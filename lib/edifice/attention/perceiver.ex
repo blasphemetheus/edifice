@@ -80,6 +80,7 @@ defmodule Edifice.Attention.Perceiver do
 
   require Axon
 
+  alias Edifice.Blocks.FFN
   alias Edifice.Utils.FusedOps
 
   # Default hyperparameters
@@ -250,7 +251,9 @@ defmodule Edifice.Attention.Perceiver do
     after_attn = Axon.add(latents, attn_out, name: "#{name}_residual")
 
     # FFN
-    build_ffn_block(after_attn, latent_dim, dropout, "#{name}_ffn")
+    ffn_normed = Axon.layer_norm(after_attn, name: "#{name}_ffn_norm")
+    ffn_out = FFN.layer(ffn_normed, hidden_size: latent_dim, dropout: dropout, name: "#{name}_ffn")
+    Axon.add(after_attn, ffn_out, name: "#{name}_ffn_residual")
   end
 
   @doc """
@@ -300,7 +303,9 @@ defmodule Edifice.Attention.Perceiver do
     after_attn = Axon.add(input, attn_out, name: "#{name}_residual")
 
     # FFN
-    build_ffn_block(after_attn, latent_dim, dropout, "#{name}_ffn")
+    ffn_normed = Axon.layer_norm(after_attn, name: "#{name}_ffn_norm")
+    ffn_out = FFN.layer(ffn_normed, hidden_size: latent_dim, dropout: dropout, name: "#{name}_ffn")
+    Axon.add(after_attn, ffn_out, name: "#{name}_ffn_residual")
   end
 
   # Cross-attention: Q from one source, K/V from another (no causal mask)
@@ -332,24 +337,7 @@ defmodule Edifice.Attention.Perceiver do
     cross_attention_impl(q, k, v, opts)
   end
 
-  # FFN block with pre-norm and residual
-  defp build_ffn_block(input, hidden_size, dropout, name) do
-    inner_size = hidden_size * 4
-
-    x = Axon.layer_norm(input, name: "#{name}_norm")
-    x = Axon.dense(x, inner_size, name: "#{name}_up")
-    x = Axon.activation(x, :gelu, name: "#{name}_gelu")
-    x = Axon.dense(x, hidden_size, name: "#{name}_down")
-
-    x =
-      if dropout > 0 do
-        Axon.dropout(x, rate: dropout, name: "#{name}_dropout")
-      else
-        x
-      end
-
-    Axon.add(input, x, name: "#{name}_residual")
-  end
+  # FFN delegated to Edifice.Blocks.FFN
 
   # ============================================================================
   # Utilities

@@ -63,6 +63,8 @@ defmodule Edifice.Attention.GLA do
 
   require Axon
 
+  alias Edifice.Blocks.FFN
+
   # Default hyperparameters
   @default_hidden_size 256
   @default_num_layers 6
@@ -172,13 +174,15 @@ defmodule Edifice.Attention.GLA do
         name: "#{name}_attention"
       )
 
-    # Gated FFN
-    build_gated_ffn(x,
+    # Gated FFN (norm + SwiGLU + residual)
+    ffn_normed = Axon.layer_norm(x, name: "#{name}_ffn_norm")
+    ffn_out = FFN.gated_layer(ffn_normed,
       hidden_size: hidden_size,
-      expand_factor: expand_factor,
+      inner_size: hidden_size * expand_factor,
       dropout: dropout,
       name: "#{name}_ffn"
     )
+    Axon.add(x, ffn_out, name: "#{name}_ffn_residual")
   end
 
   @doc """
@@ -238,45 +242,7 @@ defmodule Edifice.Attention.GLA do
     Axon.add(input, output, name: "#{name}_residual")
   end
 
-  @doc """
-  Build the Gated FFN layer (GLU-style).
-
-  Uses gated structure: output = gate * up_proj
-  """
-  @spec build_gated_ffn(Axon.t(), keyword()) :: Axon.t()
-  def build_gated_ffn(input, opts) do
-    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
-    expand_factor = Keyword.get(opts, :expand_factor, @default_expand_factor)
-    dropout = Keyword.get(opts, :dropout, @default_dropout)
-    name = Keyword.get(opts, :name, "gated_ffn")
-
-    inner_size = hidden_size * expand_factor
-
-    # Pre-LayerNorm
-    x = Axon.layer_norm(input, name: "#{name}_norm")
-
-    # Gate and up projection (GLU style)
-    gate_proj = Axon.dense(x, inner_size, name: "#{name}_gate_proj")
-    up_proj = Axon.dense(x, inner_size, name: "#{name}_up_proj")
-
-    # SiLU gate * up
-    gate = Axon.activation(gate_proj, :silu, name: "#{name}_silu")
-    gated = Axon.multiply(gate, up_proj, name: "#{name}_gated")
-
-    # Down projection
-    output = Axon.dense(gated, hidden_size, name: "#{name}_down_proj")
-
-    # Dropout
-    output =
-      if dropout > 0 do
-        Axon.dropout(output, rate: dropout, name: "#{name}_dropout")
-      else
-        output
-      end
-
-    # Residual connection
-    Axon.add(input, output, name: "#{name}_residual")
-  end
+  # Gated FFN delegated to Edifice.Blocks.FFN.gated_layer (SwiGLU)
 
   # Gated Linear Attention implementation
   defp gated_linear_attention_impl(q, k, v, g, opts) do

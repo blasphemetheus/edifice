@@ -71,6 +71,8 @@ defmodule Edifice.Attention.RetNet do
 
   require Axon
 
+  alias Edifice.Blocks.FFN
+
   # ============================================================================
   # Default Hyperparameters
   # ============================================================================
@@ -195,7 +197,7 @@ defmodule Edifice.Attention.RetNet do
 
     # 2. Feedforward branch
     ff_normed = Axon.layer_norm(after_retention, name: "#{name}_ff_norm")
-    ff_out = build_ffn(ff_normed, hidden_size, expand_factor, "#{name}_ffn")
+    ff_out = FFN.layer(ff_normed, hidden_size: hidden_size, expansion_factor: expand_factor, name: "#{name}_ffn")
 
     # Residual connection
     Axon.add(after_retention, ff_out, name: "#{name}_ff_residual")
@@ -392,22 +394,7 @@ defmodule Edifice.Attention.RetNet do
     {q_rot, k_rot}
   end
 
-  # ============================================================================
-  # Feedforward Network
-  # ============================================================================
-
-  @doc """
-  Build a feedforward network with GeLU activation.
-  """
-  @spec build_ffn(Axon.t(), pos_integer(), pos_integer(), String.t()) :: Axon.t()
-  def build_ffn(input, hidden_size, expand_factor, name) do
-    inner_size = hidden_size * expand_factor
-
-    input
-    |> Axon.dense(inner_size, name: "#{name}_up")
-    |> Axon.activation(:gelu, name: "#{name}_gelu")
-    |> Axon.dense(hidden_size, name: "#{name}_down")
-  end
+  # FFN delegated to Edifice.Blocks.FFN
 
   # ============================================================================
   # Recurrent Mode (for inference)

@@ -76,6 +76,8 @@ defmodule Edifice.Attention.HGRN do
   """
 
   require Axon
+
+  alias Edifice.Blocks.FFN
   # Default hyperparameters
   @default_hidden_size 256
   @default_num_layers 6
@@ -180,12 +182,10 @@ defmodule Edifice.Attention.HGRN do
         name: "#{name}_rnn"
       )
 
-    # Feed-forward network
-    build_ffn(x,
-      hidden_size: hidden_size,
-      dropout: dropout,
-      name: "#{name}_ffn"
-    )
+    # Feed-forward network (norm + FFN + dropout + residual)
+    ffn_normed = Axon.layer_norm(x, name: "#{name}_ffn_norm")
+    ffn_out = FFN.layer(ffn_normed, hidden_size: hidden_size, activation: :silu, dropout: dropout, name: "#{name}_ffn")
+    Axon.add(x, ffn_out, name: "#{name}_ffn_residual")
   end
 
   @doc """
@@ -257,37 +257,7 @@ defmodule Edifice.Attention.HGRN do
     Axon.add(input, output, name: "#{name}_residual")
   end
 
-  @doc """
-  Build the Feed-Forward Network layer.
-  """
-  @spec build_ffn(Axon.t(), keyword()) :: Axon.t()
-  def build_ffn(input, opts) do
-    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
-    dropout = Keyword.get(opts, :dropout, @default_dropout)
-    name = Keyword.get(opts, :name, "ffn")
-
-    # FFN expansion factor (typically 4x)
-    inner_size = hidden_size * 4
-
-    # Pre-LayerNorm
-    x = Axon.layer_norm(input, name: "#{name}_norm")
-
-    # Two-layer FFN with SiLU activation
-    x = Axon.dense(x, inner_size, name: "#{name}_up")
-    x = Axon.activation(x, :silu, name: "#{name}_silu")
-    x = Axon.dense(x, hidden_size, name: "#{name}_down")
-
-    # Dropout
-    x =
-      if dropout > 0 do
-        Axon.dropout(x, rate: dropout, name: "#{name}_dropout")
-      else
-        x
-      end
-
-    # Residual connection
-    Axon.add(input, x, name: "#{name}_residual")
-  end
+  # FFN delegated to Edifice.Blocks.FFN
 
   # HGRN recurrence with hierarchical gating via parallel scan.
   # Gates may be coarser than values (gate_dim <= expanded_size) — broadcast as needed.
