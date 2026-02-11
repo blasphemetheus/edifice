@@ -57,6 +57,13 @@ defmodule Edifice.MixProject do
         "README.md",
         "CHANGELOG.md",
         "LICENSE",
+        # Getting Started
+        "guides/ml_foundations.md",
+        "guides/core_vocabulary.md",
+        "guides/problem_landscape.md",
+        "guides/reading_edifice.md",
+        "guides/learning_path.md",
+        # Architecture Guides
         "guides/state_space_models.md",
         "guides/attention_mechanisms.md",
         "guides/recurrent_networks.md",
@@ -71,6 +78,13 @@ defmodule Edifice.MixProject do
         "guides/uncertainty_and_memory.md"
       ],
       groups_for_extras: [
+        "Getting Started": [
+          "guides/ml_foundations.md",
+          "guides/core_vocabulary.md",
+          "guides/problem_landscape.md",
+          "guides/reading_edifice.md",
+          "guides/learning_path.md"
+        ],
         "Guides: Sequence Processing": [
           "guides/state_space_models.md",
           "guides/attention_mechanisms.md",
