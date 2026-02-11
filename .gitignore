@@ -1,0 +1,22 @@
+# Dependencies and build
+/_build/
+/deps/
+/doc/
+/.fetch
+erl_crash.dump
+*.ez
+*.beam
+
+# Generated files
+/cover/
+/tmp/
+
+# IDE
+.elixir_ls/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
