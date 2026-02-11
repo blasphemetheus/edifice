@@ -53,7 +53,45 @@ defmodule Edifice.MixProject do
   defp docs do
     [
       main: "Edifice",
-      extras: ["README.md", "CHANGELOG.md", "LICENSE"],
+      extras: [
+        "README.md",
+        "CHANGELOG.md",
+        "LICENSE",
+        "guides/state_space_models.md",
+        "guides/attention_mechanisms.md",
+        "guides/recurrent_networks.md",
+        "guides/vision_architectures.md",
+        "guides/convolutional_networks.md",
+        "guides/contrastive_learning.md",
+        "guides/graph_and_set_networks.md",
+        "guides/generative_models.md",
+        "guides/dynamic_and_continuous.md",
+        "guides/building_blocks.md",
+        "guides/meta_learning.md",
+        "guides/uncertainty_and_memory.md"
+      ],
+      groups_for_extras: [
+        "Guides: Sequence Processing": [
+          "guides/state_space_models.md",
+          "guides/attention_mechanisms.md",
+          "guides/recurrent_networks.md"
+        ],
+        "Guides: Representation Learning": [
+          "guides/vision_architectures.md",
+          "guides/convolutional_networks.md",
+          "guides/contrastive_learning.md",
+          "guides/graph_and_set_networks.md"
+        ],
+        "Guides: Generative & Dynamic": [
+          "guides/generative_models.md",
+          "guides/dynamic_and_continuous.md"
+        ],
+        "Guides: Composition & Enhancement": [
+          "guides/building_blocks.md",
+          "guides/meta_learning.md",
+          "guides/uncertainty_and_memory.md"
+        ]
+      ],
       groups_for_modules: [
         Feedforward: [
           Edifice.Feedforward.MLP,

@@ -2,7 +2,7 @@
 
 A comprehensive ML architecture library for Elixir, built on [Nx](https://github.com/elixir-nx/nx) and [Axon](https://github.com/elixir-nx/axon).
 
-44 neural network architectures across 14 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons.
+103 neural network architectures across 19 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons.
 
 ## Why Edifice?
 
@@ -62,40 +62,75 @@ Edifice.list_families()
 
 ## Architecture Families
 
-### Sequence Models
+### State Space Models
 
 | Architecture | Module | Key Feature |
 |-------------|--------|-------------|
-| **Mamba** | `Edifice.SSM.Mamba` | Parallel associative scan, selective state spaces |
-| **Mamba-2 (SSD)** | `Edifice.SSM.MambaSSD` | Structured state space duality, chunk-wise |
-| **S5** | `Edifice.SSM.S5` | MIMO diagonal SSM, simplified |
+| **S4** | `Edifice.SSM.S4` | HiPPO DPLR initialization, long-range memory |
+| **S4D** | `Edifice.SSM.S4D` | Diagonal state space, simplified S4 |
+| **S5** | `Edifice.SSM.S5` | MIMO diagonal SSM with D skip connection |
+| **H3** | `Edifice.SSM.H3` | Two SSMs with multiplicative gating + short convolution |
+| **Hyena** | `Edifice.SSM.Hyena` | Long convolution hierarchy, implicit filters |
+| **Mamba** | `Edifice.SSM.Mamba` | Selective SSM, parallel associative scan |
+| **Mamba-2 (SSD)** | `Edifice.SSM.MambaSSD` | Structured state space duality, chunk-wise matmul |
+| **Mamba (Cumsum)** | `Edifice.SSM.MambaCumsum` | Mamba with configurable scan algorithm |
+| **Mamba (Hillis-Steele)** | `Edifice.SSM.MambaHillisSteele` | Mamba with max-parallelism scan |
+| **BiMamba** | `Edifice.SSM.BiMamba` | Bidirectional Mamba for non-causal tasks |
 | **GatedSSM** | `Edifice.SSM.GatedSSM` | Gated temporal with gradient checkpointing |
 | **Jamba** | `Edifice.SSM.Hybrid` | Mamba + Attention hybrid (configurable ratio) |
 | **Zamba** | `Edifice.SSM.Zamba` | Mamba + single shared attention layer |
-| **LSTM/GRU** | `Edifice.Recurrent` | Classic recurrent with multi-layer stacking |
-| **xLSTM** | `Edifice.Recurrent.XLSTM` | Exponential gating, matrix memory (sLSTM/mLSTM) |
-| **Reservoir** | `Edifice.Recurrent.Reservoir` | Echo State Networks with fixed random reservoir |
 
 ### Attention & Linear Attention
 
 | Architecture | Module | Key Feature |
 |-------------|--------|-------------|
-| **Multi-Head Attention** | `Edifice.Attention.MultiHead` | Sliding window, hybrid (LSTM+attn) |
+| **Multi-Head Attention** | `Edifice.Attention.MultiHead` | Sliding window, QK LayerNorm |
+| **GQA** | `Edifice.Attention.GQA` | Grouped Query Attention, fewer KV heads |
+| **Perceiver** | `Edifice.Attention.Perceiver` | Cross-attention to learned latents, input-agnostic |
+| **FNet** | `Edifice.Attention.FNet` | Fourier Transform replacing attention |
+| **Linear Transformer** | `Edifice.Attention.LinearTransformer` | Kernel-based O(N) attention |
+| **Nystromformer** | `Edifice.Attention.Nystromformer` | Nystrom approximation of attention matrix |
+| **Performer** | `Edifice.Attention.Performer` | FAVOR+ random feature attention |
 | **RetNet** | `Edifice.Attention.RetNet` | Multi-scale retention, O(1) recurrent inference |
 | **RWKV-7** | `Edifice.Attention.RWKV` | Linear attention, O(1) space, "Goose" architecture |
 | **GLA** | `Edifice.Attention.GLA` | Gated Linear Attention with data-dependent decay |
 | **HGRN-2** | `Edifice.Attention.HGRN` | Hierarchically gated linear RNN, state expansion |
 | **Griffin/Hawk** | `Edifice.Attention.Griffin` | RG-LRU + local attention (Griffin) or pure RG-LRU (Hawk) |
 
-### Feedforward & Convolutional
+### Recurrent Networks
 
 | Architecture | Module | Key Feature |
 |-------------|--------|-------------|
-| **MLP** | `Edifice.Feedforward.MLP` | Residual connections, layer norm, temporal mode |
-| **KAN** | `Edifice.Feedforward.KAN` | Learnable activation functions (B-spline, sine, Chebyshev) |
+| **LSTM/GRU** | `Edifice.Recurrent` | Classic recurrent with multi-layer stacking |
+| **xLSTM** | `Edifice.Recurrent.XLSTM` | Exponential gating, matrix memory (sLSTM/mLSTM) |
+| **MinGRU** | `Edifice.Recurrent.MinGRU` | Minimal GRU, parallel-scannable |
+| **MinLSTM** | `Edifice.Recurrent.MinLSTM` | Minimal LSTM, parallel-scannable |
+| **DeltaNet** | `Edifice.Recurrent.DeltaNet` | Delta rule-based linear RNN |
+| **TTT** | `Edifice.Recurrent.TTT` | Test-Time Training, self-supervised at inference |
+| **Titans** | `Edifice.Recurrent.Titans` | Neural long-term memory, surprise-gated |
+| **Reservoir** | `Edifice.Recurrent.Reservoir` | Echo State Networks with fixed random reservoir |
+
+### Vision
+
+| Architecture | Module | Key Feature |
+|-------------|--------|-------------|
+| **ViT** | `Edifice.Vision.ViT` | Vision Transformer, patch embedding |
+| **DeiT** | `Edifice.Vision.DeiT` | Data-efficient ViT with distillation token |
+| **Swin** | `Edifice.Vision.SwinTransformer` | Shifted window attention, hierarchical features |
+| **U-Net** | `Edifice.Vision.UNet` | Encoder-decoder with skip connections |
+| **ConvNeXt** | `Edifice.Vision.ConvNeXt` | Modernized ConvNet with transformer-inspired design |
+| **MLP-Mixer** | `Edifice.Vision.MLPMixer` | Pure MLP with token/channel mixing |
+
+### Convolutional
+
+| Architecture | Module | Key Feature |
+|-------------|--------|-------------|
+| **Conv1D/2D** | `Edifice.Convolutional.Conv` | Configurable convolution blocks |
 | **ResNet** | `Edifice.Convolutional.ResNet` | Residual/bottleneck blocks, configurable depth |
 | **DenseNet** | `Edifice.Convolutional.DenseNet` | Dense connections, feature reuse |
 | **TCN** | `Edifice.Convolutional.TCN` | Dilated causal convolutions for sequences |
+| **MobileNet** | `Edifice.Convolutional.MobileNet` | Depthwise separable convolutions |
+| **EfficientNet** | `Edifice.Convolutional.EfficientNet` | Compound scaling (depth, width, resolution) |
 
 ### Generative Models
 
@@ -105,8 +140,23 @@ Edifice.list_families()
 | **VQ-VAE** | `Edifice.Generative.VQVAE` | Discrete codebook, straight-through estimator |
 | **GAN** | `Edifice.Generative.GAN` | Generator/discriminator, WGAN-GP support |
 | **Diffusion (DDPM)** | `Edifice.Generative.Diffusion` | Denoising diffusion, sinusoidal time embedding |
+| **DDIM** | `Edifice.Generative.DDIM` | Deterministic diffusion sampling, fast inference |
+| **DiT** | `Edifice.Generative.DiT` | Diffusion Transformer, AdaLN-Zero conditioning |
+| **Latent Diffusion** | `Edifice.Generative.LatentDiffusion` | Diffusion in compressed latent space |
+| **Consistency Model** | `Edifice.Generative.ConsistencyModel` | Single-step generation via consistency training |
+| **Score SDE** | `Edifice.Generative.ScoreSDE` | Continuous SDE framework (VP-SDE, VE-SDE) |
 | **Flow Matching** | `Edifice.Generative.FlowMatching` | ODE-based generation, multiple loss variants |
 | **Normalizing Flow** | `Edifice.Generative.NormalizingFlow` | Affine coupling layers (RealNVP-style) |
+
+### Contrastive & Self-Supervised
+
+| Architecture | Module | Key Feature |
+|-------------|--------|-------------|
+| **SimCLR** | `Edifice.Contrastive.SimCLR` | NT-Xent contrastive loss, projection head |
+| **BYOL** | `Edifice.Contrastive.BYOL` | No negatives, momentum encoder |
+| **Barlow Twins** | `Edifice.Contrastive.BarlowTwins` | Cross-correlation redundancy reduction |
+| **MAE** | `Edifice.Contrastive.MAE` | Masked Autoencoder, 75% patch masking |
+| **VICReg** | `Edifice.Contrastive.VICReg` | Variance-Invariance-Covariance regularization |
 
 ### Graph & Set Networks
 
@@ -114,6 +164,11 @@ Edifice.list_families()
 |-------------|--------|-------------|
 | **GCN** | `Edifice.Graph.GCN` | Spectral graph convolutions (Kipf & Welling) |
 | **GAT** | `Edifice.Graph.GAT` | Graph attention with multi-head support |
+| **GIN** | `Edifice.Graph.GIN` | Graph Isomorphism Network, maximally expressive |
+| **GraphSAGE** | `Edifice.Graph.GraphSAGE` | Inductive learning, neighborhood sampling |
+| **Graph Transformer** | `Edifice.Graph.GraphTransformer` | Full attention over nodes with edge features |
+| **PNA** | `Edifice.Graph.PNA` | Principal Neighbourhood Aggregation |
+| **SchNet** | `Edifice.Graph.SchNet` | Continuous-filter convolutions for molecules |
 | **Message Passing** | `Edifice.Graph.MessagePassing` | Generic MPNN framework, global pooling |
 | **DeepSets** | `Edifice.Sets.DeepSets` | Permutation-invariant set functions |
 | **PointNet** | `Edifice.Sets.PointNet` | Point cloud processing with T-Net alignment |
@@ -124,8 +179,10 @@ Edifice.list_families()
 |-------------|--------|-------------|
 | **EBM** | `Edifice.Energy.EBM` | Energy-based models, contrastive divergence |
 | **Hopfield** | `Edifice.Energy.Hopfield` | Modern continuous Hopfield networks |
+| **Neural ODE** | `Edifice.Energy.NeuralODE` | Continuous-depth networks via ODE solvers |
 | **Bayesian NN** | `Edifice.Probabilistic.Bayesian` | Weight uncertainty, variational inference |
 | **MC Dropout** | `Edifice.Probabilistic.MCDropout` | Uncertainty estimation via dropout at inference |
+| **Evidential NN** | `Edifice.Probabilistic.EvidentialNN` | Dirichlet priors for uncertainty |
 | **NTM** | `Edifice.Memory.NTM` | Neural Turing Machine, differentiable memory |
 | **Memory Network** | `Edifice.Memory.MemoryNetwork` | End-to-end memory with multi-hop attention |
 
@@ -134,10 +191,56 @@ Edifice.list_families()
 | Architecture | Module | Key Feature |
 |-------------|--------|-------------|
 | **MoE** | `Edifice.Meta.MoE` | Mixture of Experts with top-k/hash routing |
+| **Switch MoE** | `Edifice.Meta.SwitchMoE` | Top-1 routing with load balancing |
+| **Soft MoE** | `Edifice.Meta.SoftMoE` | Fully differentiable soft token routing |
+| **LoRA** | `Edifice.Meta.LoRA` | Low-Rank Adaptation for parameter-efficient fine-tuning |
+| **Adapter** | `Edifice.Meta.Adapter` | Bottleneck adapter modules for transfer learning |
 | **Hypernetwork** | `Edifice.Meta.Hypernetwork` | Networks that generate other networks' weights |
 | **Capsule** | `Edifice.Meta.Capsule` | Dynamic routing between capsules |
 | **Liquid NN** | `Edifice.Liquid` | Continuous-time ODE dynamics (LTC cells) |
 | **SNN** | `Edifice.Neuromorphic.SNN` | Leaky integrate-and-fire, surrogate gradients |
+| **ANN2SNN** | `Edifice.Neuromorphic.ANN2SNN` | Convert trained ANNs to spiking networks |
+
+### Building Blocks
+
+| Block | Module | Key Feature |
+|-------|--------|-------------|
+| **RMSNorm** | `Edifice.Blocks.RMSNorm` | Root Mean Square normalization |
+| **SwiGLU** | `Edifice.Blocks.SwiGLU` | Gated FFN with SiLU activation |
+| **RoPE** | `Edifice.Blocks.RoPE` | Rotary position embedding |
+| **ALiBi** | `Edifice.Blocks.ALiBi` | Attention with linear biases |
+| **Patch Embed** | `Edifice.Blocks.PatchEmbed` | Image-to-patch tokenization |
+| **Sinusoidal PE** | `Edifice.Blocks.SinusoidalPE` | Fixed sinusoidal position encoding |
+| **Adaptive Norm** | `Edifice.Blocks.AdaptiveNorm` | Condition-dependent normalization (AdaLN) |
+| **Cross Attention** | `Edifice.Blocks.CrossAttention` | Cross-attention between two sequences |
+
+## Guides
+
+Conceptual guides covering theory, architecture evolution, and decision tables for each family.
+
+### Sequence Processing
+
+- **[State Space Models](guides/state_space_models.md)** — S4 through Mamba to hybrid architectures
+- **[Attention Mechanisms](guides/attention_mechanisms.md)** — Quadratic to linear to Fourier to retention
+- **[Recurrent Networks](guides/recurrent_networks.md)** — LSTM through xLSTM, MinGRU, TTT, and Titans
+
+### Representation Learning
+
+- **[Vision Architectures](guides/vision_architectures.md)** — ViT, Swin, UNet, ConvNeXt, MLP-Mixer
+- **[Convolutional Networks](guides/convolutional_networks.md)** — ResNet, DenseNet, MobileNet, TCN
+- **[Contrastive Learning](guides/contrastive_learning.md)** — SimCLR, BYOL, BarlowTwins, MAE, VICReg
+- **[Graph & Set Networks](guides/graph_and_set_networks.md)** — Message passing, spectral, invariance
+
+### Generative & Dynamic
+
+- **[Generative Models](guides/generative_models.md)** — VAEs, GANs, diffusion, flows
+- **[Dynamic & Continuous](guides/dynamic_and_continuous.md)** — ODE dynamics, energy landscapes, spiking
+
+### Composition & Enhancement
+
+- **[Building Blocks](guides/building_blocks.md)** — RoPE vs ALiBi, RMSNorm, SwiGLU, composition
+- **[Meta-Learning](guides/meta_learning.md)** — MoE, PEFT (LoRA/Adapter), capsules
+- **[Uncertainty & Memory](guides/uncertainty_and_memory.md)** — Bayesian, NTM, MLP/KAN/TabNet foundations
 
 ## Examples
 
