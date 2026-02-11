@@ -390,12 +390,14 @@ defmodule Edifice.Attention.MultiHead do
   # ============================================================================
 
   @doc """
-  Build a simplified self-attention Axon layer.
+  Build a multi-head self-attention Axon layer.
 
-  Uses single-head attention for simplicity and Axon compatibility.
+  Properly reshapes Q, K, V to `[batch, num_heads, seq, head_dim]` so each
+  head computes its own independent attention pattern, then reshapes back.
 
   ## Options
-    - `:hidden_dim` - Hidden dimension (default: 256)
+    - `:hidden_dim` - Hidden dimension = num_heads * head_dim (default: 256)
+    - `:num_heads` - Number of attention heads (default: 1)
     - `:dropout` - Dropout rate (default: 0.1)
     - `:causal` - Use causal masking (default: true)
     - `:qk_layernorm` - Normalize Q and K before attention (stabilizes training, default: false)
@@ -407,6 +409,7 @@ defmodule Edifice.Attention.MultiHead do
   @spec self_attention(Axon.t(), keyword()) :: Axon.t()
   def self_attention(input, opts \\ []) do
     hidden_dim = Keyword.get(opts, :hidden_dim, 256)
+    num_heads = Keyword.get(opts, :num_heads, 1)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
     causal = Keyword.get(opts, :causal, true)
     qk_layernorm = Keyword.get(opts, :qk_layernorm, false)
@@ -414,6 +417,8 @@ defmodule Edifice.Attention.MultiHead do
     memory_efficient = Keyword.get(opts, :memory_efficient, false)
     chunk_size = Keyword.get(opts, :chunk_size, 32)
     name = Keyword.get(opts, :name, "self_attn")
+
+    head_dim = div(hidden_dim, num_heads)
 
     # Project to Q, K, V and concatenate for single layer call
     qkv = Axon.dense(input, hidden_dim * 3, name: "#{name}_qkv")
@@ -423,14 +428,19 @@ defmodule Edifice.Attention.MultiHead do
       Axon.nx(
         qkv,
         fn qkv_tensor ->
-          {_batch, seq_len, _} = Nx.shape(qkv_tensor)
+          {batch, seq_len, _} = Nx.shape(qkv_tensor)
 
-          # Split into Q, K, V
+          # Split into Q, K, V: each [batch, seq, hidden_dim]
           query = Nx.slice_along_axis(qkv_tensor, 0, hidden_dim, axis: 2)
           key = Nx.slice_along_axis(qkv_tensor, hidden_dim, hidden_dim, axis: 2)
           value = Nx.slice_along_axis(qkv_tensor, hidden_dim * 2, hidden_dim, axis: 2)
 
-          # QK LayerNorm: normalize Q and K to prevent attention explosion
+          # Reshape to multi-head: [batch, seq, hidden] -> [batch, heads, seq, head_dim]
+          query = reshape_to_heads(query, batch, seq_len, num_heads, head_dim)
+          key = reshape_to_heads(key, batch, seq_len, num_heads, head_dim)
+          value = reshape_to_heads(value, batch, seq_len, num_heads, head_dim)
+
+          # QK LayerNorm: normalize Q and K per head to prevent attention explosion
           {query, key} =
             if qk_layernorm do
               {qk_layer_norm(query), qk_layer_norm(key)}
@@ -438,25 +448,30 @@ defmodule Edifice.Attention.MultiHead do
               {query, key}
             end
 
-          # Choose attention implementation
-          cond do
-            memory_efficient ->
-              # Memory-efficient attention with online softmax (true O(n) memory)
-              memory_efficient_attention(query, key, value,
-                chunk_size: chunk_size,
-                causal: causal
-              )
+          # Compute attention per head
+          # Q, K, V are [batch, heads, seq, head_dim]
+          output =
+            cond do
+              memory_efficient ->
+                multi_head_memory_efficient_attention(query, key, value,
+                  chunk_size: chunk_size,
+                  causal: causal
+                )
 
-            chunked ->
-              # Chunked attention (lower peak memory, same results as standard)
-              mask = if causal, do: causal_mask(seq_len), else: nil
-              chunked_attention(query, key, value, mask: mask, chunk_size: chunk_size)
+              chunked ->
+                mask = if causal, do: causal_mask(seq_len), else: nil
+                multi_head_chunked_attention(query, key, value,
+                  mask: mask,
+                  chunk_size: chunk_size
+                )
 
-            true ->
-              # Standard attention
-              mask = if causal, do: causal_mask(seq_len), else: nil
-              scaled_dot_product_attention(query, key, value, mask: mask)
-          end
+              true ->
+                mask = if causal, do: causal_mask(seq_len), else: nil
+                multi_head_sdpa(query, key, value, mask: mask)
+            end
+
+          # Reshape back: [batch, heads, seq, head_dim] -> [batch, seq, hidden_dim]
+          reshape_from_heads(output, batch, seq_len, num_heads, head_dim)
         end,
         name: "#{name}_compute"
       )
@@ -467,11 +482,11 @@ defmodule Edifice.Attention.MultiHead do
     |> Axon.dropout(rate: dropout, name: "#{name}_dropout")
   end
 
-  # Keep multi_head_attention as alias for compatibility
   @doc """
-  Alias for self_attention with configurable dimension.
+  Build multi-head attention with configurable heads and head dimension.
 
-  Passes through all options including `:qk_layernorm`.
+  Computes `hidden_dim = num_heads * head_dim` and delegates to `self_attention/2`
+  with proper multi-head reshaping.
   """
   @spec multi_head_attention(Axon.t(), keyword()) :: Axon.t()
   def multi_head_attention(input, opts \\ []) do
@@ -479,8 +494,12 @@ defmodule Edifice.Attention.MultiHead do
     head_dim = Keyword.get(opts, :head_dim, @default_head_dim)
     hidden_dim = num_heads * head_dim
 
-    # Pass all options (including qk_layernorm) to self_attention
-    self_attention(input, Keyword.put(opts, :hidden_dim, hidden_dim))
+    opts =
+      opts
+      |> Keyword.put(:hidden_dim, hidden_dim)
+      |> Keyword.put(:num_heads, num_heads)
+
+    self_attention(input, opts)
   end
 
   @doc """
@@ -520,15 +539,19 @@ defmodule Edifice.Attention.MultiHead do
     Axon.nx(
       qkv,
       fn qkv_tensor ->
-        {_batch, seq_len, _} = Nx.shape(qkv_tensor)
+        {batch, seq_len, _} = Nx.shape(qkv_tensor)
 
-        # Split into Q, K, V
+        # Split into Q, K, V: each [batch, seq, hidden_dim]
         query = Nx.slice_along_axis(qkv_tensor, 0, hidden_dim, axis: 2)
         key = Nx.slice_along_axis(qkv_tensor, hidden_dim, hidden_dim, axis: 2)
         value = Nx.slice_along_axis(qkv_tensor, hidden_dim * 2, hidden_dim, axis: 2)
 
-        # QK LayerNorm: normalize Q and K to prevent attention explosion
-        # This is used in modern transformers like ViT-22B and PaLM-2
+        # Reshape to multi-head: [batch, seq, hidden] -> [batch, heads, seq, head_dim]
+        query = reshape_to_heads(query, batch, seq_len, num_heads, head_dim)
+        key = reshape_to_heads(key, batch, seq_len, num_heads, head_dim)
+        value = reshape_to_heads(value, batch, seq_len, num_heads, head_dim)
+
+        # QK LayerNorm: normalize Q and K per head to prevent attention explosion
         {query, key} =
           if qk_layernorm do
             {qk_layer_norm(query), qk_layer_norm(key)}
@@ -536,33 +559,37 @@ defmodule Edifice.Attention.MultiHead do
             {query, key}
           end
 
-        # Choose attention implementation
-        # Note: memory_efficient uses causal masking internally, not window masking
-        # For true windowed + memory-efficient, would need custom implementation
-        cond do
-          memory_efficient ->
-            # Memory-efficient attention with online softmax (true O(n) memory)
-            # NOTE: This uses causal masking, not sliding window masking
-            memory_efficient_attention(query, key, value, chunk_size: chunk_size, causal: true)
+        # Compute attention per head
+        output =
+          cond do
+            memory_efficient ->
+              multi_head_memory_efficient_attention(query, key, value,
+                chunk_size: chunk_size,
+                causal: true
+              )
 
-          chunked ->
-            # Chunked attention with window mask
-            mask =
-              if precomputed_mask != nil,
-                do: precomputed_mask,
-                else: window_mask(seq_len, window_size)
+            chunked ->
+              mask =
+                if precomputed_mask != nil,
+                  do: precomputed_mask,
+                  else: window_mask(seq_len, window_size)
 
-            chunked_attention(query, key, value, mask: mask, chunk_size: chunk_size)
+              multi_head_chunked_attention(query, key, value,
+                mask: mask,
+                chunk_size: chunk_size
+              )
 
-          true ->
-            # Standard attention with window mask
-            mask =
-              if precomputed_mask != nil,
-                do: precomputed_mask,
-                else: window_mask(seq_len, window_size)
+            true ->
+              mask =
+                if precomputed_mask != nil,
+                  do: precomputed_mask,
+                  else: window_mask(seq_len, window_size)
 
-            scaled_dot_product_attention(query, key, value, mask: mask)
-        end
+              multi_head_sdpa(query, key, value, mask: mask)
+          end
+
+        # Reshape back: [batch, heads, seq, head_dim] -> [batch, seq, hidden_dim]
+        reshape_from_heads(output, batch, seq_len, num_heads, head_dim)
       end,
       name: "#{name}_compute"
     )
@@ -857,6 +884,187 @@ defmodule Edifice.Attention.MultiHead do
       |> Axon.relu()
       |> Axon.dropout(rate: dropout)
     end)
+  end
+
+  # ============================================================================
+  # Multi-Head Attention Helpers
+  # ============================================================================
+
+  # Reshape [batch, seq, num_heads * head_dim] -> [batch, num_heads, seq, head_dim]
+  defp reshape_to_heads(x, batch, seq_len, num_heads, head_dim) do
+    x
+    |> Nx.reshape({batch, seq_len, num_heads, head_dim})
+    |> Nx.transpose(axes: [0, 2, 1, 3])
+  end
+
+  # Reshape [batch, num_heads, seq, head_dim] -> [batch, seq, num_heads * head_dim]
+  defp reshape_from_heads(x, batch, seq_len, num_heads, head_dim) do
+    x
+    |> Nx.transpose(axes: [0, 2, 1, 3])
+    |> Nx.reshape({batch, seq_len, num_heads * head_dim})
+  end
+
+  # Multi-head scaled dot-product attention
+  # Q, K, V: [batch, heads, seq, head_dim]
+  # Returns: [batch, heads, seq, head_dim]
+  defp multi_head_sdpa(query, key, value, opts) do
+    mask = opts[:mask]
+
+    d_k = Nx.axis_size(key, -1)
+    scale = Nx.sqrt(d_k) |> Nx.as_type(Nx.type(query))
+
+    # QK^T: [batch, heads, seq_q, seq_k]
+    scores = Nx.dot(query, [3], [0, 1], key, [3], [0, 1])
+    scores = Nx.divide(scores, scale)
+
+    # Apply mask if provided (mask is [seq, seq] — broadcast to [batch, heads, seq, seq])
+    scores =
+      if mask do
+        mask_shape = Nx.shape(scores)
+
+        mask =
+          case tuple_size(Nx.shape(mask)) do
+            2 ->
+              # [seq, seq] -> broadcast to [batch, heads, seq, seq]
+              mask |> Nx.new_axis(0) |> Nx.new_axis(0) |> Nx.broadcast(mask_shape)
+
+            _ ->
+              Nx.broadcast(mask, mask_shape)
+          end
+
+        Nx.select(mask, scores, Nx.broadcast(-1.0e9, mask_shape))
+      else
+        scores
+      end
+
+    weights = FusedOps.fused_softmax(scores)
+
+    # weights @ V: [batch, heads, seq_q, head_dim]
+    Nx.dot(weights, [3], [0, 1], value, [2], [0, 1])
+  end
+
+  # Multi-head chunked attention (processes query in chunks)
+  # Q, K, V: [batch, heads, seq, head_dim]
+  defp multi_head_chunked_attention(query, key, value, opts) do
+    chunk_size = Keyword.get(opts, :chunk_size, 32)
+    mask = Keyword.get(opts, :mask)
+
+    seq_q = Nx.axis_size(query, 2)
+    seq_k = Nx.axis_size(key, 2)
+    d_k = Nx.axis_size(key, 3)
+    scale = Nx.sqrt(d_k) |> Nx.as_type(Nx.type(query))
+
+    num_chunks = div(seq_q + chunk_size - 1, chunk_size)
+
+    chunk_results =
+      for chunk_idx <- 0..(num_chunks - 1) do
+        start_idx = chunk_idx * chunk_size
+        actual_chunk_size = min(chunk_size, seq_q - start_idx)
+
+        q_chunk = Nx.slice_along_axis(query, start_idx, actual_chunk_size, axis: 2)
+
+        # scores: [batch, heads, chunk_size, seq_k]
+        scores = Nx.dot(q_chunk, [3], [0, 1], key, [3], [0, 1])
+        scores = Nx.divide(scores, scale)
+
+        scores =
+          if mask do
+            batch = Nx.axis_size(query, 0)
+            heads = Nx.axis_size(query, 1)
+
+            chunk_mask =
+              case Nx.shape(mask) do
+                {^seq_q, ^seq_k} ->
+                  Nx.slice_along_axis(mask, start_idx, actual_chunk_size, axis: 0)
+                  |> Nx.new_axis(0)
+                  |> Nx.new_axis(0)
+                  |> Nx.broadcast({batch, heads, actual_chunk_size, seq_k})
+
+                _ ->
+                  Nx.broadcast(mask, Nx.shape(scores))
+              end
+
+            Nx.select(chunk_mask, scores, Nx.broadcast(-1.0e9, Nx.shape(scores)))
+          else
+            scores
+          end
+
+        weights = FusedOps.fused_softmax(scores)
+        Nx.dot(weights, [3], [0, 1], value, [2], [0, 1])
+      end
+
+    Nx.concatenate(chunk_results, axis: 2)
+  end
+
+  # Multi-head memory-efficient attention (online softmax)
+  # Q, K, V: [batch, heads, seq, head_dim]
+  defp multi_head_memory_efficient_attention(query, key, value, opts) do
+    chunk_size = Keyword.get(opts, :chunk_size, 32)
+    causal = Keyword.get(opts, :causal, false)
+
+    {batch, heads, seq_q, dim} = Nx.shape(query)
+    seq_k = Nx.axis_size(key, 2)
+    scale = Nx.sqrt(dim) |> Nx.as_type(Nx.type(query))
+
+    num_kv_chunks = div(seq_k + chunk_size - 1, chunk_size)
+
+    tensor_type = Nx.type(query)
+    neg_inf = Nx.Constants.neg_infinity() |> Nx.as_type(tensor_type)
+
+    init_output = Nx.broadcast(Nx.tensor(0.0, type: tensor_type), {batch, heads, seq_q, dim})
+    init_max = Nx.broadcast(neg_inf, {batch, heads, seq_q})
+    init_sum = Nx.broadcast(Nx.tensor(0.0, type: tensor_type), {batch, heads, seq_q})
+
+    {final_output, _final_max, final_sum} =
+      Enum.reduce(0..(num_kv_chunks - 1), {init_output, init_max, init_sum}, fn chunk_idx,
+                                                                                {acc_output,
+                                                                                 acc_max,
+                                                                                 acc_sum} ->
+        k_start = chunk_idx * chunk_size
+        actual_chunk_size = min(chunk_size, seq_k - k_start)
+
+        k_chunk = Nx.slice_along_axis(key, k_start, actual_chunk_size, axis: 2)
+        v_chunk = Nx.slice_along_axis(value, k_start, actual_chunk_size, axis: 2)
+
+        # scores: [batch, heads, seq_q, chunk_size]
+        scores = Nx.dot(query, [3], [0, 1], k_chunk, [3], [0, 1])
+        scores = Nx.divide(scores, scale)
+
+        scores =
+          if causal do
+            q_positions = Nx.iota({seq_q, 1}, axis: 0)
+            k_positions = Nx.iota({1, actual_chunk_size}, axis: 1) |> Nx.add(k_start)
+            causal_mask = Nx.greater_equal(q_positions, k_positions)
+
+            causal_mask =
+              Nx.broadcast(
+                causal_mask |> Nx.new_axis(0) |> Nx.new_axis(0),
+                {batch, heads, seq_q, actual_chunk_size}
+              )
+
+            Nx.select(causal_mask, scores, Nx.broadcast(neg_inf, Nx.shape(scores)))
+          else
+            scores
+          end
+
+        chunk_max = Nx.reduce_max(scores, axes: [-1])
+        new_max = Nx.max(acc_max, chunk_max)
+        old_scale_factor = Nx.exp(Nx.subtract(acc_max, new_max))
+        exp_scores = Nx.exp(Nx.subtract(scores, Nx.new_axis(new_max, -1)))
+        chunk_sum = Nx.sum(exp_scores, axes: [-1])
+        new_sum = Nx.add(Nx.multiply(acc_sum, old_scale_factor), chunk_sum)
+        chunk_output = Nx.dot(exp_scores, [3], [0, 1], v_chunk, [2], [0, 1])
+
+        new_output =
+          Nx.add(
+            Nx.multiply(acc_output, Nx.new_axis(old_scale_factor, -1)),
+            chunk_output
+          )
+
+        {new_output, new_max, new_sum}
+      end)
+
+    Nx.divide(final_output, Nx.new_axis(final_sum, -1))
   end
 
   # ============================================================================

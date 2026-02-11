@@ -6,30 +6,27 @@ defmodule Edifice.Vision.ConvNeXt do
   transformers: depthwise-separable convolutions, inverted bottleneck
   blocks, GELU activation, LayerNorm, and fewer activation functions.
 
-  Since Axon works with dense layers on flattened patch representations,
-  this implementation uses the ConvNeXt block design pattern (inverted
-  bottleneck with LayerNorm and GELU) applied to patch-based features.
-
   ## Architecture
 
   ```
   Image [batch, channels, height, width]
         |
   +-----v--------------------+
-  | Stem (Patchify)           |  Non-overlapping patches -> embed
+  | Stem (4x4 strided conv)   |  [batch, H/4, W/4, dims[0]]
   +---------------------------+
-        |
-        v
-  [batch, num_patches, dims[0]]
         |
   +-----v--------------------+
   | Stage 1                   |  depths[0] ConvNeXt blocks at dims[0]
-  |   LN -> Dense -> GELU    |
-  |   -> Dense -> Residual    |
+  |   DW Conv 7x7 -> LN      |
+  |   -> PW Conv (expand 4x) |
+  |   -> GELU                |
+  |   -> PW Conv (project)   |
+  |   -> LayerScale          |
+  |   -> Residual            |
   +---------------------------+
         |
   +-----v--------------------+
-  | Downsample                |  LN + Dense to dims[1], merge 2x2
+  | Downsample                |  LN + 2x2 strided conv to dims[1]
   +---------------------------+
         |
   +-----v--------------------+
@@ -39,11 +36,7 @@ defmodule Edifice.Vision.ConvNeXt do
         ... (repeat for each stage)
         |
   +-----v--------------------+
-  | Stage 4                   |  depths[3] ConvNeXt blocks at dims[3]
-  +---------------------------+
-        |
-  +-----v--------------------+
-  | Global Average Pool       |
+  | Global Average Pool       |  [batch, dims[-1]]
   +---------------------------+
         |
   +-----v--------------------+
@@ -55,22 +48,24 @@ defmodule Edifice.Vision.ConvNeXt do
   +---------------------------+
   ```
 
-  ## ConvNeXt Block
+  ## ConvNeXt Block (faithful to paper)
 
   ```
-  Input
+  Input [batch, H, W, C]
     |
     +----------- Residual ----------+
     |                               |
+  Depthwise Conv 7x7               |
+    |                               |
   LayerNorm                         |
     |                               |
-  Dense (dim -> dim * 4)            |
+  Pointwise Conv (C -> 4C)         |
     |                               |
   GELU                              |
     |                               |
-  Dense (dim * 4 -> dim)            |
+  Pointwise Conv (4C -> C)         |
     |                               |
-  Scale (learnable layer_scale)     |
+  LayerScale (learnable gamma)     |
     |                               |
     +---------- Add ---------------+
     |
@@ -88,22 +83,6 @@ defmodule Edifice.Vision.ConvNeXt do
         num_classes: 1000
       )
 
-      # ConvNeXt-Small
-      model = ConvNeXt.build(
-        image_size: 224,
-        depths: [3, 3, 27, 3],
-        dims: [96, 192, 384, 768],
-        num_classes: 1000
-      )
-
-      # ConvNeXt-Base
-      model = ConvNeXt.build(
-        image_size: 224,
-        depths: [3, 3, 27, 3],
-        dims: [128, 256, 512, 1024],
-        num_classes: 1000
-      )
-
   ## References
 
   - "A ConvNet for the 2020s" (Liu et al., CVPR 2022)
@@ -111,14 +90,13 @@ defmodule Edifice.Vision.ConvNeXt do
 
   require Axon
 
-  alias Edifice.Blocks.PatchEmbed
-
   @default_image_size 224
   @default_patch_size 4
   @default_in_channels 3
   @default_depths [3, 3, 9, 3]
   @default_dims [96, 192, 384, 768]
   @default_dropout 0.0
+  @default_layer_scale_init 1.0e-6
 
   # ============================================================================
   # Model Builder
@@ -130,11 +108,12 @@ defmodule Edifice.Vision.ConvNeXt do
   ## Options
 
     - `:image_size` - Input image size, square (default: 224)
-    - `:patch_size` - Stem patchify size (default: 4)
+    - `:patch_size` - Stem patchify stride (default: 4)
     - `:in_channels` - Number of input channels (default: 3)
     - `:depths` - Number of blocks per stage (default: [3, 3, 9, 3])
     - `:dims` - Channel dimensions per stage (default: [96, 192, 384, 768])
     - `:dropout` - Dropout rate (default: 0.0)
+    - `:layer_scale_init` - Initial value for layer scale (default: 1e-6)
     - `:num_classes` - Number of classes for classification head (optional)
 
   ## Returns
@@ -150,64 +129,59 @@ defmodule Edifice.Vision.ConvNeXt do
     depths = Keyword.get(opts, :depths, @default_depths)
     dims = Keyword.get(opts, :dims, @default_dims)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
+    layer_scale_init = Keyword.get(opts, :layer_scale_init, @default_layer_scale_init)
     num_classes = Keyword.get(opts, :num_classes, nil)
 
     num_stages = length(depths)
-
-    # Input: [batch, channels, height, width]
-    input = Axon.input("image", shape: {nil, in_channels, image_size, image_size})
-
     first_dim = List.first(dims)
 
-    # Stem: patchify with patch_size x patch_size non-overlapping patches
-    x =
-      PatchEmbed.layer(input,
-        image_size: image_size,
-        patch_size: patch_size,
-        in_channels: in_channels,
-        embed_dim: first_dim,
-        name: "stem"
-      )
+    # Input: [batch, channels, height, width] (NCHW)
+    input = Axon.input("image", shape: {nil, in_channels, image_size, image_size})
 
+    # Transpose to NHWC for Axon.conv (channels_last default)
+    x =
+      Axon.nx(input, fn t ->
+        Nx.transpose(t, axes: [0, 2, 3, 1])
+      end, name: "nchw_to_nhwc")
+
+    # Stem: patchify with patch_size x patch_size strided convolution
+    # This replaces PatchEmbed — a single strided conv is the ConvNeXt stem
+    x = Axon.conv(x, first_dim,
+      kernel_size: {patch_size, patch_size},
+      strides: [patch_size, patch_size],
+      name: "stem_conv"
+    )
     x = Axon.layer_norm(x, name: "stem_norm")
 
     # Process through stages
-    num_patches = PatchEmbed.num_patches(image_size, patch_size)
-
-    {x, _current_patches} =
+    x =
       Enum.reduce(
         Enum.zip([depths, dims, 0..(num_stages - 1)]),
-        {x, num_patches},
-        fn {stage_depth, dim, stage_idx}, {acc, patches} ->
+        x,
+        fn {stage_depth, dim, stage_idx}, acc ->
           # ConvNeXt blocks for this stage
           acc =
             Enum.reduce(0..(stage_depth - 1), acc, fn block_idx, block_acc ->
-              convnext_block(block_acc, dim, dropout, name: "stage#{stage_idx}_block#{block_idx}")
+              convnext_block(block_acc, dim, dropout, layer_scale_init,
+                name: "stage#{stage_idx}_block#{block_idx}"
+              )
             end)
 
           # Downsampling between stages (except last)
           if stage_idx < num_stages - 1 do
             next_dim = Enum.at(dims, stage_idx + 1)
-
-            {downsampled, new_patches} =
-              downsample(acc, next_dim, patches, name: "downsample_#{stage_idx}")
-
-            {downsampled, new_patches}
+            downsample(acc, next_dim, name: "downsample_#{stage_idx}")
           else
-            {acc, patches}
+            acc
           end
         end
       )
 
-    # Global average pool: [batch, num_patches, dim] -> [batch, dim]
+    # Global average pool: [batch, H, W, C] -> [batch, C]
     x =
-      Axon.nx(
-        x,
-        fn tensor ->
-          Nx.mean(tensor, axes: [1])
-        end,
-        name: "global_pool"
-      )
+      Axon.nx(x, fn tensor ->
+        Nx.mean(tensor, axes: [1, 2])
+      end, name: "global_pool")
 
     x = Axon.layer_norm(x, name: "final_norm")
 
@@ -227,20 +201,49 @@ defmodule Edifice.Vision.ConvNeXt do
   end
 
   # ============================================================================
-  # ConvNeXt Block
+  # ConvNeXt Block (faithful to paper)
   # ============================================================================
 
-  defp convnext_block(input, dim, dropout, opts) do
+  defp convnext_block(input, dim, dropout, layer_scale_init, opts) do
     name = Keyword.get(opts, :name, "cnx_block")
     expansion = 4
 
-    # LayerNorm -> Dense (expand) -> GELU -> Dense (project back)
+    # Depthwise conv 7x7: each channel gets its own filter
+    x = Axon.conv(input, dim,
+      kernel_size: {7, 7},
+      padding: :same,
+      feature_group_size: dim,
+      name: "#{name}_dw_conv"
+    )
+
+    # LayerNorm (applied to last axis in NHWC)
+    x = Axon.layer_norm(x, name: "#{name}_norm")
+
+    # Pointwise expand: 1x1 conv equivalent, C -> 4C
+    x = Axon.conv(x, dim * expansion,
+      kernel_size: {1, 1},
+      name: "#{name}_pw_expand"
+    )
+
+    x = Axon.activation(x, :gelu, name: "#{name}_gelu")
+
+    # Pointwise project: 1x1 conv, 4C -> C
+    x = Axon.conv(x, dim,
+      kernel_size: {1, 1},
+      name: "#{name}_pw_project"
+    )
+
+    # Layer scale: learnable per-channel scaling (initialized to small value)
+    gamma_init = Nx.broadcast(layer_scale_init, {1, 1, 1, dim}) |> Nx.as_type(:f32)
+    gamma_node = Axon.constant(gamma_init)
+
     x =
-      input
-      |> Axon.layer_norm(name: "#{name}_norm")
-      |> Axon.dense(dim * expansion, name: "#{name}_expand")
-      |> Axon.activation(:gelu, name: "#{name}_gelu")
-      |> Axon.dense(dim, name: "#{name}_project")
+      Axon.layer(
+        &layer_scale_impl/3,
+        [x, gamma_node],
+        name: "#{name}_layer_scale",
+        op_name: :layer_scale
+      )
 
     x =
       if dropout > 0.0 do
@@ -253,58 +256,27 @@ defmodule Edifice.Vision.ConvNeXt do
     Axon.add(input, x, name: "#{name}_residual")
   end
 
+  # Layer scale: multiply by learnable gamma parameter
+  # gamma is initialized to a small value (1e-6) per the paper
+  defp layer_scale_impl(x, gamma, _opts) do
+    Nx.multiply(x, gamma)
+  end
+
   # ============================================================================
   # Downsampling
   # ============================================================================
 
-  defp downsample(input, next_dim, num_patches, opts) do
+  defp downsample(input, next_dim, opts) do
     name = Keyword.get(opts, :name, "downsample")
 
-    # Merge 2x2 neighboring patches and project to next dimension
-    # [batch, N, C] -> [batch, N/4, 4C] -> [batch, N/4, next_dim]
-
-    # Compute grid dimensions at compile time (num_patches is a known integer)
-    grid_size = num_patches |> :math.sqrt() |> round()
-    new_grid = div(grid_size, 2)
-
-    merged =
-      Axon.nx(
-        input,
-        fn tensor ->
-          batch = Nx.axis_size(tensor, 0)
-          feat_dim = Nx.axis_size(tensor, 2)
-
-          # Reshape to 2D grid
-          grid = Nx.reshape(tensor, {batch, grid_size, grid_size, feat_dim})
-
-          # Take quadrants
-          tl =
-            Nx.slice_along_axis(grid, 0, new_grid, axis: 1)
-            |> Nx.slice_along_axis(0, new_grid, axis: 2)
-
-          tr =
-            Nx.slice_along_axis(grid, 0, new_grid, axis: 1)
-            |> Nx.slice_along_axis(new_grid, new_grid, axis: 2)
-
-          bl =
-            Nx.slice_along_axis(grid, new_grid, new_grid, axis: 1)
-            |> Nx.slice_along_axis(0, new_grid, axis: 2)
-
-          br =
-            Nx.slice_along_axis(grid, new_grid, new_grid, axis: 1)
-            |> Nx.slice_along_axis(new_grid, new_grid, axis: 2)
-
-          merged = Nx.concatenate([tl, tr, bl, br], axis: 3)
-          Nx.reshape(merged, {batch, new_grid * new_grid, feat_dim * 4})
-        end,
-        name: "#{name}_merge"
-      )
-
-    x = Axon.layer_norm(merged, name: "#{name}_norm")
-    x = Axon.dense(x, next_dim, name: "#{name}_proj")
-
-    new_patches = div(num_patches, 4)
-    {x, new_patches}
+    # LayerNorm -> 2x2 strided conv (spatial halving + channel projection)
+    input
+    |> Axon.layer_norm(name: "#{name}_norm")
+    |> Axon.conv(next_dim,
+      kernel_size: {2, 2},
+      strides: [2, 2],
+      name: "#{name}_conv"
+    )
   end
 
   # ============================================================================
