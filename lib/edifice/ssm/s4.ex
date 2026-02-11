@@ -152,14 +152,15 @@ defmodule Edifice.SSM.S4 do
     c_proj = Axon.dense(x, state_size, name: "#{name}_c_proj")
 
     # SSM with HiPPO-initialized diagonal A
-    ssm_out = Axon.layer(
-      &hippo_ssm_impl/4,
-      [x, b_proj, c_proj],
-      name: "#{name}_ssm",
-      hidden_size: hidden_size,
-      state_size: state_size,
-      op_name: :s4_ssm
-    )
+    ssm_out =
+      Axon.layer(
+        &hippo_ssm_impl/4,
+        [x, b_proj, c_proj],
+        name: "#{name}_ssm",
+        hidden_size: hidden_size,
+        state_size: state_size,
+        op_name: :s4_ssm
+      )
 
     ssm_out =
       if dropout > 0 do

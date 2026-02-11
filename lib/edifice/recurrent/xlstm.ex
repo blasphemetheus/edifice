@@ -397,9 +397,12 @@ defmodule Edifice.Recurrent.XLSTM do
     # Compute gates for all timesteps
     # In the full mLSTM, these gates modulate the matrix memory update
     # For this simplified parallel version, we use them to modulate values
-    i_gate = Nx.exp(i_pre_clipped)  # [batch, seq, hidden]
-    f_gate = Nx.exp(f_pre_clipped)  # [batch, seq, hidden]
-    o_gate = Nx.sigmoid(o_pre)       # [batch, seq, hidden]
+    # [batch, seq, hidden]
+    i_gate = Nx.exp(i_pre_clipped)
+    # [batch, seq, hidden]
+    f_gate = Nx.exp(f_pre_clipped)
+    # [batch, seq, hidden]
+    o_gate = Nx.sigmoid(o_pre)
 
     # Compute gate factor for values (approximation of gated memory)
     # Normalized gate: i / (f + i) gives relative importance of new vs old
@@ -431,7 +434,9 @@ defmodule Edifice.Recurrent.XLSTM do
         end
       end
 
-    gate_factor_heads = reshape_for_heads(gate_factor_kv, batch_size, seq_len, num_heads, head_dim)
+    gate_factor_heads =
+      reshape_for_heads(gate_factor_kv, batch_size, seq_len, num_heads, head_dim)
+
     v = Nx.multiply(v, gate_factor_heads)
 
     # Compute attention-like scores: [batch, heads, seq, seq]
@@ -441,11 +446,13 @@ defmodule Edifice.Recurrent.XLSTM do
     # Apply causal mask
     causal_mask = create_causal_mask(seq_len)
     neg_inf = Nx.Constants.neg_infinity(Nx.type(scores))
-    scores = Nx.select(
-      Nx.broadcast(causal_mask, Nx.shape(scores)),
-      scores,
-      Nx.broadcast(neg_inf, Nx.shape(scores))
-    )
+
+    scores =
+      Nx.select(
+        Nx.broadcast(causal_mask, Nx.shape(scores)),
+        scores,
+        Nx.broadcast(neg_inf, Nx.shape(scores))
+      )
 
     # Softmax attention
     max_scores = Nx.reduce_max(scores, axes: [3], keep_axes: true)
@@ -545,11 +552,17 @@ defmodule Edifice.Recurrent.XLSTM do
     # Count layers by type
     {num_slstm, num_mlstm} =
       case variant do
-        :slstm -> {num_layers, 0}
-        :mlstm -> {0, num_layers}
+        :slstm ->
+          {num_layers, 0}
+
+        :mlstm ->
+          {0, num_layers}
+
         :mixed ->
-          slstm_count = div(num_layers + 1, 2)  # Odd layers
-          mlstm_count = div(num_layers, 2)       # Even layers
+          # Odd layers
+          slstm_count = div(num_layers + 1, 2)
+          # Even layers
+          mlstm_count = div(num_layers, 2)
           {slstm_count, mlstm_count}
       end
 

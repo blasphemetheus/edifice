@@ -212,18 +212,23 @@ defmodule Edifice.Generative.VQVAE do
     # Expand: ||z_e||^2 - 2*z_e*e^T + ||e||^2
     # z_e: [batch, D], codebook: [K, D]
 
-    z_e_sq = Nx.sum(Nx.pow(z_e, 2), axes: [-1], keep_axes: true)    # [batch, 1]
-    cb_sq = Nx.sum(Nx.pow(codebook, 2), axes: [-1], keep_axes: true) # [K, 1]
-    cross = Nx.dot(z_e, Nx.transpose(codebook))                      # [batch, K]
+    # [batch, 1]
+    z_e_sq = Nx.sum(Nx.pow(z_e, 2), axes: [-1], keep_axes: true)
+    # [K, 1]
+    cb_sq = Nx.sum(Nx.pow(codebook, 2), axes: [-1], keep_axes: true)
+    # [batch, K]
+    cross = Nx.dot(z_e, Nx.transpose(codebook))
 
     # distances: [batch, K]
     distances = z_e_sq - 2.0 * cross + Nx.transpose(cb_sq)
 
     # Find nearest codebook entry
-    indices = Nx.argmin(distances, axis: -1)  # [batch]
+    # [batch]
+    indices = Nx.argmin(distances, axis: -1)
 
     # Gather quantized vectors
-    z_q = Nx.take(codebook, indices, axis: 0)  # [batch, D]
+    # [batch, D]
+    z_q = Nx.take(codebook, indices, axis: 0)
 
     # Straight-through estimator: gradient of z_q flows to z_e
     # z_q_st = z_e + stop_grad(z_q - z_e)

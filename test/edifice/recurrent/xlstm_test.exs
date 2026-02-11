@@ -11,16 +11,19 @@ defmodule Edifice.Recurrent.XLSTMTest do
       embed_size = 64
       hidden_size = 32
 
-      model = XLSTM.build(
-        embed_size: embed_size,
-        hidden_size: hidden_size,
-        num_layers: 2,
-        variant: :slstm,
-        seq_len: @seq_len
-      )
+      model =
+        XLSTM.build(
+          embed_size: embed_size,
+          hidden_size: hidden_size,
+          num_layers: 2,
+          variant: :slstm,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -37,18 +40,21 @@ defmodule Edifice.Recurrent.XLSTMTest do
       num_heads = 2
       head_dim = 16
 
-      model = XLSTM.build(
-        embed_size: embed_size,
-        hidden_size: hidden_size,
-        num_layers: 2,
-        variant: :mlstm,
-        num_heads: num_heads,
-        head_dim: head_dim,
-        seq_len: @seq_len
-      )
+      model =
+        XLSTM.build(
+          embed_size: embed_size,
+          hidden_size: hidden_size,
+          num_layers: 2,
+          variant: :mlstm,
+          num_heads: num_heads,
+          head_dim: head_dim,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -62,18 +68,21 @@ defmodule Edifice.Recurrent.XLSTMTest do
       embed_size = 64
       hidden_size = 32
 
-      model = XLSTM.build(
-        embed_size: embed_size,
-        hidden_size: hidden_size,
-        num_layers: 4,
-        variant: :mixed,
-        num_heads: 2,
-        head_dim: 16,
-        seq_len: @seq_len
-      )
+      model =
+        XLSTM.build(
+          embed_size: embed_size,
+          hidden_size: hidden_size,
+          num_layers: 4,
+          variant: :mixed,
+          num_heads: 2,
+          head_dim: 16,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -87,17 +96,20 @@ defmodule Edifice.Recurrent.XLSTMTest do
       embed_size = 64
       hidden_size = 32
 
-      model = XLSTM.build(
-        embed_size: embed_size,
-        hidden_size: hidden_size,
-        num_layers: 2,
-        num_heads: 2,
-        head_dim: 16,
-        seq_len: @seq_len
-      )
+      model =
+        XLSTM.build(
+          embed_size: embed_size,
+          hidden_size: hidden_size,
+          num_layers: 2,
+          num_heads: 2,
+          head_dim: 16,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -110,13 +122,14 @@ defmodule Edifice.Recurrent.XLSTMTest do
     test "skips input projection" do
       size = 32
 
-      model = XLSTM.build(
-        embed_size: size,
-        hidden_size: size,
-        num_layers: 1,
-        variant: :slstm,
-        seq_len: @seq_len
-      )
+      model =
+        XLSTM.build(
+          embed_size: size,
+          hidden_size: size,
+          num_layers: 1,
+          variant: :slstm,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
       params = init_fn.(Nx.template({@batch_size, @seq_len, size}, :f32), Axon.ModelState.empty())
@@ -146,14 +159,16 @@ defmodule Edifice.Recurrent.XLSTMTest do
     end
 
     test "returns a positive integer for mLSTM" do
-      count = XLSTM.param_count(
-        embed_size: 64,
-        hidden_size: 32,
-        num_layers: 2,
-        variant: :mlstm,
-        num_heads: 2,
-        head_dim: 16
-      )
+      count =
+        XLSTM.param_count(
+          embed_size: 64,
+          hidden_size: 32,
+          num_layers: 2,
+          variant: :mlstm,
+          num_heads: 2,
+          head_dim: 16
+        )
+
       assert is_integer(count)
       assert count > 0
     end

@@ -101,16 +101,19 @@ defmodule Edifice.SSM.MambaHillisSteele do
         else
           # Shift by stride: elements 0..(seq_len-stride-1) get combined with elements stride..(seq_len-1)
           # Pad with identity (1.0 for a, 0.0 for b) at the start
-          a_shifted = Nx.pad(
-            Nx.slice_along_axis(a_curr, 0, seq_len - stride, axis: 1),
-            1.0,
-            [{0, 0, 0}, {stride, 0, 0}, {0, 0, 0}, {0, 0, 0}]
-          )
-          b_shifted = Nx.pad(
-            Nx.slice_along_axis(b_curr, 0, seq_len - stride, axis: 1),
-            0.0,
-            [{0, 0, 0}, {stride, 0, 0}, {0, 0, 0}, {0, 0, 0}]
-          )
+          a_shifted =
+            Nx.pad(
+              Nx.slice_along_axis(a_curr, 0, seq_len - stride, axis: 1),
+              1.0,
+              [{0, 0, 0}, {stride, 0, 0}, {0, 0, 0}, {0, 0, 0}]
+            )
+
+          b_shifted =
+            Nx.pad(
+              Nx.slice_along_axis(b_curr, 0, seq_len - stride, axis: 1),
+              0.0,
+              [{0, 0, 0}, {stride, 0, 0}, {0, 0, 0}, {0, 0, 0}]
+            )
 
           # Combine ALL elements using associative operator:
           # (a1, b1) ⊗ (a2, b2) = (a1*a2, a1*b2 + b1)

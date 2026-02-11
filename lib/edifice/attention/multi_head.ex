@@ -287,7 +287,10 @@ defmodule Edifice.Attention.MultiHead do
 
     # Process each K/V chunk with online softmax
     {final_output, _final_max, final_sum} =
-      Enum.reduce(0..(num_kv_chunks - 1), {init_output, init_max, init_sum}, fn chunk_idx, {acc_output, acc_max, acc_sum} ->
+      Enum.reduce(0..(num_kv_chunks - 1), {init_output, init_max, init_sum}, fn chunk_idx,
+                                                                                {acc_output,
+                                                                                 acc_max,
+                                                                                 acc_sum} ->
         # Extract K/V chunk
         k_start = chunk_idx * chunk_size
         actual_chunk_size = min(chunk_size, seq_k - k_start)
@@ -308,7 +311,9 @@ defmodule Edifice.Attention.MultiHead do
 
             # Valid if key_pos <= query_pos
             causal_mask = Nx.greater_equal(q_positions, k_positions)
-            causal_mask = Nx.broadcast(Nx.new_axis(causal_mask, 0), {batch, seq_q, actual_chunk_size})
+
+            causal_mask =
+              Nx.broadcast(Nx.new_axis(causal_mask, 0), {batch, seq_q, actual_chunk_size})
 
             Nx.select(causal_mask, scores, Nx.broadcast(neg_inf, Nx.shape(scores)))
           else
@@ -336,10 +341,11 @@ defmodule Edifice.Attention.MultiHead do
         chunk_output = Nx.dot(exp_scores, [2], [0], v_chunk, [1], [0])
 
         # 7. Update output (rescale old output and add new)
-        new_output = Nx.add(
-          Nx.multiply(acc_output, Nx.new_axis(old_scale, -1)),
-          chunk_output
-        )
+        new_output =
+          Nx.add(
+            Nx.multiply(acc_output, Nx.new_axis(old_scale, -1)),
+            chunk_output
+          )
 
         {new_output, new_max, new_sum}
       end)
@@ -436,7 +442,10 @@ defmodule Edifice.Attention.MultiHead do
           cond do
             memory_efficient ->
               # Memory-efficient attention with online softmax (true O(n) memory)
-              memory_efficient_attention(query, key, value, chunk_size: chunk_size, causal: causal)
+              memory_efficient_attention(query, key, value,
+                chunk_size: chunk_size,
+                causal: causal
+              )
 
             chunked ->
               # Chunked attention (lower peak memory, same results as standard)
@@ -538,12 +547,20 @@ defmodule Edifice.Attention.MultiHead do
 
           chunked ->
             # Chunked attention with window mask
-            mask = if precomputed_mask != nil, do: precomputed_mask, else: window_mask(seq_len, window_size)
+            mask =
+              if precomputed_mask != nil,
+                do: precomputed_mask,
+                else: window_mask(seq_len, window_size)
+
             chunked_attention(query, key, value, mask: mask, chunk_size: chunk_size)
 
           true ->
             # Standard attention with window mask
-            mask = if precomputed_mask != nil, do: precomputed_mask, else: window_mask(seq_len, window_size)
+            mask =
+              if precomputed_mask != nil,
+                do: precomputed_mask,
+                else: window_mask(seq_len, window_size)
+
             scaled_dot_product_attention(query, key, value, mask: mask)
         end
       end,

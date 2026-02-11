@@ -181,14 +181,15 @@ defmodule Edifice.SSM.Hyena do
       Enum.with_index(gates)
       |> Enum.reduce(v, fn {gate_i, idx}, acc ->
         # Implicit long convolution via learned filter
-        conv_out = Axon.layer(
-          &implicit_long_conv_impl/2,
-          [acc],
-          name: "#{name}_long_conv_#{idx}",
-          hidden_size: hidden_size,
-          filter_size: filter_size,
-          op_name: :implicit_long_conv
-        )
+        conv_out =
+          Axon.layer(
+            &implicit_long_conv_impl/2,
+            [acc],
+            name: "#{name}_long_conv_#{idx}",
+            hidden_size: hidden_size,
+            filter_size: filter_size,
+            op_name: :implicit_long_conv
+          )
 
         # Element-wise gating
         Axon.multiply(conv_out, gate_i, name: "#{name}_gate_#{idx}")

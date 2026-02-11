@@ -123,13 +123,14 @@ defmodule Edifice.Generative.ConsistencyModel do
 
   defp build_f_network(noisy_input, sigma, input_dim, hidden_size, num_layers) do
     # Sigma embedding (log-scale sinusoidal)
-    sigma_embed = Axon.layer(
-      &sigma_embedding_impl/2,
-      [sigma],
-      name: "sigma_embed",
-      hidden_size: hidden_size,
-      op_name: :sigma_embed
-    )
+    sigma_embed =
+      Axon.layer(
+        &sigma_embedding_impl/2,
+        [sigma],
+        name: "sigma_embed",
+        hidden_size: hidden_size,
+        op_name: :sigma_embed
+      )
 
     sigma_mlp =
       sigma_embed
@@ -143,9 +144,10 @@ defmodule Edifice.Generative.ConsistencyModel do
     combined = Axon.add(x_proj, sigma_mlp, name: "combine")
 
     # Residual blocks
-    x = Enum.reduce(1..num_layers, combined, fn idx, acc ->
-      build_residual_block(acc, hidden_size, "block_#{idx}")
-    end)
+    x =
+      Enum.reduce(1..num_layers, combined, fn idx, acc ->
+        build_residual_block(acc, hidden_size, "block_#{idx}")
+      end)
 
     # Output projection
     Axon.dense(x, input_dim, name: "f_output")
@@ -166,12 +168,13 @@ defmodule Edifice.Generative.ConsistencyModel do
     # Log-scale embedding
     log_sigma = Nx.log(Nx.add(Nx.as_type(sigma, :f32), 1.0e-10))
 
-    freqs = Nx.exp(
-      Nx.multiply(
-        Nx.negate(Nx.log(Nx.tensor(10000.0))),
-        Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
+    freqs =
+      Nx.exp(
+        Nx.multiply(
+          Nx.negate(Nx.log(Nx.tensor(10_000.0))),
+          Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
+        )
       )
-    )
 
     s_expanded = Nx.new_axis(log_sigma, 1)
     angles = Nx.multiply(s_expanded, Nx.reshape(freqs, {1, half_dim}))
@@ -196,16 +199,19 @@ defmodule Edifice.Generative.ConsistencyModel do
     c_skip = Nx.divide(data_sq, Nx.add(sigma_sq, data_sq))
 
     # c_out approaches 0 as sigma -> sigma_min
-    c_out = Nx.divide(
-      Nx.multiply(sigma_2d, sigma_data),
-      Nx.sqrt(Nx.add(sigma_sq, data_sq))
-    )
+    c_out =
+      Nx.divide(
+        Nx.multiply(sigma_2d, sigma_data),
+        Nx.sqrt(Nx.add(sigma_sq, data_sq))
+      )
 
     # Scale c_out to zero at sigma_min for exact boundary
-    sigma_ratio = Nx.divide(
-      Nx.subtract(sigma_2d, sigma_min),
-      Nx.add(sigma_2d, 1.0e-8)
-    )
+    sigma_ratio =
+      Nx.divide(
+        Nx.subtract(sigma_2d, sigma_min),
+        Nx.add(sigma_2d, 1.0e-8)
+      )
+
     c_out = Nx.multiply(c_out, sigma_ratio)
 
     Nx.add(Nx.multiply(c_skip, x), Nx.multiply(c_out, f_out))

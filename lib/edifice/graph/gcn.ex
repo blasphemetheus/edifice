@@ -274,11 +274,13 @@ defmodule Edifice.Graph.GCN do
     # Apply symmetric normalization: D^{-1/2} A D^{-1/2} H
     # Step 1: D^{-1/2} on the right side of A: scale columns of A
     # D^{-1/2} is diagonal, so A * D^{-1/2} = A .* d_inv_sqrt[j] per column
-    d_right = Nx.new_axis(d_inv_sqrt, 1)  # [batch, 1, num_nodes]
+    # [batch, 1, num_nodes]
+    d_right = Nx.new_axis(d_inv_sqrt, 1)
     adj_scaled = Nx.multiply(adj, d_right)
 
     # Step 2: D^{-1/2} on the left side: scale rows of result
-    d_left = Nx.new_axis(d_inv_sqrt, 2)  # [batch, num_nodes, 1]
+    # [batch, num_nodes, 1]
+    d_left = Nx.new_axis(d_inv_sqrt, 2)
     adj_norm = Nx.multiply(adj_scaled, d_left)
 
     # Propagate: A_norm @ H (batched matrix multiply)

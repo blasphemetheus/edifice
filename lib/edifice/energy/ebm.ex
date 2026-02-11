@@ -74,7 +74,7 @@ defmodule Edifice.Energy.EBM do
   import Nx.Defn
 
   @default_hidden_sizes [256, 128]
-  @default_activation :swish
+  @default_activation :silu
   @default_langevin_steps 60
   @default_langevin_step_size 10.0
   @default_langevin_noise_scale 0.005

@@ -146,9 +146,12 @@ defmodule Edifice.Probabilistic.Bayesian do
 
     # rho: weight log-variance (sigma = softplus(rho))
     # Initialize rho to small negative values so initial sigma is small
-    rho = Axon.dense(input, units, name: "#{name}_rho",
-      kernel_initializer: Axon.Initializers.uniform(scale: 0.01),
-      use_bias: true)
+    rho =
+      Axon.dense(input, units,
+        name: "#{name}_rho",
+        kernel_initializer: Axon.Initializers.uniform(scale: 0.01),
+        use_bias: true
+      )
 
     # Reparameterization trick: sample = mu + softplus(rho) * epsilon
     Axon.layer(
@@ -200,9 +203,10 @@ defmodule Edifice.Probabilistic.Bayesian do
     sigma = Nx.log1p(Nx.exp(rho))
 
     # KL(N(mu, sigma^2) || N(0, prior_sigma^2))
-    kl = Nx.log(prior_sigma / sigma) +
-         (sigma * sigma + mu * mu) / (2.0 * prior_sigma * prior_sigma) -
-         0.5
+    kl =
+      Nx.log(prior_sigma / sigma) +
+        (sigma * sigma + mu * mu) / (2.0 * prior_sigma * prior_sigma) -
+        0.5
 
     Nx.sum(kl)
   end

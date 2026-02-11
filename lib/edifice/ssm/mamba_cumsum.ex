@@ -79,11 +79,12 @@ defmodule Edifice.SSM.MambaCumsum do
     {a_bar, bx} = Common.discretize_ssm(x, b, dt, state_size)
 
     # Apply selected scan algorithm
-    h = case scan_algo do
-      :cumsum_transposed -> cumsum_transposed_scan(a_bar, bx)
-      :cumsum_logspace -> cumsum_logspace_scan(a_bar, bx)
-      _ -> select_standard_scan(a_bar, bx)
-    end
+    h =
+      case scan_algo do
+        :cumsum_transposed -> cumsum_transposed_scan(a_bar, bx)
+        :cumsum_logspace -> cumsum_logspace_scan(a_bar, bx)
+        _ -> select_standard_scan(a_bar, bx)
+      end
 
     # Compute output
     Common.compute_ssm_output(h, c)

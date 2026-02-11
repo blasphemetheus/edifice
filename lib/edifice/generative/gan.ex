@@ -203,10 +203,11 @@ defmodule Edifice.Generative.GAN do
     key = Nx.Random.key(42)
     {alpha, _key} = Nx.Random.uniform(key, shape: {batch_size, 1})
 
-    interpolated = Nx.add(
-      Nx.multiply(alpha, real_data),
-      Nx.multiply(Nx.subtract(1.0, alpha), fake_data)
-    )
+    interpolated =
+      Nx.add(
+        Nx.multiply(alpha, real_data),
+        Nx.multiply(Nx.subtract(1.0, alpha), fake_data)
+      )
 
     grad_fn = Nx.Defn.grad(fn x -> Nx.mean(critic_fn.(params, x)) end)
     gradients = grad_fn.(interpolated)

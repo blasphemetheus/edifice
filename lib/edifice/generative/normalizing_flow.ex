@@ -158,14 +158,22 @@ defmodule Edifice.Generative.NormalizingFlow do
 
     # Split input into two halves
     x1 =
-      Axon.nx(input, fn t ->
-        Nx.slice_along_axis(t, 0, half_size, axis: -1)
-      end, name: "#{prefix}_split_1")
+      Axon.nx(
+        input,
+        fn t ->
+          Nx.slice_along_axis(t, 0, half_size, axis: -1)
+        end,
+        name: "#{prefix}_split_1"
+      )
 
     x2 =
-      Axon.nx(input, fn t ->
-        Nx.slice_along_axis(t, half_size, half_size, axis: -1)
-      end, name: "#{prefix}_split_2")
+      Axon.nx(
+        input,
+        fn t ->
+          Nx.slice_along_axis(t, half_size, half_size, axis: -1)
+        end,
+        name: "#{prefix}_split_2"
+      )
 
     # Alternate which half conditions the other
     {conditioner, transformed} =
@@ -197,7 +205,7 @@ defmodule Edifice.Generative.NormalizingFlow do
     transformed_output =
       Axon.layer(
         fn x, s, t, _opts ->
-          x * Nx.exp(s) + t
+          Nx.add(Nx.multiply(x, Nx.exp(s)), t)
         end,
         [transformed, scale, translation],
         name: "#{prefix}_affine"
@@ -242,7 +250,14 @@ defmodule Edifice.Generative.NormalizingFlow do
           pos_integer(),
           boolean()
         ) :: Nx.Tensor.t()
-  defn inverse_coupling_layer(y, hidden_weights, hidden_biases, scale_params, trans_params, half_size) do
+  defn inverse_coupling_layer(
+         y,
+         hidden_weights,
+         hidden_biases,
+         scale_params,
+         trans_params,
+         half_size
+       ) do
     # Split
     y1 = Nx.slice_along_axis(y, 0, half_size, axis: -1)
     y2 = Nx.slice_along_axis(y, half_size, half_size, axis: -1)

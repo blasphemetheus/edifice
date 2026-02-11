@@ -219,8 +219,10 @@ defmodule Edifice.Graph.GAT do
     # Compute attention coefficients: e_ij = LeakyReLU(a_src_i + a_tgt_j)
     # attn_src: [batch, num_nodes, num_heads] -> [batch, num_nodes, 1, num_heads]
     # attn_tgt: [batch, num_nodes, num_heads] -> [batch, 1, num_nodes, num_heads]
-    src_scores = Nx.new_axis(attn_src, 2)   # [batch, num_nodes, 1, num_heads]
-    tgt_scores = Nx.new_axis(attn_tgt, 1)   # [batch, 1, num_nodes, num_heads]
+    # [batch, num_nodes, 1, num_heads]
+    src_scores = Nx.new_axis(attn_src, 2)
+    # [batch, 1, num_nodes, num_heads]
+    tgt_scores = Nx.new_axis(attn_tgt, 1)
 
     # e_ij: [batch, num_nodes, num_nodes, num_heads]
     e = Nx.add(src_scores, tgt_scores)
@@ -258,7 +260,7 @@ defmodule Edifice.Graph.GAT do
     alpha_t = Nx.transpose(alpha, axes: [0, 3, 1, 2])
 
     # Attention-weighted aggregation: [batch, num_heads, num_nodes, output_dim]
-    h_prime = Nx.dot(alpha_t, [3], z_t, [2])
+    h_prime = Nx.dot(alpha_t, [3], [0, 1], z_t, [2], [0, 1])
 
     # Transpose back: [batch, num_nodes, num_heads, output_dim]
     h_prime = Nx.transpose(h_prime, axes: [0, 2, 1, 3])

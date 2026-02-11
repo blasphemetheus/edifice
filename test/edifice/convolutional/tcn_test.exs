@@ -11,14 +11,17 @@ defmodule Edifice.Convolutional.TCNTest do
       channels = [32, 32]
       seq_len = 16
 
-      model = TCN.build(
-        input_size: input_size,
-        channels: channels,
-        seq_len: seq_len
-      )
+      model =
+        TCN.build(
+          input_size: input_size,
+          channels: channels,
+          seq_len: seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, seq_len, input_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, seq_len, input_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, seq_len, input_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -34,7 +37,9 @@ defmodule Edifice.Convolutional.TCNTest do
       model = TCN.build(input_size: input_size, seq_len: seq_len)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, seq_len, input_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, seq_len, input_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, seq_len, input_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -48,15 +53,18 @@ defmodule Edifice.Convolutional.TCNTest do
       seq_len = 24
       channels = [16, 16, 16]
 
-      model = TCN.build(
-        input_size: input_size,
-        channels: channels,
-        seq_len: seq_len,
-        kernel_size: 3
-      )
+      model =
+        TCN.build(
+          input_size: input_size,
+          channels: channels,
+          seq_len: seq_len,
+          kernel_size: 3
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, seq_len, input_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, seq_len, input_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, seq_len, input_size}, type: :f32)
       output = predict_fn.(params, input)

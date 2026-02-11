@@ -387,6 +387,7 @@ defmodule Edifice.Misc.MiscNewTest do
 
       # Each row should sum to 1
       sums = Nx.sum(probs, axes: [1])
+
       for s <- Nx.to_flat_list(sums) do
         assert_in_delta s, 1.0, 1.0e-5
       end

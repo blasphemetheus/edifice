@@ -113,10 +113,15 @@ defmodule Edifice.Generative.DDIM do
     observations = Axon.input("observations", shape: {nil, obs_size})
 
     # Flatten actions
-    actions_flat = Axon.nx(noisy_actions, fn x ->
-      batch = Nx.axis_size(x, 0)
-      Nx.reshape(x, {batch, action_horizon * action_dim})
-    end, name: "flatten_actions")
+    actions_flat =
+      Axon.nx(
+        noisy_actions,
+        fn x ->
+          batch = Nx.axis_size(x, 0)
+          Nx.reshape(x, {batch, action_horizon * action_dim})
+        end,
+        name: "flatten_actions"
+      )
 
     # Sinusoidal timestep embedding
     time_embed = build_timestep_embedding(timestep, hidden_size, num_steps)
@@ -125,24 +130,29 @@ defmodule Edifice.Generative.DDIM do
     obs_embed = Axon.dense(observations, hidden_size, name: "obs_embed")
 
     # Combine inputs
-    combined = Axon.concatenate([actions_flat, time_embed, obs_embed],
-      axis: 1, name: "combine_inputs")
+    combined =
+      Axon.concatenate([actions_flat, time_embed, obs_embed], axis: 1, name: "combine_inputs")
 
     # Denoiser MLP
     x = Axon.dense(combined, hidden_size, name: "denoiser_in")
     x = Axon.activation(x, :silu, name: "denoiser_in_silu")
 
-    x = Enum.reduce(1..num_layers, x, fn idx, acc ->
-      build_denoiser_block(acc, hidden_size, "denoiser_block_#{idx}")
-    end)
+    x =
+      Enum.reduce(1..num_layers, x, fn idx, acc ->
+        build_denoiser_block(acc, hidden_size, "denoiser_block_#{idx}")
+      end)
 
     # Output: predicted noise
     noise_flat = Axon.dense(x, action_horizon * action_dim, name: "noise_out")
 
-    Axon.nx(noise_flat, fn x ->
-      batch = Nx.axis_size(x, 0)
-      Nx.reshape(x, {batch, action_horizon, action_dim})
-    end, name: "reshape_noise")
+    Axon.nx(
+      noise_flat,
+      fn x ->
+        batch = Nx.axis_size(x, 0)
+        Nx.reshape(x, {batch, action_horizon, action_dim})
+      end,
+      name: "reshape_noise"
+    )
   end
 
   defp build_denoiser_block(input, hidden_size, name) do
@@ -170,7 +180,7 @@ defmodule Edifice.Generative.DDIM do
     half_dim = div(hidden_size, 2)
 
     t_norm = Nx.divide(Nx.as_type(t, :f32), num_steps)
-    freqs = Nx.pow(10000.0, Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1)))
+    freqs = Nx.pow(10_000.0, Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1)))
     t_expanded = Nx.new_axis(t_norm, 1)
     angles = Nx.multiply(t_expanded, Nx.reshape(freqs, {1, half_dim}))
     Nx.concatenate([Nx.sin(angles), Nx.cos(angles)], axis: 1)
@@ -228,7 +238,13 @@ defmodule Edifice.Generative.DDIM do
 
     Denoised actions [batch, action_horizon, action_dim].
   """
-  @spec ddim_sample(map(), (map(), map() -> Nx.Tensor.t()), Nx.Tensor.t(), Nx.Tensor.t(), keyword()) ::
+  @spec ddim_sample(
+          map(),
+          (map(), map() -> Nx.Tensor.t()),
+          Nx.Tensor.t(),
+          Nx.Tensor.t(),
+          keyword()
+        ) ::
           Nx.Tensor.t()
   def ddim_sample(params, predict_fn, observations, initial_noise, opts \\ []) do
     schedule = Keyword.fetch!(opts, :schedule)
@@ -249,11 +265,12 @@ defmodule Edifice.Generative.DDIM do
       t_prev = max(t - stride, 0)
 
       # Predict noise
-      predicted_noise = predict_fn.(params, %{
-        "noisy_actions" => x_t,
-        "timestep" => t_tensor,
-        "observations" => observations
-      })
+      predicted_noise =
+        predict_fn.(params, %{
+          "noisy_actions" => x_t,
+          "timestep" => t_tensor,
+          "observations" => observations
+        })
 
       ddim_step(x_t, predicted_noise, t, t_prev, schedule, eta)
     end)
@@ -277,27 +294,31 @@ defmodule Edifice.Generative.DDIM do
     alpha_prev = alphas_cumprod[t_prev]
 
     # Predict clean sample
-    pred_x0 = Nx.divide(
-      Nx.subtract(x_t, Nx.multiply(Nx.sqrt(1.0 - alpha_t), predicted_noise)),
-      Nx.sqrt(alpha_t)
-    )
+    pred_x0 =
+      Nx.divide(
+        Nx.subtract(x_t, Nx.multiply(Nx.sqrt(1.0 - alpha_t), predicted_noise)),
+        Nx.sqrt(alpha_t)
+      )
 
     # Clip for stability
     pred_x0 = Nx.clip(pred_x0, -1.0, 1.0)
 
     # Compute sigma for stochasticity
-    sigma = eta * Nx.sqrt(
-      Nx.divide(
-        Nx.multiply(1.0 - alpha_prev, 1.0 - alpha_t / alpha_prev),
-        Nx.add(1.0 - alpha_t, 1.0e-8)
-      )
-    )
+    sigma =
+      eta *
+        Nx.sqrt(
+          Nx.divide(
+            Nx.multiply(1.0 - alpha_prev, 1.0 - alpha_t / alpha_prev),
+            Nx.add(1.0 - alpha_t, 1.0e-8)
+          )
+        )
 
     # Direction pointing to x_t
-    dir_xt = Nx.multiply(
-      Nx.sqrt(Nx.max(1.0 - alpha_prev - sigma * sigma, 0.0)),
-      predicted_noise
-    )
+    dir_xt =
+      Nx.multiply(
+        Nx.sqrt(Nx.max(1.0 - alpha_prev - sigma * sigma, 0.0)),
+        predicted_noise
+      )
 
     # x_{t-1}
     Nx.add(

@@ -197,9 +197,13 @@ defmodule Edifice.Vision.MLPMixer do
 
     # Transpose: [batch, num_patches, hidden_dim] -> [batch, hidden_dim, num_patches]
     token_transposed =
-      Axon.nx(token_normed, fn tensor ->
-        Nx.transpose(tensor, axes: [0, 2, 1])
-      end, name: "#{name}_transpose1")
+      Axon.nx(
+        token_normed,
+        fn tensor ->
+          Nx.transpose(tensor, axes: [0, 2, 1])
+        end,
+        name: "#{name}_transpose1"
+      )
 
     token_mixed =
       token_transposed
@@ -211,9 +215,13 @@ defmodule Edifice.Vision.MLPMixer do
 
     # Transpose back: [batch, hidden_dim, num_patches] -> [batch, num_patches, hidden_dim]
     token_mixed =
-      Axon.nx(token_mixed, fn tensor ->
-        Nx.transpose(tensor, axes: [0, 2, 1])
-      end, name: "#{name}_transpose2")
+      Axon.nx(
+        token_mixed,
+        fn tensor ->
+          Nx.transpose(tensor, axes: [0, 2, 1])
+        end,
+        name: "#{name}_transpose2"
+      )
 
     # Residual
     x = Axon.add(input, token_mixed, name: "#{name}_token_residual")

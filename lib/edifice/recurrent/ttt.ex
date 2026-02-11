@@ -242,12 +242,16 @@ defmodule Edifice.Recurrent.TTT do
 
         # Weight update: W -= eta * error * k^T (outer product)
         # eta_t * error: [batch, inner], k_t: [batch, inner]
-        grad = Nx.dot(
-          Nx.new_axis(Nx.multiply(eta_t, error), 2),
-          [2], [0],
-          Nx.new_axis(k_t, 1),
-          [1], [0]
-        )
+        grad =
+          Nx.dot(
+            Nx.new_axis(Nx.multiply(eta_t, error), 2),
+            [2],
+            [0],
+            Nx.new_axis(k_t, 1),
+            [1],
+            [0]
+          )
+
         w_t = Nx.subtract(w_prev, grad)
 
         # Output: W_t @ q_t

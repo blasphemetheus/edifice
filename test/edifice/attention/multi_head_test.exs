@@ -35,7 +35,9 @@ defmodule Edifice.Attention.MultiHeadTest do
       model = MultiHead.build_sliding_window(@opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -46,7 +48,9 @@ defmodule Edifice.Attention.MultiHeadTest do
       model = MultiHead.build_sliding_window(@opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 

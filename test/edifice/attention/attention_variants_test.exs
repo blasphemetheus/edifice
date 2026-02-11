@@ -40,7 +40,10 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       model = GQA.build(@gqa_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
       output = predict_fn.(params, random_input())
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -50,7 +53,10 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       model = GQA.build(@gqa_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
       output = predict_fn.(params, random_input())
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -85,7 +91,10 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       model = Perceiver.build(@perceiver_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
       output = predict_fn.(params, random_input())
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -95,7 +104,10 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       model = Perceiver.build(@perceiver_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
       output = predict_fn.(params, random_input())
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -129,7 +141,10 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       model = FNet.build(@fnet_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
       output = predict_fn.(params, random_input())
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -139,7 +154,10 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       model = FNet.build(@fnet_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
       output = predict_fn.(params, random_input())
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -174,7 +192,10 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       model = LinearTransformer.build(@linear_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
       output = predict_fn.(params, random_input())
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -184,7 +205,10 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       model = LinearTransformer.build(@linear_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
       output = predict_fn.(params, random_input())
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -220,7 +244,10 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       model = Nystromformer.build(@nystrom_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
       output = predict_fn.(params, random_input())
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -230,7 +257,10 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       model = Nystromformer.build(@nystrom_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
       output = predict_fn.(params, random_input())
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -266,7 +296,10 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       model = Performer.build(@performer_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
       output = predict_fn.(params, random_input())
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -276,7 +309,10 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       model = Performer.build(@performer_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
       output = predict_fn.(params, random_input())
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1

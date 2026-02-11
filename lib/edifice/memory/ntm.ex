@@ -107,16 +107,26 @@ defmodule Edifice.Memory.NTM do
     controller_out = build_controller(controller_input, controller_size)
 
     # Read head: compute read weights and read from memory
-    read_result = read_head(controller_out, memory,
-      memory_size: memory_size, memory_dim: memory_dim, name: "read_head")
+    read_result =
+      read_head(controller_out, memory,
+        memory_size: memory_size,
+        memory_dim: memory_dim,
+        name: "read_head"
+      )
 
     # Write head: compute write weights, erase, and add vectors
-    _write_result = write_head(controller_out, memory,
-      memory_size: memory_size, memory_dim: memory_dim, name: "write_head")
+    _write_result =
+      write_head(controller_out, memory,
+        memory_size: memory_size,
+        memory_dim: memory_dim,
+        name: "write_head"
+      )
 
     # Combine controller output with read result for final output
-    combined = Axon.concatenate([controller_out, read_result],
-      name: "ntm_combine")
+    combined =
+      Axon.concatenate([controller_out, read_result],
+        name: "ntm_combine"
+      )
 
     Axon.dense(combined, output_size, name: "ntm_output")
   end
@@ -137,19 +147,30 @@ defmodule Edifice.Memory.NTM do
   @spec build_controller(Axon.t(), pos_integer()) :: Axon.t()
   def build_controller(input, controller_size) do
     # Reshape to sequence of length 1 for LSTM: [batch, 1, dim]
-    seq_input = Axon.nx(input, fn x ->
-      Nx.new_axis(x, 1)
-    end, name: "controller_reshape")
+    seq_input =
+      Axon.nx(
+        input,
+        fn x ->
+          Nx.new_axis(x, 1)
+        end,
+        name: "controller_reshape"
+      )
 
     # LSTM controller
-    {output_seq, _hidden} = Axon.lstm(seq_input, controller_size,
-      name: "controller_lstm",
-      recurrent_initializer: :glorot_uniform)
+    {output_seq, _hidden} =
+      Axon.lstm(seq_input, controller_size,
+        name: "controller_lstm",
+        recurrent_initializer: :glorot_uniform
+      )
 
     # Squeeze back to [batch, controller_size]
-    Axon.nx(output_seq, fn x ->
-      Nx.squeeze(x, axes: [1])
-    end, name: "controller_squeeze")
+    Axon.nx(
+      output_seq,
+      fn x ->
+        Nx.squeeze(x, axes: [1])
+      end,
+      name: "controller_squeeze"
+    )
   end
 
   @doc """
@@ -272,21 +293,21 @@ defmodule Edifice.Memory.NTM do
     # Cosine similarity between key and each memory row
     # memory: [batch, N, M]
     # Numerator: dot product
-    dot_product = Nx.sum(key_expanded * memory, axes: [2])
+    dot_product = Nx.sum(Nx.multiply(key_expanded, memory), axes: [2])
 
     # Denominator: product of norms
-    key_norm = Nx.sqrt(Nx.sum(key_expanded * key_expanded, axes: [2]) + 1.0e-8)
-    mem_norm = Nx.sqrt(Nx.sum(memory * memory, axes: [2]) + 1.0e-8)
+    key_norm = Nx.sqrt(Nx.add(Nx.sum(Nx.multiply(key_expanded, key_expanded), axes: [2]), 1.0e-8))
+    mem_norm = Nx.sqrt(Nx.add(Nx.sum(Nx.multiply(memory, memory), axes: [2]), 1.0e-8))
 
     # Cosine similarity: [batch, N]
-    cosine_sim = dot_product / (key_norm * mem_norm)
+    cosine_sim = Nx.divide(dot_product, Nx.multiply(key_norm, mem_norm))
 
     # Scale by beta and apply softmax
     # beta: [batch, 1]
-    scaled = beta * cosine_sim
+    scaled = Nx.multiply(beta, cosine_sim)
     max_score = Nx.reduce_max(scaled, axes: [1], keep_axes: true)
-    exp_scores = Nx.exp(scaled - max_score)
-    exp_scores / Nx.sum(exp_scores, axes: [1], keep_axes: true)
+    exp_scores = Nx.exp(Nx.subtract(scaled, max_score))
+    Nx.divide(exp_scores, Nx.sum(exp_scores, axes: [1], keep_axes: true))
   end
 
   # ============================================================================
@@ -297,9 +318,14 @@ defmodule Edifice.Memory.NTM do
   # memory read (using mean of memory as a simple initial read vector)
   defp build_controller_input(input, memory, _memory_dim, _num_heads) do
     # Simple initial read: mean over memory rows
-    initial_read = Axon.nx(memory, fn m ->
-      Nx.mean(m, axes: [1])
-    end, name: "initial_read")
+    initial_read =
+      Axon.nx(
+        memory,
+        fn m ->
+          Nx.mean(m, axes: [1])
+        end,
+        name: "initial_read"
+      )
 
     Axon.concatenate([input, initial_read], name: "controller_input")
   end
@@ -313,7 +339,7 @@ defmodule Edifice.Memory.NTM do
     # weights: [batch, N] -> [batch, N, 1]
     # memory: [batch, N, M]
     weights_expanded = Nx.new_axis(weights, 2)
-    Nx.sum(weights_expanded * memory, axes: [1])
+    Nx.sum(Nx.multiply(weights_expanded, memory), axes: [1])
   end
 
   # Write head implementation: content addressing + erase/add
@@ -327,7 +353,7 @@ defmodule Edifice.Memory.NTM do
     weights_expanded = Nx.new_axis(weights, 2)
     erase_expanded = Nx.new_axis(erase, 1)
 
-    erase_matrix = weights_expanded * erase_expanded
+    erase_matrix = Nx.multiply(weights_expanded, erase_expanded)
     # Return the erase signal (memory update is applied externally)
     Nx.sum(erase_matrix, axes: [1])
   end

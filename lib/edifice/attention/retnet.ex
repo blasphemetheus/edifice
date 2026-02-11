@@ -186,7 +186,9 @@ defmodule Edifice.Attention.RetNet do
 
     # 1. Multi-Scale Retention branch
     retention_normed = Axon.layer_norm(input, name: "#{name}_retention_norm")
-    retention_out = build_multi_scale_retention(retention_normed, Keyword.put(opts, :name, "#{name}_msr"))
+
+    retention_out =
+      build_multi_scale_retention(retention_normed, Keyword.put(opts, :name, "#{name}_msr"))
 
     # Residual connection
     after_retention = Axon.add(input, retention_out, name: "#{name}_retention_residual")
@@ -362,7 +364,13 @@ defmodule Edifice.Attention.RetNet do
 
   This is used during inference when processing one token at a time.
   """
-  @spec recurrent_retention_step(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t()) ::
+  @spec recurrent_retention_step(
+          Nx.Tensor.t(),
+          Nx.Tensor.t(),
+          Nx.Tensor.t(),
+          Nx.Tensor.t(),
+          Nx.Tensor.t()
+        ) ::
           {Nx.Tensor.t(), Nx.Tensor.t()}
   def recurrent_retention_step(q, k, v, state, gamma) do
     # q, k, v: [batch, head_dim]

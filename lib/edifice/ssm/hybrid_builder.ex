@@ -44,6 +44,7 @@ defmodule Edifice.SSM.HybridBuilder do
   alias Edifice.Attention.MultiHead, as: Attention
   alias Edifice.Attention.{GLA, RWKV}
   alias Edifice.Feedforward.KAN
+  alias Edifice.Blocks.FFN
 
   @type layer_type :: :mamba | :attention | :gla | :rwkv | :ffn | :kan
   @type pattern :: [layer_type()]
@@ -114,12 +115,12 @@ defmodule Edifice.SSM.HybridBuilder do
         build_layer(
           acc,
           layer_type,
-          Keyword.merge(opts, [
+          Keyword.merge(opts,
             hidden_size: hidden_size,
             dropout: dropout,
             name: layer_name,
             seq_len: seq_len
-          ])
+          )
         )
       end)
 
@@ -134,6 +135,7 @@ defmodule Edifice.SSM.HybridBuilder do
       x,
       fn tensor ->
         seq_len_actual = Nx.axis_size(tensor, 1)
+
         Nx.slice_along_axis(tensor, seq_len_actual - 1, 1, axis: 1)
         |> Nx.squeeze(axes: [1])
       end,
@@ -176,10 +178,7 @@ defmodule Edifice.SSM.HybridBuilder do
   def pattern(:rwkv_attention, num_layers) do
     # RWKV with sparse attention
     Enum.map(1..num_layers, fn idx ->
-      cond do
-        rem(idx, 4) == 0 -> :attention
-        true -> :rwkv
-      end
+      if rem(idx, 4) == 0, do: :attention, else: :rwkv
     end)
   end
 
@@ -249,8 +248,7 @@ defmodule Edifice.SSM.HybridBuilder do
       ffn:
         hidden_size * ffn_dim +
           ffn_dim * hidden_size,
-      kan:
-        hidden_size * hidden_size * 10
+      kan: hidden_size * hidden_size * 10
     }
 
     input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
@@ -495,13 +493,8 @@ defmodule Edifice.SSM.HybridBuilder do
 
   defp build_ffn_sublayer(input, hidden_size, dropout, name) do
     ffn_input = Axon.layer_norm(input, name: "#{name}_ffn_pre_norm")
-    ffn_dim = hidden_size * 4
 
-    ffn =
-      ffn_input
-      |> Axon.dense(ffn_dim, name: "#{name}_ffn1")
-      |> Axon.gelu()
-      |> Axon.dense(hidden_size, name: "#{name}_ffn2")
+    ffn = FFN.layer(ffn_input, hidden_size: hidden_size, name: "#{name}_ffn")
 
     ffn = maybe_dropout(ffn, dropout, "#{name}_ffn_dropout")
     Axon.add(input, ffn, name: "#{name}_ffn_residual")

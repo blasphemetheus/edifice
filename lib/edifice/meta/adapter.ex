@@ -70,11 +70,12 @@ defmodule Edifice.Meta.Adapter do
 
     input = Axon.input("input", shape: {nil, hidden_size})
 
-    adapter_output = adapter_block(input, hidden_size,
-      bottleneck_size: bottleneck_size,
-      activation: activation,
-      name: name
-    )
+    adapter_output =
+      adapter_block(input, hidden_size,
+        bottleneck_size: bottleneck_size,
+        activation: activation,
+        name: name
+      )
 
     adapter_output
   end
@@ -142,10 +143,11 @@ defmodule Edifice.Meta.Adapter do
     activated = Axon.activation(down, activation, name: "#{name}_act")
 
     # Up-project back to hidden size
-    up = Axon.dense(activated, hidden_size,
-      name: "#{name}_up",
-      kernel_initializer: Axon.Initializers.zeros()
-    )
+    up =
+      Axon.dense(activated, hidden_size,
+        name: "#{name}_up",
+        kernel_initializer: Axon.Initializers.zeros()
+      )
 
     # Residual connection
     Axon.add(input, up, name: "#{name}_residual")

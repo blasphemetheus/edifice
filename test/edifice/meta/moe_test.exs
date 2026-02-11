@@ -135,10 +135,12 @@ defmodule Edifice.Meta.MoETest do
     test "returns scalar loss" do
       num_experts = 4
       router_probs = Nx.broadcast(0.5, {@batch_size, @seq_len, num_experts})
-      expert_mask = Nx.tensor([
-        [[1, 1, 0, 0], [0, 1, 1, 0], [1, 0, 0, 1], [0, 0, 1, 1]],
-        [[1, 0, 1, 0], [0, 1, 0, 1], [1, 1, 0, 0], [0, 0, 1, 1]]
-      ])
+
+      expert_mask =
+        Nx.tensor([
+          [[1, 1, 0, 0], [0, 1, 1, 0], [1, 0, 0, 1], [0, 0, 1, 1]],
+          [[1, 0, 1, 0], [0, 1, 0, 1], [1, 1, 0, 0], [0, 0, 1, 1]]
+        ])
 
       loss = MoE.compute_aux_loss(router_probs, expert_mask)
       assert Nx.shape(loss) == {}

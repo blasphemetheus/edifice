@@ -157,9 +157,7 @@ defmodule Edifice.Convolutional.DenseNet do
           compressed_channels = floor(new_channels * compression)
 
           t =
-            transition_layer(block_out, compressed_channels,
-              name: "transition_#{block_idx}"
-            )
+            transition_layer(block_out, compressed_channels, name: "transition_#{block_idx}")
 
           {t, compressed_channels}
         else
@@ -215,7 +213,7 @@ defmodule Edifice.Convolutional.DenseNet do
 
     {output, final_channels} =
       Enum.reduce(0..(num_layers - 1), {input, num_channels}, fn layer_idx,
-                                                                  {acc, _current_channels} ->
+                                                                 {acc, _current_channels} ->
         # BN -> ReLU -> 1x1 conv (bottleneck) -> BN -> ReLU -> 3x3 conv
         new_features =
           dense_layer(acc, growth_rate,

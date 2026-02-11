@@ -147,7 +147,12 @@ defmodule Edifice.Recurrent.Titans do
     # Stack Titans layers
     output =
       Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
-        layer_opts = Keyword.merge(opts, memory_size: memory_size, momentum: Keyword.get(opts, :momentum, default_momentum()))
+        layer_opts =
+          Keyword.merge(opts,
+            memory_size: memory_size,
+            momentum: Keyword.get(opts, :momentum, default_momentum())
+          )
+
         layer = build_titans_layer(acc, hidden_size, layer_opts, "titans_#{layer_idx}")
 
         if dropout > 0 and layer_idx < num_layers do
@@ -211,12 +216,18 @@ defmodule Edifice.Recurrent.Titans do
     output = Axon.dense(recurrence_output, hidden_size, name: "#{name}_out_proj")
 
     # Feedforward branch for additional expressivity
-    ff_normed = Axon.layer_norm(Axon.add(input, output, name: "#{name}_mid_residual"), name: "#{name}_ff_norm")
+    ff_normed =
+      Axon.layer_norm(Axon.add(input, output, name: "#{name}_mid_residual"),
+        name: "#{name}_ff_norm"
+      )
+
     ff_inner = Axon.dense(ff_normed, hidden_size * 2, name: "#{name}_ff_up")
     ff_inner = Axon.activation(ff_inner, :gelu, name: "#{name}_ff_gelu")
     ff_out = Axon.dense(ff_inner, hidden_size, name: "#{name}_ff_down")
 
-    Axon.add(Axon.add(input, output, name: "#{name}_residual_1"), ff_out, name: "#{name}_residual_2")
+    Axon.add(Axon.add(input, output, name: "#{name}_residual_1"), ff_out,
+      name: "#{name}_residual_2"
+    )
   end
 
   defp titans_scan(combined, memory_size, momentum) do
@@ -259,12 +270,15 @@ defmodule Edifice.Recurrent.Titans do
         gate = Nx.sigmoid(Nx.add(g_input, surprise_log))
 
         # Gradient: error * k^T (outer product)
-        grad = Nx.dot(
-          Nx.new_axis(error, 2),
-          [2], [0],
-          Nx.new_axis(k_t, 1),
-          [1], [0]
-        )
+        grad =
+          Nx.dot(
+            Nx.new_axis(error, 2),
+            [2],
+            [0],
+            Nx.new_axis(k_t, 1),
+            [1],
+            [0]
+          )
 
         # Momentum update
         mom_t = Nx.add(Nx.multiply(momentum, mom_prev), grad)

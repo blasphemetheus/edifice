@@ -302,17 +302,24 @@ defmodule Edifice.Vision.SwinTransformer do
 
           # Take every other element in both dimensions to get 4 sub-grids
           # Top-left
-          tl = Nx.slice_along_axis(grid, 0, new_grid, axis: 1)
-               |> Nx.slice_along_axis(0, new_grid, axis: 2)
+          tl =
+            Nx.slice_along_axis(grid, 0, new_grid, axis: 1)
+            |> Nx.slice_along_axis(0, new_grid, axis: 2)
+
           # Top-right
-          tr = Nx.slice_along_axis(grid, 0, new_grid, axis: 1)
-               |> Nx.slice_along_axis(new_grid, new_grid, axis: 2)
+          tr =
+            Nx.slice_along_axis(grid, 0, new_grid, axis: 1)
+            |> Nx.slice_along_axis(new_grid, new_grid, axis: 2)
+
           # Bottom-left
-          bl = Nx.slice_along_axis(grid, new_grid, new_grid, axis: 1)
-               |> Nx.slice_along_axis(0, new_grid, axis: 2)
+          bl =
+            Nx.slice_along_axis(grid, new_grid, new_grid, axis: 1)
+            |> Nx.slice_along_axis(0, new_grid, axis: 2)
+
           # Bottom-right
-          br = Nx.slice_along_axis(grid, new_grid, new_grid, axis: 1)
-               |> Nx.slice_along_axis(new_grid, new_grid, axis: 2)
+          br =
+            Nx.slice_along_axis(grid, new_grid, new_grid, axis: 1)
+            |> Nx.slice_along_axis(new_grid, new_grid, axis: 2)
 
           # Concatenate along feature dim: [batch, H/2, W/2, 4C]
           merged = Nx.concatenate([tl, tr, bl, br], axis: 3)

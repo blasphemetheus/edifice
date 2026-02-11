@@ -129,9 +129,15 @@ defmodule Edifice.Meta.MoE do
     # so we build a closure that accepts the right number of args
     stack_fn =
       case num_experts do
-        2 -> fn a, b, _opts -> Nx.stack([a, b]) end
-        4 -> fn a, b, c, d, _opts -> Nx.stack([a, b, c, d]) end
-        8 -> fn a, b, c, d, e, f, g, h, _opts -> Nx.stack([a, b, c, d, e, f, g, h]) end
+        2 ->
+          fn a, b, _opts -> Nx.stack([a, b]) end
+
+        4 ->
+          fn a, b, c, d, _opts -> Nx.stack([a, b, c, d]) end
+
+        8 ->
+          fn a, b, c, d, e, f, g, h, _opts -> Nx.stack([a, b, c, d, e, f, g, h]) end
+
         n ->
           # Generic: just use first expert as fallback for unusual counts
           # In practice, num_experts is typically 2, 4, or 8
@@ -273,7 +279,14 @@ defmodule Edifice.Meta.MoE do
               build_mamba_sublayer(acc, hidden_size, dropout, "layer_#{layer_idx}")
 
             :attention ->
-              build_attention_sublayer(acc, hidden_size, dropout, seq_len, window_size, "layer_#{layer_idx}")
+              build_attention_sublayer(
+                acc,
+                hidden_size,
+                dropout,
+                seq_len,
+                window_size,
+                "layer_#{layer_idx}"
+              )
 
             _ ->
               build_mamba_sublayer(acc, hidden_size, dropout, "layer_#{layer_idx}")
@@ -303,6 +316,7 @@ defmodule Edifice.Meta.MoE do
       x,
       fn tensor ->
         seq_len_actual = Nx.axis_size(tensor, 1)
+
         Nx.slice_along_axis(tensor, seq_len_actual - 1, 1, axis: 1)
         |> Nx.squeeze(axes: [1])
       end,
@@ -368,7 +382,7 @@ defmodule Edifice.Meta.MoE do
 
     # Non-expert layers: no change
     # Total speedup = 1 / (non_expert_fraction + expert_fraction / expert_speedup)
-    1.0 / ((1 - expert_fraction) + expert_fraction / expert_speedup)
+    1.0 / (1 - expert_fraction + expert_fraction / expert_speedup)
   end
 
   @doc """

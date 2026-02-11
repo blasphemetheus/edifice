@@ -126,18 +126,28 @@ defmodule Edifice.Neuromorphic.SNN do
         {in_size, size, idx}
       end)
 
-    # Build the full SNN with LIF simulation
-    Axon.layer(
-      &snn_forward_impl/2,
-      [input],
-      name: "snn",
-      layer_configs: dense_layers,
-      all_sizes: all_sizes,
-      num_timesteps: num_timesteps,
-      tau: tau,
-      threshold: threshold,
-      op_name: :snn_forward
-    )
+    # Project through hidden layers first
+    hidden =
+      Enum.reduce(hidden_sizes, input, fn size, acc ->
+        Axon.dense(acc, size, name: "snn_hidden_#{size}")
+      end)
+
+    # Simulate LIF dynamics over timesteps
+    snn_output =
+      Axon.layer(
+        &snn_forward_impl/2,
+        [hidden],
+        name: "snn",
+        layer_configs: dense_layers,
+        all_sizes: all_sizes,
+        num_timesteps: num_timesteps,
+        tau: tau,
+        threshold: threshold,
+        op_name: :snn_forward
+      )
+
+    # Project to output size
+    Axon.dense(snn_output, output_size, name: "snn_output")
   end
 
   @doc """
@@ -247,32 +257,30 @@ defmodule Edifice.Neuromorphic.SNN do
     # 2. Collecting output spikes over timesteps
     # 3. Rate-decoding the final output
 
-    output_size = List.last(all_sizes)
-
-    # Initialize membrane potentials for each timestep accumulation
-    # We collect spikes from the output layer
-    # Simplified: single-layer LIF simulation on the input
-    initial_membrane = Nx.broadcast(Nx.tensor(0.0), {batch_size, output_size})
+    _output_size = List.last(all_sizes)
 
     # Scale input to output dimension via simple projection
     # (In the full build/1, this is handled by the Axon dense layers)
     input_current = input
     input_dim = Nx.axis_size(input, 1)
 
-    # Simple linear projection using random-like but deterministic weights
-    # In practice, the Axon model wraps this with proper learned dense layers
-    # Here we just pass through and let the surrounding Axon layers handle projection
+    # Initialize membrane potentials matching input dimensions
+    initial_membrane = Nx.broadcast(Nx.tensor(0.0), {batch_size, input_dim})
 
     # Simulate over timesteps, collecting output spikes
     {_final_membrane, spike_sum} =
-      Enum.reduce(1..num_timesteps, {initial_membrane, Nx.broadcast(Nx.tensor(0.0), {batch_size, input_dim})}, fn _t, {membrane, acc_spikes} ->
-        # LIF step
-        new_membrane = Nx.add(Nx.multiply(beta, membrane), input_current)
-        spikes = Nx.sigmoid(Nx.multiply(25.0, Nx.subtract(new_membrane, threshold)))
-        reset_membrane = Nx.subtract(new_membrane, Nx.multiply(spikes, threshold))
+      Enum.reduce(
+        1..num_timesteps,
+        {initial_membrane, Nx.broadcast(Nx.tensor(0.0), {batch_size, input_dim})},
+        fn _t, {membrane, acc_spikes} ->
+          # LIF step
+          new_membrane = Nx.add(Nx.multiply(beta, membrane), input_current)
+          spikes = Nx.sigmoid(Nx.multiply(25.0, Nx.subtract(new_membrane, threshold)))
+          reset_membrane = Nx.subtract(new_membrane, Nx.multiply(spikes, threshold))
 
-        {reset_membrane, Nx.add(acc_spikes, spikes)}
-      end)
+          {reset_membrane, Nx.add(acc_spikes, spikes)}
+        end
+      )
 
     # Rate decode: average spikes over timesteps
     Nx.divide(spike_sum, num_timesteps)

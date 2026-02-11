@@ -138,11 +138,17 @@ defmodule Edifice.Generative.Diffusion do
     sqrt_recip_alphas = Nx.rsqrt(alphas)
 
     # Posterior variance for sampling: beta_tilde_t = beta_t * (1 - alpha_bar_{t-1}) / (1 - alpha_bar_t)
-    alphas_cumprod_prev = Nx.concatenate([Nx.tensor([1.0]), Nx.slice(alphas_cumprod, [0], [num_steps - 1])])
-    posterior_variance = Nx.multiply(betas, Nx.divide(
-      Nx.subtract(1.0, alphas_cumprod_prev),
-      Nx.add(Nx.subtract(1.0, alphas_cumprod), 1.0e-8)
-    ))
+    alphas_cumprod_prev =
+      Nx.concatenate([Nx.tensor([1.0]), Nx.slice(alphas_cumprod, [0], [num_steps - 1])])
+
+    posterior_variance =
+      Nx.multiply(
+        betas,
+        Nx.divide(
+          Nx.subtract(1.0, alphas_cumprod_prev),
+          Nx.add(Nx.subtract(1.0, alphas_cumprod), 1.0e-8)
+        )
+      )
 
     %{
       num_steps: num_steps,
@@ -226,10 +232,13 @@ defmodule Edifice.Generative.Diffusion do
     input
     |> Axon.dense(hidden_size, name: "obs_proj")
     |> Axon.activation(:silu, name: "obs_silu")
-    |> Axon.nx(fn x ->
-      # Mean pool over time
-      Nx.mean(x, axes: [1])
-    end, name: "obs_pool")
+    |> Axon.nx(
+      fn x ->
+        # Mean pool over time
+        Nx.mean(x, axes: [1])
+      end,
+      name: "obs_pool"
+    )
     |> Axon.dense(hidden_size, name: "obs_out")
   end
 
@@ -251,10 +260,15 @@ defmodule Edifice.Generative.Diffusion do
     num_steps = Keyword.get(opts, :num_steps, default_num_steps())
 
     # Flatten noisy actions: [batch, horizon, dim] -> [batch, horizon * dim]
-    actions_flat = Axon.nx(noisy_actions, fn x ->
-      batch = Nx.axis_size(x, 0)
-      Nx.reshape(x, {batch, action_horizon * action_dim})
-    end, name: "flatten_actions")
+    actions_flat =
+      Axon.nx(
+        noisy_actions,
+        fn x ->
+          batch = Nx.axis_size(x, 0)
+          Nx.reshape(x, {batch, action_horizon * action_dim})
+        end,
+        name: "flatten_actions"
+      )
 
     # Sinusoidal timestep embedding
     time_embed = build_timestep_embedding(timestep, hidden_size, num_steps)
@@ -264,24 +278,30 @@ defmodule Edifice.Generative.Diffusion do
 
     # Concatenate all conditioning
     # [batch, horizon*dim + hidden + hidden]
-    combined = Axon.concatenate([actions_flat, time_embed, obs_embed], axis: 1, name: "combine_inputs")
+    combined =
+      Axon.concatenate([actions_flat, time_embed, obs_embed], axis: 1, name: "combine_inputs")
 
     # MLP denoiser layers
     x = Axon.dense(combined, hidden_size, name: "denoiser_in")
     x = Axon.activation(x, :silu, name: "denoiser_in_silu")
 
-    x = Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
-      build_denoiser_block(acc, hidden_size, "denoiser_block_#{layer_idx}")
-    end)
+    x =
+      Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
+        build_denoiser_block(acc, hidden_size, "denoiser_block_#{layer_idx}")
+      end)
 
     # Output: predict noise with same shape as actions
     noise_flat = Axon.dense(x, action_horizon * action_dim, name: "noise_out")
 
     # Reshape back: [batch, horizon * dim] -> [batch, horizon, dim]
-    Axon.nx(noise_flat, fn x ->
-      batch = Nx.axis_size(x, 0)
-      Nx.reshape(x, {batch, action_horizon, action_dim})
-    end, name: "reshape_noise")
+    Axon.nx(
+      noise_flat,
+      fn x ->
+        batch = Nx.axis_size(x, 0)
+        Nx.reshape(x, {batch, action_horizon, action_dim})
+      end,
+      name: "reshape_noise"
+    )
   end
 
   # Single denoiser block with residual connection
@@ -315,10 +335,15 @@ defmodule Edifice.Generative.Diffusion do
 
     # Create frequency bands
     half_dim = div(hidden_size, 2)
-    freqs = Nx.pow(10000.0, Nx.divide(
-      Nx.iota({half_dim}, type: :f32),
-      half_dim - 1
-    ))
+
+    freqs =
+      Nx.pow(
+        10_000.0,
+        Nx.divide(
+          Nx.iota({half_dim}, type: :f32),
+          half_dim - 1
+        )
+      )
 
     # [batch, 1] * [half_dim] -> [batch, half_dim]
     t_expanded = Nx.new_axis(t_normalized, 1)
@@ -357,7 +382,9 @@ defmodule Edifice.Generative.Diffusion do
     sqrt_alpha = Nx.gather(sqrt_alphas_cumprod, Nx.reshape(timestep, {batch_size, 1}))
     sqrt_alpha = Nx.reshape(sqrt_alpha, {batch_size, 1, 1})
 
-    sqrt_one_minus_alpha = Nx.gather(sqrt_one_minus_alphas_cumprod, Nx.reshape(timestep, {batch_size, 1}))
+    sqrt_one_minus_alpha =
+      Nx.gather(sqrt_one_minus_alphas_cumprod, Nx.reshape(timestep, {batch_size, 1}))
+
     sqrt_one_minus_alpha = Nx.reshape(sqrt_one_minus_alpha, {batch_size, 1, 1})
 
     # a_t = sqrt(alpha_bar_t) * a_0 + sqrt(1-alpha_bar_t) * eps
@@ -384,7 +411,8 @@ defmodule Edifice.Generative.Diffusion do
   a_{t-1} = (1/sqrt(alpha_t)) * (a_t - (beta_t/sqrt(1-alpha_bar_t)) * eps_hat) + sqrt(beta_tilde_t) * z
   ```
   """
-  @spec p_sample(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), map()) :: Nx.Tensor.t()
+  @spec p_sample(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), map()) ::
+          Nx.Tensor.t()
   defn p_sample(noisy_actions, predicted_noise, timestep, random_noise, schedule) do
     # noisy_actions: [batch, horizon, dim]
     # predicted_noise: [batch, horizon, dim]
@@ -402,20 +430,27 @@ defmodule Edifice.Generative.Diffusion do
     # Gather values for current timestep
     beta_t = gather_and_expand(betas, timestep, batch_size)
     sqrt_recip_alpha_t = gather_and_expand(sqrt_recip_alphas, timestep, batch_size)
-    sqrt_one_minus_alpha_t = gather_and_expand(sqrt_one_minus_alphas_cumprod, timestep, batch_size)
+
+    sqrt_one_minus_alpha_t =
+      gather_and_expand(sqrt_one_minus_alphas_cumprod, timestep, batch_size)
+
     posterior_var_t = gather_and_expand(posterior_variance, timestep, batch_size)
 
     # Compute mean: mu = (1/sqrt(alpha_t)) * (a_t - (beta_t/sqrt(1-alpha_bar_t)) * eps_hat)
     coef = Nx.divide(beta_t, sqrt_one_minus_alpha_t)
-    mean = Nx.multiply(sqrt_recip_alpha_t,
-      Nx.subtract(noisy_actions, Nx.multiply(coef, predicted_noise))
-    )
+
+    mean =
+      Nx.multiply(
+        sqrt_recip_alpha_t,
+        Nx.subtract(noisy_actions, Nx.multiply(coef, predicted_noise))
+      )
 
     # Add noise (except at t=0)
     # Check if t > 0, if so add noise
     t_is_zero = Nx.equal(timestep, 0)
     # Broadcast to match action shape [batch, horizon, dim]
-    t_is_zero_broadcast = Nx.broadcast(Nx.reshape(t_is_zero, {batch_size, 1, 1}), Nx.shape(noisy_actions))
+    t_is_zero_broadcast =
+      Nx.broadcast(Nx.reshape(t_is_zero, {batch_size, 1, 1}), Nx.shape(noisy_actions))
 
     noise_scale = Nx.sqrt(posterior_var_t)
     noise_term = Nx.multiply(noise_scale, random_noise)
@@ -457,7 +492,8 @@ defmodule Edifice.Generative.Diffusion do
     num_layers = Keyword.get(opts, :num_layers, default_num_layers())
 
     action_flat = action_horizon * action_dim
-    input_size = action_flat + hidden_size + hidden_size  # actions + time + obs
+    # actions + time + obs
+    input_size = action_flat + hidden_size + hidden_size
 
     # Input projection
     input_proj = input_size * hidden_size
@@ -500,7 +536,8 @@ defmodule Edifice.Generative.Diffusion do
       action_horizon: 4,
       hidden_size: 128,
       num_layers: 2,
-      num_steps: 20,  # Fewer steps for faster inference
+      # Fewer steps for faster inference
+      num_steps: 20,
       beta_start: 1.0e-4,
       beta_end: 0.02
     ]

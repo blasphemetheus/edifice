@@ -12,15 +12,18 @@ defmodule Edifice.Feedforward.KANTest do
       hidden_size = 32
       seq_len = 8
 
-      model = KAN.build(
-        embed_size: embed_size,
-        hidden_size: hidden_size,
-        num_layers: 2,
-        seq_len: seq_len
-      )
+      model =
+        KAN.build(
+          embed_size: embed_size,
+          hidden_size: hidden_size,
+          num_layers: 2,
+          seq_len: seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, seq_len, embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, seq_len, embed_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, seq_len, embed_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -53,16 +56,19 @@ defmodule Edifice.Feedforward.KANTest do
       hidden_size = 16
       seq_len = 4
 
-      model = KAN.build(
-        embed_size: embed_size,
-        hidden_size: hidden_size,
-        num_layers: 1,
-        grid_size: 4,
-        seq_len: seq_len
-      )
+      model =
+        KAN.build(
+          embed_size: embed_size,
+          hidden_size: hidden_size,
+          num_layers: 1,
+          grid_size: 4,
+          seq_len: seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, seq_len, embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, seq_len, embed_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, seq_len, embed_size}, type: :f32)
       output = predict_fn.(params, input)

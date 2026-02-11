@@ -76,7 +76,9 @@ defmodule Edifice.Feedforward.MLPTest do
       model = MLP.build_temporal(embed_size: embed_size, seq_len: seq_len)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, seq_len, embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, seq_len, embed_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, seq_len, embed_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -89,10 +91,13 @@ defmodule Edifice.Feedforward.MLPTest do
       seq_len = 12
       embed_size = 64
 
-      model = MLP.build_temporal(embed_size: embed_size, seq_len: seq_len, hidden_sizes: [128, 32])
+      model =
+        MLP.build_temporal(embed_size: embed_size, seq_len: seq_len, hidden_sizes: [128, 32])
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, seq_len, embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, seq_len, embed_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, seq_len, embed_size}, type: :f32)
       output = predict_fn.(params, input)

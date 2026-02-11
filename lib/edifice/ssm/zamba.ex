@@ -386,14 +386,14 @@ defmodule Edifice.SSM.Zamba do
     # Shared attention (counted ONCE, not per application)
     ffn_dim = hidden_size * 4
 
+    # QKV
+    # output proj
+    # FFN1
+    # FFN2
     shared_attn_params =
-      # QKV
       attn_hidden_dim * 3 * attn_hidden_dim +
-        # output proj
         attn_hidden_dim * attn_hidden_dim +
-        # FFN1
         hidden_size * ffn_dim +
-        # FFN2
         ffn_dim * hidden_size
 
     # Input projection

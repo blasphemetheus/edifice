@@ -221,12 +221,16 @@ defmodule Edifice.Neuromorphic.ANN2SNN do
 
     # Simulate over timesteps
     {_final_membrane, spike_sum} =
-      Enum.reduce(1..num_timesteps, {initial_membrane, Nx.broadcast(Nx.tensor(0.0), {batch_size, hidden_size})}, fn _t, {membrane, acc_spikes} ->
-        new_membrane = Nx.add(membrane, input_current)
-        spikes = Nx.greater(new_membrane, threshold) |> Nx.as_type(:f32)
-        reset_membrane = Nx.subtract(new_membrane, Nx.multiply(spikes, threshold))
-        {reset_membrane, Nx.add(acc_spikes, spikes)}
-      end)
+      Enum.reduce(
+        1..num_timesteps,
+        {initial_membrane, Nx.broadcast(Nx.tensor(0.0), {batch_size, hidden_size})},
+        fn _t, {membrane, acc_spikes} ->
+          new_membrane = Nx.add(membrane, input_current)
+          spikes = Nx.greater(new_membrane, threshold) |> Nx.as_type(:f32)
+          reset_membrane = Nx.subtract(new_membrane, Nx.multiply(spikes, threshold))
+          {reset_membrane, Nx.add(acc_spikes, spikes)}
+        end
+      )
 
     # Rate decode
     Nx.divide(spike_sum, num_timesteps)

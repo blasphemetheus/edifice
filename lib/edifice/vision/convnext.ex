@@ -182,9 +182,7 @@ defmodule Edifice.Vision.ConvNeXt do
           # ConvNeXt blocks for this stage
           acc =
             Enum.reduce(0..(stage_depth - 1), acc, fn block_idx, block_acc ->
-              convnext_block(block_acc, dim, dropout,
-                name: "stage#{stage_idx}_block#{block_idx}"
-              )
+              convnext_block(block_acc, dim, dropout, name: "stage#{stage_idx}_block#{block_idx}")
             end)
 
           # Downsampling between stages (except last)
@@ -280,14 +278,21 @@ defmodule Edifice.Vision.ConvNeXt do
           grid = Nx.reshape(tensor, {batch, grid_size, grid_size, feat_dim})
 
           # Take quadrants
-          tl = Nx.slice_along_axis(grid, 0, new_grid, axis: 1)
-               |> Nx.slice_along_axis(0, new_grid, axis: 2)
-          tr = Nx.slice_along_axis(grid, 0, new_grid, axis: 1)
-               |> Nx.slice_along_axis(new_grid, new_grid, axis: 2)
-          bl = Nx.slice_along_axis(grid, new_grid, new_grid, axis: 1)
-               |> Nx.slice_along_axis(0, new_grid, axis: 2)
-          br = Nx.slice_along_axis(grid, new_grid, new_grid, axis: 1)
-               |> Nx.slice_along_axis(new_grid, new_grid, axis: 2)
+          tl =
+            Nx.slice_along_axis(grid, 0, new_grid, axis: 1)
+            |> Nx.slice_along_axis(0, new_grid, axis: 2)
+
+          tr =
+            Nx.slice_along_axis(grid, 0, new_grid, axis: 1)
+            |> Nx.slice_along_axis(new_grid, new_grid, axis: 2)
+
+          bl =
+            Nx.slice_along_axis(grid, new_grid, new_grid, axis: 1)
+            |> Nx.slice_along_axis(0, new_grid, axis: 2)
+
+          br =
+            Nx.slice_along_axis(grid, new_grid, new_grid, axis: 1)
+            |> Nx.slice_along_axis(new_grid, new_grid, axis: 2)
 
           merged = Nx.concatenate([tl, tr, bl, br], axis: 3)
           Nx.reshape(merged, {batch, new_grid * new_grid, feat_dim * 4})

@@ -133,14 +133,15 @@ defmodule Edifice.SSM.S4D do
     b_proj = Axon.dense(x, state_size, name: "#{name}_b_proj")
     c_proj = Axon.dense(x, state_size, name: "#{name}_c_proj")
 
-    ssm_out = Axon.layer(
-      &diagonal_ssm_impl/4,
-      [x, b_proj, c_proj],
-      name: "#{name}_ssm",
-      hidden_size: hidden_size,
-      state_size: state_size,
-      op_name: :s4d_ssm
-    )
+    ssm_out =
+      Axon.layer(
+        &diagonal_ssm_impl/4,
+        [x, b_proj, c_proj],
+        name: "#{name}_ssm",
+        hidden_size: hidden_size,
+        state_size: state_size,
+        op_name: :s4d_ssm
+      )
 
     ssm_out =
       if dropout > 0 do

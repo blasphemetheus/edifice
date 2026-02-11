@@ -219,10 +219,12 @@ defmodule Edifice.Generative.GenerativeNewTest do
 
       # Test denoiser
       {den_init, den_pred} = Axon.build(denoiser)
+
       den_input = %{
         "noisy_z" => Nx.broadcast(0.5, {@batch, @latent_size}),
         "timestep" => Nx.tensor([10, 20])
       }
+
       den_params = den_init.(den_input, Axon.ModelState.empty())
       den_out = den_pred.(den_params, den_input)
       assert Nx.all(Nx.is_nan(den_out) |> Nx.logical_not()) |> Nx.to_number() == 1

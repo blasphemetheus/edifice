@@ -64,12 +64,13 @@ defmodule Edifice.Blocks.CrossAttention do
     value_proj = Axon.dense(kv_input, hidden_dim, name: "#{name}_v_proj")
 
     # Compute cross-attention
-    attended = Axon.layer(
-      &cross_attention_impl/4,
-      [query_proj, key_proj, value_proj],
-      name: "#{name}_compute",
-      op_name: :cross_attention
-    )
+    attended =
+      Axon.layer(
+        &cross_attention_impl/4,
+        [query_proj, key_proj, value_proj],
+        name: "#{name}_compute",
+        op_name: :cross_attention
+      )
 
     # Output projection
     output = Axon.dense(attended, hidden_dim, name: "#{name}_out_proj")

@@ -74,6 +74,7 @@ defmodule Edifice.Attention.Nystromformer do
   require Axon
 
   alias Edifice.Utils.FusedOps
+  alias Edifice.Blocks.{TransformerBlock, ModelBuilder}
 
   # Default hyperparameters
   @default_hidden_size 256
@@ -81,7 +82,6 @@ defmodule Edifice.Attention.Nystromformer do
   @default_num_layers 4
   @default_num_heads 4
   @default_dropout 0.1
-  @default_window_size 60
 
   @doc """
   Build a Nystromformer model for sequence processing.
@@ -102,113 +102,54 @@ defmodule Edifice.Attention.Nystromformer do
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
-    _dropout = Keyword.get(opts, :dropout, @default_dropout)
-    window_size = Keyword.get(opts, :window_size, @default_window_size)
-    seq_len = Keyword.get(opts, :seq_len, window_size)
-
-    # Use concrete seq_len for efficient JIT compilation
-    input_seq_dim = if seq_len, do: seq_len, else: nil
-
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
-
-    # Project input to hidden dimension if different
-    x =
-      if embed_size != hidden_size do
-        Axon.dense(input, hidden_size, name: "input_projection")
-      else
-        input
-      end
-
-    # Stack Nystromformer blocks (dropout applied inside blocks)
-    x =
-      Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
-        build_nystrom_block(
-          acc,
-          Keyword.merge(opts, [name: "nystrom_block_#{layer_idx}"])
-        )
-      end)
-
-    # Final layer norm
-    x = Axon.layer_norm(x, name: "final_norm")
-
-    # Extract last timestep: [batch, seq_len, hidden] -> [batch, hidden]
-    Axon.nx(
-      x,
-      fn tensor ->
-        seq_len_actual = Nx.axis_size(tensor, 1)
-
-        Nx.slice_along_axis(tensor, seq_len_actual - 1, 1, axis: 1)
-        |> Nx.squeeze(axes: [1])
-      end,
-      name: "last_timestep"
-    )
-  end
-
-  @doc """
-  Build a single Nystromformer block.
-
-  Each block has:
-  1. LayerNorm -> Nystrom Attention -> Residual
-  2. LayerNorm -> FFN -> Residual
-  """
-  @spec build_nystrom_block(Axon.t(), keyword()) :: Axon.t()
-  def build_nystrom_block(input, opts) do
-    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_heads = Keyword.get(opts, :num_heads, @default_num_heads)
     num_landmarks = Keyword.get(opts, :num_landmarks, @default_num_landmarks)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
-    name = Keyword.get(opts, :name, "nystrom_block")
 
     head_dim = div(hidden_size, num_heads)
 
-    # 1. Nystrom attention branch
-    attn_normed = Axon.layer_norm(input, name: "#{name}_attn_norm")
+    ModelBuilder.build_sequence_model(
+      Keyword.merge(opts,
+        hidden_size: hidden_size,
+        num_layers: num_layers,
+        block_builder: fn input, block_opts ->
+          name = "nystrom_block_#{block_opts[:layer_idx]}"
 
-    # Q, K, V projections
-    q_proj = Axon.dense(attn_normed, hidden_size, name: "#{name}_q_proj")
-    k_proj = Axon.dense(attn_normed, hidden_size, name: "#{name}_k_proj")
-    v_proj = Axon.dense(attn_normed, hidden_size, name: "#{name}_v_proj")
+          attn_fn = fn x, attn_name ->
+            build_nystrom_attention(x, hidden_size, num_heads, head_dim, num_landmarks, attn_name)
+          end
 
-    # Apply Nystrom attention
-    attn_out = Axon.layer(
-      &nystrom_attention_impl/4,
-      [q_proj, k_proj, v_proj],
-      name: "#{name}_nystrom_attn",
-      num_heads: num_heads,
-      head_dim: head_dim,
-      num_landmarks: num_landmarks,
-      op_name: :nystrom_attention
+          TransformerBlock.layer(input,
+            attention_fn: attn_fn,
+            hidden_size: hidden_size,
+            dropout: dropout,
+            name: name
+          )
+        end
+      )
     )
+  end
 
-    # Output projection + dropout
-    attn_out = Axon.dense(attn_out, hidden_size, name: "#{name}_out_proj")
+  # Build the Nystrom attention sublayer
+  defp build_nystrom_attention(input, hidden_size, num_heads, head_dim, num_landmarks, name) do
+    q_proj = Axon.dense(input, hidden_size, name: "#{name}_q_proj")
+    k_proj = Axon.dense(input, hidden_size, name: "#{name}_k_proj")
+    v_proj = Axon.dense(input, hidden_size, name: "#{name}_v_proj")
 
     attn_out =
-      if dropout > 0 do
-        Axon.dropout(attn_out, rate: dropout, name: "#{name}_attn_dropout")
-      else
-        attn_out
-      end
+      Axon.layer(
+        &nystrom_attention_impl/4,
+        [q_proj, k_proj, v_proj],
+        name: "#{name}_nystrom_attn",
+        num_heads: num_heads,
+        head_dim: head_dim,
+        num_landmarks: num_landmarks,
+        op_name: :nystrom_attention
+      )
 
-    # Residual
-    after_attn = Axon.add(input, attn_out, name: "#{name}_attn_residual")
-
-    # 2. FFN branch
-    ffn_normed = Axon.layer_norm(after_attn, name: "#{name}_ffn_norm")
-    ffn_out = build_ffn(ffn_normed, hidden_size, "#{name}_ffn")
-
-    ffn_out =
-      if dropout > 0 do
-        Axon.dropout(ffn_out, rate: dropout, name: "#{name}_ffn_dropout")
-      else
-        ffn_out
-      end
-
-    Axon.add(after_attn, ffn_out, name: "#{name}_ffn_residual")
+    Axon.dense(attn_out, hidden_size, name: "#{name}_out_proj")
   end
 
   # Nystrom attention implementation
@@ -246,8 +187,11 @@ defmodule Edifice.Attention.Nystromformer do
         q_trunc = Nx.slice_along_axis(q, 0, padded_len, axis: 2)
         k_trunc = Nx.slice_along_axis(k, 0, padded_len, axis: 2)
 
-        q_segments = Nx.reshape(q_trunc, {batch, num_heads, actual_landmarks, segment_size, head_dim})
-        k_segments = Nx.reshape(k_trunc, {batch, num_heads, actual_landmarks, segment_size, head_dim})
+        q_segments =
+          Nx.reshape(q_trunc, {batch, num_heads, actual_landmarks, segment_size, head_dim})
+
+        k_segments =
+          Nx.reshape(k_trunc, {batch, num_heads, actual_landmarks, segment_size, head_dim})
 
         {Nx.mean(q_segments, axes: [3]), Nx.mean(k_segments, axes: [3])}
       end
@@ -309,16 +253,6 @@ defmodule Edifice.Attention.Nystromformer do
     end)
   end
 
-  # Feed-forward network
-  defp build_ffn(input, hidden_size, name) do
-    inner_size = hidden_size * 4
-
-    input
-    |> Axon.dense(inner_size, name: "#{name}_up")
-    |> Axon.activation(:gelu, name: "#{name}_gelu")
-    |> Axon.dense(hidden_size, name: "#{name}_down")
-  end
-
   # ============================================================================
   # Utilities
   # ============================================================================
@@ -349,7 +283,7 @@ defmodule Edifice.Attention.Nystromformer do
     # FFN: up + down
     ffn_params =
       hidden_size * inner_size +
-      inner_size * hidden_size
+        inner_size * hidden_size
 
     per_layer = attn_params + ffn_params
 

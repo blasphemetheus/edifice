@@ -86,7 +86,9 @@ defmodule Edifice.Blocks.PatchEmbed do
 
           # Reshape to [batch, C, nH, P, nW, P]
           tensor
-          |> Nx.reshape({batch, in_channels, num_patches_h, patch_size, num_patches_w, patch_size})
+          |> Nx.reshape(
+            {batch, in_channels, num_patches_h, patch_size, num_patches_w, patch_size}
+          )
           # Transpose to [batch, nH, nW, C, P, P]
           |> Nx.transpose(axes: [0, 2, 4, 1, 3, 5])
           # Flatten patches: [batch, num_patches, patch_dim]

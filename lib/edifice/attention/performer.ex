@@ -78,13 +78,14 @@ defmodule Edifice.Attention.Performer do
 
   require Axon
 
+  alias Edifice.Blocks.{TransformerBlock, ModelBuilder}
+
   # Default hyperparameters
   @default_hidden_size 256
   @default_num_features 64
   @default_num_layers 4
   @default_num_heads 4
   @default_dropout 0.1
-  @default_window_size 60
 
   @doc """
   Build a Performer model for sequence processing.
@@ -105,113 +106,54 @@ defmodule Edifice.Attention.Performer do
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
-    _dropout = Keyword.get(opts, :dropout, @default_dropout)
-    window_size = Keyword.get(opts, :window_size, @default_window_size)
-    seq_len = Keyword.get(opts, :seq_len, window_size)
-
-    # Use concrete seq_len for efficient JIT compilation
-    input_seq_dim = if seq_len, do: seq_len, else: nil
-
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
-
-    # Project input to hidden dimension if different
-    x =
-      if embed_size != hidden_size do
-        Axon.dense(input, hidden_size, name: "input_projection")
-      else
-        input
-      end
-
-    # Stack Performer blocks (dropout applied inside blocks)
-    x =
-      Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
-        build_performer_block(
-          acc,
-          Keyword.merge(opts, [name: "performer_block_#{layer_idx}"])
-        )
-      end)
-
-    # Final layer norm
-    x = Axon.layer_norm(x, name: "final_norm")
-
-    # Extract last timestep: [batch, seq_len, hidden] -> [batch, hidden]
-    Axon.nx(
-      x,
-      fn tensor ->
-        seq_len_actual = Nx.axis_size(tensor, 1)
-
-        Nx.slice_along_axis(tensor, seq_len_actual - 1, 1, axis: 1)
-        |> Nx.squeeze(axes: [1])
-      end,
-      name: "last_timestep"
-    )
-  end
-
-  @doc """
-  Build a single Performer block.
-
-  Each block has:
-  1. LayerNorm -> FAVOR+ Attention -> Residual
-  2. LayerNorm -> FFN -> Residual
-  """
-  @spec build_performer_block(Axon.t(), keyword()) :: Axon.t()
-  def build_performer_block(input, opts) do
-    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_heads = Keyword.get(opts, :num_heads, @default_num_heads)
     num_features = Keyword.get(opts, :num_features, @default_num_features)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
-    name = Keyword.get(opts, :name, "performer_block")
 
     head_dim = div(hidden_size, num_heads)
 
-    # 1. FAVOR+ attention branch
-    attn_normed = Axon.layer_norm(input, name: "#{name}_attn_norm")
+    ModelBuilder.build_sequence_model(
+      Keyword.merge(opts,
+        hidden_size: hidden_size,
+        num_layers: num_layers,
+        block_builder: fn input, block_opts ->
+          name = "performer_block_#{block_opts[:layer_idx]}"
 
-    # Q, K, V projections
-    q_proj = Axon.dense(attn_normed, hidden_size, name: "#{name}_q_proj")
-    k_proj = Axon.dense(attn_normed, hidden_size, name: "#{name}_k_proj")
-    v_proj = Axon.dense(attn_normed, hidden_size, name: "#{name}_v_proj")
+          attn_fn = fn x, attn_name ->
+            build_favor_attention(x, hidden_size, num_heads, head_dim, num_features, attn_name)
+          end
 
-    # Apply FAVOR+ attention
-    attn_out = Axon.layer(
-      &favor_plus_attention_impl/4,
-      [q_proj, k_proj, v_proj],
-      name: "#{name}_favor_attn",
-      num_heads: num_heads,
-      head_dim: head_dim,
-      num_features: num_features,
-      op_name: :favor_attention
+          TransformerBlock.layer(input,
+            attention_fn: attn_fn,
+            hidden_size: hidden_size,
+            dropout: dropout,
+            name: name
+          )
+        end
+      )
     )
+  end
 
-    # Output projection + dropout
-    attn_out = Axon.dense(attn_out, hidden_size, name: "#{name}_out_proj")
+  # Build the FAVOR+ attention sublayer (Q/K/V projections + attention + output proj)
+  defp build_favor_attention(input, hidden_size, num_heads, head_dim, num_features, name) do
+    q_proj = Axon.dense(input, hidden_size, name: "#{name}_q_proj")
+    k_proj = Axon.dense(input, hidden_size, name: "#{name}_k_proj")
+    v_proj = Axon.dense(input, hidden_size, name: "#{name}_v_proj")
 
     attn_out =
-      if dropout > 0 do
-        Axon.dropout(attn_out, rate: dropout, name: "#{name}_attn_dropout")
-      else
-        attn_out
-      end
+      Axon.layer(
+        &favor_plus_attention_impl/4,
+        [q_proj, k_proj, v_proj],
+        name: "#{name}_favor_attn",
+        num_heads: num_heads,
+        head_dim: head_dim,
+        num_features: num_features,
+        op_name: :favor_attention
+      )
 
-    # Residual
-    after_attn = Axon.add(input, attn_out, name: "#{name}_attn_residual")
-
-    # 2. FFN branch
-    ffn_normed = Axon.layer_norm(after_attn, name: "#{name}_ffn_norm")
-    ffn_out = build_ffn(ffn_normed, hidden_size, "#{name}_ffn")
-
-    ffn_out =
-      if dropout > 0 do
-        Axon.dropout(ffn_out, rate: dropout, name: "#{name}_ffn_dropout")
-      else
-        ffn_out
-      end
-
-    Axon.add(after_attn, ffn_out, name: "#{name}_ffn_residual")
+    Axon.dense(attn_out, hidden_size, name: "#{name}_out_proj")
   end
 
   # FAVOR+ attention implementation
@@ -236,31 +178,41 @@ defmodule Edifice.Attention.Performer do
     omega = generate_random_features(head_dim, num_features, Nx.type(q))
 
     # Apply FAVOR+ feature map: phi(x) = exp(-||x||^2/2) / sqrt(m) * exp(x @ omega^T)
-    q_prime = favor_feature_map(q, omega, num_features)  # [batch, heads, seq, num_features]
-    k_prime = favor_feature_map(k, omega, num_features)  # [batch, heads, seq, num_features]
+    # [batch, heads, seq, num_features]
+    q_prime = favor_feature_map(q, omega, num_features)
+    # [batch, heads, seq, num_features]
+    k_prime = favor_feature_map(k, omega, num_features)
 
     # Causal FAVOR+ attention using cumulative sums
     # KV[t] = sum_{i<=t} phi(K[i])^T * V[i]
     # Z[t] = sum_{i<=t} phi(K[i])
 
     # K'^T * V outer products: [batch, heads, seq, num_features, head_dim]
-    k_expanded = Nx.new_axis(k_prime, 4)    # [batch, heads, seq, num_features, 1]
-    v_expanded = Nx.new_axis(v, 3)           # [batch, heads, seq, 1, head_dim]
-    kv = Nx.multiply(k_expanded, v_expanded)  # [batch, heads, seq, num_features, head_dim]
+    # [batch, heads, seq, num_features, 1]
+    k_expanded = Nx.new_axis(k_prime, 4)
+    # [batch, heads, seq, 1, head_dim]
+    v_expanded = Nx.new_axis(v, 3)
+    # [batch, heads, seq, num_features, head_dim]
+    kv = Nx.multiply(k_expanded, v_expanded)
 
     # Cumulative sums for causal attention
-    kv_cumsum = Nx.cumulative_sum(kv, axis: 2)     # [batch, heads, seq, num_features, head_dim]
-    k_cumsum = Nx.cumulative_sum(k_prime, axis: 2)  # [batch, heads, seq, num_features]
+    # [batch, heads, seq, num_features, head_dim]
+    kv_cumsum = Nx.cumulative_sum(kv, axis: 2)
+    # [batch, heads, seq, num_features]
+    k_cumsum = Nx.cumulative_sum(k_prime, axis: 2)
 
     # Compute output: phi(Q) @ KV_cumsum
     # q_prime: [batch, heads, seq, num_features]
     # kv_cumsum: [batch, heads, seq, num_features, head_dim]
     # We want to dot q along num_features dimension with kv_cumsum
-    q_expanded = Nx.new_axis(q_prime, 4)  # [batch, heads, seq, num_features, 1]
-    numerator = Nx.sum(Nx.multiply(q_expanded, kv_cumsum), axes: [3])  # [batch, heads, seq, head_dim]
+    # [batch, heads, seq, num_features, 1]
+    q_expanded = Nx.new_axis(q_prime, 4)
+    # [batch, heads, seq, head_dim]
+    numerator = Nx.sum(Nx.multiply(q_expanded, kv_cumsum), axes: [3])
 
     # Normalizer: phi(Q) . sum(phi(K))
-    denominator = Nx.sum(Nx.multiply(q_prime, k_cumsum), axes: [3], keep_axes: true)  # [batch, heads, seq, 1]
+    # [batch, heads, seq, 1]
+    denominator = Nx.sum(Nx.multiply(q_prime, k_cumsum), axes: [3], keep_axes: true)
 
     # Normalized output
     output = Nx.divide(numerator, Nx.add(denominator, eps))
@@ -305,16 +257,6 @@ defmodule Edifice.Attention.Performer do
     Nx.divide(Nx.exp(Nx.subtract(projection, x_norm_sq)), scale)
   end
 
-  # Feed-forward network
-  defp build_ffn(input, hidden_size, name) do
-    inner_size = hidden_size * 4
-
-    input
-    |> Axon.dense(inner_size, name: "#{name}_up")
-    |> Axon.activation(:gelu, name: "#{name}_gelu")
-    |> Axon.dense(hidden_size, name: "#{name}_down")
-  end
-
   # ============================================================================
   # Utilities
   # ============================================================================
@@ -345,7 +287,7 @@ defmodule Edifice.Attention.Performer do
     # FFN: up + down
     ffn_params =
       hidden_size * inner_size +
-      inner_size * hidden_size
+        inner_size * hidden_size
 
     per_layer = attn_params + ffn_params
 

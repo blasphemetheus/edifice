@@ -534,9 +534,10 @@ defmodule Edifice.Utils.FusedOps do
     scale = Nx.rsqrt(Nx.as_type(d_k, Nx.type(query)))
 
     # Q @ K^T with scaling (fused)
-    scores = query
-    |> Nx.dot([3], [0, 1], key, [3], [0, 1])
-    |> Nx.multiply(scale)
+    scores =
+      query
+      |> Nx.dot([3], [0, 1], key, [3], [0, 1])
+      |> Nx.multiply(scale)
 
     # Softmax over keys dimension (axis=-1)
     fused_softmax_impl(scores)
@@ -546,10 +547,11 @@ defmodule Edifice.Utils.FusedOps do
     d_k = Nx.axis_size(query, -1)
     scale = Nx.rsqrt(Nx.as_type(d_k, Nx.type(query)))
 
-    scores = query
-    |> Nx.dot([3], [0, 1], key, [3], [0, 1])
-    |> Nx.multiply(scale)
-    |> Nx.add(mask)
+    scores =
+      query
+      |> Nx.dot([3], [0, 1], key, [3], [0, 1])
+      |> Nx.multiply(scale)
+      |> Nx.add(mask)
 
     fused_softmax_impl(scores)
   end
@@ -615,13 +617,13 @@ defmodule Edifice.Utils.FusedOps do
     end
   end
 
-  defn apply_relu(x), do: Nx.max(x, 0)
-  defn apply_silu(x), do: Nx.multiply(x, Nx.sigmoid(x))
-  defn apply_gelu(x), do: gelu_impl(x)
-  defn apply_gelu_approx(x), do: gelu_approx_impl(x)
-  defn apply_sigmoid(x), do: Nx.sigmoid(x)
-  defn apply_tanh(x), do: Nx.tanh(x)
-  defn apply_softplus(x), do: Nx.log1p(Nx.exp(x))
+  defn(apply_relu(x), do: Nx.max(x, 0))
+  defn(apply_silu(x), do: Nx.multiply(x, Nx.sigmoid(x)))
+  defn(apply_gelu(x), do: gelu_impl(x))
+  defn(apply_gelu_approx(x), do: gelu_approx_impl(x))
+  defn(apply_sigmoid(x), do: Nx.sigmoid(x))
+  defn(apply_tanh(x), do: Nx.tanh(x))
+  defn(apply_softplus(x), do: Nx.log1p(Nx.exp(x)))
 
   # Exact GELU: x * CDF_normal(x) where CDF is the CDF of standard normal
   defnp gelu_impl(x) do
@@ -645,7 +647,17 @@ defmodule Edifice.Utils.FusedOps do
   """
   @spec supported_activation?(atom()) :: boolean()
   def supported_activation?(activation) do
-    activation in [:relu, :silu, :gelu, :gelu_approx, :sigmoid, :tanh, :softplus, :identity, :none]
+    activation in [
+      :relu,
+      :silu,
+      :gelu,
+      :gelu_approx,
+      :sigmoid,
+      :tanh,
+      :softplus,
+      :identity,
+      :none
+    ]
   end
 
   @doc """

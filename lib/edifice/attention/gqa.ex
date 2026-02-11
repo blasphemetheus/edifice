@@ -68,6 +68,7 @@ defmodule Edifice.Attention.GQA do
   require Axon
 
   alias Edifice.Utils.FusedOps
+  alias Edifice.Blocks.{TransformerBlock, ModelBuilder}
 
   # Default hyperparameters
   @default_hidden_size 256
@@ -75,7 +76,6 @@ defmodule Edifice.Attention.GQA do
   @default_num_kv_heads 2
   @default_num_layers 4
   @default_dropout 0.1
-  @default_window_size 60
 
   @doc """
   Build a GQA transformer model for sequence processing.
@@ -96,91 +96,30 @@ defmodule Edifice.Attention.GQA do
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
-    _dropout = Keyword.get(opts, :dropout, @default_dropout)
-    window_size = Keyword.get(opts, :window_size, @default_window_size)
-    seq_len = Keyword.get(opts, :seq_len, window_size)
-
-    # Use concrete seq_len for efficient JIT compilation
-    input_seq_dim = if seq_len, do: seq_len, else: nil
-
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
-
-    # Project input to hidden dimension if different
-    x =
-      if embed_size != hidden_size do
-        Axon.dense(input, hidden_size, name: "input_projection")
-      else
-        input
-      end
-
-    # Stack GQA transformer blocks (dropout applied inside blocks)
-    x =
-      Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
-        build_gqa_block(
-          acc,
-          Keyword.merge(opts, [name: "gqa_block_#{layer_idx}"])
-        )
-      end)
-
-    # Final layer norm
-    x = Axon.layer_norm(x, name: "final_norm")
-
-    # Extract last timestep: [batch, seq_len, hidden] -> [batch, hidden]
-    Axon.nx(
-      x,
-      fn tensor ->
-        seq_len_actual = Nx.axis_size(tensor, 1)
-
-        Nx.slice_along_axis(tensor, seq_len_actual - 1, 1, axis: 1)
-        |> Nx.squeeze(axes: [1])
-      end,
-      name: "last_timestep"
-    )
-  end
-
-  @doc """
-  Build a single GQA transformer block.
-
-  Each block has:
-  1. LayerNorm -> GQA Attention -> Residual
-  2. LayerNorm -> FFN -> Residual
-  """
-  @spec build_gqa_block(Axon.t(), keyword()) :: Axon.t()
-  def build_gqa_block(input, opts) do
-    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
-    name = Keyword.get(opts, :name, "gqa_block")
 
-    # 1. GQA Attention branch
-    attn_normed = Axon.layer_norm(input, name: "#{name}_attn_norm")
-    attn_out = build_gqa_attention(attn_normed, Keyword.put(opts, :name, "#{name}_attn"))
+    ModelBuilder.build_sequence_model(
+      Keyword.merge(opts,
+        hidden_size: hidden_size,
+        num_layers: num_layers,
+        block_builder: fn input, block_opts ->
+          name = "gqa_block_#{block_opts[:layer_idx]}"
 
-    # Dropout + Residual
-    attn_out =
-      if dropout > 0 do
-        Axon.dropout(attn_out, rate: dropout, name: "#{name}_attn_dropout")
-      else
-        attn_out
-      end
+          attn_fn = fn x, attn_name ->
+            build_gqa_attention(x, Keyword.merge(opts, name: attn_name))
+          end
 
-    after_attn = Axon.add(input, attn_out, name: "#{name}_attn_residual")
-
-    # 2. FFN branch
-    ffn_normed = Axon.layer_norm(after_attn, name: "#{name}_ffn_norm")
-    ffn_out = build_ffn(ffn_normed, hidden_size, "#{name}_ffn")
-
-    ffn_out =
-      if dropout > 0 do
-        Axon.dropout(ffn_out, rate: dropout, name: "#{name}_ffn_dropout")
-      else
-        ffn_out
-      end
-
-    Axon.add(after_attn, ffn_out, name: "#{name}_ffn_residual")
+          TransformerBlock.layer(input,
+            attention_fn: attn_fn,
+            hidden_size: hidden_size,
+            dropout: dropout,
+            name: name
+          )
+        end
+      )
+    )
   end
 
   @doc """
@@ -208,15 +147,16 @@ defmodule Edifice.Attention.GQA do
     v_proj = Axon.dense(input, kv_dim, name: "#{name}_v_proj")
 
     # Apply GQA attention
-    output = Axon.layer(
-      &gqa_attention_impl/4,
-      [q_proj, k_proj, v_proj],
-      name: "#{name}_compute",
-      num_heads: num_heads,
-      num_kv_heads: num_kv_heads,
-      head_dim: head_dim,
-      op_name: :gqa_attention
-    )
+    output =
+      Axon.layer(
+        &gqa_attention_impl/4,
+        [q_proj, k_proj, v_proj],
+        name: "#{name}_compute",
+        num_heads: num_heads,
+        num_kv_heads: num_kv_heads,
+        head_dim: head_dim,
+        op_name: :gqa_attention
+      )
 
     # Output projection
     Axon.dense(output, hidden_size, name: "#{name}_out_proj")
@@ -235,31 +175,36 @@ defmodule Edifice.Attention.GQA do
     heads_per_group = div(num_heads, num_kv_heads)
 
     # Reshape Q: [batch, seq, num_heads, head_dim] -> [batch, num_heads, seq, head_dim]
-    q = q
-    |> Nx.reshape({batch, seq_len, num_heads, head_dim})
-    |> Nx.transpose(axes: [0, 2, 1, 3])
+    q =
+      q
+      |> Nx.reshape({batch, seq_len, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
 
     # Reshape K, V: [batch, seq, num_kv_heads, head_dim] -> [batch, num_kv_heads, seq, head_dim]
-    k = k
-    |> Nx.reshape({batch, seq_len, num_kv_heads, head_dim})
-    |> Nx.transpose(axes: [0, 2, 1, 3])
+    k =
+      k
+      |> Nx.reshape({batch, seq_len, num_kv_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
 
-    v = v
-    |> Nx.reshape({batch, seq_len, num_kv_heads, head_dim})
-    |> Nx.transpose(axes: [0, 2, 1, 3])
+    v =
+      v
+      |> Nx.reshape({batch, seq_len, num_kv_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
 
     # Repeat K, V for each group of Q heads
     # [batch, num_kv_heads, seq, head_dim] -> [batch, num_heads, seq, head_dim]
     # Reshape to [batch, num_kv_heads, 1, seq, head_dim], broadcast, then reshape
-    k = k
-    |> Nx.reshape({batch, num_kv_heads, 1, seq_len, head_dim})
-    |> Nx.broadcast({batch, num_kv_heads, heads_per_group, seq_len, head_dim})
-    |> Nx.reshape({batch, num_heads, seq_len, head_dim})
+    k =
+      k
+      |> Nx.reshape({batch, num_kv_heads, 1, seq_len, head_dim})
+      |> Nx.broadcast({batch, num_kv_heads, heads_per_group, seq_len, head_dim})
+      |> Nx.reshape({batch, num_heads, seq_len, head_dim})
 
-    v = v
-    |> Nx.reshape({batch, num_kv_heads, 1, seq_len, head_dim})
-    |> Nx.broadcast({batch, num_kv_heads, heads_per_group, seq_len, head_dim})
-    |> Nx.reshape({batch, num_heads, seq_len, head_dim})
+    v =
+      v
+      |> Nx.reshape({batch, num_kv_heads, 1, seq_len, head_dim})
+      |> Nx.broadcast({batch, num_kv_heads, heads_per_group, seq_len, head_dim})
+      |> Nx.reshape({batch, num_heads, seq_len, head_dim})
 
     # Scaled dot-product attention
     scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
@@ -272,16 +217,19 @@ defmodule Edifice.Attention.GQA do
     rows = Nx.iota({seq_len, seq_len}, axis: 0)
     cols = Nx.iota({seq_len, seq_len}, axis: 1)
     causal_mask = Nx.greater_equal(rows, cols)
-    causal_mask = Nx.broadcast(
-      Nx.reshape(causal_mask, {1, 1, seq_len, seq_len}),
-      {batch, num_heads, seq_len, seq_len}
-    )
 
-    scores = Nx.select(
-      causal_mask,
-      scores,
-      Nx.broadcast(-1.0e9, Nx.shape(scores))
-    )
+    causal_mask =
+      Nx.broadcast(
+        Nx.reshape(causal_mask, {1, 1, seq_len, seq_len}),
+        {batch, num_heads, seq_len, seq_len}
+      )
+
+    scores =
+      Nx.select(
+        causal_mask,
+        scores,
+        Nx.broadcast(-1.0e9, Nx.shape(scores))
+      )
 
     # Softmax over keys
     weights = FusedOps.fused_softmax(scores)
@@ -293,16 +241,6 @@ defmodule Edifice.Attention.GQA do
     output
     |> Nx.transpose(axes: [0, 2, 1, 3])
     |> Nx.reshape({batch, seq_len, num_heads * head_dim})
-  end
-
-  # Feed-forward network
-  defp build_ffn(input, hidden_size, name) do
-    inner_size = hidden_size * 4
-
-    input
-    |> Axon.dense(inner_size, name: "#{name}_up")
-    |> Axon.activation(:gelu, name: "#{name}_gelu")
-    |> Axon.dense(hidden_size, name: "#{name}_down")
   end
 
   # ============================================================================
@@ -337,13 +275,13 @@ defmodule Edifice.Attention.GQA do
     # Attention: Q proj + K proj + V proj + output proj
     attn_params =
       hidden_size * q_dim +
-      hidden_size * kv_dim * 2 +
-      q_dim * hidden_size
+        hidden_size * kv_dim * 2 +
+        q_dim * hidden_size
 
     # FFN: up + down
     ffn_params =
       hidden_size * inner_size +
-      inner_size * hidden_size
+        inner_size * hidden_size
 
     per_layer = attn_params + ffn_params
 

@@ -151,7 +151,7 @@ defmodule Edifice.Graph.MessagePassing do
 
     # Neighbor messages: A @ sender_proj => [batch, num_nodes, dim]
     # Each row i gets the sum of sender_proj[j] for all j where A[i,j] > 0
-    neighbor_msgs = Nx.dot(adjacency, [2], sender_proj, [1])
+    neighbor_msgs = Nx.dot(adjacency, [2], [0], sender_proj, [1], [0])
 
     # Add self (receiver) contribution
     messages = Nx.add(neighbor_msgs, receiver_proj)
@@ -183,11 +183,12 @@ defmodule Edifice.Graph.MessagePassing do
         # Replace masked positions with very negative values
         neg_inf = Nx.broadcast(-1.0e9, Nx.shape(broadcast_msgs))
 
-        masked = Nx.select(
-          Nx.broadcast(mask_expanded, Nx.shape(broadcast_msgs)),
-          broadcast_msgs,
-          neg_inf
-        )
+        masked =
+          Nx.select(
+            Nx.broadcast(mask_expanded, Nx.shape(broadcast_msgs)),
+            broadcast_msgs,
+            neg_inf
+          )
 
         # Max over neighbors (axis 2)
         max_msgs = Nx.reduce_max(masked, axes: [2])
@@ -250,11 +251,12 @@ defmodule Edifice.Graph.MessagePassing do
         broadcast_feats = Nx.multiply(features_expanded, mask_expanded)
         neg_inf = Nx.broadcast(-1.0e9, Nx.shape(broadcast_feats))
 
-        masked = Nx.select(
-          Nx.broadcast(mask_expanded, Nx.shape(broadcast_feats)),
-          broadcast_feats,
-          neg_inf
-        )
+        masked =
+          Nx.select(
+            Nx.broadcast(mask_expanded, Nx.shape(broadcast_feats)),
+            broadcast_feats,
+            neg_inf
+          )
 
         Nx.reduce_max(masked, axes: [2])
     end

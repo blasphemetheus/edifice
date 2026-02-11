@@ -198,8 +198,12 @@ defmodule Edifice.Feedforward.KAN do
     # Second KAN layer (expand then contract, like FFN)
     kan2_normed = Axon.layer_norm(after_kan1, name: "#{name}_norm2")
     inner_size = hidden_size * 2
-    kan2_up = build_kan_layer(kan2_normed, inner_size, Keyword.put(opts, :name, "#{name}_kan2_up"))
-    kan2_down = build_kan_layer(kan2_up, hidden_size, Keyword.put(opts, :name, "#{name}_kan2_down"))
+
+    kan2_up =
+      build_kan_layer(kan2_normed, inner_size, Keyword.put(opts, :name, "#{name}_kan2_up"))
+
+    kan2_down =
+      build_kan_layer(kan2_up, hidden_size, Keyword.put(opts, :name, "#{name}_kan2_down"))
 
     # Residual
     Axon.add(after_kan1, kan2_down, name: "#{name}_residual2")
@@ -359,9 +363,12 @@ defmodule Edifice.Feedforward.KAN do
     # - freq_proj: in * (out * grid)
     # - spline_proj: (out * grid) * out
     kan_layer_params = fn in_size, out_size ->
-      in_size * out_size +                    # base_proj
-      in_size * (out_size * grid_size) +      # freq_proj
-      (out_size * grid_size) * out_size       # spline_proj
+      # base_proj
+      # freq_proj
+      # spline_proj
+      in_size * out_size +
+        in_size * (out_size * grid_size) +
+        out_size * grid_size * out_size
     end
 
     # Per block:
@@ -369,10 +376,11 @@ defmodule Edifice.Feedforward.KAN do
     # - kan2_up: hidden -> 2*hidden
     # - kan2_down: 2*hidden -> hidden
     inner_size = hidden_size * 2
+
     block_params =
       kan_layer_params.(hidden_size, hidden_size) +
-      kan_layer_params.(hidden_size, inner_size) +
-      kan_layer_params.(inner_size, hidden_size)
+        kan_layer_params.(hidden_size, inner_size) +
+        kan_layer_params.(inner_size, hidden_size)
 
     input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
 

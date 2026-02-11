@@ -18,12 +18,23 @@ defmodule Edifice.ContrastiveTest do
 
   describe "SimCLR.build/1" do
     test "returns an Axon model" do
-      model = SimCLR.build(encoder_dim: @encoder_dim, projection_dim: @projection_dim, hidden_dim: @hidden_dim)
+      model =
+        SimCLR.build(
+          encoder_dim: @encoder_dim,
+          projection_dim: @projection_dim,
+          hidden_dim: @hidden_dim
+        )
+
       assert %Axon{} = model
     end
 
     test "forward pass produces expected output shape" do
-      model = SimCLR.build(encoder_dim: @encoder_dim, projection_dim: @projection_dim, hidden_dim: @hidden_dim)
+      model =
+        SimCLR.build(
+          encoder_dim: @encoder_dim,
+          projection_dim: @projection_dim,
+          hidden_dim: @hidden_dim
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
       params = init_fn.(Nx.template({@batch_size, @encoder_dim}, :f32), Axon.ModelState.empty())
@@ -36,7 +47,12 @@ defmodule Edifice.ContrastiveTest do
     end
 
     test "output values are finite" do
-      model = SimCLR.build(encoder_dim: @encoder_dim, projection_dim: @projection_dim, hidden_dim: @hidden_dim)
+      model =
+        SimCLR.build(
+          encoder_dim: @encoder_dim,
+          projection_dim: @projection_dim,
+          hidden_dim: @hidden_dim
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
       params = init_fn.(Nx.template({@batch_size, @encoder_dim}, :f32), Axon.ModelState.empty())
@@ -89,18 +105,25 @@ defmodule Edifice.ContrastiveTest do
 
   describe "BYOL.build/1" do
     test "returns {online, target} tuple of Axon models" do
-      {online, target} = BYOL.build(encoder_dim: @encoder_dim, projection_dim: @projection_dim, hidden_dim: @hidden_dim)
+      {online, target} =
+        BYOL.build(
+          encoder_dim: @encoder_dim,
+          projection_dim: @projection_dim,
+          hidden_dim: @hidden_dim
+        )
+
       assert %Axon{} = online
       assert %Axon{} = target
     end
 
     test "online forward pass produces expected output shape" do
-      {online, _target} = BYOL.build(
-        encoder_dim: @encoder_dim,
-        projection_dim: @projection_dim,
-        predictor_dim: 8,
-        hidden_dim: @hidden_dim
-      )
+      {online, _target} =
+        BYOL.build(
+          encoder_dim: @encoder_dim,
+          projection_dim: @projection_dim,
+          predictor_dim: 8,
+          hidden_dim: @hidden_dim
+        )
 
       {init_fn, predict_fn} = Axon.build(online)
       params = init_fn.(Nx.template({@batch_size, @encoder_dim}, :f32), Axon.ModelState.empty())
@@ -113,11 +136,12 @@ defmodule Edifice.ContrastiveTest do
     end
 
     test "target forward pass produces expected output shape" do
-      {_online, target} = BYOL.build(
-        encoder_dim: @encoder_dim,
-        projection_dim: @projection_dim,
-        hidden_dim: @hidden_dim
-      )
+      {_online, target} =
+        BYOL.build(
+          encoder_dim: @encoder_dim,
+          projection_dim: @projection_dim,
+          hidden_dim: @hidden_dim
+        )
 
       {init_fn, predict_fn} = Axon.build(target)
       params = init_fn.(Nx.template({@batch_size, @encoder_dim}, :f32), Axon.ModelState.empty())
@@ -130,11 +154,12 @@ defmodule Edifice.ContrastiveTest do
     end
 
     test "output values are finite" do
-      {online, _target} = BYOL.build(
-        encoder_dim: @encoder_dim,
-        projection_dim: @projection_dim,
-        hidden_dim: @hidden_dim
-      )
+      {online, _target} =
+        BYOL.build(
+          encoder_dim: @encoder_dim,
+          projection_dim: @projection_dim,
+          hidden_dim: @hidden_dim
+        )
 
       {init_fn, predict_fn} = Axon.build(online)
       params = init_fn.(Nx.template({@batch_size, @encoder_dim}, :f32), Axon.ModelState.empty())
@@ -215,12 +240,23 @@ defmodule Edifice.ContrastiveTest do
 
   describe "BarlowTwins.build/1" do
     test "returns an Axon model" do
-      model = BarlowTwins.build(encoder_dim: @encoder_dim, projection_dim: @projection_dim, hidden_dim: @hidden_dim)
+      model =
+        BarlowTwins.build(
+          encoder_dim: @encoder_dim,
+          projection_dim: @projection_dim,
+          hidden_dim: @hidden_dim
+        )
+
       assert %Axon{} = model
     end
 
     test "forward pass produces expected output shape" do
-      model = BarlowTwins.build(encoder_dim: @encoder_dim, projection_dim: @projection_dim, hidden_dim: @hidden_dim)
+      model =
+        BarlowTwins.build(
+          encoder_dim: @encoder_dim,
+          projection_dim: @projection_dim,
+          hidden_dim: @hidden_dim
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
       params = init_fn.(Nx.template({@batch_size, @encoder_dim}, :f32), Axon.ModelState.empty())
@@ -233,7 +269,12 @@ defmodule Edifice.ContrastiveTest do
     end
 
     test "output values are finite" do
-      model = BarlowTwins.build(encoder_dim: @encoder_dim, projection_dim: @projection_dim, hidden_dim: @hidden_dim)
+      model =
+        BarlowTwins.build(
+          encoder_dim: @encoder_dim,
+          projection_dim: @projection_dim,
+          hidden_dim: @hidden_dim
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
       params = init_fn.(Nx.template({@batch_size, @encoder_dim}, :f32), Axon.ModelState.empty())
@@ -291,28 +332,35 @@ defmodule Edifice.ContrastiveTest do
     @num_patches 8
 
     test "returns {encoder, decoder} tuple of Axon models" do
-      {encoder, decoder} = MAE.build(
-        input_dim: @input_dim,
-        embed_dim: @embed_dim,
-        decoder_dim: @decoder_dim,
-        num_patches: @num_patches
-      )
+      {encoder, decoder} =
+        MAE.build(
+          input_dim: @input_dim,
+          embed_dim: @embed_dim,
+          decoder_dim: @decoder_dim,
+          num_patches: @num_patches
+        )
 
       assert %Axon{} = encoder
       assert %Axon{} = decoder
     end
 
     test "encoder forward pass produces expected output shape" do
-      {encoder, _decoder} = MAE.build(
-        input_dim: @input_dim,
-        embed_dim: @embed_dim,
-        decoder_dim: @decoder_dim,
-        num_encoder_layers: 2,
-        num_patches: @num_patches
-      )
+      {encoder, _decoder} =
+        MAE.build(
+          input_dim: @input_dim,
+          embed_dim: @embed_dim,
+          decoder_dim: @decoder_dim,
+          num_encoder_layers: 2,
+          num_patches: @num_patches
+        )
 
       {init_fn, predict_fn} = Axon.build(encoder)
-      params = init_fn.(Nx.template({@batch_size, @num_patches, @input_dim}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          Nx.template({@batch_size, @num_patches, @input_dim}, :f32),
+          Axon.ModelState.empty()
+        )
 
       key = Nx.Random.key(48)
       {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @num_patches, @input_dim})
@@ -322,16 +370,22 @@ defmodule Edifice.ContrastiveTest do
     end
 
     test "decoder forward pass produces expected output shape" do
-      {_encoder, decoder} = MAE.build(
-        input_dim: @input_dim,
-        embed_dim: @embed_dim,
-        decoder_dim: @decoder_dim,
-        num_decoder_layers: 2,
-        num_patches: @num_patches
-      )
+      {_encoder, decoder} =
+        MAE.build(
+          input_dim: @input_dim,
+          embed_dim: @embed_dim,
+          decoder_dim: @decoder_dim,
+          num_decoder_layers: 2,
+          num_patches: @num_patches
+        )
 
       {init_fn, predict_fn} = Axon.build(decoder)
-      params = init_fn.(Nx.template({@batch_size, @num_patches, @embed_dim}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          Nx.template({@batch_size, @num_patches, @embed_dim}, :f32),
+          Axon.ModelState.empty()
+        )
 
       key = Nx.Random.key(49)
       {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @num_patches, @embed_dim})
@@ -342,16 +396,22 @@ defmodule Edifice.ContrastiveTest do
     end
 
     test "encoder output values are finite" do
-      {encoder, _decoder} = MAE.build(
-        input_dim: @input_dim,
-        embed_dim: @embed_dim,
-        decoder_dim: @decoder_dim,
-        num_encoder_layers: 2,
-        num_patches: @num_patches
-      )
+      {encoder, _decoder} =
+        MAE.build(
+          input_dim: @input_dim,
+          embed_dim: @embed_dim,
+          decoder_dim: @decoder_dim,
+          num_encoder_layers: 2,
+          num_patches: @num_patches
+        )
 
       {init_fn, predict_fn} = Axon.build(encoder)
-      params = init_fn.(Nx.template({@batch_size, @num_patches, @input_dim}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          Nx.template({@batch_size, @num_patches, @input_dim}, :f32),
+          Axon.ModelState.empty()
+        )
 
       key = Nx.Random.key(48)
       {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @num_patches, @input_dim})
@@ -434,12 +494,23 @@ defmodule Edifice.ContrastiveTest do
 
   describe "VICReg.build/1" do
     test "returns an Axon model" do
-      model = VICReg.build(encoder_dim: @encoder_dim, projection_dim: @projection_dim, hidden_dim: @hidden_dim)
+      model =
+        VICReg.build(
+          encoder_dim: @encoder_dim,
+          projection_dim: @projection_dim,
+          hidden_dim: @hidden_dim
+        )
+
       assert %Axon{} = model
     end
 
     test "forward pass produces expected output shape" do
-      model = VICReg.build(encoder_dim: @encoder_dim, projection_dim: @projection_dim, hidden_dim: @hidden_dim)
+      model =
+        VICReg.build(
+          encoder_dim: @encoder_dim,
+          projection_dim: @projection_dim,
+          hidden_dim: @hidden_dim
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
       params = init_fn.(Nx.template({@batch_size, @encoder_dim}, :f32), Axon.ModelState.empty())
@@ -452,7 +523,12 @@ defmodule Edifice.ContrastiveTest do
     end
 
     test "output values are finite" do
-      model = VICReg.build(encoder_dim: @encoder_dim, projection_dim: @projection_dim, hidden_dim: @hidden_dim)
+      model =
+        VICReg.build(
+          encoder_dim: @encoder_dim,
+          projection_dim: @projection_dim,
+          hidden_dim: @hidden_dim
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
       params = init_fn.(Nx.template({@batch_size, @encoder_dim}, :f32), Axon.ModelState.empty())
@@ -472,11 +548,12 @@ defmodule Edifice.ContrastiveTest do
       {z, key} = Nx.Random.uniform(key, shape: {@batch_size, @projection_dim})
       {z_prime, _key} = Nx.Random.uniform(key, shape: {@batch_size, @projection_dim})
 
-      loss = VICReg.vicreg_loss(z, z_prime,
-        lambda_inv: 25.0,
-        mu_var: 25.0,
-        nu_cov: 1.0
-      )
+      loss =
+        VICReg.vicreg_loss(z, z_prime,
+          lambda_inv: 25.0,
+          mu_var: 25.0,
+          nu_cov: 1.0
+        )
 
       assert Nx.shape(loss) == {}
       assert Nx.all(Nx.is_infinity(loss) |> Nx.logical_not()) |> Nx.to_number() == 1

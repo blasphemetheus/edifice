@@ -108,25 +108,35 @@ defmodule Edifice.Meta.Capsule do
     input = Axon.input("input", shape: input_shape)
 
     # Initial convolution
-    conv = Axon.conv(input, conv_channels,
-      kernel_size: {conv_kernel, conv_kernel},
-      padding: :valid,
-      name: "initial_conv")
+    conv =
+      Axon.conv(input, conv_channels,
+        kernel_size: {conv_kernel, conv_kernel},
+        padding: :valid,
+        name: "initial_conv"
+      )
+
     conv = Axon.relu(conv)
 
     # Primary capsule layer: outputs capsule vectors
-    primary_caps = primary_capsule_layer(conv, num_primary_caps, primary_cap_dim,
-      name: "primary_caps")
+    primary_caps =
+      primary_capsule_layer(conv, num_primary_caps, primary_cap_dim, name: "primary_caps")
 
     # Dynamic routing to digit/output capsules
-    digit_caps = dynamic_routing(primary_caps, num_digit_caps, digit_cap_dim,
-      routing_iterations: routing_iterations, name: "digit_caps")
+    digit_caps =
+      dynamic_routing(primary_caps, num_digit_caps, digit_cap_dim,
+        routing_iterations: routing_iterations,
+        name: "digit_caps"
+      )
 
     # Output: length of each digit capsule = class probability
-    Axon.nx(digit_caps, fn caps ->
-      # caps: [batch, num_digit_caps, digit_cap_dim]
-      Nx.sqrt(Nx.sum(Nx.pow(caps, 2), axes: [2]) + 1.0e-8)
-    end, name: "capsule_norms")
+    Axon.nx(
+      digit_caps,
+      fn caps ->
+        # caps: [batch, num_digit_caps, digit_cap_dim]
+        Nx.sqrt(Nx.add(Nx.sum(Nx.pow(caps, 2), axes: [2]), 1.0e-8))
+      end,
+      name: "capsule_norms"
+    )
   end
 
   @doc """
@@ -159,26 +169,32 @@ defmodule Edifice.Meta.Capsule do
     # Convolution: output channels = num_caps * cap_dim
     total_channels = num_caps * cap_dim
 
-    conv_out = Axon.conv(input, total_channels,
-      kernel_size: {kernel_size, kernel_size},
-      strides: [strides, strides],
-      padding: :valid,
-      name: "#{name}_conv")
+    conv_out =
+      Axon.conv(input, total_channels,
+        kernel_size: {kernel_size, kernel_size},
+        strides: [strides, strides],
+        padding: :valid,
+        name: "#{name}_conv"
+      )
 
     # Reshape to capsule vectors and apply squash
-    Axon.nx(conv_out, fn tensor ->
-      # tensor: [batch, h, w, num_caps * cap_dim]
-      batch = Nx.axis_size(tensor, 0)
-      h = Nx.axis_size(tensor, 1)
-      w = Nx.axis_size(tensor, 2)
+    Axon.nx(
+      conv_out,
+      fn tensor ->
+        # tensor: [batch, h, w, num_caps * cap_dim]
+        batch = Nx.axis_size(tensor, 0)
+        h = Nx.axis_size(tensor, 1)
+        w = Nx.axis_size(tensor, 2)
 
-      # Reshape: [batch, h * w * num_caps, cap_dim]
-      total_caps = h * w * num_caps
-      reshaped = Nx.reshape(tensor, {batch, total_caps, cap_dim})
+        # Reshape: [batch, h * w * num_caps, cap_dim]
+        total_caps = h * w * num_caps
+        reshaped = Nx.reshape(tensor, {batch, total_caps, cap_dim})
 
-      # Apply squash activation
-      squash_impl(reshaped)
-    end, name: "#{name}_squash")
+        # Apply squash activation
+        squash_impl(reshaped)
+      end,
+      name: "#{name}_squash"
+    )
   end
 
   @doc """
@@ -254,8 +270,8 @@ defmodule Edifice.Meta.Capsule do
     # For each (input_cap, output_cap) pair, learn a transformation matrix
     # We approximate this with a dense layer that maps each input capsule
     # to predictions for all output capsules
-    predictions = Axon.dense(input_caps, num_output_caps * output_cap_dim,
-      name: "#{name}_transform")
+    predictions =
+      Axon.dense(input_caps, num_output_caps * output_cap_dim, name: "#{name}_transform")
 
     # Apply routing algorithm
     Axon.layer(
@@ -283,8 +299,11 @@ defmodule Edifice.Meta.Capsule do
     num_input_caps = Nx.axis_size(predictions, 1)
 
     # Reshape predictions: [batch, num_input_caps, num_output_caps, output_cap_dim]
-    u_hat = Nx.reshape(predictions,
-      {batch, num_input_caps, num_output_caps, output_cap_dim})
+    u_hat =
+      Nx.reshape(
+        predictions,
+        {batch, num_input_caps, num_output_caps, output_cap_dim}
+      )
 
     # Initialize routing logits to zero
     # b: [batch, num_input_caps, num_output_caps]

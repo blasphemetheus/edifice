@@ -210,6 +210,7 @@ defmodule Edifice.SSM.Common do
       dt_rank: dt_rank,
       name: "#{name}_ssm"
     ]
+
     # Merge any extra opts (like chunk_size for SSD)
     ssm_opts = Keyword.merge(ssm_opts, Keyword.take(opts, [:chunk_size, :scan_algo]))
 
@@ -373,8 +374,10 @@ defmodule Edifice.SSM.Common do
     # dt: [batch, seq_len, hidden_size]
     # a_diag: [state_size]
     # We need per-channel discretization: [batch, seq_len, hidden_size, state_size]
-    dt_expanded = Nx.new_axis(dt, 3)  # [batch, seq_len, hidden_size, 1]
-    a_expanded = Nx.reshape(a_diag, {1, 1, 1, state_size})  # [1, 1, 1, state_size]
+    # [batch, seq_len, hidden_size, 1]
+    dt_expanded = Nx.new_axis(dt, 3)
+    # [1, 1, 1, state_size]
+    a_expanded = Nx.reshape(a_diag, {1, 1, 1, state_size})
 
     # A_bar = exp(dt * A): [batch, seq_len, hidden_size, state_size]
     a_bar = Nx.exp(Nx.multiply(dt_expanded, a_expanded))
@@ -383,15 +386,21 @@ defmodule Edifice.SSM.Common do
     # b: [batch, seq_len, state_size]
     # dt: [batch, seq_len, hidden_size]
     # B_bar: [batch, seq_len, hidden_size, state_size]
-    b_expanded = Nx.new_axis(b, 2)  # [batch, seq_len, 1, state_size]
-    dt_mean = Nx.mean(dt, axes: [2], keep_axes: true)  # [batch, seq_len, 1]
-    dt_for_b = Nx.new_axis(dt_mean, 3)  # [batch, seq_len, 1, 1]
-    b_bar = Nx.multiply(dt_for_b, b_expanded)  # [batch, seq_len, 1, state_size]
+    # [batch, seq_len, 1, state_size]
+    b_expanded = Nx.new_axis(b, 2)
+    # [batch, seq_len, 1]
+    dt_mean = Nx.mean(dt, axes: [2], keep_axes: true)
+    # [batch, seq_len, 1, 1]
+    dt_for_b = Nx.new_axis(dt_mean, 3)
+    # [batch, seq_len, 1, state_size]
+    b_bar = Nx.multiply(dt_for_b, b_expanded)
 
     # x contribution: B_bar * x
     # x: [batch, seq_len, hidden_size]
-    x_expanded = Nx.new_axis(x, 3)  # [batch, seq_len, hidden_size, 1]
-    bx = Nx.multiply(b_bar, x_expanded)  # [batch, seq_len, hidden_size, state_size]
+    # [batch, seq_len, hidden_size, 1]
+    x_expanded = Nx.new_axis(x, 3)
+    # [batch, seq_len, hidden_size, state_size]
+    bx = Nx.multiply(b_bar, x_expanded)
 
     {a_bar, bx}
   end
@@ -414,10 +423,12 @@ defmodule Edifice.SSM.Common do
   def compute_ssm_output(h, c) do
     # c: [batch, seq_len, state_size]
     # h: [batch, seq_len, hidden_size, state_size]
-    c_expanded = Nx.new_axis(c, 2)  # [batch, seq_len, 1, state_size]
+    # [batch, seq_len, 1, state_size]
+    c_expanded = Nx.new_axis(c, 2)
 
     # y = sum over state_size of (c * h)
-    Nx.sum(Nx.multiply(c_expanded, h), axes: [3])  # [batch, seq_len, hidden_size]
+    # [batch, seq_len, hidden_size]
+    Nx.sum(Nx.multiply(c_expanded, h), axes: [3])
   end
 
   # ============================================================================
@@ -492,16 +503,19 @@ defmodule Edifice.SSM.Common do
           # Shift tensors for combining
           # For a: use 1.0 padding (identity for multiplication)
           # For b: use 0.0 padding (identity for addition after multiply)
-          a_shifted = Nx.pad(
-            Nx.slice_along_axis(a_curr, 0, seq_len - stride, axis: 1),
-            1.0,
-            [{0, 0, 0}, {stride, 0, 0}, {0, 0, 0}, {0, 0, 0}]
-          )
-          b_shifted = Nx.pad(
-            Nx.slice_along_axis(b_curr, 0, seq_len - stride, axis: 1),
-            0.0,
-            [{0, 0, 0}, {stride, 0, 0}, {0, 0, 0}, {0, 0, 0}]
-          )
+          a_shifted =
+            Nx.pad(
+              Nx.slice_along_axis(a_curr, 0, seq_len - stride, axis: 1),
+              1.0,
+              [{0, 0, 0}, {stride, 0, 0}, {0, 0, 0}, {0, 0, 0}]
+            )
+
+          b_shifted =
+            Nx.pad(
+              Nx.slice_along_axis(b_curr, 0, seq_len - stride, axis: 1),
+              0.0,
+              [{0, 0, 0}, {stride, 0, 0}, {0, 0, 0}, {0, 0, 0}]
+            )
 
           # Combine using associative operator:
           # (a1, b1) ⊗ (a2, b2) = (a1*a2, a1*b2 + b1)

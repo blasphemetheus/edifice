@@ -125,20 +125,20 @@ defmodule Edifice.Attention.Perceiver do
 
     # Create learned latent array: [1, num_latents, latent_dim]
     # We use a parameter node that gets broadcast to batch size
-    latent_init = Axon.param("latent_array", {1, num_latents, latent_dim},
-      initializer: :glorot_uniform
-    )
+    latent_init =
+      Axon.param("latent_array", {1, num_latents, latent_dim}, initializer: :glorot_uniform)
 
     # Wrap latent_init so it can be combined with the input graph
     # Use Axon.layer to create the latent array broadcast to batch size
-    latents = Axon.layer(
-      &broadcast_latents/3,
-      [input_proj, latent_init],
-      name: "latent_broadcast",
-      num_latents: num_latents,
-      latent_dim: latent_dim,
-      op_name: :broadcast_latents
-    )
+    latents =
+      Axon.layer(
+        &broadcast_latents/3,
+        [input_proj, latent_init],
+        name: "latent_broadcast",
+        num_latents: num_latents,
+        latent_dim: latent_dim,
+        op_name: :broadcast_latents
+      )
 
     # Cross-attention: latents attend to input
     latents =
@@ -210,14 +210,15 @@ defmodule Edifice.Attention.Perceiver do
     v_proj = Axon.dense(input_normed, latent_dim, name: "#{name}_v_proj")
 
     # Cross-attention
-    attn_out = Axon.layer(
-      &cross_attention_impl/4,
-      [q_proj, k_proj, v_proj],
-      name: "#{name}_compute",
-      num_heads: num_heads,
-      head_dim: head_dim,
-      op_name: :cross_attention
-    )
+    attn_out =
+      Axon.layer(
+        &cross_attention_impl/4,
+        [q_proj, k_proj, v_proj],
+        name: "#{name}_compute",
+        num_heads: num_heads,
+        head_dim: head_dim,
+        op_name: :cross_attention
+      )
 
     # Output projection + dropout
     attn_out = Axon.dense(attn_out, latent_dim, name: "#{name}_out_proj")
@@ -259,14 +260,15 @@ defmodule Edifice.Attention.Perceiver do
     v_proj = Axon.dense(x, latent_dim, name: "#{name}_v_proj")
 
     # Self-attention (no causal mask - latents are unordered)
-    attn_out = Axon.layer(
-      &self_attention_impl/4,
-      [q_proj, k_proj, v_proj],
-      name: "#{name}_compute",
-      num_heads: num_heads,
-      head_dim: head_dim,
-      op_name: :self_attention
-    )
+    attn_out =
+      Axon.layer(
+        &self_attention_impl/4,
+        [q_proj, k_proj, v_proj],
+        name: "#{name}_compute",
+        num_heads: num_heads,
+        head_dim: head_dim,
+        op_name: :self_attention
+      )
 
     # Output projection + dropout
     attn_out = Axon.dense(attn_out, latent_dim, name: "#{name}_out_proj")
@@ -366,13 +368,13 @@ defmodule Edifice.Attention.Perceiver do
 
     # Cross-attention per layer: Q + K + V + output + FFN
     cross_attn_params =
-      (latent_dim * latent_dim * 3 + latent_dim * latent_dim) +
-      (latent_dim * inner_size + inner_size * latent_dim)
+      latent_dim * latent_dim * 3 + latent_dim * latent_dim +
+        (latent_dim * inner_size + inner_size * latent_dim)
 
     # Self-attention per layer: Q + K + V + output + FFN
     self_attn_params =
-      (latent_dim * latent_dim * 3 + latent_dim * latent_dim) +
-      (latent_dim * inner_size + inner_size * latent_dim)
+      latent_dim * latent_dim * 3 + latent_dim * latent_dim +
+        (latent_dim * inner_size + inner_size * latent_dim)
 
     latent_params + input_proj +
       cross_attn_params * num_cross_layers +

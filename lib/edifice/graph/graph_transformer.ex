@@ -257,11 +257,12 @@ defmodule Edifice.Graph.GraphTransformer do
     mask = Nx.greater(adj_bias, 0)
     neg_inf = Nx.broadcast(-1.0e9, Nx.shape(scores))
 
-    scores_masked = Nx.select(
-      Nx.broadcast(mask, Nx.shape(scores)),
-      scores,
-      neg_inf
-    )
+    scores_masked =
+      Nx.select(
+        Nx.broadcast(mask, Nx.shape(scores)),
+        scores,
+        neg_inf
+      )
 
     # Softmax
     max_scores = Nx.reduce_max(scores_masked, axes: [3], keep_axes: true)

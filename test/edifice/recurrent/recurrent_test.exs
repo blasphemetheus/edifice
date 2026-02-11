@@ -11,15 +11,18 @@ defmodule Edifice.RecurrentTest do
       embed_size = 64
       hidden_size = 32
 
-      model = Recurrent.build(
-        embed_size: embed_size,
-        hidden_size: hidden_size,
-        cell_type: :lstm,
-        seq_len: @seq_len
-      )
+      model =
+        Recurrent.build(
+          embed_size: embed_size,
+          hidden_size: hidden_size,
+          cell_type: :lstm,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -32,16 +35,19 @@ defmodule Edifice.RecurrentTest do
       embed_size = 64
       hidden_size = 32
 
-      model = Recurrent.build(
-        embed_size: embed_size,
-        hidden_size: hidden_size,
-        cell_type: :lstm,
-        num_layers: 2,
-        seq_len: @seq_len
-      )
+      model =
+        Recurrent.build(
+          embed_size: embed_size,
+          hidden_size: hidden_size,
+          cell_type: :lstm,
+          num_layers: 2,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -53,16 +59,19 @@ defmodule Edifice.RecurrentTest do
       embed_size = 64
       hidden_size = 32
 
-      model = Recurrent.build(
-        embed_size: embed_size,
-        hidden_size: hidden_size,
-        cell_type: :lstm,
-        return_sequences: true,
-        seq_len: @seq_len
-      )
+      model =
+        Recurrent.build(
+          embed_size: embed_size,
+          hidden_size: hidden_size,
+          cell_type: :lstm,
+          return_sequences: true,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -77,15 +86,18 @@ defmodule Edifice.RecurrentTest do
       embed_size = 64
       hidden_size = 32
 
-      model = Recurrent.build(
-        embed_size: embed_size,
-        hidden_size: hidden_size,
-        cell_type: :gru,
-        seq_len: @seq_len
-      )
+      model =
+        Recurrent.build(
+          embed_size: embed_size,
+          hidden_size: hidden_size,
+          cell_type: :gru,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -97,16 +109,19 @@ defmodule Edifice.RecurrentTest do
       embed_size = 64
       hidden_size = 32
 
-      model = Recurrent.build(
-        embed_size: embed_size,
-        hidden_size: hidden_size,
-        cell_type: :gru,
-        return_sequences: true,
-        seq_len: @seq_len
-      )
+      model =
+        Recurrent.build(
+          embed_size: embed_size,
+          hidden_size: hidden_size,
+          cell_type: :gru,
+          return_sequences: true,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
       output = predict_fn.(params, input)

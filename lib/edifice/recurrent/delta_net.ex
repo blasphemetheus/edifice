@@ -219,12 +219,16 @@ defmodule Edifice.Recurrent.DeltaNet do
         # Delta update: S_t = S_{t-1} + beta_t * error * k_t^T
         # error: [batch, hidden], k_t: [batch, hidden]
         # outer product: [batch, hidden, hidden]
-        update = Nx.dot(
-          Nx.new_axis(Nx.multiply(beta_t, error), 2),
-          [2], [0],
-          Nx.new_axis(k_t, 1),
-          [1], [0]
-        )
+        update =
+          Nx.dot(
+            Nx.new_axis(Nx.multiply(beta_t, error), 2),
+            [2],
+            [0],
+            Nx.new_axis(k_t, 1),
+            [1],
+            [0]
+          )
+
         s_t = Nx.add(s_prev, update)
 
         # Output: S_t @ q_t -> [batch, hidden_size]

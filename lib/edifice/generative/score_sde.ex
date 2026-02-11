@@ -109,16 +109,18 @@ defmodule Edifice.Generative.ScoreSDE do
 
     # Inputs
     noisy_input = Axon.input("noisy_input", shape: {nil, input_dim})
-    timestep = Axon.input("timestep", shape: {nil})  # t in [0, 1]
+    # t in [0, 1]
+    timestep = Axon.input("timestep", shape: {nil})
 
     # Time embedding (Gaussian Fourier features for score networks)
-    time_embed = Axon.layer(
-      &fourier_time_embed_impl/2,
-      [timestep],
-      name: "time_embed",
-      hidden_size: hidden_size,
-      op_name: :fourier_embed
-    )
+    time_embed =
+      Axon.layer(
+        &fourier_time_embed_impl/2,
+        [timestep],
+        name: "time_embed",
+        hidden_size: hidden_size,
+        op_name: :fourier_embed
+      )
 
     time_mlp =
       time_embed
@@ -134,9 +136,10 @@ defmodule Edifice.Generative.ScoreSDE do
     combined = Axon.add(x_proj, time_mlp, name: "combine")
 
     # Score prediction network
-    x = Enum.reduce(1..num_layers, combined, fn idx, acc ->
-      build_score_block(acc, hidden_size, "score_block_#{idx}")
-    end)
+    x =
+      Enum.reduce(1..num_layers, combined, fn idx, acc ->
+        build_score_block(acc, hidden_size, "score_block_#{idx}")
+      end)
 
     x = Axon.layer_norm(x, name: "final_norm")
 
@@ -158,13 +161,16 @@ defmodule Edifice.Generative.ScoreSDE do
     half_dim = div(hidden_size, 2)
 
     # Random Fourier features with learned-like fixed frequencies
-    freqs = Nx.multiply(
-      Nx.tensor(:math.pi() * 2),
-      Nx.exp(Nx.multiply(
-        Nx.log(Nx.tensor(100.0)),
-        Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
-      ))
-    )
+    freqs =
+      Nx.multiply(
+        Nx.tensor(:math.pi() * 2),
+        Nx.exp(
+          Nx.multiply(
+            Nx.log(Nx.tensor(100.0)),
+            Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
+          )
+        )
+      )
 
     t_expanded = Nx.new_axis(Nx.as_type(t, :f32), 1)
     angles = Nx.multiply(t_expanded, Nx.reshape(freqs, {1, half_dim}))

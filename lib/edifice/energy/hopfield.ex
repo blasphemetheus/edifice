@@ -95,8 +95,12 @@ defmodule Edifice.Energy.Hopfield do
 
     input = Axon.input("input", shape: {nil, input_dim})
 
-    hopfield_layer(input, num_patterns: num_patterns, pattern_dim: pattern_dim,
-                   beta: beta, name: "hopfield")
+    hopfield_layer(input,
+      num_patterns: num_patterns,
+      pattern_dim: pattern_dim,
+      beta: beta,
+      name: "hopfield"
+    )
   end
 
   @doc """
@@ -139,6 +143,7 @@ defmodule Edifice.Energy.Hopfield do
         scores,
         fn s ->
           scaled = Nx.multiply(s, beta)
+
           Nx.exp(Nx.subtract(scaled, Nx.reduce_max(scaled, axes: [-1], keep_axes: true)))
           |> then(fn e -> Nx.divide(e, Nx.sum(e, axes: [-1], keep_axes: true)) end)
         end,
@@ -195,8 +200,8 @@ defmodule Edifice.Energy.Hopfield do
             head_dim = div(hidden_dim, num_heads)
 
             # Project to per-head dimension
-            head_input = Axon.dense(acc, head_dim,
-              name: "layer_#{layer_idx}_head_#{head_idx}_proj")
+            head_input =
+              Axon.dense(acc, head_dim, name: "layer_#{layer_idx}_head_#{head_idx}_proj")
 
             hopfield_layer(head_input,
               num_patterns: num_patterns,
@@ -215,10 +220,13 @@ defmodule Edifice.Energy.Hopfield do
           end
 
         # Project back to hidden_dim if pattern_dim differs
-        hopfield_out = Axon.dense(hopfield_out, hidden_dim,
-          name: "layer_#{layer_idx}_out_proj")
-        hopfield_out = Axon.dropout(hopfield_out, rate: dropout,
-          name: "layer_#{layer_idx}_dropout")
+        hopfield_out = Axon.dense(hopfield_out, hidden_dim, name: "layer_#{layer_idx}_out_proj")
+
+        hopfield_out =
+          Axon.dropout(hopfield_out,
+            rate: dropout,
+            name: "layer_#{layer_idx}_dropout"
+          )
 
         # Residual connection + layer norm
         residual = Axon.add(acc, hopfield_out, name: "layer_#{layer_idx}_residual")

@@ -1,11 +1,11 @@
-defmodule Edifice.SSM.SSMNewTest do
+defmodule Edifice.SSM.SSMRemainingTest do
   use ExUnit.Case, async: true
 
-  alias Edifice.SSM.S4
-  alias Edifice.SSM.S4D
-  alias Edifice.SSM.H3
-  alias Edifice.SSM.Hyena
-  alias Edifice.SSM.BiMamba
+  alias Edifice.SSM.MambaCumsum
+  alias Edifice.SSM.MambaHillisSteele
+  alias Edifice.SSM.Hybrid
+  alias Edifice.SSM.Zamba
+  alias Edifice.SSM.HybridBuilder
 
   @batch 2
   @seq_len 8
@@ -21,11 +21,11 @@ defmodule Edifice.SSM.SSMNewTest do
   end
 
   # ============================================================================
-  # S4 Tests
+  # MambaCumsum Tests
   # ============================================================================
 
-  describe "S4.build/1" do
-    @s4_opts [
+  describe "MambaCumsum.build/1" do
+    @cumsum_opts [
       embed_size: @embed_size,
       hidden_size: @hidden_size,
       state_size: @state_size,
@@ -34,26 +34,23 @@ defmodule Edifice.SSM.SSMNewTest do
     ]
 
     test "builds an Axon model" do
-      model = S4.build(@s4_opts)
+      model = MambaCumsum.build(@cumsum_opts)
       assert %Axon{} = model
     end
 
     test "forward pass produces correct output shape" do
-      model = S4.build(@s4_opts)
-
+      model = MambaCumsum.build(@cumsum_opts)
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
         init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
-
       assert Nx.shape(output) == {@batch, @hidden_size}
     end
 
     test "output contains finite values" do
-      model = S4.build(@s4_opts)
-
+      model = MambaCumsum.build(@cumsum_opts)
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
@@ -61,22 +58,25 @@ defmodule Edifice.SSM.SSMNewTest do
 
       output = predict_fn.(params, random_input())
 
-      assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
+      assert output
+             |> Nx.is_nan()
+             |> Nx.any()
+             |> Nx.to_number() == 0
     end
   end
 
-  describe "S4.output_size/1" do
+  describe "MambaCumsum.output_size/1" do
     test "returns hidden_size" do
-      assert S4.output_size(hidden_size: @hidden_size) == @hidden_size
+      assert MambaCumsum.output_size(hidden_size: 64) == 64
     end
   end
 
   # ============================================================================
-  # S4D Tests
+  # MambaHillisSteele Tests
   # ============================================================================
 
-  describe "S4D.build/1" do
-    @s4d_opts [
+  describe "MambaHillisSteele.build/1" do
+    @hs_opts [
       embed_size: @embed_size,
       hidden_size: @hidden_size,
       state_size: @state_size,
@@ -85,26 +85,23 @@ defmodule Edifice.SSM.SSMNewTest do
     ]
 
     test "builds an Axon model" do
-      model = S4D.build(@s4d_opts)
+      model = MambaHillisSteele.build(@hs_opts)
       assert %Axon{} = model
     end
 
     test "forward pass produces correct output shape" do
-      model = S4D.build(@s4d_opts)
-
+      model = MambaHillisSteele.build(@hs_opts)
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
         init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
-
       assert Nx.shape(output) == {@batch, @hidden_size}
     end
 
     test "output contains finite values" do
-      model = S4D.build(@s4d_opts)
-
+      model = MambaHillisSteele.build(@hs_opts)
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
@@ -112,51 +109,54 @@ defmodule Edifice.SSM.SSMNewTest do
 
       output = predict_fn.(params, random_input())
 
-      assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
+      assert output
+             |> Nx.is_nan()
+             |> Nx.any()
+             |> Nx.to_number() == 0
     end
   end
 
-  describe "S4D.output_size/1" do
+  describe "MambaHillisSteele.output_size/1" do
     test "returns hidden_size" do
-      assert S4D.output_size(hidden_size: @hidden_size) == @hidden_size
+      assert MambaHillisSteele.output_size(hidden_size: 64) == 64
     end
   end
 
   # ============================================================================
-  # H3 Tests
+  # Hybrid (Jamba) Tests
   # ============================================================================
 
-  describe "H3.build/1" do
-    @h3_opts [
+  describe "Hybrid.build/1" do
+    @hybrid_opts [
       embed_size: @embed_size,
       hidden_size: @hidden_size,
+      num_layers: 3,
+      attention_every: 3,
       state_size: @state_size,
-      conv_size: 4,
-      num_layers: @num_layers,
-      window_size: @seq_len
+      num_heads: 2,
+      head_dim: 16,
+      window_size: @seq_len,
+      dropout: 0.0
     ]
 
     test "builds an Axon model" do
-      model = H3.build(@h3_opts)
+      model = Hybrid.build(@hybrid_opts)
       assert %Axon{} = model
     end
 
     test "forward pass produces correct output shape" do
-      model = H3.build(@h3_opts)
-
+      model = Hybrid.build(@hybrid_opts)
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
         init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
-
       assert Nx.shape(output) == {@batch, @hidden_size}
     end
 
     test "output contains finite values" do
-      model = H3.build(@h3_opts)
-
+      model = Hybrid.build(@hybrid_opts)
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
@@ -164,102 +164,54 @@ defmodule Edifice.SSM.SSMNewTest do
 
       output = predict_fn.(params, random_input())
 
-      assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
+      assert output
+             |> Nx.is_nan()
+             |> Nx.any()
+             |> Nx.to_number() == 0
     end
   end
 
-  describe "H3.output_size/1" do
+  describe "Hybrid.output_size/1" do
     test "returns hidden_size" do
-      assert H3.output_size(hidden_size: @hidden_size) == @hidden_size
+      assert Hybrid.output_size(hidden_size: 64) == 64
     end
   end
 
   # ============================================================================
-  # Hyena Tests
+  # Zamba Tests
   # ============================================================================
 
-  describe "Hyena.build/1" do
-    @hyena_opts [
+  describe "Zamba.build/1" do
+    @zamba_opts [
       embed_size: @embed_size,
       hidden_size: @hidden_size,
-      order: 2,
-      filter_size: 16,
-      num_layers: @num_layers,
-      window_size: @seq_len
-    ]
-
-    test "builds an Axon model" do
-      model = Hyena.build(@hyena_opts)
-      assert %Axon{} = model
-    end
-
-    test "forward pass produces correct output shape" do
-      model = Hyena.build(@hyena_opts)
-
-      {init_fn, predict_fn} = Axon.build(model)
-
-      params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
-
-      output = predict_fn.(params, random_input())
-
-      assert Nx.shape(output) == {@batch, @hidden_size}
-    end
-
-    test "output contains finite values" do
-      model = Hyena.build(@hyena_opts)
-
-      {init_fn, predict_fn} = Axon.build(model)
-
-      params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
-
-      output = predict_fn.(params, random_input())
-
-      assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
-    end
-  end
-
-  describe "Hyena.output_size/1" do
-    test "returns hidden_size" do
-      assert Hyena.output_size(hidden_size: @hidden_size) == @hidden_size
-    end
-  end
-
-  # ============================================================================
-  # BiMamba Tests
-  # ============================================================================
-
-  describe "BiMamba.build/1" do
-    @bimamba_opts [
-      embed_size: @embed_size,
-      hidden_size: @hidden_size,
+      num_layers: 3,
+      attention_every: 3,
       state_size: @state_size,
-      num_layers: @num_layers,
-      window_size: @seq_len
+      num_heads: 2,
+      head_dim: 16,
+      window_size: @seq_len,
+      dropout: 0.0
     ]
 
     test "builds an Axon model" do
-      model = BiMamba.build(@bimamba_opts)
+      model = Zamba.build(@zamba_opts)
       assert %Axon{} = model
     end
 
     test "forward pass produces correct output shape" do
-      model = BiMamba.build(@bimamba_opts)
-
+      model = Zamba.build(@zamba_opts)
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
         init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
-
       assert Nx.shape(output) == {@batch, @hidden_size}
     end
 
     test "output contains finite values" do
-      model = BiMamba.build(@bimamba_opts)
-
+      model = Zamba.build(@zamba_opts)
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
@@ -267,27 +219,67 @@ defmodule Edifice.SSM.SSMNewTest do
 
       output = predict_fn.(params, random_input())
 
-      assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
+      assert output
+             |> Nx.is_nan()
+             |> Nx.any()
+             |> Nx.to_number() == 0
+    end
+  end
+
+  describe "Zamba.output_size/1" do
+    test "returns hidden_size" do
+      assert Zamba.output_size(hidden_size: 64) == 64
+    end
+  end
+
+  # ============================================================================
+  # HybridBuilder Tests
+  # ============================================================================
+
+  describe "HybridBuilder.build/2" do
+    @builder_opts [
+      embed_size: @embed_size,
+      hidden_size: @hidden_size,
+      dropout: 0.0,
+      seq_len: @seq_len
+    ]
+
+    test "builds a jamba_like model" do
+      pattern = HybridBuilder.pattern(:jamba_like, 3)
+      model = HybridBuilder.build(pattern, @builder_opts)
+      assert %Axon{} = model
     end
 
-    test "concat combine mode produces correct output shape" do
-      opts = Keyword.put(@bimamba_opts, :combine, :concat)
-      model = BiMamba.build(opts)
+    test "builds a zamba_like model" do
+      pattern = HybridBuilder.pattern(:zamba_like, 3)
+      model = HybridBuilder.build(pattern, @builder_opts)
+      assert %Axon{} = model
+    end
 
+    test "forward pass produces correct output shape" do
+      pattern = HybridBuilder.pattern(:jamba_like, 3)
+      model = HybridBuilder.build(pattern, @builder_opts)
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
         init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
-
       assert Nx.shape(output) == {@batch, @hidden_size}
     end
   end
 
-  describe "BiMamba.output_size/1" do
-    test "returns hidden_size" do
-      assert BiMamba.output_size(hidden_size: @hidden_size) == @hidden_size
+  describe "HybridBuilder.pattern/2" do
+    test "returns list of layer types" do
+      pattern = HybridBuilder.pattern(:jamba_like, 6)
+      assert is_list(pattern)
+      assert length(pattern) == 6
+    end
+
+    test "jamba_like includes both mamba and attention" do
+      pattern = HybridBuilder.pattern(:jamba_like, 6)
+      assert :mamba in pattern
+      assert :attention in pattern
     end
   end
 end

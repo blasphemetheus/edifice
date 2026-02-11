@@ -163,13 +163,14 @@ defmodule Edifice.Attention.GLA do
     name = Keyword.get(opts, :name, "gla_block")
 
     # Gated Linear Attention
-    x = build_gated_linear_attention(input,
-      hidden_size: hidden_size,
-      num_heads: num_heads,
-      head_dim: head_dim,
-      dropout: dropout,
-      name: "#{name}_attention"
-    )
+    x =
+      build_gated_linear_attention(input,
+        hidden_size: hidden_size,
+        num_heads: num_heads,
+        head_dim: head_dim,
+        dropout: dropout,
+        name: "#{name}_attention"
+      )
 
     # Gated FFN
     build_gated_ffn(x,
@@ -212,14 +213,15 @@ defmodule Edifice.Attention.GLA do
     g_proj = Axon.activation(g_proj, :sigmoid, name: "#{name}_g_sigmoid")
 
     # Gated linear attention
-    output = Axon.layer(
-      &gated_linear_attention_impl/5,
-      [q_proj, k_proj, v_proj, g_proj],
-      name: "#{name}_gla",
-      num_heads: num_heads,
-      head_dim: head_dim,
-      op_name: :gated_linear_attention
-    )
+    output =
+      Axon.layer(
+        &gated_linear_attention_impl/5,
+        [q_proj, k_proj, v_proj, g_proj],
+        name: "#{name}_gla",
+        num_heads: num_heads,
+        head_dim: head_dim,
+        op_name: :gated_linear_attention
+      )
 
     # Output projection
     output = Axon.dense(output, hidden_size, name: "#{name}_output")
@@ -293,7 +295,8 @@ defmodule Edifice.Attention.GLA do
 
     # Apply feature map to Q and K (ELU + 1 for positive features)
     # This is a common choice for linear attention
-    q_feat = Nx.add(1.0, Nx.max(q, 0.0)) # Simple ReLU + 1
+    # Simple ReLU + 1
+    q_feat = Nx.add(1.0, Nx.max(q, 0.0))
     k_feat = Nx.add(1.0, Nx.max(k, 0.0))
 
     # Causal linear attention with gating
@@ -304,28 +307,37 @@ defmodule Edifice.Attention.GLA do
 
     # Compute key-value outer products: [batch, seq_len, num_heads, head_dim, head_dim]
     # kv[t] = k[t] outer v[t]
-    k_expanded = Nx.new_axis(k_feat, 4)  # [batch, seq_len, num_heads, head_dim, 1]
-    v_expanded = Nx.new_axis(v, 3)       # [batch, seq_len, num_heads, 1, head_dim]
-    kv = Nx.multiply(k_expanded, v_expanded)  # [batch, seq_len, num_heads, head_dim, head_dim]
+    # [batch, seq_len, num_heads, head_dim, 1]
+    k_expanded = Nx.new_axis(k_feat, 4)
+    # [batch, seq_len, num_heads, 1, head_dim]
+    v_expanded = Nx.new_axis(v, 3)
+    # [batch, seq_len, num_heads, head_dim, head_dim]
+    kv = Nx.multiply(k_expanded, v_expanded)
 
     # Apply gate to kv
-    g_expanded = Nx.new_axis(g, 4)  # [batch, seq_len, num_heads, head_dim, 1]
+    # [batch, seq_len, num_heads, head_dim, 1]
+    g_expanded = Nx.new_axis(g, 4)
     kv_gated = Nx.multiply(kv, g_expanded)
 
     # Cumulative sum for causal attention
-    kv_cumsum = Nx.cumulative_sum(kv_gated, axis: 1)  # [batch, seq_len, num_heads, head_dim, head_dim]
-    k_cumsum = Nx.cumulative_sum(k_feat, axis: 1)     # [batch, seq_len, num_heads, head_dim]
+    # [batch, seq_len, num_heads, head_dim, head_dim]
+    kv_cumsum = Nx.cumulative_sum(kv_gated, axis: 1)
+    # [batch, seq_len, num_heads, head_dim]
+    k_cumsum = Nx.cumulative_sum(k_feat, axis: 1)
 
     # Query attention: output = g * (q @ kv_cumsum) / (q @ k_cumsum)
     # q: [batch, seq_len, num_heads, head_dim]
     # kv_cumsum: [batch, seq_len, num_heads, head_dim, head_dim]
 
     # Numerator: q @ kv_cumsum -> [batch, seq_len, num_heads, head_dim]
-    q_expanded = Nx.new_axis(q_feat, 3)  # [batch, seq_len, num_heads, 1, head_dim]
-    numerator = Nx.sum(Nx.multiply(q_expanded, kv_cumsum), axes: [4])  # [batch, seq_len, num_heads, head_dim]
+    # [batch, seq_len, num_heads, 1, head_dim]
+    q_expanded = Nx.new_axis(q_feat, 3)
+    # [batch, seq_len, num_heads, head_dim]
+    numerator = Nx.sum(Nx.multiply(q_expanded, kv_cumsum), axes: [4])
 
     # Denominator: q @ k_cumsum -> [batch, seq_len, num_heads]
-    denominator = Nx.sum(Nx.multiply(q_feat, k_cumsum), axes: [3], keep_axes: true)  # [batch, seq_len, num_heads, 1]
+    # [batch, seq_len, num_heads, 1]
+    denominator = Nx.sum(Nx.multiply(q_feat, k_cumsum), axes: [3], keep_axes: true)
 
     # Final output with gate
     eps = 1.0e-6
@@ -368,14 +380,14 @@ defmodule Edifice.Attention.GLA do
     #   - Output projection: attn_dim * hidden
     attention_params =
       4 * hidden_size * attn_dim +
-      attn_dim * hidden_size
+        attn_dim * hidden_size
 
     # FFN (GLU style):
     #   - Gate, Up projections: 2 * hidden * inner
     #   - Down projection: inner * hidden
     ffn_params =
       2 * hidden_size * inner_size +
-      inner_size * hidden_size
+        inner_size * hidden_size
 
     per_layer = attention_params + ffn_params
 

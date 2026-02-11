@@ -1,7 +1,16 @@
 defmodule Edifice.Blocks.BlocksTest do
   use ExUnit.Case, async: true
 
-  alias Edifice.Blocks.{RMSNorm, SwiGLU, RoPE, ALiBi, PatchEmbed, SinusoidalPE, AdaptiveNorm, CrossAttention}
+  alias Edifice.Blocks.{
+    RMSNorm,
+    SwiGLU,
+    RoPE,
+    ALiBi,
+    PatchEmbed,
+    SinusoidalPE,
+    AdaptiveNorm,
+    CrossAttention
+  }
 
   @batch 2
   @seq_len 8
@@ -123,25 +132,29 @@ defmodule Edifice.Blocks.BlocksTest do
       input = Axon.input("input", shape: {nil, @seq_len, @hidden})
       condition = Axon.input("condition", shape: {nil, @hidden})
 
-      model = AdaptiveNorm.layer(input, condition,
-        hidden_size: @hidden,
-        mode: :adaln_zero,
-        name: "test_adaln"
-      )
+      model =
+        AdaptiveNorm.layer(input, condition,
+          hidden_size: @hidden,
+          mode: :adaln_zero,
+          name: "test_adaln"
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(
-        %{
-          "input" => Nx.template({@batch, @seq_len, @hidden}, :f32),
-          "condition" => Nx.template({@batch, @hidden}, :f32)
-        },
-        Axon.ModelState.empty()
-      )
 
-      output = predict_fn.(params, %{
-        "input" => Nx.broadcast(0.5, {@batch, @seq_len, @hidden}),
-        "condition" => Nx.broadcast(0.1, {@batch, @hidden})
-      })
+      params =
+        init_fn.(
+          %{
+            "input" => Nx.template({@batch, @seq_len, @hidden}, :f32),
+            "condition" => Nx.template({@batch, @hidden}, :f32)
+          },
+          Axon.ModelState.empty()
+        )
+
+      output =
+        predict_fn.(params, %{
+          "input" => Nx.broadcast(0.5, {@batch, @seq_len, @hidden}),
+          "condition" => Nx.broadcast(0.1, {@batch, @hidden})
+        })
 
       assert Nx.shape(output) == {@batch, @seq_len, @hidden}
     end
@@ -152,24 +165,28 @@ defmodule Edifice.Blocks.BlocksTest do
       queries = Axon.input("queries", shape: {nil, 8, 16})
       context = Axon.input("context", shape: {nil, 12, 16})
 
-      model = CrossAttention.layer(queries, context,
-        hidden_dim: 32,
-        name: "test_cross_attn"
-      )
+      model =
+        CrossAttention.layer(queries, context,
+          hidden_dim: 32,
+          name: "test_cross_attn"
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(
-        %{
-          "queries" => Nx.template({@batch, 8, 16}, :f32),
-          "context" => Nx.template({@batch, 12, 16}, :f32)
-        },
-        Axon.ModelState.empty()
-      )
 
-      output = predict_fn.(params, %{
-        "queries" => Nx.broadcast(0.5, {@batch, 8, 16}),
-        "context" => Nx.broadcast(0.5, {@batch, 12, 16})
-      })
+      params =
+        init_fn.(
+          %{
+            "queries" => Nx.template({@batch, 8, 16}, :f32),
+            "context" => Nx.template({@batch, 12, 16}, :f32)
+          },
+          Axon.ModelState.empty()
+        )
+
+      output =
+        predict_fn.(params, %{
+          "queries" => Nx.broadcast(0.5, {@batch, 8, 16}),
+          "context" => Nx.broadcast(0.5, {@batch, 12, 16})
+        })
 
       assert Nx.shape(output) == {@batch, 8, 32}
     end

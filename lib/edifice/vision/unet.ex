@@ -134,10 +134,14 @@ defmodule Edifice.Vision.UNet do
 
     # Flatten to [batch, C * H * W]
     x =
-      Axon.nx(input, fn tensor ->
-        batch = Nx.axis_size(tensor, 0)
-        Nx.reshape(tensor, {batch, :auto})
-      end, name: "flatten")
+      Axon.nx(
+        input,
+        fn tensor ->
+          batch = Nx.axis_size(tensor, 0)
+          Nx.reshape(tensor, {batch, :auto})
+        end,
+        name: "flatten"
+      )
 
     # Encoder path: collect skip connections
     {x, skips, feature_sizes} = encoder_path(x, flat_size, base_features, depth, dropout)
@@ -162,10 +166,14 @@ defmodule Edifice.Vision.UNet do
     x = Axon.dense(x, output_flat_size, name: "output_proj")
 
     # Reshape to [batch, out_channels, H, W]
-    Axon.nx(x, fn tensor ->
-      batch = Nx.axis_size(tensor, 0)
-      Nx.reshape(tensor, {batch, out_channels, image_size, image_size})
-    end, name: "output_reshape")
+    Axon.nx(
+      x,
+      fn tensor ->
+        batch = Nx.axis_size(tensor, 0)
+        Nx.reshape(tensor, {batch, out_channels, image_size, image_size})
+      end,
+      name: "output_reshape"
+    )
   end
 
   # ============================================================================
@@ -252,10 +260,14 @@ defmodule Edifice.Vision.UNet do
     token_dim = div(dim, num_tokens)
 
     x =
-      Axon.nx(input, fn tensor ->
-        batch = Nx.axis_size(tensor, 0)
-        Nx.reshape(tensor, {batch, num_tokens, token_dim})
-      end, name: "#{name}_to_seq")
+      Axon.nx(
+        input,
+        fn tensor ->
+          batch = Nx.axis_size(tensor, 0)
+          Nx.reshape(tensor, {batch, num_tokens, token_dim})
+        end,
+        name: "#{name}_to_seq"
+      )
 
     # QKV projection and attention
     qkv = Axon.dense(x, token_dim * 3, name: "#{name}_qkv")
@@ -289,10 +301,14 @@ defmodule Edifice.Vision.UNet do
     x = Axon.add(x, attended, name: "#{name}_residual")
 
     # Flatten back to [batch, dim]
-    Axon.nx(x, fn tensor ->
-      batch = Nx.axis_size(tensor, 0)
-      Nx.reshape(tensor, {batch, :auto})
-    end, name: "#{name}_flatten")
+    Axon.nx(
+      x,
+      fn tensor ->
+        batch = Nx.axis_size(tensor, 0)
+        Nx.reshape(tensor, {batch, :auto})
+      end,
+      name: "#{name}_flatten"
+    )
   end
 
   # ============================================================================

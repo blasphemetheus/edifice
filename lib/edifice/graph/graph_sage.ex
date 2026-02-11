@@ -146,6 +146,7 @@ defmodule Edifice.Graph.GraphSAGE do
       case aggregator do
         :pool ->
           pool_dim = output_dim
+
           nodes
           |> Axon.dense(pool_dim, name: "#{name}_pool_proj")
           |> Axon.activation(:relu, name: "#{name}_pool_act")
@@ -176,10 +177,14 @@ defmodule Edifice.Graph.GraphSAGE do
 
     # L2 normalize
     normalized =
-      Axon.nx(projected, fn x ->
-        norm = Nx.sqrt(Nx.sum(Nx.pow(x, 2), axes: [2], keep_axes: true))
-        Nx.divide(x, Nx.max(norm, 1.0e-6))
-      end, name: "#{name}_l2_norm")
+      Axon.nx(
+        projected,
+        fn x ->
+          norm = Nx.sqrt(Nx.sum(Nx.pow(x, 2), axes: [2], keep_axes: true))
+          Nx.divide(x, Nx.max(norm, 1.0e-6))
+        end,
+        name: "#{name}_l2_norm"
+      )
 
     if dropout > 0.0 do
       Axon.dropout(normalized, rate: dropout, name: "#{name}_dropout")

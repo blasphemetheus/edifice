@@ -171,14 +171,15 @@ defmodule Edifice.Generative.LatentDiffusion do
     timestep = Axon.input("timestep", shape: {nil})
 
     # Timestep embedding
-    time_embed = Axon.layer(
-      &sinusoidal_embed_impl/2,
-      [timestep],
-      name: "time_embed",
-      hidden_size: hidden_size,
-      num_steps: num_steps,
-      op_name: :sinusoidal_embed
-    )
+    time_embed =
+      Axon.layer(
+        &sinusoidal_embed_impl/2,
+        [timestep],
+        name: "time_embed",
+        hidden_size: hidden_size,
+        num_steps: num_steps,
+        op_name: :sinusoidal_embed
+      )
 
     time_mlp =
       time_embed
@@ -190,9 +191,10 @@ defmodule Edifice.Generative.LatentDiffusion do
     combined = Axon.add(z_proj, time_mlp, name: "combine")
 
     # Denoiser residual blocks
-    x = Enum.reduce(1..num_layers, combined, fn idx, acc ->
-      build_residual_block(acc, hidden_size, "denoiser_block_#{idx}")
-    end)
+    x =
+      Enum.reduce(1..num_layers, combined, fn idx, acc ->
+        build_residual_block(acc, hidden_size, "denoiser_block_#{idx}")
+      end)
 
     # Output: predict noise in latent space
     Axon.dense(x, latent_size, name: "noise_pred")
@@ -212,12 +214,14 @@ defmodule Edifice.Generative.LatentDiffusion do
     half_dim = div(hidden_size, 2)
 
     t_norm = Nx.divide(Nx.as_type(t, :f32), num_steps)
-    freqs = Nx.exp(
-      Nx.multiply(
-        Nx.negate(Nx.log(Nx.tensor(10000.0))),
-        Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
+
+    freqs =
+      Nx.exp(
+        Nx.multiply(
+          Nx.negate(Nx.log(Nx.tensor(10_000.0))),
+          Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
+        )
       )
-    )
 
     t_expanded = Nx.new_axis(t_norm, 1)
     angles = Nx.multiply(t_expanded, Nx.reshape(freqs, {1, half_dim}))

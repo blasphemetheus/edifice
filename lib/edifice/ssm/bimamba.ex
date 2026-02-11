@@ -155,27 +155,29 @@ defmodule Edifice.SSM.BiMamba do
     fwd_b = Axon.dense(x, state_size, name: "#{name}_fwd_b")
     fwd_c = Axon.dense(x, state_size, name: "#{name}_fwd_c")
 
-    fwd_out = Axon.layer(
-      &forward_ssm_impl/4,
-      [x, fwd_b, fwd_c],
-      name: "#{name}_fwd_ssm",
-      hidden_size: hidden_size,
-      state_size: state_size,
-      op_name: :forward_ssm
-    )
+    fwd_out =
+      Axon.layer(
+        &forward_ssm_impl/4,
+        [x, fwd_b, fwd_c],
+        name: "#{name}_fwd_ssm",
+        hidden_size: hidden_size,
+        state_size: state_size,
+        op_name: :forward_ssm
+      )
 
     # Backward SSM (reverse input, run SSM, reverse output)
     bwd_b = Axon.dense(x, state_size, name: "#{name}_bwd_b")
     bwd_c = Axon.dense(x, state_size, name: "#{name}_bwd_c")
 
-    bwd_out = Axon.layer(
-      &backward_ssm_impl/4,
-      [x, bwd_b, bwd_c],
-      name: "#{name}_bwd_ssm",
-      hidden_size: hidden_size,
-      state_size: state_size,
-      op_name: :backward_ssm
-    )
+    bwd_out =
+      Axon.layer(
+        &backward_ssm_impl/4,
+        [x, bwd_b, bwd_c],
+        name: "#{name}_bwd_ssm",
+        hidden_size: hidden_size,
+        state_size: state_size,
+        op_name: :backward_ssm
+      )
 
     # Combine forward and backward
     combined =
@@ -242,7 +244,9 @@ defmodule Edifice.SSM.BiMamba do
     a_bar = Nx.broadcast(a_bar, {batch, seq_len, state_size})
 
     b_bar = Nx.multiply(dt, b_dir)
-    bu = Nx.multiply(b_bar, Nx.mean(Nx.reshape(x_dir, {batch, seq_len, hidden_size, 1}), axes: [2]))
+
+    bu =
+      Nx.multiply(b_bar, Nx.mean(Nx.reshape(x_dir, {batch, seq_len, hidden_size, 1}), axes: [2]))
 
     log_a = Nx.log(Nx.add(Nx.abs(a_bar), 1.0e-10))
     log_a_cumsum = Nx.cumulative_sum(log_a, axis: 1)

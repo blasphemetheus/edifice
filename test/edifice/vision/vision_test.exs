@@ -39,7 +39,13 @@ defmodule Edifice.Vision.VisionTest do
       model = ViT.build(@vit_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @channels, @image_size, @image_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          Nx.template({@batch, @channels, @image_size, @image_size}, :f32),
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, random_image())
 
       assert Nx.shape(output) == {@batch, @embed_dim}
@@ -50,7 +56,13 @@ defmodule Edifice.Vision.VisionTest do
       model = ViT.build(opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @channels, @image_size, @image_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          Nx.template({@batch, @channels, @image_size, @image_size}, :f32),
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, random_image())
 
       assert Nx.shape(output) == {@batch, 10}
@@ -60,7 +72,13 @@ defmodule Edifice.Vision.VisionTest do
       model = ViT.build(@vit_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @channels, @image_size, @image_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          Nx.template({@batch, @channels, @image_size, @image_size}, :f32),
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, random_image())
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -98,7 +116,13 @@ defmodule Edifice.Vision.VisionTest do
       model = DeiT.build(@deit_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @channels, @image_size, @image_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          Nx.template({@batch, @channels, @image_size, @image_size}, :f32),
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, random_image())
 
       assert Nx.shape(output) == {@batch, @embed_dim}
@@ -109,7 +133,13 @@ defmodule Edifice.Vision.VisionTest do
       model = DeiT.build(opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @channels, @image_size, @image_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          Nx.template({@batch, @channels, @image_size, @image_size}, :f32),
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, random_image())
 
       assert Nx.shape(output) == {@batch, 10}
@@ -120,7 +150,13 @@ defmodule Edifice.Vision.VisionTest do
       model = DeiT.build(opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @channels, @image_size, @image_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          Nx.template({@batch, @channels, @image_size, @image_size}, :f32),
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, random_image())
 
       assert %{cls: cls_out, dist: dist_out} = output
@@ -132,7 +168,13 @@ defmodule Edifice.Vision.VisionTest do
       model = DeiT.build(@deit_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @channels, @image_size, @image_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          Nx.template({@batch, @channels, @image_size, @image_size}, :f32),
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, random_image())
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -340,7 +382,13 @@ defmodule Edifice.Vision.VisionTest do
       model = MLPMixer.build(@mixer_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @channels, @image_size, @image_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          Nx.template({@batch, @channels, @image_size, @image_size}, :f32),
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, random_image())
 
       assert Nx.shape(output) == {@batch, @embed_dim}
@@ -351,7 +399,13 @@ defmodule Edifice.Vision.VisionTest do
       model = MLPMixer.build(opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @channels, @image_size, @image_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          Nx.template({@batch, @channels, @image_size, @image_size}, :f32),
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, random_image())
 
       assert Nx.shape(output) == {@batch, 10}
@@ -361,7 +415,13 @@ defmodule Edifice.Vision.VisionTest do
       model = MLPMixer.build(@mixer_opts)
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @channels, @image_size, @image_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          Nx.template({@batch, @channels, @image_size, @image_size}, :f32),
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, random_image())
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1

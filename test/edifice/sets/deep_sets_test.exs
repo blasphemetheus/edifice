@@ -44,7 +44,9 @@ defmodule Edifice.Sets.DeepSetsTest do
 
       # Create a set and a permuted version
       set = Nx.tensor([[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0], [10.0, 11.0, 12.0]]])
-      permuted = Nx.tensor([[[7.0, 8.0, 9.0], [1.0, 2.0, 3.0], [10.0, 11.0, 12.0], [4.0, 5.0, 6.0]]])
+
+      permuted =
+        Nx.tensor([[[7.0, 8.0, 9.0], [1.0, 2.0, 3.0], [10.0, 11.0, 12.0], [4.0, 5.0, 6.0]]])
 
       output_original = predict_fn.(params, set)
       output_permuted = predict_fn.(params, permuted)

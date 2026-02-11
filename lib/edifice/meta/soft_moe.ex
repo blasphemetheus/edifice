@@ -109,11 +109,16 @@ defmodule Edifice.Meta.SoftMoE do
     x = Axon.layer_norm(x, name: "final_norm")
 
     # Extract last timestep
-    Axon.nx(x, fn tensor ->
-      seq_len_actual = Nx.axis_size(tensor, 1)
-      Nx.slice_along_axis(tensor, seq_len_actual - 1, 1, axis: 1)
-      |> Nx.squeeze(axes: [1])
-    end, name: "last_timestep")
+    Axon.nx(
+      x,
+      fn tensor ->
+        seq_len_actual = Nx.axis_size(tensor, 1)
+
+        Nx.slice_along_axis(tensor, seq_len_actual - 1, 1, axis: 1)
+        |> Nx.squeeze(axes: [1])
+      end,
+      name: "last_timestep"
+    )
   end
 
   @doc """
@@ -210,7 +215,9 @@ defmodule Edifice.Meta.SoftMoE do
     # experts_stacked: [num_experts, batch, seq_len, hidden_size]
 
     # Softmax dispatch weights
-    dispatch_probs = Nx.exp(dispatch_logits - Nx.reduce_max(dispatch_logits, axes: [-1], keep_axes: true))
+    dispatch_probs =
+      Nx.exp(dispatch_logits - Nx.reduce_max(dispatch_logits, axes: [-1], keep_axes: true))
+
     dispatch_probs = dispatch_probs / Nx.sum(dispatch_probs, axes: [-1], keep_axes: true)
 
     # Transpose experts: [batch, seq_len, num_experts, hidden_size]

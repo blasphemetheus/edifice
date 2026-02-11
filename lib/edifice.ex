@@ -181,10 +181,50 @@ defmodule Edifice do
       feedforward: [:mlp, :kan, :tabnet],
       convolutional: [:resnet, :densenet, :tcn, :mobilenet, :efficientnet],
       recurrent: [:lstm, :gru, :xlstm, :min_gru, :min_lstm, :delta_net, :ttt, :titans, :reservoir],
-      ssm: [:mamba, :mamba_ssd, :mamba_cumsum, :mamba_hillis_steele, :s4, :s4d, :s5, :h3, :hyena, :bimamba, :gated_ssm, :jamba, :zamba],
-      attention: [:attention, :sliding_window, :retnet, :rwkv, :gla, :hgrn, :griffin, :gqa, :perceiver, :fnet, :linear_transformer, :nystromformer, :performer],
+      ssm: [
+        :mamba,
+        :mamba_ssd,
+        :mamba_cumsum,
+        :mamba_hillis_steele,
+        :s4,
+        :s4d,
+        :s5,
+        :h3,
+        :hyena,
+        :bimamba,
+        :gated_ssm,
+        :jamba,
+        :zamba
+      ],
+      attention: [
+        :attention,
+        :sliding_window,
+        :retnet,
+        :rwkv,
+        :gla,
+        :hgrn,
+        :griffin,
+        :gqa,
+        :perceiver,
+        :fnet,
+        :linear_transformer,
+        :nystromformer,
+        :performer
+      ],
       vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer],
-      generative: [:diffusion, :ddim, :dit, :latent_diffusion, :consistency_model, :score_sde, :flow_matching, :vae, :vq_vae, :gan, :normalizing_flow],
+      generative: [
+        :diffusion,
+        :ddim,
+        :dit,
+        :latent_diffusion,
+        :consistency_model,
+        :score_sde,
+        :flow_matching,
+        :vae,
+        :vq_vae,
+        :gan,
+        :normalizing_flow
+      ],
       graph: [:gcn, :gat, :graph_sage, :gin, :pna, :graph_transformer, :schnet],
       sets: [:deep_sets, :pointnet],
       energy: [:ebm, :hopfield, :neural_ode],
@@ -240,8 +280,12 @@ defmodule Edifice do
   @spec module_for(atom()) :: module()
   def module_for(name) do
     case Map.fetch(@architecture_registry, name) do
-      {:ok, {module, _}} -> module
-      {:ok, module} -> module
+      {:ok, {module, _}} ->
+        module
+
+      {:ok, module} ->
+        module
+
       :error ->
         available = list_architectures() |> Enum.join(", ")
         raise ArgumentError, "Unknown architecture #{inspect(name)}. Available: #{available}"

@@ -101,7 +101,8 @@ defmodule Edifice.Meta.Hypernetwork do
 
     # Apply generated weights to data input sequentially
     apply_generated_weights(data_input, weight_generators, target_layer_sizes,
-      activation: activation)
+      activation: activation
+    )
   end
 
   @doc """
@@ -144,7 +145,8 @@ defmodule Edifice.Meta.Hypernetwork do
     # Scale initial output to be small (prevents target network explosion)
     Axon.dense(x, total_params,
       name: "#{name}_params",
-      kernel_initializer: Axon.Initializers.uniform(scale: 0.01))
+      kernel_initializer: Axon.Initializers.uniform(scale: 0.01)
+    )
   end
 
   @doc """

@@ -170,15 +170,16 @@ defmodule Edifice.Liquid do
     f_proj = Axon.dense(f_proj, hidden_size, name: "#{name}_f_out")
 
     # Apply LTC dynamics
-    ltc_output = Axon.layer(
-      &ltc_impl/4,
-      [x, tau_proj, f_proj],
-      name: "#{name}_ltc",
-      hidden_size: hidden_size,
-      integration_steps: integration_steps,
-      solver: solver,
-      op_name: :ltc_cell
-    )
+    ltc_output =
+      Axon.layer(
+        &ltc_impl/4,
+        [x, tau_proj, f_proj],
+        name: "#{name}_ltc",
+        hidden_size: hidden_size,
+        integration_steps: integration_steps,
+        solver: solver,
+        op_name: :ltc_cell
+      )
 
     # Dropout
     ltc_output =
@@ -280,14 +281,15 @@ defmodule Edifice.Liquid do
     x =
       Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
         # LTC layer
-        ltc_out = build_ltc_layer(
-          acc,
-          hidden_size: hidden_size,
-          dropout: dropout,
-          integration_steps: Keyword.get(opts, :integration_steps, @default_integration_steps),
-          solver: Keyword.get(opts, :solver, @default_solver),
-          name: "ltc_layer_#{layer_idx}"
-        )
+        ltc_out =
+          build_ltc_layer(
+            acc,
+            hidden_size: hidden_size,
+            dropout: dropout,
+            integration_steps: Keyword.get(opts, :integration_steps, @default_integration_steps),
+            solver: Keyword.get(opts, :solver, @default_solver),
+            name: "ltc_layer_#{layer_idx}"
+          )
 
         # FFN layer (SwiGLU style)
         build_ffn(ltc_out,
@@ -303,6 +305,7 @@ defmodule Edifice.Liquid do
       x,
       fn tensor ->
         seq_len_actual = Nx.axis_size(tensor, 1)
+
         Nx.slice_along_axis(tensor, seq_len_actual - 1, 1, axis: 1)
         |> Nx.squeeze(axes: [1])
       end,
@@ -362,10 +365,13 @@ defmodule Edifice.Liquid do
     # Per layer:
     # - tau projection: hidden * hidden
     # - f network: hidden * (hidden * 2) + (hidden * 2) * hidden
+    # tau
+    # f hidden
+    # f out
     per_layer =
-      hidden_size * hidden_size +    # tau
-      hidden_size * (hidden_size * 2) +  # f hidden
-      (hidden_size * 2) * hidden_size    # f out
+      hidden_size * hidden_size +
+        hidden_size * (hidden_size * 2) +
+        hidden_size * 2 * hidden_size
 
     # Input projection
     input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
@@ -401,7 +407,8 @@ defmodule Edifice.Liquid do
       num_layers: 4,
       window_size: 60,
       dropout: 0.1,
-      integration_steps: 1,  # DOPRI5 uses adaptive stepping
+      # DOPRI5 uses adaptive stepping
+      integration_steps: 1,
       solver: :dopri5
     ]
   end

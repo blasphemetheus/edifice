@@ -110,11 +110,12 @@ defmodule Edifice.SSM.MambaSSD do
     {a_bar, bx} = Common.discretize_ssm(x, b, dt, state_size)
 
     # Use SSD algorithm (training or inference mode)
-    h = if training_mode do
-      ssd_matmul_scan(a_bar, bx, c, chunk_size)
-    else
-      ssd_scan(a_bar, bx, chunk_size)
-    end
+    h =
+      if training_mode do
+        ssd_matmul_scan(a_bar, bx, c, chunk_size)
+      else
+        ssd_scan(a_bar, bx, chunk_size)
+      end
 
     # Compute output
     Common.compute_ssm_output(h, c)
@@ -185,7 +186,12 @@ defmodule Edifice.SSM.MambaSSD do
 
     # Create shift: prepend zero and drop last
     zero_slice = Nx.broadcast(0.0, {batch, 1, hidden, state})
-    log_cumsum_shifted = Nx.concatenate([zero_slice, Nx.slice_along_axis(log_cumsum, 0, chunk_len - 1, axis: 1)], axis: 1)
+
+    log_cumsum_shifted =
+      Nx.concatenate([zero_slice, Nx.slice_along_axis(log_cumsum, 0, chunk_len - 1, axis: 1)],
+        axis: 1
+      )
+
     log_cumsum_s_shifted = Nx.reshape(log_cumsum_shifted, {batch, 1, chunk_len, hidden, state})
 
     # log_transfer[t, s] = log_cumsum[t] - log_cumsum_shifted[s]
@@ -311,20 +317,21 @@ defmodule Edifice.SSM.MambaSSD do
       # Compute product of A from end of prev_idx chunk to start of current chunk
       # This spans all chunks from prev_idx+1 to current_chunk_idx-1, plus partial of prev_idx
 
-      products = Enum.map((prev_idx + 1)..(current_chunk_idx - 1)//1, fn between_idx ->
-        if between_idx < num_chunks do
-          start_idx = between_idx * chunk_size
-          a_chunk = Nx.slice_along_axis(a, start_idx, chunk_size, axis: 1)
-          Nx.product(a_chunk, axes: [1])
-        else
-          # Remainder chunk
-          start_idx = num_chunks * chunk_size
-          a_chunk = Nx.slice_along_axis(a, start_idx, remainder, axis: 1)
-          Nx.product(a_chunk, axes: [1])
-        end
-      end)
+      products =
+        Enum.map((prev_idx + 1)..(current_chunk_idx - 1)//1, fn between_idx ->
+          if between_idx < num_chunks do
+            start_idx = between_idx * chunk_size
+            a_chunk = Nx.slice_along_axis(a, start_idx, chunk_size, axis: 1)
+            Nx.product(a_chunk, axes: [1])
+          else
+            # Remainder chunk
+            start_idx = num_chunks * chunk_size
+            a_chunk = Nx.slice_along_axis(a, start_idx, remainder, axis: 1)
+            Nx.product(a_chunk, axes: [1])
+          end
+        end)
 
-      if length(products) == 0 do
+      if products == [] do
         # Adjacent chunks, just need product from prev chunk's end
         batch = Nx.axis_size(a, 0)
         hidden = Nx.axis_size(a, 2)
@@ -533,6 +540,7 @@ defmodule Edifice.SSM.MambaSSD do
   def training_defaults do
     recommended_defaults()
     |> Keyword.put(:training_mode, true)
-    |> Keyword.put(:chunk_size, 32)  # Larger chunks for better matmul efficiency
+    # Larger chunks for better matmul efficiency
+    |> Keyword.put(:chunk_size, 32)
   end
 end

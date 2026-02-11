@@ -166,13 +166,14 @@ defmodule Edifice.Attention.RWKV do
     name = Keyword.get(opts, :name, "rwkv_block")
 
     # Time-mixing (WKV attention)
-    x = build_time_mixing(input,
-      hidden_size: hidden_size,
-      head_size: head_size,
-      num_heads: num_heads,
-      dropout: dropout,
-      name: "#{name}_time_mix"
-    )
+    x =
+      build_time_mixing(input,
+        hidden_size: hidden_size,
+        head_size: head_size,
+        num_heads: num_heads,
+        dropout: dropout,
+        name: "#{name}_time_mix"
+      )
 
     # Channel-mixing (FFN with gating)
     build_channel_mixing(x,
@@ -230,15 +231,16 @@ defmodule Edifice.Attention.RWKV do
     v_proj = Axon.dense(x_mixed, hidden_size, name: "#{name}_v_proj")
 
     # Apply WKV attention
-    wkv = Axon.layer(
-      &wkv_attention/5,
-      [w_proj, k_proj, v_proj, r_proj],
-      name: "#{name}_wkv",
-      hidden_size: hidden_size,
-      head_size: head_size,
-      num_heads: num_heads,
-      op_name: :wkv_attention
-    )
+    wkv =
+      Axon.layer(
+        &wkv_attention/5,
+        [w_proj, k_proj, v_proj, r_proj],
+        name: "#{name}_wkv",
+        hidden_size: hidden_size,
+        head_size: head_size,
+        num_heads: num_heads,
+        op_name: :wkv_attention
+      )
 
     # Output projection
     output = Axon.dense(wkv, hidden_size, name: "#{name}_output")
@@ -329,7 +331,10 @@ defmodule Edifice.Attention.RWKV do
         zeros = Nx.broadcast(0.0, {batch, 1, hidden})
 
         # Shift: concatenate zeros with all but last token
-        shifted = Nx.concatenate([zeros, Nx.slice_along_axis(x, 0, Nx.axis_size(x, 1) - 1, axis: 1)], axis: 1)
+        shifted =
+          Nx.concatenate([zeros, Nx.slice_along_axis(x, 0, Nx.axis_size(x, 1) - 1, axis: 1)],
+            axis: 1
+          )
 
         # Concatenate current and shifted for mixing
         Nx.concatenate([x, shifted], axis: 2)
@@ -457,8 +462,8 @@ defmodule Edifice.Attention.RWKV do
     #   - output: hidden * hidden
     time_mix_params =
       hidden_size * 2 * hidden_size +
-      4 * hidden_size * hidden_size +
-      hidden_size * hidden_size
+        4 * hidden_size * hidden_size +
+        hidden_size * hidden_size
 
     # Channel-mixing:
     #   - r_proj: hidden * 2 * hidden
@@ -466,8 +471,8 @@ defmodule Edifice.Attention.RWKV do
     #   - v_proj: inner_size * hidden
     channel_mix_params =
       hidden_size * 2 * hidden_size +
-      hidden_size * 2 * inner_size +
-      inner_size * hidden_size
+        hidden_size * 2 * inner_size +
+        inner_size * hidden_size
 
     per_layer = time_mix_params + channel_mix_params
 

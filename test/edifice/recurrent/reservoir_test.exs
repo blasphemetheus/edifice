@@ -12,15 +12,18 @@ defmodule Edifice.Recurrent.ReservoirTest do
       reservoir_size = 64
       output_size = 16
 
-      model = Reservoir.build(
-        input_size: input_size,
-        reservoir_size: reservoir_size,
-        output_size: output_size,
-        seq_len: @seq_len
-      )
+      model =
+        Reservoir.build(
+          input_size: input_size,
+          reservoir_size: reservoir_size,
+          output_size: output_size,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, @seq_len, input_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, @seq_len, input_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, @seq_len, input_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -33,14 +36,17 @@ defmodule Edifice.Recurrent.ReservoirTest do
       input_size = 32
       reservoir_size = 64
 
-      model = Reservoir.build(
-        input_size: input_size,
-        reservoir_size: reservoir_size,
-        seq_len: @seq_len
-      )
+      model =
+        Reservoir.build(
+          input_size: input_size,
+          reservoir_size: reservoir_size,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, @seq_len, input_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, @seq_len, input_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, @seq_len, input_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -54,17 +60,20 @@ defmodule Edifice.Recurrent.ReservoirTest do
       reservoir_size = 32
       output_size = 8
 
-      model = Reservoir.build(
-        input_size: input_size,
-        reservoir_size: reservoir_size,
-        output_size: output_size,
-        spectral_radius: 0.95,
-        sparsity: 0.8,
-        seq_len: @seq_len
-      )
+      model =
+        Reservoir.build(
+          input_size: input_size,
+          reservoir_size: reservoir_size,
+          output_size: output_size,
+          spectral_radius: 0.95,
+          sparsity: 0.8,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, @seq_len, input_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, @seq_len, input_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, @seq_len, input_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -77,17 +86,20 @@ defmodule Edifice.Recurrent.ReservoirTest do
       reservoir_size = 32
       output_size = 8
 
-      model = Reservoir.build(
-        input_size: input_size,
-        reservoir_size: reservoir_size,
-        output_size: output_size,
-        input_scaling: 0.5,
-        leak_rate: 0.8,
-        seq_len: @seq_len
-      )
+      model =
+        Reservoir.build(
+          input_size: input_size,
+          reservoir_size: reservoir_size,
+          output_size: output_size,
+          input_scaling: 0.5,
+          leak_rate: 0.8,
+          seq_len: @seq_len
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch_size, @seq_len, input_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch_size, @seq_len, input_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.iota({@batch_size, @seq_len, input_size}, type: :f32)
       output = predict_fn.(params, input)
@@ -96,12 +108,13 @@ defmodule Edifice.Recurrent.ReservoirTest do
     end
 
     test "builds model graph without error" do
-      model = Reservoir.build(
-        input_size: 32,
-        reservoir_size: 64,
-        output_size: 16,
-        seq_len: @seq_len
-      )
+      model =
+        Reservoir.build(
+          input_size: 32,
+          reservoir_size: 64,
+          output_size: 16,
+          seq_len: @seq_len
+        )
 
       # Model is an Axon struct that can be built
       assert %Axon{} = model

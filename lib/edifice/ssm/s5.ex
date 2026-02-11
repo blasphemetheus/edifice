@@ -173,12 +173,13 @@ defmodule Edifice.SSM.S5 do
     name = Keyword.get(opts, :name, "s5_block")
 
     # MIMO SSM layer
-    x = build_mimo_ssm(input,
-      hidden_size: hidden_size,
-      state_size: state_size,
-      dropout: dropout,
-      name: "#{name}_ssm"
-    )
+    x =
+      build_mimo_ssm(input,
+        hidden_size: hidden_size,
+        state_size: state_size,
+        dropout: dropout,
+        name: "#{name}_ssm"
+      )
 
     # Feed-forward network
     build_ffn(x,
@@ -219,14 +220,15 @@ defmodule Edifice.SSM.S5 do
     d_proj = Axon.dense(x, hidden_size, name: "#{name}_d_proj")
 
     # Apply MIMO SSM
-    ssm_output = Axon.layer(
-      &mimo_ssm_impl/5,
-      [encoded, b_proj, c_proj, d_proj],
-      name: "#{name}_ssm",
-      hidden_size: hidden_size,
-      state_size: state_size,
-      op_name: :mimo_ssm
-    )
+    ssm_output =
+      Axon.layer(
+        &mimo_ssm_impl/5,
+        [encoded, b_proj, c_proj, d_proj],
+        name: "#{name}_ssm",
+        hidden_size: hidden_size,
+        state_size: state_size,
+        op_name: :mimo_ssm
+      )
 
     # Dropout
     ssm_output =
@@ -296,7 +298,8 @@ defmodule Edifice.SSM.S5 do
     # Initialize as -exp(uniform) for HiPPO-like initialization
     # We use fixed values here for simplicity
     a_diag = Nx.negate(Nx.add(Nx.iota({state_size}), 1.0))
-    a_diag = Nx.divide(a_diag, state_size)  # Normalize
+    # Normalize
+    a_diag = Nx.divide(a_diag, state_size)
 
     # Discretization step (fixed for simplicity)
     dt = 0.1
@@ -329,8 +332,10 @@ defmodule Edifice.SSM.S5 do
     y = Nx.multiply(c_proj, h)
 
     # Sum over state dimension and project to hidden_size
-    y_summed = Nx.sum(y, axes: [2])  # [batch, seq_len]
-    y_expanded = Nx.new_axis(y_summed, 2)  # [batch, seq_len, 1]
+    # [batch, seq_len]
+    y_summed = Nx.sum(y, axes: [2])
+    # [batch, seq_len, 1]
+    y_expanded = Nx.new_axis(y_summed, 2)
     y_broadcast = Nx.broadcast(y_expanded, {batch, seq_len, hidden_size})
 
     # Add skip connection (D term)
@@ -368,15 +373,15 @@ defmodule Edifice.SSM.S5 do
     #   - D projection: hidden * hidden
     ssm_params =
       hidden_size * state_size +
-      2 * hidden_size * state_size +
-      hidden_size * hidden_size
+        2 * hidden_size * state_size +
+        hidden_size * hidden_size
 
     # FFN (GLU style):
     #   - Gate, Up: 2 * hidden * inner
     #   - Down: inner * hidden
     ffn_params =
       2 * hidden_size * inner_size +
-      inner_size * hidden_size
+        inner_size * hidden_size
 
     per_layer = ssm_params + ffn_params
 

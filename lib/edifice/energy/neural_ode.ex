@@ -111,8 +111,7 @@ defmodule Edifice.Energy.NeuralODE do
 
         # Scale by step size
         scaled_dh =
-          Axon.nx(dh, fn x -> Nx.multiply(x, step_size) end,
-            name: "scale_step_#{step}")
+          Axon.nx(dh, fn x -> Nx.multiply(x, step_size) end, name: "scale_step_#{step}")
 
         # Euler step: h_{t+dt} = h_t + dt * f(h_t, t)
         Axon.add(h, scaled_dh, name: "euler_step_#{step}")

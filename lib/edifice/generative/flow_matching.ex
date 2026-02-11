@@ -209,12 +209,13 @@ defmodule Edifice.Generative.FlowMatching do
 
     # Sinusoidal embedding
     # emb = exp(-log(10000) * i / half_dim) for i in 0..half_dim-1
-    freqs = Nx.exp(
-      Nx.multiply(
-        Nx.negate(Nx.log(Nx.tensor(10000.0))),
-        Nx.divide(Nx.iota({half_dim}, type: :f32), half_dim)
+    freqs =
+      Nx.exp(
+        Nx.multiply(
+          Nx.negate(Nx.log(Nx.tensor(10_000.0))),
+          Nx.divide(Nx.iota({half_dim}, type: :f32), half_dim)
+        )
       )
-    )
 
     # t: [batch] -> [batch, 1]
     t_expanded = Nx.new_axis(t, -1)
@@ -264,6 +265,7 @@ defmodule Edifice.Generative.FlowMatching do
 
     # x_t = (1 - t) * x_0 + t * x_1
     one_minus_t = Nx.subtract(1.0, t_broadcast)
+
     Nx.add(
       Nx.multiply(one_minus_t, x_0),
       Nx.multiply(t_broadcast, x_1)
@@ -336,11 +338,12 @@ defmodule Edifice.Generative.FlowMatching do
     target_vel = target_velocity(noise, actions)
 
     # Predict velocity
-    pred_vel = predict_fn.(params, %{
-      "x_t" => x_t,
-      "timestep" => t,
-      "observations" => observations
-    })
+    pred_vel =
+      predict_fn.(params, %{
+        "x_t" => x_t,
+        "timestep" => t,
+        "observations" => observations
+      })
 
     # MSE loss
     velocity_loss(target_vel, pred_vel)
@@ -381,19 +384,20 @@ defmodule Edifice.Generative.FlowMatching do
         t = step / num_steps
         t_tensor = Nx.broadcast(Nx.tensor(t, type: :f32), {Nx.axis_size(x, 0)})
 
-        x_next = case solver do
-          :euler ->
-            euler_step(params, predict_fn, x, t_tensor, observations, dt)
+        x_next =
+          case solver do
+            :euler ->
+              euler_step(params, predict_fn, x, t_tensor, observations, dt)
 
-          :midpoint ->
-            midpoint_step(params, predict_fn, x, t_tensor, observations, dt)
+            :midpoint ->
+              midpoint_step(params, predict_fn, x, t_tensor, observations, dt)
 
-          :rk4 ->
-            rk4_step(params, predict_fn, x, t_tensor, observations, dt)
+            :rk4 ->
+              rk4_step(params, predict_fn, x, t_tensor, observations, dt)
 
-          _ ->
-            euler_step(params, predict_fn, x, t_tensor, observations, dt)
-        end
+            _ ->
+              euler_step(params, predict_fn, x, t_tensor, observations, dt)
+          end
 
         {x_next, t + dt}
       end)
@@ -403,11 +407,12 @@ defmodule Edifice.Generative.FlowMatching do
 
   # Euler method: x_{t+dt} = x_t + dt * v(x_t, t)
   defp euler_step(params, predict_fn, x, t, observations, dt) do
-    v = predict_fn.(params, %{
-      "x_t" => x,
-      "timestep" => t,
-      "observations" => observations
-    })
+    v =
+      predict_fn.(params, %{
+        "x_t" => x,
+        "timestep" => t,
+        "observations" => observations
+      })
 
     Nx.add(x, Nx.multiply(dt, v))
   end
@@ -417,22 +422,24 @@ defmodule Edifice.Generative.FlowMatching do
     batch_size = Nx.axis_size(x, 0)
 
     # k1 = v(x, t)
-    k1 = predict_fn.(params, %{
-      "x_t" => x,
-      "timestep" => t,
-      "observations" => observations
-    })
+    k1 =
+      predict_fn.(params, %{
+        "x_t" => x,
+        "timestep" => t,
+        "observations" => observations
+      })
 
     # x_mid = x + dt/2 * k1
     x_mid = Nx.add(x, Nx.multiply(dt / 2, k1))
     t_mid = Nx.add(t, Nx.broadcast(dt / 2, {batch_size}))
 
     # k2 = v(x_mid, t + dt/2)
-    k2 = predict_fn.(params, %{
-      "x_t" => x_mid,
-      "timestep" => t_mid,
-      "observations" => observations
-    })
+    k2 =
+      predict_fn.(params, %{
+        "x_t" => x_mid,
+        "timestep" => t_mid,
+        "observations" => observations
+      })
 
     # x_{t+dt} = x + dt * k2
     Nx.add(x, Nx.multiply(dt, k2))
@@ -444,43 +451,51 @@ defmodule Edifice.Generative.FlowMatching do
     half_dt = dt / 2
 
     # k1 = v(x, t)
-    k1 = predict_fn.(params, %{
-      "x_t" => x,
-      "timestep" => t,
-      "observations" => observations
-    })
+    k1 =
+      predict_fn.(params, %{
+        "x_t" => x,
+        "timestep" => t,
+        "observations" => observations
+      })
 
     # k2 = v(x + dt/2 * k1, t + dt/2)
     x2 = Nx.add(x, Nx.multiply(half_dt, k1))
     t2 = Nx.add(t, Nx.broadcast(half_dt, {batch_size}))
-    k2 = predict_fn.(params, %{
-      "x_t" => x2,
-      "timestep" => t2,
-      "observations" => observations
-    })
+
+    k2 =
+      predict_fn.(params, %{
+        "x_t" => x2,
+        "timestep" => t2,
+        "observations" => observations
+      })
 
     # k3 = v(x + dt/2 * k2, t + dt/2)
     x3 = Nx.add(x, Nx.multiply(half_dt, k2))
-    k3 = predict_fn.(params, %{
-      "x_t" => x3,
-      "timestep" => t2,
-      "observations" => observations
-    })
+
+    k3 =
+      predict_fn.(params, %{
+        "x_t" => x3,
+        "timestep" => t2,
+        "observations" => observations
+      })
 
     # k4 = v(x + dt * k3, t + dt)
     x4 = Nx.add(x, Nx.multiply(dt, k3))
     t4 = Nx.add(t, Nx.broadcast(dt, {batch_size}))
-    k4 = predict_fn.(params, %{
-      "x_t" => x4,
-      "timestep" => t4,
-      "observations" => observations
-    })
+
+    k4 =
+      predict_fn.(params, %{
+        "x_t" => x4,
+        "timestep" => t4,
+        "observations" => observations
+      })
 
     # x_{t+dt} = x + dt/6 * (k1 + 2*k2 + 2*k3 + k4)
-    weighted_sum = Nx.add(
-      Nx.add(k1, Nx.multiply(2.0, k2)),
-      Nx.add(Nx.multiply(2.0, k3), k4)
-    )
+    weighted_sum =
+      Nx.add(
+        Nx.add(k1, Nx.multiply(2.0, k2)),
+        Nx.add(Nx.multiply(2.0, k3), k4)
+      )
 
     Nx.add(x, Nx.multiply(dt / 6, weighted_sum))
   end
@@ -562,24 +577,27 @@ defmodule Edifice.Generative.FlowMatching do
         t_tensor = Nx.broadcast(Nx.tensor(t, type: :f32), {Nx.axis_size(x, 0)})
 
         # Conditional velocity
-        v_cond = predict_fn.(params, %{
-          "x_t" => x,
-          "timestep" => t_tensor,
-          "observations" => observations
-        })
+        v_cond =
+          predict_fn.(params, %{
+            "x_t" => x,
+            "timestep" => t_tensor,
+            "observations" => observations
+          })
 
         # Unconditional velocity
-        v_uncond = predict_fn.(params, %{
-          "x_t" => x,
-          "timestep" => t_tensor,
-          "observations" => uncond_obs
-        })
+        v_uncond =
+          predict_fn.(params, %{
+            "x_t" => x,
+            "timestep" => t_tensor,
+            "observations" => uncond_obs
+          })
 
         # Guided velocity
-        v_guided = Nx.add(
-          v_uncond,
-          Nx.multiply(guidance_scale, Nx.subtract(v_cond, v_uncond))
-        )
+        v_guided =
+          Nx.add(
+            v_uncond,
+            Nx.multiply(guidance_scale, Nx.subtract(v_cond, v_uncond))
+          )
 
         x_next = Nx.add(x, Nx.multiply(dt, v_guided))
         {x_next, t + dt}
@@ -616,7 +634,8 @@ defmodule Edifice.Generative.FlowMatching do
     action_flat = action_horizon * action_dim
 
     # Embeddings
-    _time_embed = hidden_size  # Sinusoidal (no params, but we count dim)
+    # Sinusoidal (no params, but we count dim)
+    _time_embed = hidden_size
     obs_embed = obs_size * hidden_size
     x_embed = action_flat * hidden_size
 

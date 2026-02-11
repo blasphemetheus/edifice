@@ -148,29 +148,31 @@ defmodule Edifice.SSM.H3 do
     shift_b = Axon.dense(x, state_size, name: "#{name}_shift_b")
     shift_c = Axon.dense(x, state_size, name: "#{name}_shift_c")
 
-    shift_out = Axon.layer(
-      &diagonal_ssm_impl/4,
-      [x, shift_b, shift_c],
-      name: "#{name}_shift_ssm",
-      hidden_size: hidden_size,
-      state_size: state_size,
-      dt_init: 0.01,
-      op_name: :shift_ssm
-    )
+    shift_out =
+      Axon.layer(
+        &diagonal_ssm_impl/4,
+        [x, shift_b, shift_c],
+        name: "#{name}_shift_ssm",
+        hidden_size: hidden_size,
+        state_size: state_size,
+        dt_init: 0.01,
+        op_name: :shift_ssm
+      )
 
     # Branch 2: Diagonal SSM
     diag_b = Axon.dense(x, state_size, name: "#{name}_diag_b")
     diag_c = Axon.dense(x, state_size, name: "#{name}_diag_c")
 
-    diag_out = Axon.layer(
-      &diagonal_ssm_impl/4,
-      [x, diag_b, diag_c],
-      name: "#{name}_diag_ssm",
-      hidden_size: hidden_size,
-      state_size: state_size,
-      dt_init: 0.001,
-      op_name: :diag_ssm
-    )
+    diag_out =
+      Axon.layer(
+        &diagonal_ssm_impl/4,
+        [x, diag_b, diag_c],
+        name: "#{name}_diag_ssm",
+        hidden_size: hidden_size,
+        state_size: state_size,
+        dt_init: 0.001,
+        op_name: :diag_ssm
+      )
 
     # Multiplicative interaction
     combined = Axon.multiply(shift_out, diag_out, name: "#{name}_mul_gate")

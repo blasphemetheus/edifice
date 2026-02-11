@@ -128,11 +128,15 @@ defmodule Edifice.Probabilistic.EvidentialNN do
     evidence = Axon.dense(backbone, num_classes, name: "evidence_head")
 
     # alpha = evidence + 1 (Dirichlet concentration parameters)
-    Axon.nx(evidence, fn e ->
-      # Softplus for non-negative evidence, then add 1 for valid Dirichlet
-      pos_evidence = Nx.log1p(Nx.exp(e))
-      Nx.add(pos_evidence, 1.0)
-    end, name: "alpha")
+    Axon.nx(
+      evidence,
+      fn e ->
+        # Softplus for non-negative evidence, then add 1 for valid Dirichlet
+        pos_evidence = Nx.log1p(Nx.exp(e))
+        Nx.add(pos_evidence, 1.0)
+      end,
+      name: "alpha"
+    )
   end
 
   @doc """
@@ -251,10 +255,11 @@ defmodule Edifice.Probabilistic.EvidentialNN do
 
     # Type II Maximum Likelihood loss
     # L = sum(y_k * (log(S) - log(alpha_k)))
-    nll = Nx.sum(
-      targets * (Nx.log(dirichlet_strength) - Nx.log(alpha)),
-      axes: [1]
-    )
+    nll =
+      Nx.sum(
+        targets * (Nx.log(dirichlet_strength) - Nx.log(alpha)),
+        axes: [1]
+      )
 
     # KL divergence regularizer: penalize evidence on wrong classes
     # Remove evidence for correct class
@@ -264,11 +269,12 @@ defmodule Edifice.Probabilistic.EvidentialNN do
     s_tilde = Nx.sum(alpha_tilde, axes: [1], keep_axes: true)
     num_classes = Nx.axis_size(alpha, 1)
 
-    kl = Nx.sum(
-      (alpha_tilde - 1.0) *
-        (Nx.log(alpha_tilde) - Nx.log(s_tilde / num_classes)),
-      axes: [1]
-    )
+    kl =
+      Nx.sum(
+        (alpha_tilde - 1.0) *
+          (Nx.log(alpha_tilde) - Nx.log(s_tilde / num_classes)),
+        axes: [1]
+      )
 
     Nx.mean(nll + kl_weight * kl)
   end

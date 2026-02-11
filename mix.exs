@@ -55,19 +55,27 @@ defmodule Edifice.MixProject do
       main: "Edifice",
       extras: ["README.md", "CHANGELOG.md", "LICENSE"],
       groups_for_modules: [
-        "Feedforward": [
+        Feedforward: [
           Edifice.Feedforward.MLP,
-          Edifice.Feedforward.KAN
+          Edifice.Feedforward.KAN,
+          Edifice.Feedforward.TabNet
         ],
-        "Convolutional": [
+        Convolutional: [
           Edifice.Convolutional.Conv,
           Edifice.Convolutional.ResNet,
           Edifice.Convolutional.DenseNet,
-          Edifice.Convolutional.TCN
+          Edifice.Convolutional.TCN,
+          Edifice.Convolutional.MobileNet,
+          Edifice.Convolutional.EfficientNet
         ],
-        "Recurrent": [
+        Recurrent: [
           Edifice.Recurrent,
           Edifice.Recurrent.XLSTM,
+          Edifice.Recurrent.MinGRU,
+          Edifice.Recurrent.MinLSTM,
+          Edifice.Recurrent.DeltaNet,
+          Edifice.Recurrent.TTT,
+          Edifice.Recurrent.Titans,
           Edifice.Recurrent.Reservoir
         ],
         "State Space Models": [
@@ -75,64 +83,118 @@ defmodule Edifice.MixProject do
           Edifice.SSM.MambaSSD,
           Edifice.SSM.MambaCumsum,
           Edifice.SSM.MambaHillisSteele,
+          Edifice.SSM.S4,
+          Edifice.SSM.S4D,
           Edifice.SSM.S5,
+          Edifice.SSM.H3,
+          Edifice.SSM.Hyena,
+          Edifice.SSM.BiMamba,
           Edifice.SSM.GatedSSM,
           Edifice.SSM.Hybrid,
           Edifice.SSM.Zamba,
           Edifice.SSM.HybridBuilder,
           Edifice.SSM.Common
         ],
-        "Attention": [
+        Attention: [
           Edifice.Attention.MultiHead,
+          Edifice.Attention.GQA,
+          Edifice.Attention.Perceiver,
+          Edifice.Attention.FNet,
+          Edifice.Attention.LinearTransformer,
+          Edifice.Attention.Nystromformer,
+          Edifice.Attention.Performer,
           Edifice.Attention.RetNet,
           Edifice.Attention.RWKV,
           Edifice.Attention.GLA,
           Edifice.Attention.HGRN,
           Edifice.Attention.Griffin
         ],
-        "Generative": [
+        Vision: [
+          Edifice.Vision.ViT,
+          Edifice.Vision.DeiT,
+          Edifice.Vision.SwinTransformer,
+          Edifice.Vision.UNet,
+          Edifice.Vision.ConvNeXt,
+          Edifice.Vision.MLPMixer
+        ],
+        Generative: [
           Edifice.Generative.VAE,
           Edifice.Generative.VQVAE,
           Edifice.Generative.GAN,
           Edifice.Generative.Diffusion,
+          Edifice.Generative.DDIM,
+          Edifice.Generative.DiT,
+          Edifice.Generative.LatentDiffusion,
+          Edifice.Generative.ConsistencyModel,
+          Edifice.Generative.ScoreSDE,
           Edifice.Generative.FlowMatching,
           Edifice.Generative.NormalizingFlow
         ],
-        "Graph": [
+        Contrastive: [
+          Edifice.Contrastive.SimCLR,
+          Edifice.Contrastive.BYOL,
+          Edifice.Contrastive.BarlowTwins,
+          Edifice.Contrastive.MAE,
+          Edifice.Contrastive.VICReg
+        ],
+        Graph: [
           Edifice.Graph.GCN,
           Edifice.Graph.GAT,
+          Edifice.Graph.GIN,
+          Edifice.Graph.GraphSAGE,
+          Edifice.Graph.GraphTransformer,
+          Edifice.Graph.PNA,
+          Edifice.Graph.SchNet,
           Edifice.Graph.MessagePassing
         ],
-        "Sets": [
+        Sets: [
           Edifice.Sets.DeepSets,
           Edifice.Sets.PointNet
         ],
-        "Energy": [
+        Energy: [
           Edifice.Energy.EBM,
-          Edifice.Energy.Hopfield
+          Edifice.Energy.Hopfield,
+          Edifice.Energy.NeuralODE
         ],
-        "Probabilistic": [
+        Probabilistic: [
           Edifice.Probabilistic.Bayesian,
-          Edifice.Probabilistic.MCDropout
+          Edifice.Probabilistic.MCDropout,
+          Edifice.Probabilistic.EvidentialNN
         ],
-        "Memory": [
+        Memory: [
           Edifice.Memory.NTM,
           Edifice.Memory.MemoryNetwork
         ],
-        "Meta": [
+        Meta: [
           Edifice.Meta.MoE,
+          Edifice.Meta.SwitchMoE,
+          Edifice.Meta.SoftMoE,
+          Edifice.Meta.LoRA,
+          Edifice.Meta.Adapter,
           Edifice.Meta.Hypernetwork,
           Edifice.Meta.Capsule
         ],
-        "Liquid": [
+        Liquid: [
           Edifice.Liquid
         ],
-        "Neuromorphic": [
-          Edifice.Neuromorphic.SNN
+        Neuromorphic: [
+          Edifice.Neuromorphic.SNN,
+          Edifice.Neuromorphic.ANN2SNN
         ],
-        "Utilities": [
+        "Building Blocks": [
+          Edifice.Blocks.RMSNorm,
+          Edifice.Blocks.SwiGLU,
+          Edifice.Blocks.RoPE,
+          Edifice.Blocks.ALiBi,
+          Edifice.Blocks.PatchEmbed,
+          Edifice.Blocks.SinusoidalPE,
+          Edifice.Blocks.AdaptiveNorm,
+          Edifice.Blocks.CrossAttention
+        ],
+        Utilities: [
           Edifice.Utils.FusedOps,
-          Edifice.Utils.ODESolver
+          Edifice.Utils.ODESolver,
+          Edifice.Utils.Common
         ]
       ]
     ]

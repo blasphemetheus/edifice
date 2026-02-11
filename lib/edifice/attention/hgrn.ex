@@ -167,12 +167,13 @@ defmodule Edifice.Attention.HGRN do
     name = Keyword.get(opts, :name, "hgrn_block")
 
     # Hierarchical gated RNN layer
-    x = build_hgrn_layer(input,
-      hidden_size: hidden_size,
-      state_expansion: state_expansion,
-      dropout: dropout,
-      name: "#{name}_rnn"
-    )
+    x =
+      build_hgrn_layer(input,
+        hidden_size: hidden_size,
+        state_expansion: state_expansion,
+        dropout: dropout,
+        name: "#{name}_rnn"
+      )
 
     # Feed-forward network
     build_ffn(x,
@@ -217,14 +218,15 @@ defmodule Edifice.Attention.HGRN do
     value_proj = Axon.activation(value_proj, :silu, name: "#{name}_value_silu")
 
     # Gated recurrence with parallel scan
-    output = Axon.layer(
-      &hgrn_recurrence/4,
-      [forget_gate, input_gate, value_proj],
-      name: "#{name}_recurrence",
-      hidden_size: hidden_size,
-      expanded_size: expanded_size,
-      op_name: :hgrn_recurrence
-    )
+    output =
+      Axon.layer(
+        &hgrn_recurrence/4,
+        [forget_gate, input_gate, value_proj],
+        name: "#{name}_recurrence",
+        hidden_size: hidden_size,
+        expanded_size: expanded_size,
+        op_name: :hgrn_recurrence
+      )
 
     # Contract back to hidden_size
     output = Axon.dense(output, hidden_size, name: "#{name}_contract")
@@ -343,14 +345,14 @@ defmodule Edifice.Attention.HGRN do
     #   - Contract projection: expanded * hidden
     hgrn_params =
       3 * hidden_size * expanded_size +
-      expanded_size * hidden_size
+        expanded_size * hidden_size
 
     # FFN:
     #   - Up projection: hidden * inner
     #   - Down projection: inner * hidden
     ffn_params =
       hidden_size * inner_size +
-      inner_size * hidden_size
+        inner_size * hidden_size
 
     per_layer = hgrn_params + ffn_params
 

@@ -418,11 +418,12 @@ defmodule Edifice.Attention.Griffin do
     # Where mask is 0, set scores to -inf
     neg_inf = Nx.Constants.neg_infinity(Nx.type(scores))
     # Use where: mask == 1 ? scores : -inf
-    scores = Nx.select(
-      Nx.broadcast(mask, Nx.shape(scores)),
-      scores,
-      Nx.broadcast(neg_inf, Nx.shape(scores))
-    )
+    scores =
+      Nx.select(
+        Nx.broadcast(mask, Nx.shape(scores)),
+        scores,
+        Nx.broadcast(neg_inf, Nx.shape(scores))
+      )
 
     # Softmax (stable version)
     max_scores = Nx.reduce_max(scores, axes: [3], keep_axes: true)

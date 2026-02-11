@@ -201,7 +201,9 @@ defmodule Edifice.Meta.LoRA do
         ratio = output_dim / Nx.axis_size(a, Nx.rank(a) - 1)
         delta = Nx.multiply(a, scale * ratio)
         # Broadcast delta to match original shape if needed
-        delta_broadcast = Nx.broadcast(Nx.mean(delta, axes: [-1], keep_axes: true), Nx.shape(orig))
+        delta_broadcast =
+          Nx.broadcast(Nx.mean(delta, axes: [-1], keep_axes: true), Nx.shape(orig))
+
         Nx.add(orig, delta_broadcast)
       end,
       [original, a_proj],
