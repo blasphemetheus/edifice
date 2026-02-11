@@ -216,27 +216,39 @@ Edifice.list_families()
 
 ## Guides
 
+### New to ML?
+
+Start here if you're new to machine learning. These guides build from zero to fluency with Edifice's API and architecture families.
+
+1. **[ML Foundations](guides/ml_foundations.md)** — What neural networks are, how they learn, tensors and shapes
+2. **[Core Vocabulary](guides/core_vocabulary.md)** — Essential terminology used across all guides
+3. **[The Problem Landscape](guides/problem_landscape.md)** — Classification, generation, sequence modeling — which architectures solve which problems
+4. **[Reading Edifice](guides/reading_edifice.md)** — The build/init/predict pattern, Axon graphs, shapes, and runnable examples
+5. **[Learning Path](guides/learning_path.md)** — A guided tour through the 19 architecture families
+
+### Architecture Guides
+
 Conceptual guides covering theory, architecture evolution, and decision tables for each family.
 
-### Sequence Processing
+#### Sequence Processing
 
 - **[State Space Models](guides/state_space_models.md)** — S4 through Mamba to hybrid architectures
 - **[Attention Mechanisms](guides/attention_mechanisms.md)** — Quadratic to linear to Fourier to retention
 - **[Recurrent Networks](guides/recurrent_networks.md)** — LSTM through xLSTM, MinGRU, TTT, and Titans
 
-### Representation Learning
+#### Representation Learning
 
 - **[Vision Architectures](guides/vision_architectures.md)** — ViT, Swin, UNet, ConvNeXt, MLP-Mixer
 - **[Convolutional Networks](guides/convolutional_networks.md)** — ResNet, DenseNet, MobileNet, TCN
 - **[Contrastive Learning](guides/contrastive_learning.md)** — SimCLR, BYOL, BarlowTwins, MAE, VICReg
 - **[Graph & Set Networks](guides/graph_and_set_networks.md)** — Message passing, spectral, invariance
 
-### Generative & Dynamic
+#### Generative & Dynamic
 
 - **[Generative Models](guides/generative_models.md)** — VAEs, GANs, diffusion, flows
 - **[Dynamic & Continuous](guides/dynamic_and_continuous.md)** — ODE dynamics, energy landscapes, spiking
 
-### Composition & Enhancement
+#### Composition & Enhancement
 
 - **[Building Blocks](guides/building_blocks.md)** — RoPE vs ALiBi, RMSNorm, SwiGLU, composition
 - **[Meta-Learning](guides/meta_learning.md)** — MoE, PEFT (LoRA/Adapter), capsules
