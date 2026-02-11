@@ -209,11 +209,12 @@ defmodule Edifice.Memory.NTM do
     name = Keyword.get(opts, :name, "read_head")
 
     # Full 4-stage addressing pipeline
-    weights = build_addressing(controller_out, memory,
-      memory_size: memory_size,
-      memory_dim: memory_dim,
-      name: name
-    )
+    weights =
+      build_addressing(controller_out, memory,
+        memory_size: memory_size,
+        memory_dim: memory_dim,
+        name: name
+      )
 
     # Weighted read: w^T * M -> [batch, M]
     Axon.layer(
@@ -254,11 +255,12 @@ defmodule Edifice.Memory.NTM do
     name = Keyword.get(opts, :name, "write_head")
 
     # Full 4-stage addressing pipeline
-    weights = build_addressing(controller_out, memory,
-      memory_size: memory_size,
-      memory_dim: memory_dim,
-      name: name
-    )
+    weights =
+      build_addressing(controller_out, memory,
+        memory_size: memory_size,
+        memory_dim: memory_dim,
+        name: name
+      )
 
     # Erase vector: sigmoid -> values in [0, 1]
     erase =
@@ -424,21 +426,32 @@ defmodule Edifice.Memory.NTM do
     n = Nx.axis_size(w, 1)
 
     # Split shift kernel into components
-    s_left = Nx.slice_along_axis(shift, 0, 1, axis: 1)    # [batch, 1]
-    s_stay = Nx.slice_along_axis(shift, 1, 1, axis: 1)    # [batch, 1]
-    s_right = Nx.slice_along_axis(shift, 2, 1, axis: 1)   # [batch, 1]
+    # [batch, 1]
+    s_left = Nx.slice_along_axis(shift, 0, 1, axis: 1)
+    # [batch, 1]
+    s_stay = Nx.slice_along_axis(shift, 1, 1, axis: 1)
+    # [batch, 1]
+    s_right = Nx.slice_along_axis(shift, 2, 1, axis: 1)
 
     # Roll left: [w[1], w[2], ..., w[N-1], w[0]]
-    w_rolled_left = Nx.concatenate([
-      Nx.slice_along_axis(w, 1, n - 1, axis: 1),
-      Nx.slice_along_axis(w, 0, 1, axis: 1)
-    ], axis: 1)
+    w_rolled_left =
+      Nx.concatenate(
+        [
+          Nx.slice_along_axis(w, 1, n - 1, axis: 1),
+          Nx.slice_along_axis(w, 0, 1, axis: 1)
+        ],
+        axis: 1
+      )
 
     # Roll right: [w[N-1], w[0], w[1], ..., w[N-2]]
-    w_rolled_right = Nx.concatenate([
-      Nx.slice_along_axis(w, n - 1, 1, axis: 1),
-      Nx.slice_along_axis(w, 0, n - 1, axis: 1)
-    ], axis: 1)
+    w_rolled_right =
+      Nx.concatenate(
+        [
+          Nx.slice_along_axis(w, n - 1, 1, axis: 1),
+          Nx.slice_along_axis(w, 0, n - 1, axis: 1)
+        ],
+        axis: 1
+      )
 
     # w_tilde[i] = s_{-1} * w[i+1] + s_0 * w[i] + s_{+1} * w[i-1]
     Nx.add(

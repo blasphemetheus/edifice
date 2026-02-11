@@ -287,6 +287,7 @@ defmodule Edifice.PropertyTest do
   # ── Property: Contrastive Non-Collapse ─────────────────────────
 
   @tag timeout: 120_000
+  @tag :slow
   property "simclr produces different outputs for different inputs" do
     model = Edifice.build(:simclr, encoder_dim: 8, projection_dim: 4)
 

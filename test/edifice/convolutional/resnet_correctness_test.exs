@@ -1,5 +1,7 @@
 defmodule Edifice.Convolutional.ResNetCorrectnessTest do
   use ExUnit.Case, async: true
+  # All ResNet tests involve convolutions which are too slow on BinaryBackend
+  @moduletag :slow
 
   alias Edifice.Convolutional.ResNet
 
@@ -36,7 +38,7 @@ defmodule Edifice.Convolutional.ResNetCorrectnessTest do
         Enum.filter(param_keys, &String.contains?(&1, "stage0_block1_skip_proj"))
 
       assert stage0_block1_skip == [],
-        "stage0_block1 should use identity skip (no projection), but found: #{inspect(stage0_block1_skip)}"
+             "stage0_block1 should use identity skip (no projection), but found: #{inspect(stage0_block1_skip)}"
     end
 
     @tag :slow
@@ -53,7 +55,7 @@ defmodule Edifice.Convolutional.ResNetCorrectnessTest do
         Enum.filter(param_keys, &String.contains?(&1, "stage1_block0_skip_proj"))
 
       assert length(stage1_block0_skip) > 0,
-        "stage1_block0 should have skip_proj for stride 2 + channel change"
+             "stage1_block0 should have skip_proj for stride 2 + channel change"
     end
 
     test "output shape is [batch, num_classes]" do
@@ -89,15 +91,16 @@ defmodule Edifice.Convolutional.ResNetCorrectnessTest do
       # - stage3: block0 needs projection, block1 identity
       # So we expect exactly 3 skip_proj layers (one per stage 1-3)
       assert length(skip_proj_keys) == 3,
-        "Expected 3 skip_proj param groups (stages 1-3 only), got #{length(skip_proj_keys)}: #{inspect(skip_proj_keys)}"
+             "Expected 3 skip_proj param groups (stages 1-3 only), got #{length(skip_proj_keys)}: #{inspect(skip_proj_keys)}"
 
       # Verify no second-block projections exist in any stage
-      second_block_skip_keys = Enum.filter(param_keys, fn key ->
-        String.contains?(key, "block1_skip_proj")
-      end)
+      second_block_skip_keys =
+        Enum.filter(param_keys, fn key ->
+          String.contains?(key, "block1_skip_proj")
+        end)
 
       assert second_block_skip_keys == [],
-        "Second blocks should all use identity skip, but found: #{inspect(second_block_skip_keys)}"
+             "Second blocks should all use identity skip, but found: #{inspect(second_block_skip_keys)}"
     end
 
     test "output is finite (no NaN/Inf)" do
@@ -143,7 +146,7 @@ defmodule Edifice.Convolutional.ResNetCorrectnessTest do
         Enum.filter(param_keys, &String.contains?(&1, "stage0_block1_skip_proj"))
 
       assert stage0_block1_skip == [],
-        "Bottleneck stage0_block1 should use identity skip, but found: #{inspect(stage0_block1_skip)}"
+             "Bottleneck stage0_block1 should use identity skip, but found: #{inspect(stage0_block1_skip)}"
     end
 
     test "bottleneck output shape is [batch, num_classes]" do

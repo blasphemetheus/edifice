@@ -366,18 +366,28 @@ defmodule Edifice.Attention.RetNet do
     # Q: standard rotation [q1*cos - q2*sin, q1*sin + q2*cos]
     q1 = Nx.slice_along_axis(q, 0, half_dim, axis: 3)
     q2 = Nx.slice_along_axis(q, half_dim, half_dim, axis: 3)
-    q_rot = Nx.concatenate([
-      Nx.subtract(Nx.multiply(q1, cos_t), Nx.multiply(q2, sin_t)),
-      Nx.add(Nx.multiply(q1, sin_t), Nx.multiply(q2, cos_t))
-    ], axis: 3)
+
+    q_rot =
+      Nx.concatenate(
+        [
+          Nx.subtract(Nx.multiply(q1, cos_t), Nx.multiply(q2, sin_t)),
+          Nx.add(Nx.multiply(q1, sin_t), Nx.multiply(q2, cos_t))
+        ],
+        axis: 3
+      )
 
     # K: conjugate rotation [k1*cos + k2*sin, k2*cos - k1*sin]
     k1 = Nx.slice_along_axis(k, 0, half_dim, axis: 3)
     k2 = Nx.slice_along_axis(k, half_dim, half_dim, axis: 3)
-    k_rot = Nx.concatenate([
-      Nx.add(Nx.multiply(k1, cos_t), Nx.multiply(k2, sin_t)),
-      Nx.subtract(Nx.multiply(k2, cos_t), Nx.multiply(k1, sin_t))
-    ], axis: 3)
+
+    k_rot =
+      Nx.concatenate(
+        [
+          Nx.add(Nx.multiply(k1, cos_t), Nx.multiply(k2, sin_t)),
+          Nx.subtract(Nx.multiply(k2, cos_t), Nx.multiply(k1, sin_t))
+        ],
+        axis: 3
+      )
 
     {q_rot, k_rot}
   end

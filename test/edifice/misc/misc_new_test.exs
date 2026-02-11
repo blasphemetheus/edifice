@@ -182,6 +182,7 @@ defmodule Edifice.Misc.MiscNewTest do
       assert out_dim > 0
     end
 
+    @tag :slow
     test "with num_classes adds classification head" do
       model =
         EfficientNet.build(

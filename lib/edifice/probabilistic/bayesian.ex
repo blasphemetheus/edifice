@@ -140,8 +140,8 @@ defmodule Edifice.Probabilistic.Bayesian do
   def bayesian_dense(input, units, opts \\ []) do
     name = Keyword.get(opts, :name, "bayesian_dense")
 
-    # True weight-level reparameterization: each weight element W_ij has its
-    # own (mu_ij, rho_ij) pair. On each forward pass we sample:
+    # True weight-level reparameterization (Blundell et al. 2015):
+    # Each weight W_ij has its own (mu_ij, rho_ij). On each forward pass:
     #   W = mu_kernel + softplus(rho_kernel) * epsilon
     #   b = mu_bias + softplus(rho_bias) * epsilon_b
     #   output = input @ W + b
@@ -149,34 +149,38 @@ defmodule Edifice.Probabilistic.Bayesian do
       Nx.broadcast(Nx.tensor(-3.0, type: type), shape)
     end
 
+    # Params go in the INPUT list so Axon resolves them to tensors.
+    # Shape fn arity = number of non-param inputs before this param.
+    mu_kernel =
+      Axon.param("mu_kernel", fn input_shape ->
+        {elem(input_shape, tuple_size(input_shape) - 1), units}
+      end)
+
+    rho_kernel =
+      Axon.param(
+        "rho_kernel",
+        fn input_shape ->
+          {elem(input_shape, tuple_size(input_shape) - 1), units}
+        end,
+        initializer: rho_init
+      )
+
+    mu_bias =
+      Axon.param("mu_bias", fn _input_shape -> {units} end, initializer: :zeros)
+
+    rho_bias =
+      Axon.param("rho_bias", fn _input_shape -> {units} end, initializer: rho_init)
+
     Axon.layer(
-      &bayesian_dense_impl/2,
-      [input],
+      &bayesian_dense_impl/6,
+      [input, mu_kernel, rho_kernel, mu_bias, rho_bias],
       name: name,
-      units: units,
-      op_name: :bayesian_dense,
-      mu_kernel:
-        Axon.param("mu_kernel", fn input_shape ->
-          {elem(input_shape, tuple_size(input_shape) - 1), units}
-        end),
-      rho_kernel:
-        Axon.param("rho_kernel", fn input_shape ->
-          {elem(input_shape, tuple_size(input_shape) - 1), units}
-        end, initializer: rho_init),
-      mu_bias:
-        Axon.param("mu_bias", fn _input_shape -> {units} end, initializer: :zeros),
-      rho_bias:
-        Axon.param("rho_bias", fn _input_shape -> {units} end, initializer: rho_init)
+      op_name: :bayesian_dense
     )
   end
 
   # True weight-level reparameterization: sample entire weight matrix each forward pass
-  defp bayesian_dense_impl(input, opts) do
-    mu_kernel = opts[:mu_kernel]
-    rho_kernel = opts[:rho_kernel]
-    mu_bias = opts[:mu_bias]
-    rho_bias = opts[:rho_bias]
-
+  defp bayesian_dense_impl(input, mu_kernel, rho_kernel, mu_bias, rho_bias, _opts) do
     # Sample kernel: W = mu + softplus(rho) * epsilon
     sigma_kernel = Nx.log1p(Nx.exp(rho_kernel))
     key = Nx.Random.key(:erlang.system_time())

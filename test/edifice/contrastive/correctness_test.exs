@@ -14,8 +14,26 @@ defmodule Edifice.Contrastive.CorrectnessTest do
 
   # ── Non-Collapse: Different inputs should produce different outputs ──
 
-  for arch <- [:simclr, :barlow_twins, :vicreg] do
+  # SimCLR is fast enough for the default suite
+  @tag timeout: 120_000
+  test "simclr does not collapse — different inputs produce different outputs" do
+    model = Edifice.build(:simclr, encoder_dim: @embed, projection_dim: @hidden)
+
+    input1 = random_tensor({@batch, @embed}, 42)
+    input2 = random_tensor({@batch, @embed}, 99)
+
+    {predict_fn, params} = build_and_init(model, %{"features" => input1})
+    out1 = predict_fn.(params, %{"features" => input1})
+    out2 = predict_fn.(params, %{"features" => input2})
+
+    diff = Nx.mean(Nx.abs(Nx.subtract(out1, out2))) |> Nx.to_number()
+    assert diff > 1.0e-6, "simclr collapsed: outputs identical for different inputs"
+  end
+
+  # Barlow Twins and VICReg use cross-correlation matrices — slow on BinaryBackend
+  for arch <- [:barlow_twins, :vicreg] do
     @tag timeout: 120_000
+    @tag :slow
     test "#{arch} does not collapse — different inputs produce different outputs" do
       model = Edifice.build(unquote(arch), encoder_dim: @embed, projection_dim: @hidden)
 
@@ -26,7 +44,6 @@ defmodule Edifice.Contrastive.CorrectnessTest do
       out1 = predict_fn.(params, %{"features" => input1})
       out2 = predict_fn.(params, %{"features" => input2})
 
-      # Outputs should differ for different inputs
       diff = Nx.mean(Nx.abs(Nx.subtract(out1, out2))) |> Nx.to_number()
       assert diff > 1.0e-6, "#{unquote(arch)} collapsed: outputs identical for different inputs"
     end
@@ -34,8 +51,23 @@ defmodule Edifice.Contrastive.CorrectnessTest do
 
   # ── Determinism: Same input -> same output ──────────────────
 
-  for arch <- [:simclr, :barlow_twins, :vicreg] do
+  @tag timeout: 120_000
+  test "simclr is deterministic in inference mode" do
+    model = Edifice.build(:simclr, encoder_dim: @embed, projection_dim: @hidden)
+
+    input = random_tensor({@batch, @embed})
+    {predict_fn, params} = build_and_init(model, %{"features" => input})
+
+    out1 = predict_fn.(params, %{"features" => input})
+    out2 = predict_fn.(params, %{"features" => input})
+
+    diff = Nx.mean(Nx.abs(Nx.subtract(out1, out2))) |> Nx.to_number()
+    assert diff < 1.0e-6, "simclr not deterministic: diff = #{diff}"
+  end
+
+  for arch <- [:barlow_twins, :vicreg] do
     @tag timeout: 120_000
+    @tag :slow
     test "#{arch} is deterministic in inference mode" do
       model = Edifice.build(unquote(arch), encoder_dim: @embed, projection_dim: @hidden)
 
