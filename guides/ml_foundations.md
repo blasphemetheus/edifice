@@ -3,7 +3,7 @@
 
 ## Why This Guide Exists
 
-Edifice gives you 103 neural network architectures. Before you explore them, you need a mental
+Edifice gives you 90+ neural network architectures. Before you explore them, you need a mental
 model of what a neural network actually *is* and what it means for one to "learn." This guide
 builds that foundation from scratch. No prior ML knowledge is assumed -- just basic comfort with
 the idea that numbers go in and numbers come out.
@@ -237,7 +237,7 @@ Techniques for fighting overfitting (called **regularization**) include:
 ## Why Architecture Matters
 
 If all neural networks do the same basic thing (forward pass, loss, gradient descent), why do
-we need 103 different architectures?
+we need so many different architectures?
 
 Because **structure encodes assumptions about the data**. The right architecture builds in the
 right biases for your problem:

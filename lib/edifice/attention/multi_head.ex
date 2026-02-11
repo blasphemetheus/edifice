@@ -664,7 +664,50 @@ defmodule Edifice.Attention.MultiHead do
   end
 
   # ============================================================================
-  # Option C: Sliding Window Model
+  # Standard Build (Registry Entry Point)
+  # ============================================================================
+
+  @doc """
+  Build a multi-head attention model.
+
+  This is the standard entry point used by `Edifice.build(:attention, opts)`.
+  Delegates to `build_sliding_window/1` which provides efficient attention
+  that only attends to recent timesteps.
+
+  For a hybrid LSTM + attention model, use `build_hybrid/1` directly.
+
+  ## Options
+    - `:embed_size` - Input embedding size (required)
+    - `:hidden_size` - Total hidden dimension; overrides num_heads * head_dim (optional)
+    - `:window_size` - Attention window / sequence length (default: 60)
+    - `:num_heads` - Attention heads (default: 4)
+    - `:head_dim` - Dimension per head (default: 64)
+    - `:num_layers` - Number of attention layers (default: 2)
+    - `:ffn_dim` - Feed-forward dimension (default: 256)
+    - `:dropout` - Dropout rate (default: 0.1)
+
+  ## Returns
+    Model that outputs [batch, hidden_dim] from last position.
+  """
+  @spec build(keyword()) :: Axon.t()
+  def build(opts \\ []) do
+    # Map hidden_size to head_dim if provided (for registry API consistency)
+    opts =
+      case Keyword.fetch(opts, :hidden_size) do
+        {:ok, hidden_size} ->
+          num_heads = Keyword.get(opts, :num_heads, @default_num_heads)
+          head_dim = div(hidden_size, num_heads)
+          opts |> Keyword.put(:head_dim, head_dim) |> Keyword.delete(:hidden_size)
+
+        :error ->
+          opts
+      end
+
+    build_sliding_window(opts)
+  end
+
+  # ============================================================================
+  # Option C: Sliding Window Attention Model
   # ============================================================================
 
   @doc """

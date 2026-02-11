@@ -4,7 +4,7 @@
 ## What This Guide Covers
 
 Every architecture in Edifice follows the same patterns. Once you understand these patterns,
-you can pick up any of the 103 architectures without re-learning the API. This guide walks
+you can pick up any of the 90+ architectures without re-learning the API. This guide walks
 through those patterns with runnable examples.
 
 **Prerequisites:** You should be comfortable with the concepts in
@@ -18,7 +18,7 @@ Edifice sits on top of two foundational Elixir libraries:
 
 ```
 ┌─────────────────────────────────────┐
-│           Edifice                    │  103 architectures, consistent API
+│           Edifice                    │  90+ architectures, consistent API
 │  "What architecture do I want?"      │
 ├─────────────────────────────────────┤
 │           Axon                       │  Model building, computation graphs
@@ -40,7 +40,7 @@ NumPy + autograd.
 **computation graph** -- a description of how data flows through layers. The graph is then
 compiled into efficient functions for initialization and prediction.
 
-**Edifice** uses Axon to implement 103 architectures with a consistent API. Instead of manually
+**Edifice** uses Axon to implement 90+ architectures with a consistent API. Instead of manually
 wiring up attention heads, SSM blocks, and normalization layers, you call `Edifice.build/2` and
 get a ready-to-use Axon model.
 
@@ -104,7 +104,7 @@ model = Edifice.build(arch_name, embed_size: 256, hidden_size: 512, num_layers: 
 You can explore what's available:
 
 ```elixir
-# List all 103+ architecture names
+# List all 90+ architecture names
 Edifice.list_architectures()
 # => [:adapter, :ann2snn, :attention, :barlow_twins, :bayesian, :bimamba, ...]
 

@@ -3,7 +3,7 @@
 
 ## How to Use This Guide
 
-Edifice has 103 architectures across 19 families. That's overwhelming if you try to learn them
+Edifice has 90+ architectures across 19 families. That's overwhelming if you try to learn them
 all at once. This guide gives you a structured path through the families, organized so that
 each step builds naturally on the previous ones. At each step, you get:
 

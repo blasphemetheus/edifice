@@ -167,7 +167,7 @@ IO.puts("""
      # ... train and evaluate
    end
 
-   One dependency. One API. 103 architectures.
+   One dependency. One API. 90+ architectures.
 """)
 
 IO.puts("=== Done ===")
