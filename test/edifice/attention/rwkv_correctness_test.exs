@@ -29,7 +29,9 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
       # The u parameter is passed as Axon.constant to the WKV layer
       model = RWKV.build(@rwkv_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -50,7 +52,9 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
       # So the mix_proj should have input dim = 2 * hidden_size
       model = RWKV.build(@rwkv_opts)
       {init_fn, _} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -64,7 +68,7 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
       in_dim = elem(Nx.shape(kernel), 0)
 
       assert in_dim == @hidden_size * 2,
-        "mix_proj input should be 2*hidden_size (current+shifted), got #{in_dim}"
+             "mix_proj input should be 2*hidden_size (current+shifted), got #{in_dim}"
     end
   end
 
@@ -78,7 +82,9 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
       # We verify by checking that the model has k_proj and v_proj
       model = RWKV.build(@rwkv_opts)
       {init_fn, _} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -106,8 +112,11 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
       {init_16, pred_16} = Axon.build(model_16, mode: :inference)
       {init_32, pred_32} = Axon.build(model_32, mode: :inference)
 
-      params_16 = init_16.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
-      params_32 = init_32.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+      params_16 =
+        init_16.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params_32 =
+        init_32.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -125,7 +134,9 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
     test "inference is deterministic" do
       model = RWKV.build(@rwkv_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -140,7 +151,9 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
     test "WKV attention structure has R, W, K, V projections" do
       model = RWKV.build(@rwkv_opts)
       {init_fn, _} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
       time_keys = Enum.filter(param_keys, &String.contains?(&1, "time_mix"))

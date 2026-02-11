@@ -49,54 +49,67 @@ defmodule Edifice.Blocks.AdaptiveNorm do
     mode = Keyword.get(opts, :mode, :adaln_zero)
     name = Keyword.get(opts, :name, "adaptive_norm")
 
-    # Predict scale, shift (and gate for adaln_zero) from condition
-    num_params = if mode == :adaln_zero, do: hidden_size * 3, else: hidden_size * 2
-    params = Axon.dense(condition, num_params, name: "#{name}_params")
-
-    # Apply LayerNorm then modulate
+    # Apply LayerNorm first
     normed = Axon.layer_norm(input, name: "#{name}_ln")
 
-    Axon.layer(
-      &adaptive_norm_impl/3,
-      [normed, params],
-      name: name,
-      hidden_size: hidden_size,
-      mode: mode,
-      op_name: :adaptive_norm
-    )
+    # Branch at graph construction time (not runtime) to avoid passing
+    # atom opts to Axon.layer, which breaks Axon's graph traversal
+    if mode == :adaln_zero do
+      params = Axon.dense(condition, hidden_size * 3, name: "#{name}_params")
+
+      Axon.layer(
+        &adaln_zero_impl/3,
+        [normed, params],
+        name: name,
+        hidden_size: hidden_size,
+        op_name: :adaptive_norm
+      )
+    else
+      params = Axon.dense(condition, hidden_size * 2, name: "#{name}_params")
+
+      Axon.layer(
+        &adaln_impl/3,
+        [normed, params],
+        name: name,
+        hidden_size: hidden_size,
+        op_name: :adaptive_norm
+      )
+    end
   end
 
-  defp adaptive_norm_impl(normed, params, opts) do
+  # AdaLN-Zero: gamma(c) * LN(x) + beta(c), gated by alpha(c)
+  defp adaln_zero_impl(normed, params, opts) do
     hidden_size = opts[:hidden_size]
-    mode = opts[:mode] || :adaln_zero
 
-    if mode == :adaln_zero do
-      gamma = Nx.slice_along_axis(params, 0, hidden_size, axis: -1)
-      beta = Nx.slice_along_axis(params, hidden_size, hidden_size, axis: -1)
-      alpha = Nx.slice_along_axis(params, hidden_size * 2, hidden_size, axis: -1)
+    gamma = Nx.slice_along_axis(params, 0, hidden_size, axis: -1)
+    beta = Nx.slice_along_axis(params, hidden_size, hidden_size, axis: -1)
+    alpha = Nx.slice_along_axis(params, hidden_size * 2, hidden_size, axis: -1)
 
-      # Expand for broadcasting if normed has more dims
-      {gamma, beta, alpha} =
-        if tuple_size(Nx.shape(normed)) == 3 do
-          {Nx.new_axis(gamma, 1), Nx.new_axis(beta, 1), Nx.new_axis(alpha, 1)}
-        else
-          {gamma, beta, alpha}
-        end
+    {gamma, beta, alpha} =
+      if tuple_size(Nx.shape(normed)) == 3 do
+        {Nx.new_axis(gamma, 1), Nx.new_axis(beta, 1), Nx.new_axis(alpha, 1)}
+      else
+        {gamma, beta, alpha}
+      end
 
-      modulated = Nx.add(Nx.multiply(Nx.add(1.0, gamma), normed), beta)
-      Nx.multiply(alpha, modulated)
-    else
-      gamma = Nx.slice_along_axis(params, 0, hidden_size, axis: -1)
-      beta = Nx.slice_along_axis(params, hidden_size, hidden_size, axis: -1)
+    modulated = Nx.add(Nx.multiply(Nx.add(1.0, gamma), normed), beta)
+    Nx.multiply(alpha, modulated)
+  end
 
-      {gamma, beta} =
-        if tuple_size(Nx.shape(normed)) == 3 do
-          {Nx.new_axis(gamma, 1), Nx.new_axis(beta, 1)}
-        else
-          {gamma, beta}
-        end
+  # AdaLN: gamma(c) * LN(x) + beta(c)
+  defp adaln_impl(normed, params, opts) do
+    hidden_size = opts[:hidden_size]
 
-      Nx.add(Nx.multiply(Nx.add(1.0, gamma), normed), beta)
-    end
+    gamma = Nx.slice_along_axis(params, 0, hidden_size, axis: -1)
+    beta = Nx.slice_along_axis(params, hidden_size, hidden_size, axis: -1)
+
+    {gamma, beta} =
+      if tuple_size(Nx.shape(normed)) == 3 do
+        {Nx.new_axis(gamma, 1), Nx.new_axis(beta, 1)}
+      else
+        {gamma, beta}
+      end
+
+    Nx.add(Nx.multiply(Nx.add(1.0, gamma), normed), beta)
   end
 end

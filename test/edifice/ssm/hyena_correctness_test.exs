@@ -28,13 +28,17 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
     test "model has filter MLP dense parameters" do
       model = Hyena.build(@hyena_opts)
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
       # Should have filter dense layers (3 per order, 2 orders)
       filter_keys = Enum.filter(param_keys, &String.contains?(&1, "filter"))
-      assert length(filter_keys) >= 6, "Expected >=6 filter params (3 dense x 2 orders), got #{length(filter_keys)}"
+
+      assert length(filter_keys) >= 6,
+             "Expected >=6 filter params (3 dense x 2 orders), got #{length(filter_keys)}"
 
       # Each filter has dense1 -> sin -> dense2 -> sin -> dense3
       for idx <- 0..1 do
@@ -46,7 +50,9 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
     test "filter MLP final layer outputs hidden_size dimensions" do
       model = Hyena.build(@hyena_opts)
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       # Final filter dense should project to hidden_size
       dense3_params = params.data["hyena_block_1_filter0_dense3"]
@@ -54,7 +60,9 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
 
       # Output dim should be hidden_size
       out_dim = elem(Nx.shape(kernel), 1)
-      assert out_dim == @hidden_size, "filter output should be hidden_size=#{@hidden_size}, got #{out_dim}"
+
+      assert out_dim == @hidden_size,
+             "filter output should be hidden_size=#{@hidden_size}, got #{out_dim}"
     end
   end
 
@@ -66,7 +74,9 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
     test "model has short depthwise conv parameters with kernel_size=3" do
       model = Hyena.build(@hyena_opts)
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -77,6 +87,7 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
       # Check kernel shape: for depthwise 1D conv, kernel is {kernel_size, 1, channels}
       for key <- dw_keys do
         layer_params = params.data[key]
+
         if Map.has_key?(layer_params, "kernel") do
           kernel = layer_params["kernel"]
           shape = Nx.shape(kernel)
@@ -96,12 +107,16 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
       # order=1: 1 round (v, x1)
       model_o1 = Hyena.build(Keyword.put(@hyena_opts, :order, 1))
       {init_fn_1, _} = Axon.build(model_o1, mode: :inference)
-      params_1 = init_fn_1.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params_1 =
+        init_fn_1.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       # order=2: 2 rounds (v, x1, x2)
       model_o2 = Hyena.build(@hyena_opts)
       {init_fn_2, _} = Axon.build(model_o2, mode: :inference)
-      params_2 = init_fn_2.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params_2 =
+        init_fn_2.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       keys_1 = Map.keys(params_1.data)
       keys_2 = Map.keys(params_2.data)
@@ -125,8 +140,11 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
       {init_1, pred_1} = Axon.build(model_o1, mode: :inference)
       {init_2, pred_2} = Axon.build(model_o2, mode: :inference)
 
-      params_1 = init_1.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
-      params_2 = init_2.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+      params_1 =
+        init_1.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params_2 =
+        init_2.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -151,7 +169,9 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
     test "model is deterministic in inference mode" do
       model = Hyena.build(@hyena_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -166,7 +186,9 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
     test "different inputs produce different outputs" do
       model = Hyena.build(@hyena_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input1, key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})

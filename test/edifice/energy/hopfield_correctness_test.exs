@@ -28,17 +28,20 @@ defmodule Edifice.Energy.HopfieldCorrectnessTest do
       # Patterns are stored as a param inside the hopfield_retrieve layer
       # Structure: params.data["hopfield_retrieve"]["hopfield_patterns"]
       retrieve_params = params.data["hopfield_retrieve"]
+
       assert is_map(retrieve_params) and not is_struct(retrieve_params),
-        "Should have 'hopfield_retrieve' param group"
+             "Should have 'hopfield_retrieve' param group"
 
       pattern_keys = Map.keys(retrieve_params) |> Enum.filter(&String.contains?(&1, "patterns"))
+
       assert length(pattern_keys) > 0,
-        "hopfield_retrieve should contain a 'patterns' sub-key, got: #{inspect(Map.keys(retrieve_params))}"
+             "hopfield_retrieve should contain a 'patterns' sub-key, got: #{inspect(Map.keys(retrieve_params))}"
 
       # Verify pattern shape: [num_patterns, pattern_dim]
       patterns = retrieve_params[hd(pattern_keys)]
+
       assert Nx.shape(patterns) == {@num_patterns, @pattern_dim},
-        "Patterns should be {#{@num_patterns}, #{@pattern_dim}}, got #{inspect(Nx.shape(patterns))}"
+             "Patterns should be {#{@num_patterns}, #{@pattern_dim}}, got #{inspect(Nx.shape(patterns))}"
     end
 
     test "params do NOT contain separate similarity and retrieval dense layers" do
@@ -54,10 +57,10 @@ defmodule Edifice.Energy.HopfieldCorrectnessTest do
       retrieval_keys = Enum.filter(param_keys, &String.contains?(&1, "retrieval"))
 
       assert similarity_keys == [],
-        "Should not have separate 'similarity' dense layer, but found: #{inspect(similarity_keys)}"
+             "Should not have separate 'similarity' dense layer, but found: #{inspect(similarity_keys)}"
 
       assert retrieval_keys == [],
-        "Should not have separate 'retrieval' dense layer, but found: #{inspect(retrieval_keys)}"
+             "Should not have separate 'retrieval' dense layer, but found: #{inspect(retrieval_keys)}"
     end
 
     test "output shape is [batch, pattern_dim]" do
@@ -103,8 +106,9 @@ defmodule Edifice.Energy.HopfieldCorrectnessTest do
 
       # High beta should produce different output than low beta
       diff = Nx.subtract(output_low, output_high) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
+
       assert diff > 1.0e-6,
-        "Different beta values should produce different outputs"
+             "Different beta values should produce different outputs"
     end
   end
 

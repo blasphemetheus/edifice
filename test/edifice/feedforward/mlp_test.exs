@@ -30,6 +30,7 @@ defmodule Edifice.Feedforward.MLPTest do
       assert Nx.shape(output) == {@batch_size, 128}
     end
 
+    @tag :slow
     test "uses default hidden sizes when not specified" do
       model = MLP.build(input_size: 64)
 

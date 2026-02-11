@@ -101,15 +101,19 @@ defmodule Edifice.Graph.GAT do
 
     # Hidden GAT layers: multi-head with concatenation
     output =
-      Enum.reduce(0..(num_layers - 2), nodes, fn idx, acc ->
-        gat_layer(acc, adjacency, hidden_dim,
-          num_heads: num_heads,
-          name: "gat_#{idx}",
-          activation: activation,
-          dropout: dropout,
-          concat_heads: true
-        )
-      end)
+      if num_layers > 1 do
+        Enum.reduce(0..(num_layers - 2), nodes, fn idx, acc ->
+          gat_layer(acc, adjacency, hidden_dim,
+            num_heads: num_heads,
+            name: "gat_#{idx}",
+            activation: activation,
+            dropout: dropout,
+            concat_heads: true
+          )
+        end)
+      else
+        nodes
+      end
 
     # Output layer: single head (or average over heads) for classification
     gat_layer(output, adjacency, num_classes,

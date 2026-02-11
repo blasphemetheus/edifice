@@ -269,12 +269,16 @@ defmodule Edifice.Meta.Capsule do
     # Per-pair transformation matrices W_ij: each (input_cap, output_cap) pair
     # has its own transformation. Shape determined dynamically from input.
     w_param =
-      Axon.param("#{name}_W", fn input_shape ->
-        # input_shape: {batch, num_input_caps, input_cap_dim}
-        num_input_caps = elem(input_shape, 1)
-        input_cap_dim = elem(input_shape, 2)
-        {num_input_caps, input_cap_dim, num_output_caps * output_cap_dim}
-      end, initializer: :glorot_uniform)
+      Axon.param(
+        "#{name}_W",
+        fn input_shape ->
+          # input_shape: {batch, num_input_caps, input_cap_dim}
+          num_input_caps = elem(input_shape, 1)
+          input_cap_dim = elem(input_shape, 2)
+          {num_input_caps, input_cap_dim, num_output_caps * output_cap_dim}
+        end,
+        initializer: :glorot_uniform
+      )
 
     # Apply per-capsule transformation + routing
     Axon.layer(
@@ -312,8 +316,10 @@ defmodule Edifice.Meta.Capsule do
     u_hat_flat =
       Nx.sum(
         Nx.multiply(
-          Nx.new_axis(input_caps, 3),     # [batch, num_input, cap_dim, 1]
-          Nx.new_axis(w_param, 0)          # [1, num_input, cap_dim, num_out*out_dim]
+          # [batch, num_input, cap_dim, 1]
+          Nx.new_axis(input_caps, 3),
+          # [1, num_input, cap_dim, num_out*out_dim]
+          Nx.new_axis(w_param, 0)
         ),
         axes: [2]
       )

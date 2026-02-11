@@ -32,13 +32,15 @@ defmodule Edifice.Neuromorphic.SNNCorrectnessTest do
 
       # Should have dense layer for each hidden size
       layer_0_keys = Enum.filter(param_keys, &String.contains?(&1, "snn_layer_0_dense"))
+
       assert length(layer_0_keys) > 0,
-        "Should have dense layer for hidden layer 0, got: #{inspect(param_keys)}"
+             "Should have dense layer for hidden layer 0, got: #{inspect(param_keys)}"
 
       # Should have output readout layer
       output_keys = Enum.filter(param_keys, &String.contains?(&1, "snn_output"))
+
       assert length(output_keys) > 0,
-        "Should have output readout layer, got: #{inspect(param_keys)}"
+             "Should have output readout layer, got: #{inspect(param_keys)}"
     end
 
     test "multi-layer SNN has more params than single-layer" do
@@ -55,7 +57,7 @@ defmodule Edifice.Neuromorphic.SNNCorrectnessTest do
       keys_m = Map.keys(params_m.data) |> length()
 
       assert keys_m > keys_s,
-        "Multi-layer should have more param groups: #{keys_m} vs #{keys_s}"
+             "Multi-layer should have more param groups: #{keys_m} vs #{keys_s}"
     end
   end
 

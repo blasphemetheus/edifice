@@ -453,14 +453,7 @@ defmodule Edifice.Blocks.CorrectnessTest do
       refute has_nan(output)
     end
 
-    @tag :skip
     test "adaln responds to different conditioning" do
-      # KNOWN BUG: Passing `mode: :adaln` (atom value) as a custom option to
-      # Axon.layer breaks graph traversal - the condition branch's dense layer
-      # gets dropped from the model state. This causes conditioning to have no
-      # effect. The fix requires changing AdaptiveNorm to avoid passing atom opts
-      # to Axon.layer (e.g., encode mode as integer, or restructure the graph).
-      # For now, this test is skipped until AdaptiveNorm is fixed.
       h = 64
       input = Axon.input("input", shape: {nil, 4, h})
       condition = Axon.input("condition", shape: {nil, h})

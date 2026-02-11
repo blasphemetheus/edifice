@@ -140,17 +140,23 @@ defmodule Edifice.Vision.ConvNeXt do
 
     # Transpose to NHWC for Axon.conv (channels_last default)
     x =
-      Axon.nx(input, fn t ->
-        Nx.transpose(t, axes: [0, 2, 3, 1])
-      end, name: "nchw_to_nhwc")
+      Axon.nx(
+        input,
+        fn t ->
+          Nx.transpose(t, axes: [0, 2, 3, 1])
+        end,
+        name: "nchw_to_nhwc"
+      )
 
     # Stem: patchify with patch_size x patch_size strided convolution
     # This replaces PatchEmbed — a single strided conv is the ConvNeXt stem
-    x = Axon.conv(x, first_dim,
-      kernel_size: {patch_size, patch_size},
-      strides: [patch_size, patch_size],
-      name: "stem_conv"
-    )
+    x =
+      Axon.conv(x, first_dim,
+        kernel_size: {patch_size, patch_size},
+        strides: [patch_size, patch_size],
+        name: "stem_conv"
+      )
+
     x = Axon.layer_norm(x, name: "stem_norm")
 
     # Process through stages
@@ -179,9 +185,13 @@ defmodule Edifice.Vision.ConvNeXt do
 
     # Global average pool: [batch, H, W, C] -> [batch, C]
     x =
-      Axon.nx(x, fn tensor ->
-        Nx.mean(tensor, axes: [1, 2])
-      end, name: "global_pool")
+      Axon.nx(
+        x,
+        fn tensor ->
+          Nx.mean(tensor, axes: [1, 2])
+        end,
+        name: "global_pool"
+      )
 
     x = Axon.layer_norm(x, name: "final_norm")
 
@@ -209,29 +219,32 @@ defmodule Edifice.Vision.ConvNeXt do
     expansion = 4
 
     # Depthwise conv 7x7: each channel gets its own filter
-    x = Axon.conv(input, dim,
-      kernel_size: {7, 7},
-      padding: :same,
-      feature_group_size: dim,
-      name: "#{name}_dw_conv"
-    )
+    x =
+      Axon.conv(input, dim,
+        kernel_size: {7, 7},
+        padding: :same,
+        feature_group_size: dim,
+        name: "#{name}_dw_conv"
+      )
 
     # LayerNorm (applied to last axis in NHWC)
     x = Axon.layer_norm(x, name: "#{name}_norm")
 
     # Pointwise expand: 1x1 conv equivalent, C -> 4C
-    x = Axon.conv(x, dim * expansion,
-      kernel_size: {1, 1},
-      name: "#{name}_pw_expand"
-    )
+    x =
+      Axon.conv(x, dim * expansion,
+        kernel_size: {1, 1},
+        name: "#{name}_pw_expand"
+      )
 
     x = Axon.activation(x, :gelu, name: "#{name}_gelu")
 
     # Pointwise project: 1x1 conv, 4C -> C
-    x = Axon.conv(x, dim,
-      kernel_size: {1, 1},
-      name: "#{name}_pw_project"
-    )
+    x =
+      Axon.conv(x, dim,
+        kernel_size: {1, 1},
+        name: "#{name}_pw_project"
+      )
 
     # Layer scale: learnable per-channel scaling (initialized to small value)
     gamma_init = Nx.broadcast(layer_scale_init, {1, 1, 1, dim}) |> Nx.as_type(:f32)

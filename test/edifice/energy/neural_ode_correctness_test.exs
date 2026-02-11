@@ -28,13 +28,15 @@ defmodule Edifice.Energy.NeuralODECorrectnessTest do
 
       # Should have shared dynamics layers
       dynamics_keys = Enum.filter(param_keys, &String.contains?(&1, "dynamics_dense1"))
+
       assert length(dynamics_keys) > 0,
-        "Should have 'dynamics_dense1' param, got keys: #{inspect(param_keys)}"
+             "Should have 'dynamics_dense1' param, got keys: #{inspect(param_keys)}"
 
       # Should NOT have per-step dynamics layers
       per_step_keys = Enum.filter(param_keys, &String.contains?(&1, "dynamics_dense1_step_0"))
+
       assert per_step_keys == [],
-        "Should not have per-step dynamics names, but found: #{inspect(per_step_keys)}"
+             "Should not have per-step dynamics names, but found: #{inspect(per_step_keys)}"
     end
 
     test "different num_steps produce correct output shape" do
@@ -49,7 +51,7 @@ defmodule Edifice.Energy.NeuralODECorrectnessTest do
         output = predict_fn.(params, input)
 
         assert Nx.shape(output) == {@batch, @hidden_size},
-          "num_steps=#{num_steps} should output {#{@batch}, #{@hidden_size}}, got #{inspect(Nx.shape(output))}"
+               "num_steps=#{num_steps} should output {#{@batch}, #{@hidden_size}}, got #{inspect(Nx.shape(output))}"
       end
     end
 
@@ -60,14 +62,17 @@ defmodule Edifice.Energy.NeuralODECorrectnessTest do
       {init_build, _} = Axon.build(model_build, mode: :inference)
       {init_shared, _} = Axon.build(model_shared, mode: :inference)
 
-      params_build = init_build.(Nx.template({@batch, @input_size}, :f32), Axon.ModelState.empty())
-      params_shared = init_shared.(Nx.template({@batch, @input_size}, :f32), Axon.ModelState.empty())
+      params_build =
+        init_build.(Nx.template({@batch, @input_size}, :f32), Axon.ModelState.empty())
+
+      params_shared =
+        init_shared.(Nx.template({@batch, @input_size}, :f32), Axon.ModelState.empty())
 
       keys_build = Map.keys(params_build.data) |> Enum.sort()
       keys_shared = Map.keys(params_shared.data) |> Enum.sort()
 
       assert keys_build == keys_shared,
-        "build/1 and build_shared/1 should produce identical param keys"
+             "build/1 and build_shared/1 should produce identical param keys"
     end
   end
 

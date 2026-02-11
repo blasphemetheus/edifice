@@ -47,14 +47,38 @@ defmodule Edifice.RegistrySweepTest do
   # :reservoir uses input_size not embed_size. :rwkv needs head_size explicitly.
   # These get dedicated blocks below.
   @sequence_archs [
-    :mamba, :mamba_ssd, :mamba_cumsum, :mamba_hillis_steele,
-    :s4, :s4d, :s5, :h3, :hyena, :bimamba, :gated_ssm,
-    :jamba, :zamba,
-    :lstm, :gru, :xlstm, :min_gru, :min_lstm, :delta_net,
-    :ttt, :titans,
-    :retnet, :gla, :hgrn, :griffin,
-    :gqa, :fnet, :linear_transformer, :nystromformer, :performer,
-    :kan, :liquid
+    :mamba,
+    :mamba_ssd,
+    :mamba_cumsum,
+    :mamba_hillis_steele,
+    :s4,
+    :s4d,
+    :s5,
+    :h3,
+    :hyena,
+    :bimamba,
+    :gated_ssm,
+    :jamba,
+    :zamba,
+    :lstm,
+    :gru,
+    :xlstm,
+    :min_gru,
+    :min_lstm,
+    :delta_net,
+    :ttt,
+    :titans,
+    :retnet,
+    :gla,
+    :hgrn,
+    :griffin,
+    :gqa,
+    :fnet,
+    :linear_transformer,
+    :nystromformer,
+    :performer,
+    :kan,
+    :liquid
   ]
 
   @sequence_opts [
@@ -99,12 +123,15 @@ defmodule Edifice.RegistrySweepTest do
       @tag timeout: 120_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
-        model = Edifice.build(:reservoir,
-          input_size: @embed,
-          reservoir_size: @hidden,
-          output_size: @hidden,
-          seq_len: @seq_len
-        )
+
+        model =
+          Edifice.build(:reservoir,
+            input_size: @embed,
+            reservoir_size: @hidden,
+            output_size: @hidden,
+            seq_len: @seq_len
+          )
+
         input = random_tensor({batch, @seq_len, @embed})
         {predict_fn, params} = build_and_init(model, %{"input" => input})
         output = predict_fn.(params, %{"input" => input})
@@ -121,14 +148,16 @@ defmodule Edifice.RegistrySweepTest do
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
         # RWKV defaults head_size=64, hidden_size=256. We need head_size <= hidden_size.
-        model = Edifice.build(:rwkv,
-          embed_size: @embed,
-          hidden_size: @hidden,
-          head_size: 8,
-          num_layers: @num_layers,
-          seq_len: @seq_len,
-          dropout: 0.0
-        )
+        model =
+          Edifice.build(:rwkv,
+            embed_size: @embed,
+            hidden_size: @hidden,
+            head_size: 8,
+            num_layers: @num_layers,
+            seq_len: @seq_len,
+            dropout: 0.0
+          )
+
         input = random_tensor({batch, @seq_len, @embed})
         {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
         output = predict_fn.(params, %{"state_sequence" => input})
@@ -245,16 +274,19 @@ defmodule Edifice.RegistrySweepTest do
         # Swin with 2 stages needs image_size >= patch_size * 2^num_stages
         # window_size must divide spatial dim at each stage
         img = 32
-        model = Edifice.build(:swin,
-          image_size: img,
-          in_channels: @in_channels,
-          patch_size: 4,
-          embed_dim: @hidden,
-          depths: [1, 1],
-          num_heads: [2, 2],
-          window_size: 4,
-          dropout: 0.0
-        )
+
+        model =
+          Edifice.build(:swin,
+            image_size: img,
+            in_channels: @in_channels,
+            patch_size: 4,
+            embed_dim: @hidden,
+            depths: [1, 1],
+            num_heads: [2, 2],
+            window_size: 4,
+            dropout: 0.0
+          )
+
         input = random_tensor({batch, @in_channels, img, img})
         {predict_fn, params} = build_and_init(model, %{"image" => input})
         output = predict_fn.(params, %{"image" => input})
@@ -272,14 +304,17 @@ defmodule Edifice.RegistrySweepTest do
         batch = unquote(batch)
         # ConvNeXt downsamples 4x: need image_size >= 32 for 2 stages
         img = 32
-        model = Edifice.build(:convnext,
-          image_size: img,
-          in_channels: @in_channels,
-          patch_size: 4,
-          dims: [@hidden, @hidden * 2],
-          depths: [1, 1],
-          dropout: 0.0
-        )
+
+        model =
+          Edifice.build(:convnext,
+            image_size: img,
+            in_channels: @in_channels,
+            patch_size: 4,
+            dims: [@hidden, @hidden * 2],
+            depths: [1, 1],
+            dropout: 0.0
+          )
+
         input = random_tensor({batch, @in_channels, img, img})
         {predict_fn, params} = build_and_init(model, %{"image" => input})
         output = predict_fn.(params, %{"image" => input})
@@ -613,6 +648,7 @@ defmodule Edifice.RegistrySweepTest do
         ]
 
         model = Edifice.build(:hypernetwork, opts)
+
         input_map = %{
           "conditioning" => random_tensor({batch, @embed}),
           "data_input" => random_tensor({batch, @embed})
@@ -635,15 +671,18 @@ defmodule Edifice.RegistrySweepTest do
         batch = unquote(batch)
         # CapsNet expects NHWC image input; conv_kernel=9 needs at least 9x9
         img_size = 28
-        model = Edifice.build(:capsule,
-          input_shape: {nil, img_size, img_size, 1},
-          conv_channels: 32,
-          conv_kernel: 9,
-          num_primary_caps: 8,
-          primary_cap_dim: 4,
-          num_digit_caps: @num_classes,
-          digit_cap_dim: 4
-        )
+
+        model =
+          Edifice.build(:capsule,
+            input_shape: {nil, img_size, img_size, 1},
+            conv_channels: 32,
+            conv_kernel: 9,
+            num_primary_caps: 8,
+            primary_cap_dim: 4,
+            num_digit_caps: @num_classes,
+            digit_cap_dim: 4
+          )
+
         input = random_tensor({batch, img_size, img_size, 1})
         {predict_fn, params} = build_and_init(model, %{"input" => input})
         output = predict_fn.(params, %{"input" => input})
@@ -725,6 +764,7 @@ defmodule Edifice.RegistrySweepTest do
         # DenseNet uses block_config (list of layer counts per block), not block_layers
         # Image must survive stem (7x7 stride 2 + 3x3 maxpool stride 2) = /4
         img = 32
+
         model =
           Edifice.build(:densenet,
             input_shape: {nil, img, img, @in_channels},
@@ -765,7 +805,14 @@ defmodule Edifice.RegistrySweepTest do
       @tag timeout: 120_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
-        model = Edifice.build(:mobilenet, input_dim: @embed, hidden_dim: @hidden, num_classes: @num_classes)
+
+        model =
+          Edifice.build(:mobilenet,
+            input_dim: @embed,
+            hidden_dim: @hidden,
+            num_classes: @num_classes
+          )
+
         input = random_tensor({batch, @embed})
         {predict_fn, params} = build_and_init(model, %{"input" => input})
         output = predict_fn.(params, %{"input" => input})
@@ -783,13 +830,15 @@ defmodule Edifice.RegistrySweepTest do
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
         # EfficientNet SE blocks need channels large enough for squeeze-excite ratio
-        model = Edifice.build(:efficientnet,
-          input_dim: 64,
-          base_dim: 16,
-          width_multiplier: 1.0,
-          depth_multiplier: 1.0,
-          num_classes: @num_classes
-        )
+        model =
+          Edifice.build(:efficientnet,
+            input_dim: 64,
+            base_dim: 16,
+            width_multiplier: 1.0,
+            depth_multiplier: 1.0,
+            num_classes: @num_classes
+          )
+
         input = random_tensor({batch, 64})
         {predict_fn, params} = build_and_init(model, %{"input" => input})
         output = predict_fn.(params, %{"input" => input})
@@ -834,7 +883,9 @@ defmodule Edifice.RegistrySweepTest do
     for batch <- @batches do
       test "batch=#{batch}: encoder and decoder produce correct shapes" do
         batch = unquote(batch)
-        {encoder, _decoder} = Edifice.build(:vq_vae, input_size: @embed, embedding_dim: @latent_size)
+
+        {encoder, _decoder} =
+          Edifice.build(:vq_vae, input_size: @embed, embedding_dim: @latent_size)
 
         enc_input = random_tensor({batch, @embed})
         {enc_pred, enc_params} = build_and_init(encoder, %{"input" => enc_input})
@@ -928,14 +979,15 @@ defmodule Edifice.RegistrySweepTest do
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
 
-        model = Edifice.build(:flow_matching,
-          obs_size: @embed,
-          action_dim: @action_dim,
-          action_horizon: @action_horizon,
-          hidden_size: @hidden,
-          num_layers: @num_layers,
-          dropout: 0.0
-        )
+        model =
+          Edifice.build(:flow_matching,
+            obs_size: @embed,
+            action_dim: @action_dim,
+            action_horizon: @action_horizon,
+            hidden_size: @hidden,
+            num_layers: @num_layers,
+            dropout: 0.0
+          )
 
         input_map = %{
           "x_t" => random_tensor({batch, @action_horizon, @action_dim}),
@@ -958,13 +1010,21 @@ defmodule Edifice.RegistrySweepTest do
       @tag timeout: 120_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
-        model = Edifice.build(:dit,
-          input_dim: @embed, hidden_size: @hidden, depth: 1, num_heads: 2, dropout: 0.0
-        )
+
+        model =
+          Edifice.build(:dit,
+            input_dim: @embed,
+            hidden_size: @hidden,
+            depth: 1,
+            num_heads: 2,
+            dropout: 0.0
+          )
+
         input_map = %{
           "noisy_input" => random_tensor({batch, @embed}),
           "timestep" => random_tensor({batch})
         }
+
         {predict_fn, params} = build_and_init(model, input_map)
         output = predict_fn.(params, input_map)
         assert_finite!(output, "dit batch=#{batch}")
@@ -978,13 +1038,19 @@ defmodule Edifice.RegistrySweepTest do
       @tag timeout: 120_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
-        model = Edifice.build(:score_sde,
-          input_dim: @embed, hidden_size: @hidden, num_layers: @num_layers
-        )
+
+        model =
+          Edifice.build(:score_sde,
+            input_dim: @embed,
+            hidden_size: @hidden,
+            num_layers: @num_layers
+          )
+
         input_map = %{
           "noisy_input" => random_tensor({batch, @embed}),
           "timestep" => random_tensor({batch})
         }
+
         {predict_fn, params} = build_and_init(model, input_map)
         output = predict_fn.(params, input_map)
         assert_finite!(output, "score_sde batch=#{batch}")
@@ -999,13 +1065,19 @@ defmodule Edifice.RegistrySweepTest do
       @tag timeout: 120_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
-        model = Edifice.build(:consistency_model,
-          input_dim: @embed, hidden_size: @hidden, num_layers: @num_layers
-        )
+
+        model =
+          Edifice.build(:consistency_model,
+            input_dim: @embed,
+            hidden_size: @hidden,
+            num_layers: @num_layers
+          )
+
         input_map = %{
           "noisy_input" => random_tensor({batch, @embed}),
           "sigma" => random_tensor({batch})
         }
+
         {predict_fn, params} = build_and_init(model, input_map)
         output = predict_fn.(params, input_map)
         assert_finite!(output, "consistency_model batch=#{batch}")
@@ -1045,6 +1117,7 @@ defmodule Edifice.RegistrySweepTest do
           "noisy_z" => random_tensor({batch, @latent_size}),
           "timestep" => random_tensor({batch})
         }
+
         {denoise_pred, denoise_params} = build_and_init(denoiser, denoise_input)
         denoise_out = denoise_pred.(denoise_params, denoise_input)
         assert_finite!(denoise_out, "latent_diffusion denoiser batch=#{batch}")

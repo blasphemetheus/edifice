@@ -239,7 +239,9 @@ defmodule Edifice.Generative.DiT do
     Nx.add(Nx.multiply(Nx.add(1.0, gamma), x), beta)
   end
 
-  # Simplified self-attention for 2D input [batch, hidden_size]
+  # Multi-head self-attention that handles both 2D [batch, hidden] and
+  # 3D [batch, seq, hidden] inputs. For 2D, adds seq=1 dim so attention
+  # is mathematically correct (softmax of single score = 1, output = V).
   defp build_self_attention(input, hidden_size, num_heads, name) do
     head_dim = div(hidden_size, num_heads)
 
@@ -247,12 +249,9 @@ defmodule Edifice.Generative.DiT do
     k = Axon.dense(input, hidden_size, name: "#{name}_k")
     v = Axon.dense(input, hidden_size, name: "#{name}_v")
 
-    # For single-token input, attention is just a weighted projection
-    # For multi-token, we would reshape to [batch, num_heads, seq, head_dim]
-    # Here with [batch, hidden_size], attention degenerates to gating
     attn_out =
       Axon.layer(
-        &single_token_attention_impl/4,
+        &multi_head_attention_impl/4,
         [q, k, v],
         name: "#{name}_compute",
         num_heads: num_heads,
@@ -263,13 +262,54 @@ defmodule Edifice.Generative.DiT do
     Axon.dense(attn_out, hidden_size, name: "#{name}_out_proj")
   end
 
-  # For single-token: attention simplifies to sigmoid gating of value
-  defp single_token_attention_impl(q, k, v, _opts) do
-    # score = softmax(q * k / sqrt(d)) * v
-    # For single token, softmax(scalar) = 1, so output = v
-    # We add a learned gating for expressivity
-    gate = Nx.sigmoid(Nx.sum(Nx.multiply(q, k), axes: [-1], keep_axes: true))
-    Nx.multiply(gate, v)
+  # Real multi-head attention supporting both 2D and 3D inputs
+  defp multi_head_attention_impl(q, k, v, opts) do
+    num_heads = opts[:num_heads]
+    head_dim = opts[:head_dim]
+    rank = Nx.rank(q)
+
+    # Add seq dim if 2D: [batch, hidden] -> [batch, 1, hidden]
+    {q, k, v, was_2d} =
+      if rank == 2 do
+        {Nx.new_axis(q, 1), Nx.new_axis(k, 1), Nx.new_axis(v, 1), true}
+      else
+        {q, k, v, false}
+      end
+
+    batch = Nx.axis_size(q, 0)
+    seq_len = Nx.axis_size(q, 1)
+
+    # Reshape to multi-head: [batch, seq, heads, head_dim] -> [batch, heads, seq, head_dim]
+    q = q |> Nx.reshape({batch, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
+    k = k |> Nx.reshape({batch, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
+    v = v |> Nx.reshape({batch, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    # Scaled dot-product attention
+    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
+    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
+
+    # Softmax attention weights
+    max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
+    exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
+
+    attn_weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
+
+    # Apply attention to values
+    output = Nx.dot(attn_weights, [3], [0, 1], v, [2], [0, 1])
+
+    # Reshape back: [batch, heads, seq, head_dim] -> [batch, seq, hidden]
+    output =
+      output
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+      |> Nx.reshape({batch, seq_len, num_heads * head_dim})
+
+    # Remove seq dim if input was 2D
+    if was_2d do
+      Nx.squeeze(output, axes: [1])
+    else
+      output
+    end
   end
 
   # Sinusoidal timestep embedding -> MLP

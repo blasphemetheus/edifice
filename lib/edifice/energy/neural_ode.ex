@@ -149,5 +149,4 @@ defmodule Edifice.Energy.NeuralODE do
     hidden = Keyword.get(opts, :hidden_size, @default_hidden_size)
     out || hidden
   end
-
 end

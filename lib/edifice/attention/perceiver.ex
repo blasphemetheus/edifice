@@ -160,12 +160,13 @@ defmodule Edifice.Attention.Perceiver do
           )
 
         # Self-attention blocks for this cross-attention group
-        num_self = if cross_idx == num_cross_layers do
-          # Last group gets any remaining self-attention layers
-          num_layers - self_layers_per_cross * (num_cross_layers - 1)
-        else
-          self_layers_per_cross
-        end
+        num_self =
+          if cross_idx == num_cross_layers do
+            # Last group gets any remaining self-attention layers
+            num_layers - self_layers_per_cross * (num_cross_layers - 1)
+          else
+            self_layers_per_cross
+          end
 
         start_idx = self_layers_per_cross * (cross_idx - 1) + 1
 

@@ -252,25 +252,37 @@ defmodule Edifice.Feedforward.KAN do
 
         :chebyshev ->
           # Chebyshev polynomials require input in [-1, 1]
-          Axon.nx(freq_proj, fn x ->
-            clamped = Nx.clip(x, -1.0, 1.0)
-            Nx.cos(Nx.multiply(Nx.acos(clamped), 1.0))
-          end, name: "#{name}_chebyshev")
+          Axon.nx(
+            freq_proj,
+            fn x ->
+              clamped = Nx.clip(x, -1.0, 1.0)
+              Nx.cos(Nx.multiply(Nx.acos(clamped), 1.0))
+            end,
+            name: "#{name}_chebyshev"
+          )
 
         :fourier ->
           # Fourier: both sin and cos components
-          Axon.nx(freq_proj, fn x ->
-            half = div(Nx.axis_size(x, -1), 2)
-            sin_part = Nx.sin(Nx.slice_along_axis(x, 0, half, axis: -1))
-            cos_part = Nx.cos(Nx.slice_along_axis(x, half, half, axis: -1))
-            Nx.concatenate([sin_part, cos_part], axis: -1)
-          end, name: "#{name}_fourier")
+          Axon.nx(
+            freq_proj,
+            fn x ->
+              half = div(Nx.axis_size(x, -1), 2)
+              sin_part = Nx.sin(Nx.slice_along_axis(x, 0, half, axis: -1))
+              cos_part = Nx.cos(Nx.slice_along_axis(x, half, half, axis: -1))
+              Nx.concatenate([sin_part, cos_part], axis: -1)
+            end,
+            name: "#{name}_fourier"
+          )
 
         :rbf ->
           # RBF: exp(-x^2 / 2) — Gaussian basis
-          Axon.nx(freq_proj, fn x ->
-            Nx.exp(Nx.negate(Nx.divide(Nx.pow(x, 2), 2.0)))
-          end, name: "#{name}_rbf")
+          Axon.nx(
+            freq_proj,
+            fn x ->
+              Nx.exp(Nx.negate(Nx.divide(Nx.pow(x, 2), 2.0)))
+            end,
+            name: "#{name}_rbf"
+          )
       end
 
     # Project back to output size (learns amplitude weights)

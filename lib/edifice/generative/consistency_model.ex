@@ -181,10 +181,10 @@ defmodule Edifice.Generative.ConsistencyModel do
     Nx.concatenate([Nx.sin(angles), Nx.cos(angles)], axis: 1)
   end
 
-  # Consistency skip connection
-  # c_skip(sigma) = sigma_data^2 / (sigma^2 + sigma_data^2)
-  # c_out(sigma) = sigma * sigma_data / sqrt(sigma^2 + sigma_data^2)
-  # where sigma_data is a constant (we use 0.5)
+  # Consistency skip connection (Song et al., 2023, Appendix A)
+  # c_skip(sigma) = sigma_data^2 / ((sigma - sigma_min)^2 + sigma_data^2)
+  # c_out(sigma) = sigma_data * (sigma - sigma_min) / sqrt(sigma^2 + sigma_data^2)
+  # Boundary: at sigma = sigma_min, c_skip = 1 and c_out = 0, so f(x, sigma_min) = x
   defp consistency_skip_impl(x, f_out, sigma, opts) do
     sigma_min = opts[:sigma_min]
     _sigma_max = opts[:sigma_max]
@@ -192,27 +192,23 @@ defmodule Edifice.Generative.ConsistencyModel do
     sigma_data = 0.5
     sigma_2d = Nx.new_axis(sigma, 1)
 
+    # (sigma - sigma_min) term — drives boundary condition
+    sigma_diff = Nx.subtract(sigma_2d, sigma_min)
+    sigma_diff_sq = Nx.multiply(sigma_diff, sigma_diff)
     sigma_sq = Nx.multiply(sigma_2d, sigma_2d)
     data_sq = sigma_data * sigma_data
 
-    # c_skip approaches 1 as sigma -> sigma_min (boundary condition)
-    c_skip = Nx.divide(data_sq, Nx.add(sigma_sq, data_sq))
+    # c_skip = sigma_data^2 / ((sigma - sigma_min)^2 + sigma_data^2)
+    # At sigma_min: numerator = data_sq, denominator = 0 + data_sq -> c_skip = 1
+    c_skip = Nx.divide(data_sq, Nx.add(sigma_diff_sq, data_sq))
 
-    # c_out approaches 0 as sigma -> sigma_min
+    # c_out = sigma_data * (sigma - sigma_min) / sqrt(sigma^2 + sigma_data^2)
+    # At sigma_min: numerator = 0 -> c_out = 0
     c_out =
       Nx.divide(
-        Nx.multiply(sigma_2d, sigma_data),
+        Nx.multiply(sigma_data, sigma_diff),
         Nx.sqrt(Nx.add(sigma_sq, data_sq))
       )
-
-    # Scale c_out to zero at sigma_min for exact boundary
-    sigma_ratio =
-      Nx.divide(
-        Nx.subtract(sigma_2d, sigma_min),
-        Nx.add(sigma_2d, 1.0e-8)
-      )
-
-    c_out = Nx.multiply(c_out, sigma_ratio)
 
     Nx.add(Nx.multiply(c_skip, x), Nx.multiply(c_out, f_out))
   end
@@ -222,12 +218,13 @@ defmodule Edifice.Generative.ConsistencyModel do
   # ============================================================================
 
   @doc """
-  Consistency training loss.
+  Consistency training loss using pseudo-Huber function.
 
   Enforces f(x_{t+1}, t+1) = f(x_t, t) for adjacent timesteps.
   Uses a target network (EMA of the online network) for stability.
 
-  The loss is: ||f_theta(x_{t+dt}, t+dt) - f_target(x_t, t)||^2
+  The pseudo-Huber loss (Song et al., 2023) is: sqrt(||d||^2 + c^2) - c
+  where d = f_theta(x_{t+dt}, t+dt) - f_target(x_t, t) and c = 0.00054*sqrt(d_dim).
 
   ## Parameters
 
@@ -241,7 +238,12 @@ defmodule Edifice.Generative.ConsistencyModel do
   @spec consistency_loss(Nx.Tensor.t(), Nx.Tensor.t()) :: Nx.Tensor.t()
   defn consistency_loss(pred_current, pred_target) do
     diff = Nx.subtract(pred_current, pred_target)
-    Nx.mean(Nx.multiply(diff, diff))
+    d_sq = Nx.sum(Nx.multiply(diff, diff), axes: [-1])
+    # Pseudo-Huber with c = 0.00054 * sqrt(dim), per Improved Consistency Training
+    dim = Nx.axis_size(pred_current, Nx.rank(pred_current) - 1)
+    c = 0.00054 * Nx.sqrt(dim)
+    c_sq = Nx.multiply(c, c)
+    Nx.mean(Nx.subtract(Nx.sqrt(Nx.add(d_sq, c_sq)), c))
   end
 
   # ============================================================================
@@ -271,6 +273,38 @@ defmodule Edifice.Generative.ConsistencyModel do
     output_proj = hidden_size * input_dim
 
     input_proj + sigma_mlp + blocks + output_proj
+  end
+
+  @doc """
+  Generate noise schedule using Karras et al. discretization.
+
+  Produces N timesteps: t_i = (eps^{1/rho} + (i-1)/(N-1) * (T^{1/rho} - eps^{1/rho}))^rho
+  where eps = sigma_min, T = sigma_max, and rho = 7 (default).
+
+  ## Options
+    - `:n_steps` - Number of timesteps (default: 40)
+    - `:sigma_min` - Minimum sigma (default: 0.002)
+    - `:sigma_max` - Maximum sigma (default: 80.0)
+    - `:rho` - Schedule curvature (default: 7)
+  """
+  @spec noise_schedule(keyword()) :: Nx.Tensor.t()
+  def noise_schedule(opts \\ []) do
+    n = Keyword.get(opts, :n_steps, 40)
+    sigma_min = Keyword.get(opts, :sigma_min, @default_sigma_min)
+    sigma_max = Keyword.get(opts, :sigma_max, @default_sigma_max)
+    rho = Keyword.get(opts, :rho, 7)
+
+    inv_rho = 1.0 / rho
+    min_inv = :math.pow(sigma_min, inv_rho)
+    max_inv = :math.pow(sigma_max, inv_rho)
+
+    steps =
+      for i <- 0..(n - 1) do
+        frac = if n > 1, do: i / (n - 1), else: 0.0
+        :math.pow(min_inv + frac * (max_inv - min_inv), rho)
+      end
+
+    Nx.tensor(steps, type: :f32)
   end
 
   @doc """

@@ -90,12 +90,16 @@ defmodule Edifice.Recurrent.DeltaNet do
   # Model Building
   # ============================================================================
 
+  @doc "Default number of attention heads"
+  def default_num_heads, do: 4
+
   @doc """
   Build a DeltaNet model for sequence processing.
 
   ## Options
     - `:embed_size` - Size of input embedding per frame (required)
     - `:hidden_size` - Internal hidden dimension (default: 256)
+    - `:num_heads` - Number of independent delta rule heads (default: 4)
     - `:num_layers` - Number of DeltaNet layers (default: 4)
     - `:dropout` - Dropout rate between layers (default: 0.1)
     - `:window_size` - Expected sequence length (default: 60)
@@ -107,6 +111,7 @@ defmodule Edifice.Recurrent.DeltaNet do
   def build(opts \\ []) do
     embed_size = Keyword.fetch!(opts, :embed_size)
     hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
+    num_heads = Keyword.get(opts, :num_heads, default_num_heads())
     num_layers = Keyword.get(opts, :num_layers, default_num_layers())
     dropout = Keyword.get(opts, :dropout, default_dropout())
     window_size = Keyword.get(opts, :window_size, 60)
@@ -128,7 +133,7 @@ defmodule Edifice.Recurrent.DeltaNet do
     # Stack DeltaNet layers
     output =
       Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
-        layer = build_delta_net_layer(acc, hidden_size, "delta_net_#{layer_idx}")
+        layer = build_delta_net_layer(acc, hidden_size, num_heads, "delta_net_#{layer_idx}")
 
         if dropout > 0 and layer_idx < num_layers do
           Axon.dropout(layer, rate: dropout, name: "dropout_#{layer_idx}")
@@ -155,19 +160,19 @@ defmodule Edifice.Recurrent.DeltaNet do
   # DeltaNet Layer
   # ============================================================================
 
-  defp build_delta_net_layer(input, hidden_size, name) do
+  defp build_delta_net_layer(input, hidden_size, num_heads, name) do
     # Pre-norm for stability
     normed = Axon.layer_norm(input, name: "#{name}_norm")
 
     # Project to Q, K, V, beta: 4 * hidden_size total
     projections = Axon.dense(normed, hidden_size * 4, name: "#{name}_qkvb_proj")
 
-    # Apply delta rule recurrence
+    # Apply multi-head delta rule recurrence
     recurrence_output =
       Axon.nx(
         projections,
         fn proj ->
-          delta_net_scan(proj, hidden_size)
+          delta_net_scan(proj, hidden_size, num_heads)
         end,
         name: "#{name}_recurrence"
       )
@@ -179,10 +184,11 @@ defmodule Edifice.Recurrent.DeltaNet do
     Axon.add(input, output, name: "#{name}_residual")
   end
 
-  defp delta_net_scan(projections, hidden_size) do
+  defp delta_net_scan(projections, hidden_size, num_heads) do
     # projections: [batch, seq_len, hidden_size * 4]
     batch_size = Nx.axis_size(projections, 0)
     seq_len = Nx.axis_size(projections, 1)
+    head_dim = div(hidden_size, num_heads)
 
     # Split into Q, K, V, beta
     q_all = Nx.slice_along_axis(projections, 0, hidden_size, axis: 2)
@@ -193,51 +199,57 @@ defmodule Edifice.Recurrent.DeltaNet do
     # Beta gate: controls update rate
     beta = Nx.sigmoid(beta_pre)
 
-    # L2 normalize keys for stable memory updates
-    k_norm = Nx.sqrt(Nx.add(Nx.sum(Nx.pow(k_all, 2), axes: [2], keep_axes: true), norm_eps()))
+    # Reshape to multi-head: [batch, seq, num_heads, head_dim]
+    q_all = Nx.reshape(q_all, {batch_size, seq_len, num_heads, head_dim})
+    k_all = Nx.reshape(k_all, {batch_size, seq_len, num_heads, head_dim})
+    v_all = Nx.reshape(v_all, {batch_size, seq_len, num_heads, head_dim})
+    beta = Nx.reshape(beta, {batch_size, seq_len, num_heads, head_dim})
+
+    # L2 normalize keys per head for stable memory updates
+    k_norm = Nx.sqrt(Nx.add(Nx.sum(Nx.pow(k_all, 2), axes: [3], keep_axes: true), norm_eps()))
     k_normalized = Nx.divide(k_all, k_norm)
 
-    # Initialize memory matrix S: [batch, hidden_size, hidden_size]
-    s_init = Nx.broadcast(0.0, {batch_size, hidden_size, hidden_size})
+    # Initialize per-head memory: [batch, num_heads, head_dim, head_dim]
+    s_init = Nx.broadcast(0.0, {batch_size, num_heads, head_dim, head_dim})
 
-    # Sequential scan with delta rule
+    # Sequential scan with delta rule — vectorized across heads
     {_, output_list} =
       Enum.reduce(0..(seq_len - 1), {s_init, []}, fn t, {s_prev, acc} ->
+        # [batch, num_heads, head_dim]
         q_t = Nx.slice_along_axis(q_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         k_t = Nx.slice_along_axis(k_normalized, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         v_t = Nx.slice_along_axis(v_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        # Current retrieval: S_{t-1} @ k_t -> [batch, hidden_size]
-        # s_prev: [batch, hidden, hidden], k_t: [batch, hidden]
-        retrieval = Nx.dot(s_prev, [2], [0], Nx.new_axis(k_t, 2), [1], [0])
-        retrieval = Nx.squeeze(retrieval, axes: [2])
+        # Retrieval: S @ k per head: [batch, num_heads, head_dim]
+        # s_prev: [batch, H, d, d], k_t: [batch, H, d] -> [batch, H, d]
+        retrieval =
+          Nx.dot(s_prev, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1])
+
+        retrieval = Nx.squeeze(retrieval, axes: [3])
 
         # Error: v_t - retrieval
         error = Nx.subtract(v_t, retrieval)
 
-        # Delta update: S_t = S_{t-1} + beta_t * error * k_t^T
-        # error: [batch, hidden], k_t: [batch, hidden]
-        # outer product: [batch, hidden, hidden]
-        update =
-          Nx.dot(
-            Nx.new_axis(Nx.multiply(beta_t, error), 2),
-            [2],
-            [0],
-            Nx.new_axis(k_t, 1),
-            [1],
-            [0]
-          )
+        # Delta update: S += beta * error * k^T (outer product per head)
+        # beta_t * error: [batch, H, d]
+        scaled_error = Nx.multiply(beta_t, error)
+        # outer: [batch, H, d, 1] * [batch, H, 1, d] -> [batch, H, d, d]
+        update = Nx.multiply(Nx.new_axis(scaled_error, 3), Nx.new_axis(k_t, 2))
 
         s_t = Nx.add(s_prev, update)
 
-        # Output: S_t @ q_t -> [batch, hidden_size]
-        o_t = Nx.dot(s_t, [2], [0], Nx.new_axis(q_t, 2), [1], [0])
-        o_t = Nx.squeeze(o_t, axes: [2])
+        # Output: S @ q per head: [batch, num_heads, head_dim]
+        o_t = Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, 3), [2], [0, 1])
+        o_t = Nx.squeeze(o_t, axes: [3])
 
-        {s_t, [o_t | acc]}
+        # Flatten heads: [batch, num_heads * head_dim]
+        o_flat = Nx.reshape(o_t, {batch_size, num_heads * head_dim})
+
+        {s_t, [o_flat | acc]}
       end)
 
+    # [batch, seq_len, hidden_size]
     output_list |> Enum.reverse() |> Nx.stack(axis: 1)
   end
 

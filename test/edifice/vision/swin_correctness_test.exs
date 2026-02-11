@@ -50,7 +50,8 @@ defmodule Edifice.Vision.SwinCorrectnessTest do
       c = 1
 
       # [1, 4, 4, 1] with values 0..15
-      input = Nx.iota({1, h, w, c}, axis: 1) |> Nx.multiply(w) |> Nx.add(Nx.iota({1, h, w, c}, axis: 2))
+      input =
+        Nx.iota({1, h, w, c}, axis: 1) |> Nx.multiply(w) |> Nx.add(Nx.iota({1, h, w, c}, axis: 2))
 
       partitioned = SwinTransformer.window_partition(input, ws, h, w)
       # Should have 4 windows of 4 tokens each

@@ -27,30 +27,35 @@ defmodule Edifice.Recurrent.ReservoirCorrectnessTest do
       # ESN: only readout layer is trainable. Reservoir weights are constants.
       model = Reservoir.build(@base_opts)
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @input_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @input_size}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
       # Should only have readout params, no reservoir weight params
-      reservoir_param_keys = Enum.filter(param_keys, fn key ->
-        String.contains?(key, "reservoir") and not String.contains?(key, "readout")
-      end)
+      reservoir_param_keys =
+        Enum.filter(param_keys, fn key ->
+          String.contains?(key, "reservoir") and not String.contains?(key, "readout")
+        end)
 
       # The reservoir layer should NOT have trainable params (weights are Axon.constant)
       assert reservoir_param_keys == [],
-        "Reservoir weights should be constants, not trainable params: #{inspect(reservoir_param_keys)}"
+             "Reservoir weights should be constants, not trainable params: #{inspect(reservoir_param_keys)}"
     end
 
     test "readout layer IS trainable" do
       model = Reservoir.build(@base_opts)
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @input_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @input_size}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
       readout_keys = Enum.filter(param_keys, &String.contains?(&1, "readout"))
 
       assert length(readout_keys) > 0,
-        "Should have trainable readout params, got: #{inspect(param_keys)}"
+             "Should have trainable readout params, got: #{inspect(param_keys)}"
     end
 
     test "same model produces identical outputs with shared readout params (deterministic reservoir)" do
@@ -64,7 +69,8 @@ defmodule Edifice.Recurrent.ReservoirCorrectnessTest do
 
       # Initialize params from model1 and reuse for model2
       # (readout params are random, but reservoir constants are deterministic)
-      params = init_fn1.(Nx.template({@batch, @seq_len, @input_size}, :f32), Axon.ModelState.empty())
+      params =
+        init_fn1.(Nx.template({@batch, @seq_len, @input_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @input_size})
@@ -73,7 +79,9 @@ defmodule Edifice.Recurrent.ReservoirCorrectnessTest do
       output2 = predict_fn2.(params, input)
 
       diff = Nx.subtract(output1, output2) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
-      assert diff < 1.0e-5, "Same opts + same readout params should produce identical output, diff = #{diff}"
+
+      assert diff < 1.0e-5,
+             "Same opts + same readout params should produce identical output, diff = #{diff}"
     end
   end
 
@@ -85,7 +93,9 @@ defmodule Edifice.Recurrent.ReservoirCorrectnessTest do
     test "output shape is [batch, output_size]" do
       model = Reservoir.build(@base_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @input_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @input_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @input_size})
@@ -97,7 +107,9 @@ defmodule Edifice.Recurrent.ReservoirCorrectnessTest do
     test "output is finite" do
       model = Reservoir.build(@base_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @input_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @input_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @input_size})
@@ -110,7 +122,9 @@ defmodule Edifice.Recurrent.ReservoirCorrectnessTest do
     test "different inputs produce different outputs" do
       model = Reservoir.build(@base_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @input_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @input_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input1, key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @input_size})

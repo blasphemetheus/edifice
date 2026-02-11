@@ -30,6 +30,7 @@ defmodule Edifice.Convolutional.TCNTest do
       assert Nx.shape(output) == {@batch_size, seq_len, 32}
     end
 
+    @tag :slow
     test "uses default channels when not specified" do
       input_size = 64
       seq_len = 16

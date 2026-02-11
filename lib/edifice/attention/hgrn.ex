@@ -76,7 +76,6 @@ defmodule Edifice.Attention.HGRN do
   """
 
   require Axon
-
   # Default hyperparameters
   @default_hidden_size 256
   @default_num_layers 6
@@ -124,7 +123,9 @@ defmodule Edifice.Attention.HGRN do
         input
       end
 
-    # Stack HGRN-2 blocks
+    # Stack HGRN-2 blocks with hierarchical gating:
+    # Lower layers get fine-grained per-element gates; higher layers
+    # share gates across groups (coarser gating).
     x =
       Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
         build_hgrn_block(
@@ -132,6 +133,8 @@ defmodule Edifice.Attention.HGRN do
           hidden_size: hidden_size,
           state_expansion: state_expansion,
           dropout: dropout,
+          layer_idx: layer_idx,
+          num_layers: num_layers,
           name: "hgrn_block_#{layer_idx}"
         )
       end)
@@ -172,6 +175,8 @@ defmodule Edifice.Attention.HGRN do
         hidden_size: hidden_size,
         state_expansion: state_expansion,
         dropout: dropout,
+        layer_idx: Keyword.get(opts, :layer_idx, 1),
+        num_layers: Keyword.get(opts, :num_layers, @default_num_layers),
         name: "#{name}_rnn"
       )
 
@@ -197,23 +202,30 @@ defmodule Edifice.Attention.HGRN do
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     state_expansion = Keyword.get(opts, :state_expansion, @default_state_expansion)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
+    layer_idx = Keyword.get(opts, :layer_idx, 1)
+    _num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     name = Keyword.get(opts, :name, "hgrn")
 
     expanded_size = hidden_size * state_expansion
 
+    # Hierarchical gating: gate granularity decreases with layer depth.
+    # Layer 1 (bottom): per-element gates (gate_dim = expanded_size)
+    # Higher layers: gates shared across groups (gate_dim halves per layer)
+    gate_dim = max(1, Bitwise.bsr(expanded_size, layer_idx - 1))
+    group_size = div(expanded_size, gate_dim)
+
     # Pre-LayerNorm
     x = Axon.layer_norm(input, name: "#{name}_norm")
 
-    # Project input for gates and values
-    # Forget gate (controls state retention)
-    forget_proj = Axon.dense(x, expanded_size, name: "#{name}_forget_proj")
+    # Forget gate: project to gate_dim (coarser at higher layers)
+    forget_proj = Axon.dense(x, gate_dim, name: "#{name}_forget_proj")
     forget_gate = Axon.activation(forget_proj, :sigmoid, name: "#{name}_forget_sigmoid")
 
-    # Input gate (controls new information)
-    input_proj = Axon.dense(x, expanded_size, name: "#{name}_input_proj")
+    # Input gate: same granularity as forget gate
+    input_proj = Axon.dense(x, gate_dim, name: "#{name}_input_proj")
     input_gate = Axon.activation(input_proj, :sigmoid, name: "#{name}_input_sigmoid")
 
-    # Input value (expanded)
+    # Input value (full expanded size)
     value_proj = Axon.dense(x, expanded_size, name: "#{name}_value_proj")
     value_proj = Axon.activation(value_proj, :silu, name: "#{name}_value_silu")
 
@@ -225,6 +237,8 @@ defmodule Edifice.Attention.HGRN do
         name: "#{name}_recurrence",
         hidden_size: hidden_size,
         expanded_size: expanded_size,
+        gate_dim: gate_dim,
+        group_size: group_size,
         op_name: :hgrn_recurrence
       )
 
@@ -275,42 +289,58 @@ defmodule Edifice.Attention.HGRN do
     Axon.add(input, x, name: "#{name}_residual")
   end
 
-  # HGRN recurrence implementation using parallel scan
+  # HGRN recurrence with hierarchical gating via parallel scan.
+  # Gates may be coarser than values (gate_dim <= expanded_size) — broadcast as needed.
   defp hgrn_recurrence(forget, input_gate, value, opts) do
-    # forget: [batch, seq_len, expanded_size] - forget gate
-    # input_gate: [batch, seq_len, expanded_size] - input gate
-    # value: [batch, seq_len, expanded_size] - input value
+    # forget: [batch, seq_len, gate_dim]
+    # input_gate: [batch, seq_len, gate_dim]
+    # value: [batch, seq_len, expanded_size]
+    group_size = opts[:group_size]
 
-    _hidden_size = opts[:hidden_size]
-    _expanded_size = opts[:expanded_size]
+    # Broadcast coarse gates to full expanded_size by repeating each gate element
+    # across its group. If group_size == 1, this is a no-op.
+    forget_full =
+      if group_size > 1 do
+        # [batch, seq, gate_dim] -> [batch, seq, gate_dim, 1] -> [batch, seq, gate_dim, group]
+        batch = Nx.axis_size(forget, 0)
+        seq_len = Nx.axis_size(forget, 1)
+        gate_dim = Nx.axis_size(forget, 2)
+
+        forget
+        |> Nx.new_axis(3)
+        |> Nx.broadcast({batch, seq_len, gate_dim, group_size})
+        |> Nx.reshape({batch, seq_len, gate_dim * group_size})
+      else
+        forget
+      end
+
+    input_gate_full =
+      if group_size > 1 do
+        batch = Nx.axis_size(input_gate, 0)
+        seq_len = Nx.axis_size(input_gate, 1)
+        gate_dim = Nx.axis_size(input_gate, 2)
+
+        input_gate
+        |> Nx.new_axis(3)
+        |> Nx.broadcast({batch, seq_len, gate_dim, group_size})
+        |> Nx.reshape({batch, seq_len, gate_dim * group_size})
+      else
+        input_gate
+      end
 
     # Gated recurrence: h[t] = forget[t] * h[t-1] + input[t] * value[t]
-    # This can be computed with parallel scan (associative operation)
+    # Parallel scan via log-cumsum-exp trick:
+    gated_value = Nx.multiply(input_gate_full, value)
 
-    # Compute the gated input contribution
-    gated_value = Nx.multiply(input_gate, value)
-
-    # Use cumulative operations for parallel computation
-    # The recurrence h[t] = f[t] * h[t-1] + (1-f[t]) * v[t] can be approximated
-    # by computing cumulative products and sums
-
-    # Compute log of forget gate for stable cumulative product
-    log_forget = Nx.log(Nx.add(forget, 1.0e-10))
+    # Stable cumulative product of forget gates
+    log_forget = Nx.log(Nx.add(forget_full, 1.0e-10))
     log_forget_cumsum = Nx.cumulative_sum(log_forget, axis: 1)
     forget_cumprod = Nx.exp(log_forget_cumsum)
 
-    # For each position t, the output is:
-    # h[t] = sum_{i=0}^{t} (prod_{j=i+1}^{t} f[j]) * (1-f[i]) * v[i]
-    # = forget_cumprod[t] * sum_{i=0}^{t} (v[i] * input[i] / forget_cumprod[i])
-
-    # Normalize by cumulative forget product
+    # h[t] = forget_cumprod[t] * sum_{i<=t} (gated_value[i] / forget_cumprod[i])
     eps = 1.0e-10
     normalized_value = Nx.divide(gated_value, Nx.add(forget_cumprod, eps))
-
-    # Cumulative sum of normalized values
     value_cumsum = Nx.cumulative_sum(normalized_value, axis: 1)
-
-    # Multiply back by cumulative forget product
     Nx.multiply(forget_cumprod, value_cumsum)
   end
 

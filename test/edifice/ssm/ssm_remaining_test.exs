@@ -256,6 +256,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
       assert %Axon{} = model
     end
 
+    @tag :slow
     test "forward pass produces correct output shape" do
       pattern = HybridBuilder.pattern(:jamba_like, 3)
       model = HybridBuilder.build(pattern, @builder_opts)

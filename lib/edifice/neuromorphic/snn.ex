@@ -77,7 +77,7 @@ defmodule Edifice.Neuromorphic.SNN do
   @default_num_timesteps 25
   @default_tau 2.0
   @default_threshold 1.0
-  @default_surrogate_slope 25.0
+  @default_surrogate_slope 10.0
 
   # ============================================================================
   # Model Building
@@ -196,9 +196,9 @@ defmodule Edifice.Neuromorphic.SNN do
   """
   @spec surrogate_gradient(Nx.Tensor.t(), float()) :: Nx.Tensor.t()
   defn surrogate_gradient(x, slope) do
-    # Fast sigmoid surrogate: 1 / (1 + slope * |x|) smoothed
-    # Using standard sigmoid with slope scaling
-    Nx.sigmoid(slope * x)
+    # Standard sigmoid surrogate with slope scaling
+    # Clamp to [-8, 8] to prevent exp() overflow → NaN gradients
+    Nx.sigmoid(Nx.clip(slope * x, -8.0, 8.0))
   end
 
   @doc """
@@ -239,12 +239,21 @@ defmodule Edifice.Neuromorphic.SNN do
     initial_spikes = Nx.broadcast(0.0, {batch_size, dim})
 
     {_final_membrane, spike_sum} =
-      Enum.reduce(1..num_timesteps, {initial_membrane, initial_spikes}, fn _t, {membrane, acc_spikes} ->
+      Enum.reduce(1..num_timesteps, {initial_membrane, initial_spikes}, fn _t,
+                                                                           {membrane, acc_spikes} ->
         # Leaky integration: V[t] = beta * V[t-1] + I[t]
         new_membrane = Nx.add(Nx.multiply(beta, membrane), input_current)
 
         # Spike generation via surrogate gradient (sigmoid approximation)
-        spikes = Nx.sigmoid(Nx.multiply(@default_surrogate_slope, Nx.subtract(new_membrane, threshold)))
+        # Clamp pre-sigmoid input to [-8, 8] to prevent exp() overflow → NaN gradients
+        scaled =
+          Nx.clip(
+            Nx.multiply(@default_surrogate_slope, Nx.subtract(new_membrane, threshold)),
+            -8.0,
+            8.0
+          )
+
+        spikes = Nx.sigmoid(scaled)
 
         # Soft reset: V[t] = V[t] - spike[t] * threshold
         reset_membrane = Nx.subtract(new_membrane, Nx.multiply(spikes, threshold))

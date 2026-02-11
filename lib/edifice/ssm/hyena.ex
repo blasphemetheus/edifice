@@ -320,7 +320,9 @@ defmodule Edifice.SSM.Hyena do
     # Short depthwise conv: hidden * 3 (kernel_size=3, depthwise)
     short_conv = hidden_size * 3
     # Filter MLPs: order * (1 * filter + filter * filter + filter * hidden)
-    filter_params = order * (1 * filter_size + filter_size * filter_size + filter_size * hidden_size)
+    filter_params =
+      order * (1 * filter_size + filter_size * filter_size + filter_size * hidden_size)
+
     # Output proj
     out_proj = hidden_size * hidden_size
     # FFN

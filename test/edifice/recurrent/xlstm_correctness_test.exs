@@ -40,7 +40,9 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
       # So projection should be: 2*num_heads + hidden + 3*kv_dim
       model = XLSTM.build(@mlstm_opts)
       {init_fn, _} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -57,13 +59,15 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
       expected = @num_heads * 2 + @hidden_size + kv_dim * 3
 
       assert out_dim == expected,
-        "mLSTM projection should be #{expected} (2*heads + hidden + 3*kv), got #{out_dim}"
+             "mLSTM projection should be #{expected} (2*heads + hidden + 3*kv), got #{out_dim}"
     end
 
     test "mLSTM produces correct output shape" do
       model = XLSTM.build(@mlstm_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -76,7 +80,9 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
     test "mLSTM is deterministic in inference" do
       model = XLSTM.build(@mlstm_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -97,7 +103,9 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
     test "sLSTM produces correct output shape" do
       model = XLSTM.build(@slstm_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -110,7 +118,9 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
     test "sLSTM has 4x hidden gate projection (i, f, z, o)" do
       model = XLSTM.build(@slstm_opts)
       {init_fn, _} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
       gate_keys = Enum.filter(param_keys, &String.contains?(&1, "gates_proj"))
@@ -121,7 +131,7 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
       out_dim = elem(Nx.shape(kernel), 1)
 
       assert out_dim == @hidden_size * 4,
-        "sLSTM gates should be 4*hidden (i, f, z, o), got #{out_dim}"
+             "sLSTM gates should be 4*hidden (i, f, z, o), got #{out_dim}"
     end
   end
 
@@ -131,19 +141,22 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
 
   describe "mixed variant" do
     test "mixed model alternates sLSTM and mLSTM" do
-      model = XLSTM.build(
-        embed_size: @embed_size,
-        hidden_size: @hidden_size,
-        num_layers: 2,
-        num_heads: @num_heads,
-        head_dim: @head_dim,
-        variant: :mixed,
-        seq_len: @seq_len,
-        dropout: 0.0
-      )
+      model =
+        XLSTM.build(
+          embed_size: @embed_size,
+          hidden_size: @hidden_size,
+          num_layers: 2,
+          num_heads: @num_heads,
+          head_dim: @head_dim,
+          variant: :mixed,
+          seq_len: @seq_len,
+          dropout: 0.0
+        )
 
       {init_fn, _} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -163,8 +176,11 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
       {init_s, pred_s} = Axon.build(model_s, mode: :inference)
       {init_m, pred_m} = Axon.build(model_m, mode: :inference)
 
-      params_s = init_s.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
-      params_m = init_m.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+      params_s =
+        init_s.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params_m =
+        init_m.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})

@@ -292,8 +292,14 @@ defmodule Edifice.Vision.SwinTransformer do
     attn_out =
       Axon.layer(
         fn q_t, k_t, v_t, bias_t, mask_t, layer_opts ->
-          window_attention_impl(q_t, k_t, v_t, bias_t,
-            if(has_shift, do: mask_t, else: nil), layer_opts)
+          window_attention_impl(
+            q_t,
+            k_t,
+            v_t,
+            bias_t,
+            if(has_shift, do: mask_t, else: nil),
+            layer_opts
+          )
         end,
         [q, k, v, rel_pos_node, shift_mask_node],
         name: "#{name}_compute",
@@ -334,8 +340,7 @@ defmodule Edifice.Vision.SwinTransformer do
     # Cyclic shift for shifted window attention
     {q_spatial, k_spatial, v_spatial} =
       if shift_size > 0 do
-        {cyclic_shift(q_spatial, shift_size, h, w),
-         cyclic_shift(k_spatial, shift_size, h, w),
+        {cyclic_shift(q_spatial, shift_size, h, w), cyclic_shift(k_spatial, shift_size, h, w),
          cyclic_shift(v_spatial, shift_size, h, w)}
       else
         {q_spatial, k_spatial, v_spatial}

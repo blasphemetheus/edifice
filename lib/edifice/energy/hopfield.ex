@@ -135,9 +135,7 @@ defmodule Edifice.Energy.Hopfield do
     # The SAME Y is used for both similarity (X@Y^T) and retrieval (weights@Y),
     # which is the key insight: Modern Hopfield = attention with K=V=Y.
     patterns =
-      Axon.param("#{name}_patterns", {num_patterns, pattern_dim},
-        initializer: :glorot_uniform
-      )
+      Axon.param("#{name}_patterns", {num_patterns, pattern_dim}, initializer: :glorot_uniform)
 
     # Project input to pattern_dim for compatibility
     x_proj = Axon.dense(input, pattern_dim, name: "#{name}_query_proj")

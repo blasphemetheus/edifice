@@ -148,8 +148,16 @@ defmodule Edifice.Convolutional.ResNet do
         first_stride = if stage_idx == 0, do: 1, else: 2
 
         result =
-          build_stage(acc, num_blocks, channels, first_stride, stage_idx, block_fn,
-            in_channels, out_channels)
+          build_stage(
+            acc,
+            num_blocks,
+            channels,
+            first_stride,
+            stage_idx,
+            block_fn,
+            in_channels,
+            out_channels
+          )
 
         {result, out_channels}
       end)
@@ -319,8 +327,16 @@ defmodule Edifice.Convolutional.ResNet do
   # Private Helpers
   # ============================================================================
 
-  defp build_stage(input, num_blocks, channels, first_stride, stage_idx, block_fn,
-         in_channels, out_channels) do
+  defp build_stage(
+         input,
+         num_blocks,
+         channels,
+         first_stride,
+         stage_idx,
+         block_fn,
+         in_channels,
+         out_channels
+       ) do
     {result, _} =
       Enum.reduce(0..(num_blocks - 1), {input, in_channels}, fn block_idx, {acc, current_in} ->
         strides = if block_idx == 0, do: first_stride, else: 1

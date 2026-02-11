@@ -460,6 +460,7 @@ defmodule Edifice.Attention.MultiHead do
 
               chunked ->
                 mask = if causal, do: causal_mask(seq_len), else: nil
+
                 multi_head_chunked_attention(query, key, value,
                   mask: mask,
                   chunk_size: chunk_size

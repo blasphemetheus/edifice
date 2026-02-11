@@ -27,10 +27,14 @@ defmodule Edifice.SSM.H3CorrectnessTest do
     test "params contain a_log and dt_log keys for shift SSM" do
       model = H3.build(@base_opts)
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       ssm_key = Enum.find(Map.keys(params.data), &String.contains?(&1, "shift_ssm"))
-      assert ssm_key != nil, "Should have shift SSM param group, got: #{inspect(Map.keys(params.data))}"
+
+      assert ssm_key != nil,
+             "Should have shift SSM param group, got: #{inspect(Map.keys(params.data))}"
 
       ssm_params = params.data[ssm_key]
       assert is_map(ssm_params) and not is_struct(ssm_params)
@@ -38,18 +42,22 @@ defmodule Edifice.SSM.H3CorrectnessTest do
       ssm_sub_keys = Map.keys(ssm_params)
 
       a_log_keys = Enum.filter(ssm_sub_keys, &String.contains?(&1, "a_log"))
+
       assert length(a_log_keys) > 0,
-        "Shift SSM should contain 'a_log', got: #{inspect(ssm_sub_keys)}"
+             "Shift SSM should contain 'a_log', got: #{inspect(ssm_sub_keys)}"
 
       dt_log_keys = Enum.filter(ssm_sub_keys, &String.contains?(&1, "dt_log"))
+
       assert length(dt_log_keys) > 0,
-        "Shift SSM should contain 'dt_log', got: #{inspect(ssm_sub_keys)}"
+             "Shift SSM should contain 'dt_log', got: #{inspect(ssm_sub_keys)}"
     end
 
     test "params contain a_log and dt_log keys for diag SSM" do
       model = H3.build(@base_opts)
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       ssm_key = Enum.find(Map.keys(params.data), &String.contains?(&1, "diag_ssm"))
       assert ssm_key != nil, "Should have diag SSM param group"
@@ -67,13 +75,15 @@ defmodule Edifice.SSM.H3CorrectnessTest do
     test "params contain depthwise conv weights (not window_mean)" do
       model = H3.build(@base_opts)
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
       conv_keys = Enum.filter(param_keys, &String.contains?(&1, "dw_conv"))
 
       assert length(conv_keys) > 0,
-        "Should have depthwise conv params, got: #{inspect(param_keys)}"
+             "Should have depthwise conv params, got: #{inspect(param_keys)}"
     end
   end
 
@@ -85,7 +95,9 @@ defmodule Edifice.SSM.H3CorrectnessTest do
     test "output shape is [batch, hidden_size]" do
       model = H3.build(@base_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -97,7 +109,9 @@ defmodule Edifice.SSM.H3CorrectnessTest do
     test "output is finite" do
       model = H3.build(@base_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -110,7 +124,9 @@ defmodule Edifice.SSM.H3CorrectnessTest do
     test "output is deterministic" do
       model = H3.build(@base_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})

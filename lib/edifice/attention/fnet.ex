@@ -133,24 +133,26 @@ defmodule Edifice.Attention.FNet do
   """
   @spec fourier_mixing(Nx.Tensor.t()) :: Nx.Tensor.t()
   def fourier_mixing(tensor) do
-    # Apply FFT along the sequence axis (axis 1) for each feature independently
-    # Nx.fft operates on the last axis, so we need to handle this carefully
+    # Paper: y = Real(FFT2(x)) — 2D FFT along both sequence and hidden axes.
+    # Nx.fft operates on the last axis, so we apply it twice with transposition.
     {batch, seq_len, hidden_dim} = Nx.shape(tensor)
 
-    # Transpose to [batch, hidden_dim, seq_len] so FFT runs along seq axis (last axis)
-    transposed = Nx.transpose(tensor, axes: [0, 2, 1])
+    # FFT along sequence axis (axis 1):
+    # Transpose to [batch, hidden_dim, seq_len] so last axis = seq
+    x = Nx.transpose(tensor, axes: [0, 2, 1])
+    x = Nx.reshape(x, {batch * hidden_dim, seq_len})
+    x = Nx.fft(x)
+    x = Nx.reshape(x, {batch, hidden_dim, seq_len})
+    x = Nx.transpose(x, axes: [0, 2, 1])
 
-    # Reshape to 2D for FFT: [batch * hidden_dim, seq_len]
-    flat = Nx.reshape(transposed, {batch * hidden_dim, seq_len})
+    # FFT along hidden axis (axis 2):
+    # Already in [batch, seq_len, hidden_dim] so last axis = hidden
+    x = Nx.reshape(x, {batch * seq_len, hidden_dim})
+    x = Nx.fft(x)
+    x = Nx.reshape(x, {batch, seq_len, hidden_dim})
 
-    # Apply FFT along sequence dimension and take real part
-    fft_result = Nx.fft(flat)
-    real_part = Nx.real(fft_result)
-
-    # Reshape back: [batch, hidden_dim, seq_len] -> [batch, seq_len, hidden_dim]
-    real_part
-    |> Nx.reshape({batch, hidden_dim, seq_len})
-    |> Nx.transpose(axes: [0, 2, 1])
+    # Take real part of the 2D FFT result
+    Nx.real(x)
   end
 
   # ============================================================================

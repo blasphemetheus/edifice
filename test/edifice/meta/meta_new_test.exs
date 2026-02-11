@@ -67,6 +67,7 @@ defmodule Edifice.Meta.MetaNewTest do
       assert Nx.shape(output) == {@batch_size, @hidden_size}
     end
 
+    @tag :slow
     test "with 8 experts" do
       model =
         SwitchMoE.build(
@@ -152,6 +153,7 @@ defmodule Edifice.Meta.MetaNewTest do
       assert Nx.shape(output) == {@batch_size, @hidden_size}
     end
 
+    @tag :slow
     test "with 8 experts" do
       model =
         SoftMoE.build(

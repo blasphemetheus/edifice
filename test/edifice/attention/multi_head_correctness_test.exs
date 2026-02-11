@@ -44,8 +44,11 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
       {init_1h, predict_1h} = Axon.build(model_1h, mode: :inference)
       {init_4h, predict_4h} = Axon.build(model_4h, mode: :inference)
 
-      params_1h = init_1h.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
-      params_4h = init_4h.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+      params_1h =
+        init_1h.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params_4h =
+        init_4h.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -65,16 +68,19 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
     test "self_attention with num_heads > 1 produces correct output shape" do
       input_node = Axon.input("x", shape: {nil, @seq_len, @embed_size})
 
-      attn = MultiHead.self_attention(input_node,
-        hidden_dim: @hidden_dim,
-        num_heads: @num_heads,
-        causal: false,
-        dropout: 0.0,
-        name: "test_attn"
-      )
+      attn =
+        MultiHead.self_attention(input_node,
+          hidden_dim: @hidden_dim,
+          num_heads: @num_heads,
+          causal: false,
+          dropout: 0.0,
+          name: "test_attn"
+        )
 
       {init_fn, predict_fn} = Axon.build(attn, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -87,16 +93,19 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
     test "multi_head_attention passes num_heads to self_attention" do
       input_node = Axon.input("x", shape: {nil, @seq_len, @embed_size})
 
-      attn = MultiHead.multi_head_attention(input_node,
-        num_heads: @num_heads,
-        head_dim: @head_dim,
-        causal: false,
-        dropout: 0.0,
-        name: "mha_test"
-      )
+      attn =
+        MultiHead.multi_head_attention(input_node,
+          num_heads: @num_heads,
+          head_dim: @head_dim,
+          causal: false,
+          dropout: 0.0,
+          name: "mha_test"
+        )
 
       {init_fn, predict_fn} = Axon.build(attn, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -154,7 +163,9 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
         )
 
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -186,7 +197,9 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
         )
 
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})

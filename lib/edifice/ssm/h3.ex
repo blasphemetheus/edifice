@@ -148,15 +148,19 @@ defmodule Edifice.SSM.H3 do
     shift_b = Axon.dense(x, state_size, name: "#{name}_shift_b")
     shift_c = Axon.dense(x, state_size, name: "#{name}_shift_c")
 
-    shift_a_log = Axon.param("#{name}_shift_a_log", {state_size},
-      initializer: fn {n}, _type, _key ->
-        Nx.log(Nx.add(Nx.iota({n}, type: :f32), 1.0))
-      end)
+    shift_a_log =
+      Axon.param("#{name}_shift_a_log", {state_size},
+        initializer: fn {n}, _type, _key ->
+          Nx.log(Nx.add(Nx.iota({n}, type: :f32), 1.0))
+        end
+      )
 
-    shift_dt_log = Axon.param("#{name}_shift_dt_log", {1},
-      initializer: fn _shape, _type, _key ->
-        Nx.tensor([:math.log(:math.exp(0.01) - 1)], type: :f32)
-      end)
+    shift_dt_log =
+      Axon.param("#{name}_shift_dt_log", {1},
+        initializer: fn _shape, _type, _key ->
+          Nx.tensor([:math.log(:math.exp(0.01) - 1)], type: :f32)
+        end
+      )
 
     shift_out =
       Axon.layer(
@@ -172,15 +176,19 @@ defmodule Edifice.SSM.H3 do
     diag_b = Axon.dense(x, state_size, name: "#{name}_diag_b")
     diag_c = Axon.dense(x, state_size, name: "#{name}_diag_c")
 
-    diag_a_log = Axon.param("#{name}_diag_a_log", {state_size},
-      initializer: fn {n}, _type, _key ->
-        Nx.log(Nx.add(Nx.iota({n}, type: :f32), 1.0))
-      end)
+    diag_a_log =
+      Axon.param("#{name}_diag_a_log", {state_size},
+        initializer: fn {n}, _type, _key ->
+          Nx.log(Nx.add(Nx.iota({n}, type: :f32), 1.0))
+        end
+      )
 
-    diag_dt_log = Axon.param("#{name}_diag_dt_log", {1},
-      initializer: fn _shape, _type, _key ->
-        Nx.tensor([:math.log(:math.exp(0.001) - 1)], type: :f32)
-      end)
+    diag_dt_log =
+      Axon.param("#{name}_diag_dt_log", {1},
+        initializer: fn _shape, _type, _key ->
+          Nx.tensor([:math.log(:math.exp(0.001) - 1)], type: :f32)
+        end
+      )
 
     diag_out =
       Axon.layer(

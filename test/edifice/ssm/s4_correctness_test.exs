@@ -27,7 +27,9 @@ defmodule Edifice.SSM.S4CorrectnessTest do
     test "model has dt projection parameters" do
       model = S4.build(@s4_opts)
       {init_fn, _predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -42,7 +44,9 @@ defmodule Edifice.SSM.S4CorrectnessTest do
     test "output is per-channel (not broadcast scalar)" do
       model = S4.build(@s4_opts)
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -67,7 +71,9 @@ defmodule Edifice.SSM.S4CorrectnessTest do
     test "output depends on sequence content (not just last frame)" do
       model = S4.build(@s4_opts)
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input1, key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -88,7 +94,9 @@ defmodule Edifice.SSM.S4CorrectnessTest do
     test "constant input produces smooth output" do
       model = S4.build(@s4_opts)
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       # Constant input: all ones
       input = Nx.broadcast(1.0, {@batch, @seq_len, @embed_size})
@@ -110,7 +118,9 @@ defmodule Edifice.SSM.S4CorrectnessTest do
       deep_opts = Keyword.put(@s4_opts, :num_layers, 4)
       model = S4.build(deep_opts)
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
@@ -123,7 +133,9 @@ defmodule Edifice.SSM.S4CorrectnessTest do
     test "model is deterministic without dropout" do
       model = S4.build(@s4_opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      params = init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+
+      params =
+        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})

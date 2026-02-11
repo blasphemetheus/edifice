@@ -249,6 +249,7 @@ defmodule Edifice.Graph.GraphNewTest do
       assert Nx.shape(output) == {@batch_size, @num_nodes, 6}
     end
 
+    @tag :slow
     test "defaults produce correct shape" do
       model = GraphTransformer.build(input_dim: @input_dim)
       output = build_and_predict(model)

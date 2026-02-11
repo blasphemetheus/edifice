@@ -111,7 +111,12 @@ defmodule Edifice.Vision.ConvNeXtCorrectnessTest do
       param_keys = Map.keys(params.data)
 
       # Should have downsample convolution
-      ds_keys = Enum.filter(param_keys, &String.contains?(&1, "downsample") and String.contains?(&1, "conv"))
+      ds_keys =
+        Enum.filter(
+          param_keys,
+          &(String.contains?(&1, "downsample") and String.contains?(&1, "conv"))
+        )
+
       assert length(ds_keys) > 0
 
       # Downsample conv kernel should be 2x2
@@ -144,8 +149,16 @@ defmodule Edifice.Vision.ConvNeXtCorrectnessTest do
       image1 =
         Nx.indexed_put(
           image1,
-          Nx.tensor([[0, 0, 0, 0], [0, 0, 1, 1], [0, 0, 2, 2], [0, 0, 3, 3],
-                     [1, 0, 0, 0], [1, 0, 1, 1], [1, 0, 2, 2], [1, 0, 3, 3]]),
+          Nx.tensor([
+            [0, 0, 0, 0],
+            [0, 0, 1, 1],
+            [0, 0, 2, 2],
+            [0, 0, 3, 3],
+            [1, 0, 0, 0],
+            [1, 0, 1, 1],
+            [1, 0, 2, 2],
+            [1, 0, 3, 3]
+          ]),
           Nx.broadcast(1.0, {8})
         )
 
@@ -155,8 +168,16 @@ defmodule Edifice.Vision.ConvNeXtCorrectnessTest do
       image2 =
         Nx.indexed_put(
           image2,
-          Nx.tensor([[0, 0, 28, 28], [0, 0, 29, 29], [0, 0, 30, 30], [0, 0, 31, 31],
-                     [1, 0, 28, 28], [1, 0, 29, 29], [1, 0, 30, 30], [1, 0, 31, 31]]),
+          Nx.tensor([
+            [0, 0, 28, 28],
+            [0, 0, 29, 29],
+            [0, 0, 30, 30],
+            [0, 0, 31, 31],
+            [1, 0, 28, 28],
+            [1, 0, 29, 29],
+            [1, 0, 30, 30],
+            [1, 0, 31, 31]
+          ]),
           Nx.broadcast(1.0, {8})
         )
 

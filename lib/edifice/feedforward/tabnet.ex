@@ -100,7 +100,8 @@ defmodule Edifice.Feedforward.TabNet do
     # Build TabNet steps with prior scale tracking
     # Each step: attention with prior -> sparsemax -> mask -> transform -> aggregate
     {aggregated, _prior, _processed} =
-      Enum.reduce(0..(num_steps - 1), {nil, initial_prior, bn_input}, fn step, {agg, prior, processed} ->
+      Enum.reduce(0..(num_steps - 1), {nil, initial_prior, bn_input}, fn step,
+                                                                         {agg, prior, processed} ->
         # Attention transformer: learn which features to focus on
         attention_logits =
           processed
@@ -190,10 +191,12 @@ defmodule Edifice.Feedforward.TabNet do
     k = Nx.sum(support_float, axes: [-1], keep_axes: true)
 
     # tau = (sum of top-k sorted values - 1) / k
-    tau_num = Nx.subtract(
-      Nx.sum(Nx.multiply(sorted, support_float), axes: [-1], keep_axes: true),
-      1.0
-    )
+    tau_num =
+      Nx.subtract(
+        Nx.sum(Nx.multiply(sorted, support_float), axes: [-1], keep_axes: true),
+        1.0
+      )
+
     tau = Nx.divide(tau_num, Nx.max(k, 1.0))
 
     Nx.max(Nx.subtract(z, tau), 0.0)
