@@ -271,40 +271,34 @@ defmodule Edifice.Attention.Griffin do
     x_proj = Axon.dense(input, hidden_size, name: "#{name}_x_proj")
     gated_input = Axon.multiply(input_gate, x_proj, name: "#{name}_gated_input")
 
-    # Apply the RG-LRU recurrence using Axon.nx for the scan
-    # Concatenate inputs for processing
-    combined =
-      Axon.concatenate([gated_input, recurrence_gate], axis: 2, name: "#{name}_combined")
+    # Learnable lambda parameter for per-dimension decay: a = sigmoid(lambda)
+    # Initialized so that a^c is uniformly in [0.9, 0.999]
+    lambda_init = init_lambda({hidden_size})
+    lambda_node = Axon.constant(lambda_init)
 
-    Axon.nx(
-      combined,
-      fn tensor ->
-        # Split back into gated_input and recurrence_gate
-        x_gated = Nx.slice_along_axis(tensor, 0, hidden_size, axis: 2)
-        rec_gate = Nx.slice_along_axis(tensor, hidden_size, hidden_size, axis: 2)
-
-        rg_lru_scan_impl(x_gated, rec_gate, hidden_size)
-      end,
-      name: "#{name}_scan"
+    # Apply the RG-LRU recurrence using Axon.layer for the scan
+    Axon.layer(
+      &rg_lru_layer_impl/4,
+      [gated_input, recurrence_gate, lambda_node],
+      name: "#{name}_scan",
+      hidden_size: hidden_size,
+      op_name: :rg_lru_scan
     )
+  end
+
+  # Axon.layer wrapper that unpacks opts and delegates to scan
+  defp rg_lru_layer_impl(x_gated, recurrence_gate, lambda, opts) do
+    rg_lru_scan_impl(x_gated, recurrence_gate, lambda, opts[:hidden_size])
   end
 
   # RG-LRU scan implementation
   # h_t = a_t . h_{t-1} + sqrt(1-a_t^2) . x_gated_t
-  defp rg_lru_scan_impl(x_gated, recurrence_gate, hidden_size) do
+  defp rg_lru_scan_impl(x_gated, recurrence_gate, lambda, _hidden_size) do
     c = rg_lru_c()
 
-    # Initialize lambda to give a^c uniform in [0.9, 0.999]
-    # Using a fixed initialization for now (learnable in future)
-    # lambda such that sigmoid(lambda)^c ~ 0.95
-    # sigmoid(-2) ~ 0.12, 0.12^8 ~ 0.0000004 (too small)
-    # sigmoid(2) ~ 0.88, 0.88^8 ~ 0.36 (better)
-    # sigmoid(3) ~ 0.95, 0.95^8 ~ 0.66
-    # We want a_base such that a_base^8 is in [0.9, 0.999]
-    # a_base = 0.987 gives 0.987^8 ~ 0.90
-    # a_base = 0.9999 gives 0.9999^8 ~ 0.999
-    # Using fixed a_base = 0.99 for stability
-    a_base = Nx.broadcast(0.99, {hidden_size})
+    # a = sigmoid(lambda) — learnable per-dimension base decay
+    # lambda is initialized via init_lambda so that a^c is in [0.9, 0.999]
+    a_base = Nx.sigmoid(lambda)
 
     # a_t = a^(c * r_t), gated decay
     # recurrence_gate: [batch, seq_len, hidden_size]

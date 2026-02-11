@@ -233,37 +233,69 @@ defmodule Edifice.Feedforward.KAN do
   @spec build_kan_layer(Axon.t(), pos_integer(), keyword()) :: Axon.t()
   def build_kan_layer(input, out_size, opts \\ []) do
     grid_size = Keyword.get(opts, :grid_size, default_grid_size())
+    basis = Keyword.get(opts, :basis, default_basis())
     name = Keyword.get(opts, :name, "kan_layer")
 
     # Base activation path: linear + SiLU
     base = Axon.dense(input, out_size, name: "#{name}_base_proj")
     base_activated = Axon.activation(base, :silu, name: "#{name}_base_silu")
 
-    # Spline path: project to frequency space, apply sine, project back
-    # This approximates Sum A_ijk * sin(omega_k * x_j + phi)
-
-    # Project input to frequency-expanded space
+    # Spline/basis path: project to expanded space, apply basis fn, project back
     freq_size = out_size * grid_size
     freq_proj = Axon.dense(input, freq_size, name: "#{name}_freq_proj")
 
-    # Apply sine activation with learnable scaling
-    sine_activated =
-      Axon.nx(
-        freq_proj,
-        fn x ->
-          # Apply sine with multiple implicit frequencies
-          # The dense layer learns omega*x, we apply sin
-          Nx.sin(x)
-        end,
-        name: "#{name}_sine"
-      )
+    # Apply selected basis function
+    basis_activated =
+      case basis do
+        :sine ->
+          Axon.nx(freq_proj, &Nx.sin/1, name: "#{name}_sine")
+
+        :chebyshev ->
+          # Chebyshev polynomials require input in [-1, 1]
+          Axon.nx(freq_proj, fn x ->
+            clamped = Nx.clip(x, -1.0, 1.0)
+            Nx.cos(Nx.multiply(Nx.acos(clamped), 1.0))
+          end, name: "#{name}_chebyshev")
+
+        :fourier ->
+          # Fourier: both sin and cos components
+          Axon.nx(freq_proj, fn x ->
+            half = div(Nx.axis_size(x, -1), 2)
+            sin_part = Nx.sin(Nx.slice_along_axis(x, 0, half, axis: -1))
+            cos_part = Nx.cos(Nx.slice_along_axis(x, half, half, axis: -1))
+            Nx.concatenate([sin_part, cos_part], axis: -1)
+          end, name: "#{name}_fourier")
+
+        :rbf ->
+          # RBF: exp(-x^2 / 2) — Gaussian basis
+          Axon.nx(freq_proj, fn x ->
+            Nx.exp(Nx.negate(Nx.divide(Nx.pow(x, 2), 2.0)))
+          end, name: "#{name}_rbf")
+      end
 
     # Project back to output size (learns amplitude weights)
-    spline_out = Axon.dense(sine_activated, out_size, name: "#{name}_spline_proj")
+    spline_out = Axon.dense(basis_activated, out_size, name: "#{name}_spline_proj")
 
-    # Combine base and spline with learnable weights
-    # output = w_base * base + w_spline * spline
-    combined = Axon.add(base_activated, spline_out, name: "#{name}_combine")
+    # Learnable mixing weights: output = w_base * base + w_spline * spline
+    base_weight_param =
+      Axon.param("#{name}_base_w", {1, 1, out_size},
+        initializer: fn shape, _type, _key -> Nx.broadcast(0.5, shape) end
+      )
+
+    spline_weight_param =
+      Axon.param("#{name}_spline_w", {1, 1, out_size},
+        initializer: fn shape, _type, _key -> Nx.broadcast(0.5, shape) end
+      )
+
+    combined =
+      Axon.layer(
+        fn base_val, spline_val, w_base, w_spline, _opts ->
+          Nx.add(Nx.multiply(w_base, base_val), Nx.multiply(w_spline, spline_val))
+        end,
+        [base_activated, spline_out, base_weight_param, spline_weight_param],
+        name: "#{name}_combine",
+        op_name: :kan_combine
+      )
 
     # Final layer norm for stability
     Axon.layer_norm(combined, name: "#{name}_norm")

@@ -34,9 +34,6 @@ architectures = [
   {:min_gru, "MinGRU (parallel-scannable recurrent)",
     [embed_size: embed_size, hidden_size: hidden_size, num_layers: num_layers, window_size: window_size]},
 
-  {:attention, "Multi-Head Attention (transformer)",
-    [embed_size: embed_size, hidden_size: hidden_size, num_layers: num_layers, num_heads: 4, window_size: window_size]},
-
   {:retnet, "RetNet (retention-based)",
     [embed_size: embed_size, hidden_size: hidden_size, num_layers: num_layers, num_heads: 4, window_size: window_size]},
 
@@ -53,7 +50,15 @@ architectures = [
 IO.puts("Architecture                                  | Output Shape  | Parameters")
 IO.puts("----------------------------------------------|---------------|----------")
 
-results =
+count_params = fn count_params, data ->
+  Enum.reduce(data, 0, fn
+    {_k, %Nx.Tensor{} = t}, acc -> acc + Nx.size(t)
+    {_k, %{} = nested}, acc -> acc + count_params.(count_params, nested)
+    _, acc -> acc
+  end)
+end
+
+_results =
   Enum.map(architectures, fn {name, description, opts} ->
     # Build the model through the registry
     model = Edifice.build(name, opts)
@@ -65,18 +70,7 @@ results =
     template = Nx.template({1, window_size, embed_size}, :f32)
     params = init_fn.(template, Axon.ModelState.empty())
 
-    param_count =
-      params
-      |> Axon.ModelState.data()
-      |> Enum.reduce(0, fn {_name, layer_params}, acc ->
-        layer_count =
-          layer_params
-          |> Map.values()
-          |> Enum.map(&Nx.size/1)
-          |> Enum.sum()
-
-        acc + layer_count
-      end)
+    param_count = count_params.(count_params, params.data)
 
     # Run inference
     output = predict_fn.(params, input)

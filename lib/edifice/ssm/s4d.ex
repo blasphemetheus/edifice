@@ -133,10 +133,28 @@ defmodule Edifice.SSM.S4D do
     b_proj = Axon.dense(x, state_size, name: "#{name}_b_proj")
     c_proj = Axon.dense(x, state_size, name: "#{name}_c_proj")
 
+    # Learnable A diagonal in log space: A = -exp(a_log)
+    # Initialized with S4D-Lin: A_n = -n for n in 1..N, so a_log = log(n)
+    a_log_param =
+      Axon.param("#{name}_a_log", {state_size},
+        initializer: fn {n}, _type, _key ->
+          Nx.log(Nx.add(Nx.iota({n}, type: :f32), 1.0))
+        end
+      )
+
+    # Learnable discretization step in log space: dt = softplus(dt_log)
+    dt_log_param =
+      Axon.param("#{name}_dt_log", {1},
+        initializer: fn _shape, _type, _key ->
+          # Initialize so softplus(dt_log) ≈ 0.01
+          Nx.tensor([:math.log(:math.exp(0.01) - 1)], type: :f32)
+        end
+      )
+
     ssm_out =
       Axon.layer(
-        &diagonal_ssm_impl/4,
-        [x, b_proj, c_proj],
+        &diagonal_ssm_impl/6,
+        [x, b_proj, c_proj, a_log_param, dt_log_param],
         name: "#{name}_ssm",
         hidden_size: hidden_size,
         state_size: state_size,
@@ -160,20 +178,21 @@ defmodule Edifice.SSM.S4D do
     )
   end
 
-  # Diagonal SSM: purely diagonal A with learnable-like initialization
-  # Simpler than S4's HiPPO -- uses evenly-spaced negative reals
-  defp diagonal_ssm_impl(x, b, c, opts) do
+  # Diagonal SSM with learnable A and dt parameters
+  defp diagonal_ssm_impl(x, b, c, a_log, dt_log, opts) do
     hidden_size = opts[:hidden_size]
     state_size = opts[:state_size]
 
     batch = Nx.axis_size(x, 0)
     seq_len = Nx.axis_size(x, 1)
 
-    # Diagonal A: evenly spaced in [-1, -N] (S4D-Lin initialization)
-    a_diag = Nx.negate(Nx.add(Nx.iota({state_size}, type: :f32), 1.0))
+    # Learnable A diagonal: A = -exp(a_log) (always negative for stability)
+    a_diag = Nx.negate(Nx.exp(a_log))
 
-    # Discretization
-    dt = 0.01
+    # Learnable dt: dt = softplus(dt_log) (always positive)
+    dt = Nx.log(Nx.add(1.0, Nx.exp(Nx.min(dt_log, 20.0))))
+
+    # Bilinear discretization: a_bar = exp(A * dt)
     a_bar = Nx.exp(Nx.multiply(dt, a_diag))
     a_bar = Nx.broadcast(a_bar, {batch, seq_len, state_size})
 

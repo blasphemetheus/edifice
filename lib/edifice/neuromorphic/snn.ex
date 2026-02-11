@@ -112,42 +112,30 @@ defmodule Edifice.Neuromorphic.SNN do
 
     input = Axon.input("input", shape: {nil, input_size})
 
-    # Build the SNN layers using standard dense layers for weights,
-    # then simulate LIF dynamics in a custom layer
-    all_sizes = hidden_sizes ++ [output_size]
-
-    # Project through dense layers (these provide the W matrices)
-    # Then simulate LIF dynamics over timesteps
-    dense_layers =
-      all_sizes
-      |> Enum.with_index()
-      |> Enum.map(fn {size, idx} ->
-        in_size = if idx == 0, do: input_size, else: Enum.at(all_sizes, idx - 1)
-        {in_size, size, idx}
-      end)
-
-    # Project through hidden layers first
+    # Multi-layer SNN: each layer does dense projection then LIF simulation
+    # The dense layer provides learnable weights W_l, and the LIF layer
+    # simulates spiking dynamics with rate-coded output between layers
     hidden =
-      Enum.reduce(hidden_sizes, input, fn size, acc ->
-        Axon.dense(acc, size, name: "snn_hidden_#{size}")
+      hidden_sizes
+      |> Enum.with_index()
+      |> Enum.reduce(input, fn {size, idx}, acc ->
+        # Dense projection (learnable synaptic weights)
+        projected = Axon.dense(acc, size, name: "snn_layer_#{idx}_dense")
+
+        # LIF neuron layer: simulate over timesteps, rate-decode output
+        Axon.layer(
+          &lif_layer_impl/2,
+          [projected],
+          name: "snn_layer_#{idx}_lif",
+          num_timesteps: num_timesteps,
+          tau: tau,
+          threshold: threshold,
+          op_name: :lif_layer
+        )
       end)
 
-    # Simulate LIF dynamics over timesteps
-    snn_output =
-      Axon.layer(
-        &snn_forward_impl/2,
-        [hidden],
-        name: "snn",
-        layer_configs: dense_layers,
-        all_sizes: all_sizes,
-        num_timesteps: num_timesteps,
-        tau: tau,
-        threshold: threshold,
-        op_name: :snn_forward
-      )
-
-    # Project to output size
-    Axon.dense(snn_output, output_size, name: "snn_output")
+    # Final readout projection (trainable)
+    Axon.dense(hidden, output_size, name: "snn_output")
   end
 
   @doc """
@@ -234,53 +222,35 @@ defmodule Edifice.Neuromorphic.SNN do
   # Private Implementation
   # ============================================================================
 
-  # Full SNN forward pass: simulate LIF dynamics over timesteps
-  # Uses a simplified approach: dense layers as weight matrices,
-  # LIF dynamics simulated via custom Nx operations
-  defp snn_forward_impl(input, opts) do
+  # Single LIF layer: simulate over timesteps with constant input current
+  # Returns rate-decoded output (mean spike count over timesteps)
+  defp lif_layer_impl(input_current, opts) do
     num_timesteps = opts[:num_timesteps]
     tau = opts[:tau]
     threshold = opts[:threshold]
-    all_sizes = opts[:all_sizes]
 
-    # Membrane decay factor
+    # Membrane decay factor: beta = exp(-1/tau)
     beta = :math.exp(-1.0 / tau)
 
-    batch_size = Nx.axis_size(input, 0)
-    _num_layers = length(all_sizes)
+    batch_size = Nx.axis_size(input_current, 0)
+    dim = Nx.axis_size(input_current, 1)
 
-    # For the SNN simulation, we use a simplified approach:
-    # Project input through a single dense layer (done in Axon above),
-    # then simulate LIF dynamics. In this custom layer, we approximate
-    # the multi-layer SNN by:
-    # 1. Using the input directly as current to the first layer
-    # 2. Collecting output spikes over timesteps
-    # 3. Rate-decoding the final output
+    initial_membrane = Nx.broadcast(0.0, {batch_size, dim})
+    initial_spikes = Nx.broadcast(0.0, {batch_size, dim})
 
-    _output_size = List.last(all_sizes)
-
-    # Scale input to output dimension via simple projection
-    # (In the full build/1, this is handled by the Axon dense layers)
-    input_current = input
-    input_dim = Nx.axis_size(input, 1)
-
-    # Initialize membrane potentials matching input dimensions
-    initial_membrane = Nx.broadcast(Nx.tensor(0.0), {batch_size, input_dim})
-
-    # Simulate over timesteps, collecting output spikes
     {_final_membrane, spike_sum} =
-      Enum.reduce(
-        1..num_timesteps,
-        {initial_membrane, Nx.broadcast(Nx.tensor(0.0), {batch_size, input_dim})},
-        fn _t, {membrane, acc_spikes} ->
-          # LIF step
-          new_membrane = Nx.add(Nx.multiply(beta, membrane), input_current)
-          spikes = Nx.sigmoid(Nx.multiply(25.0, Nx.subtract(new_membrane, threshold)))
-          reset_membrane = Nx.subtract(new_membrane, Nx.multiply(spikes, threshold))
+      Enum.reduce(1..num_timesteps, {initial_membrane, initial_spikes}, fn _t, {membrane, acc_spikes} ->
+        # Leaky integration: V[t] = beta * V[t-1] + I[t]
+        new_membrane = Nx.add(Nx.multiply(beta, membrane), input_current)
 
-          {reset_membrane, Nx.add(acc_spikes, spikes)}
-        end
-      )
+        # Spike generation via surrogate gradient (sigmoid approximation)
+        spikes = Nx.sigmoid(Nx.multiply(@default_surrogate_slope, Nx.subtract(new_membrane, threshold)))
+
+        # Soft reset: V[t] = V[t] - spike[t] * threshold
+        reset_membrane = Nx.subtract(new_membrane, Nx.multiply(spikes, threshold))
+
+        {reset_membrane, Nx.add(acc_spikes, spikes)}
+      end)
 
     # Rate decode: average spikes over timesteps
     Nx.divide(spike_sum, num_timesteps)

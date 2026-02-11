@@ -113,20 +113,20 @@ end
 IO.puts("\n5. Comparing graph architectures:\n")
 
 graph_architectures = [
-  {"GCN (spectral convolution)", fn ->
+  {"GCN (spectral, graph-level)", fn ->
     Edifice.Graph.GCN.build_classifier(
       input_dim: input_dim, hidden_dims: [64, 64],
       num_classes: num_classes, pool: :mean
     )
   end},
-  {"GAT (graph attention)", fn ->
-    Edifice.Graph.GAT.build_classifier(
-      input_dim: input_dim, hidden_dims: [64, 64],
-      num_classes: num_classes, num_heads: 4, pool: :mean
+  {"GAT (attention, node-level)", fn ->
+    Edifice.Graph.GAT.build(
+      input_dim: input_dim, hidden_dim: 16,
+      num_classes: num_classes, num_heads: 4
     )
   end},
-  {"GIN (graph isomorphism)", fn ->
-    Edifice.Graph.GIN.build_classifier(
+  {"GIN (isomorphism, graph-level)", fn ->
+    Edifice.Graph.GIN.build(
       input_dim: input_dim, hidden_dims: [64, 64],
       num_classes: num_classes, pool: :mean
     )
@@ -138,7 +138,7 @@ for {name, build_fn} <- graph_architectures do
   {arch_init, arch_predict} = Axon.build(arch_model)
   arch_params = arch_init.(template, Axon.ModelState.empty())
   output = arch_predict.(arch_params, input)
-  IO.puts("   #{String.pad_trailing(name, 35)} output: #{inspect(Nx.shape(output))}")
+  IO.puts("   #{String.pad_trailing(name, 38)} output: #{inspect(Nx.shape(output))}")
 end
 
 # ---------------------------------------------------------------

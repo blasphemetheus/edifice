@@ -69,23 +69,47 @@ defmodule Edifice.Recurrent.Reservoir do
     input_size = Keyword.fetch!(opts, :input_size)
     reservoir_size = Keyword.get(opts, :reservoir_size, 500)
     output_size = Keyword.get(opts, :output_size, reservoir_size)
+    spectral_radius = Keyword.get(opts, :spectral_radius, 0.9)
+    sparsity = Keyword.get(opts, :sparsity, 0.9)
+    input_scaling = Keyword.get(opts, :input_scaling, 1.0)
+    leak_rate = Keyword.get(opts, :leak_rate, 1.0)
     seq_len = Keyword.get(opts, :seq_len, nil)
 
     # Input: [batch, seq_len, input_size]
     input = Axon.input("input", shape: {nil, seq_len, input_size})
 
-    # Reservoir layer (fixed random weights, not trained)
+    # Generate fixed reservoir weights at BUILD TIME (computed once, frozen forever)
+    # This is the key property of ESNs: reservoir weights are never trained
+    key = Nx.Random.key(42)
+
+    # Input weights: [input_size, reservoir_size]
+    {w_in_data, key} = Nx.Random.normal(key, shape: {input_size, reservoir_size})
+    w_in_data = Nx.multiply(w_in_data, input_scaling)
+
+    # Reservoir weights: [reservoir_size, reservoir_size] with sparsity
+    {w_res_data, key} = Nx.Random.normal(key, shape: {reservoir_size, reservoir_size})
+    {mask_vals, _key} = Nx.Random.uniform(key, shape: {reservoir_size, reservoir_size})
+    sparse_mask = Nx.greater(mask_vals, sparsity)
+    w_res_data = Nx.select(sparse_mask, w_res_data, Nx.tensor(0.0))
+
+    # Scale to target spectral radius (Frobenius norm approximation)
+    frobenius_norm = Nx.to_number(Nx.sqrt(Nx.sum(Nx.pow(w_res_data, 2))))
+    est_spectral = frobenius_norm / :math.sqrt(max(reservoir_size * (1.0 - sparsity), 1.0))
+    scale = spectral_radius / max(est_spectral, 1.0e-8)
+    w_res_data = Nx.multiply(w_res_data, scale)
+
+    # Inject as Axon.constant nodes (frozen, never trained)
+    w_in_const = Axon.constant(w_in_data, name: "w_in")
+    w_res_const = Axon.constant(w_res_data, name: "w_res")
+
+    # Reservoir dynamics with fixed weights
     reservoir_output =
       Axon.layer(
-        &reservoir_forward/2,
-        [input],
+        &reservoir_forward/4,
+        [input, w_in_const, w_res_const],
         name: "reservoir",
         reservoir_size: reservoir_size,
-        input_size: input_size,
-        spectral_radius: Keyword.get(opts, :spectral_radius, 0.9),
-        sparsity: Keyword.get(opts, :sparsity, 0.9),
-        input_scaling: Keyword.get(opts, :input_scaling, 1.0),
-        leak_rate: Keyword.get(opts, :leak_rate, 1.0),
+        leak_rate: leak_rate,
         op_name: :reservoir
       )
 
@@ -93,51 +117,21 @@ defmodule Edifice.Recurrent.Reservoir do
     Axon.dense(reservoir_output, output_size, name: "readout")
   end
 
-  # Reservoir forward pass using fixed random weights
-  # In practice, the reservoir weights should be initialized once and frozen.
-  # Here we use a deterministic seed-based approach for reproducibility.
-  defp reservoir_forward(input, opts) do
+  # Reservoir forward pass using pre-computed fixed weights
+  defp reservoir_forward(input, w_in, w_res, opts) do
     reservoir_size = opts[:reservoir_size]
-    input_size = opts[:input_size]
-    spectral_radius = opts[:spectral_radius]
-    input_scaling = opts[:input_scaling]
     leak_rate = opts[:leak_rate]
-    sparsity = opts[:sparsity]
 
     batch_size = Nx.axis_size(input, 0)
     seq_len = Nx.axis_size(input, 1)
 
-    # Generate deterministic reservoir weights using a fixed key
-    key = Nx.Random.key(42)
-
-    # Input weights: [input_size, reservoir_size]
-    {w_in, key} = Nx.Random.normal(key, shape: {input_size, reservoir_size})
-    w_in = Nx.multiply(w_in, input_scaling)
-
-    # Reservoir weights: [reservoir_size, reservoir_size]
-    {w_res, key} = Nx.Random.normal(key, shape: {reservoir_size, reservoir_size})
-
-    # Apply sparsity mask
-    {mask_vals, _key} = Nx.Random.uniform(key, shape: {reservoir_size, reservoir_size})
-    mask = Nx.greater(mask_vals, sparsity)
-    w_res = Nx.multiply(w_res, mask)
-
-    # Scale to target spectral radius
-    # Approximate spectral radius scaling (exact eigenvalue computation is expensive)
-    frobenius_norm = Nx.sqrt(Nx.sum(Nx.pow(w_res, 2)))
-    estimated_spectral = Nx.divide(frobenius_norm, Nx.sqrt(reservoir_size * (1.0 - sparsity)))
-    scale = Nx.divide(spectral_radius, Nx.add(estimated_spectral, 1.0e-8))
-    w_res = Nx.multiply(w_res, scale)
-
-    # Run reservoir dynamics
+    # Run reservoir dynamics: h[t] = tanh(W_in * x[t] + W_res * h[t-1])
     h = Nx.broadcast(0.0, {batch_size, reservoir_size})
 
-    # Process each timestep
     final_h =
       Enum.reduce(0..(seq_len - 1), h, fn t, h_prev ->
         x_t = Nx.slice_along_axis(input, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        # h_new = tanh(W_in * x + W_res * h_prev)
         pre_activation = Nx.add(Nx.dot(x_t, w_in), Nx.dot(h_prev, w_res))
         h_new = Nx.tanh(pre_activation)
 

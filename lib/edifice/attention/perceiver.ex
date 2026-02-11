@@ -140,29 +140,44 @@ defmodule Edifice.Attention.Perceiver do
         op_name: :broadcast_latents
       )
 
-    # Cross-attention: latents attend to input
+    # Iterative refinement: interleave cross-attention with self-attention blocks.
+    # Each cross-attention pass is followed by a group of self-attention layers,
+    # matching the original Perceiver paper's progressive refinement pattern.
+    # With num_cross_layers=1, this is identical to Perceiver IO (1 cross + N self).
+    self_layers_per_cross = max(div(num_layers, num_cross_layers), 1)
+
     latents =
       Enum.reduce(1..num_cross_layers, latents, fn cross_idx, acc ->
-        build_cross_attention_block(
-          acc,
-          input_proj,
-          latent_dim: latent_dim,
-          num_heads: num_heads,
-          dropout: dropout,
-          name: "cross_attn_#{cross_idx}"
-        )
-      end)
+        # Cross-attention: latents attend to input
+        after_cross =
+          build_cross_attention_block(
+            acc,
+            input_proj,
+            latent_dim: latent_dim,
+            num_heads: num_heads,
+            dropout: dropout,
+            name: "cross_attn_#{cross_idx}"
+          )
 
-    # Self-attention over latents
-    latents =
-      Enum.reduce(1..num_layers, latents, fn layer_idx, acc ->
-        build_self_attention_block(
-          acc,
-          latent_dim: latent_dim,
-          num_heads: num_heads,
-          dropout: dropout,
-          name: "self_attn_block_#{layer_idx}"
-        )
+        # Self-attention blocks for this cross-attention group
+        num_self = if cross_idx == num_cross_layers do
+          # Last group gets any remaining self-attention layers
+          num_layers - self_layers_per_cross * (num_cross_layers - 1)
+        else
+          self_layers_per_cross
+        end
+
+        start_idx = self_layers_per_cross * (cross_idx - 1) + 1
+
+        Enum.reduce(start_idx..(start_idx + num_self - 1), after_cross, fn layer_idx, inner_acc ->
+          build_self_attention_block(
+            inner_acc,
+            latent_dim: latent_dim,
+            num_heads: num_heads,
+            dropout: dropout,
+            name: "self_attn_block_#{layer_idx}"
+          )
+        end)
       end)
 
     # Final layer norm

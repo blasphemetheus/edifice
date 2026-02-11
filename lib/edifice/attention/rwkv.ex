@@ -230,11 +230,16 @@ defmodule Edifice.Attention.RWKV do
     k_proj = Axon.dense(x_mixed, hidden_size, name: "#{name}_k_proj")
     v_proj = Axon.dense(x_mixed, hidden_size, name: "#{name}_v_proj")
 
+    # Time-first (u) parameter: boosts current token's key
+    # This is a key RWKV innovation for giving special weight to the current position
+    u_init = Nx.broadcast(Nx.tensor(0.0, type: :f32), {1, 1, num_heads, head_size})
+    u_node = Axon.constant(u_init)
+
     # Apply WKV attention
     wkv =
       Axon.layer(
-        &wkv_attention/5,
-        [w_proj, k_proj, v_proj, r_proj],
+        &wkv_attention/6,
+        [w_proj, k_proj, v_proj, r_proj, u_node],
         name: "#{name}_wkv",
         hidden_size: hidden_size,
         head_size: head_size,
@@ -343,9 +348,9 @@ defmodule Edifice.Attention.RWKV do
     )
   end
 
-  # WKV attention implementation
-  # This is a simplified version of the RWKV WKV attention
-  defp wkv_attention(w, k, v, r, opts) do
+  # WKV attention implementation with time_first (u) parameter
+  # u gives special weight to the current token at each position
+  defp wkv_attention(w, k, v, r, u, opts) do
     hidden_size = opts[:hidden_size]
     head_size = opts[:head_size]
     num_heads = opts[:num_heads]
@@ -354,6 +359,7 @@ defmodule Edifice.Attention.RWKV do
     # k: [batch, seq_len, hidden_size] - keys
     # v: [batch, seq_len, hidden_size] - values
     # r: [batch, seq_len, hidden_size] - receptance
+    # u: [1, 1, num_heads, head_size] - time_first bias for current token
 
     batch = Nx.axis_size(w, 0)
     seq_len = Nx.axis_size(w, 1)
@@ -368,14 +374,6 @@ defmodule Edifice.Attention.RWKV do
     # w represents log(decay), so exp(-softplus(w)) gives decay in (0, 1)
     decay = Nx.exp(Nx.negate(Nx.log(Nx.add(1.0, Nx.exp(w)))))
 
-    # Compute WKV attention using cumulative sum approach
-    # This is a parallelizable approximation of the recurrent formula
-    #
-    # For each position t:
-    # numerator[t] = sum_{i<=t} decay^(t-i) * exp(k[i]) * v[i]
-    # denominator[t] = sum_{i<=t} decay^(t-i) * exp(k[i])
-    # wkv[t] = numerator[t] / denominator[t]
-
     # Compute attention weights: exp(k)
     # Clamp k for numerical stability
     k_clamped = Nx.clip(k, -10.0, 10.0)
@@ -385,8 +383,16 @@ defmodule Edifice.Attention.RWKV do
     weighted_v = Nx.multiply(exp_k, v)
 
     # Compute cumulative sums with decay using parallel scan
-    # We use a simplified approach: exponential moving average
+    # The inclusive scan gives: sum_{i<=t} decay^(t-i) * exp(k[i]) * v[i]
     {numerator, denominator} = parallel_wkv_scan(decay, weighted_v, exp_k, seq_len)
+
+    # Time-first (u) parameter: boost current token's contribution
+    # The inclusive scan already includes exp(k[t]) * v[t] for current token.
+    # We want exp(u + k[t]) * v[t] = exp(u) * exp(k[t]) * v[t] instead.
+    # Extra contribution: (exp(u) - 1) * exp(k[t]) * v[t]
+    u_boost = Nx.subtract(Nx.exp(u), 1.0)
+    numerator = Nx.add(numerator, Nx.multiply(Nx.multiply(u_boost, exp_k), v))
+    denominator = Nx.add(denominator, Nx.multiply(u_boost, exp_k))
 
     # Output: sigmoid(r) * (numerator / denominator)
     r_gate = Nx.sigmoid(r)

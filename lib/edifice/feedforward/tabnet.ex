@@ -94,30 +94,42 @@ defmodule Edifice.Feedforward.TabNet do
     # Initial batch normalization
     bn_input = Axon.layer_norm(input, name: "input_bn")
 
-    # Build TabNet steps
-    # Each step selects features, processes them, and outputs a decision
-    # We chain the steps through the Axon graph
-    {aggregated, _} =
-      Enum.reduce(0..(num_steps - 1), {nil, bn_input}, fn step, {agg, processed} ->
+    # Initial prior scales = 1.0 (all features equally available)
+    initial_prior = Axon.constant(Nx.broadcast(1.0, {1, input_size}), name: "initial_prior")
+
+    # Build TabNet steps with prior scale tracking
+    # Each step: attention with prior -> sparsemax -> mask -> transform -> aggregate
+    {aggregated, _prior, _processed} =
+      Enum.reduce(0..(num_steps - 1), {nil, initial_prior, bn_input}, fn step, {agg, prior, processed} ->
         # Attention transformer: learn which features to focus on
-        # Produces a soft mask over input features
-        attention_scores =
+        attention_logits =
           processed
           |> Axon.dense(input_size, name: "step_#{step}_attn_proj")
           |> Axon.layer_norm(name: "step_#{step}_attn_bn")
 
-        # Apply prior scales (relaxation) via custom layer
+        # Apply prior scales and sparsemax for sparse feature selection
+        # mask = sparsemax(prior * logits)
         mask =
           Axon.layer(
-            fn scores, _orig_input, _opts ->
-              # Sparsemax approximation via softmax with temperature
-              exp_scores = Nx.exp(scores)
-              Nx.divide(exp_scores, Nx.sum(exp_scores, axes: [1], keep_axes: true))
+            fn logits, prior_scales, _opts ->
+              scaled = Nx.multiply(logits, prior_scales)
+              sparsemax(scaled)
             end,
-            [attention_scores, bn_input],
-            name: "step_#{step}_mask",
-            relaxation_factor: relaxation_factor,
-            op_name: :tabnet_mask
+            [attention_logits, prior],
+            name: "step_#{step}_sparsemax",
+            op_name: :tabnet_sparsemax
+          )
+
+        # Update prior scales: P[i] = P[i-1] * (gamma - M[i])
+        # Features with high mask values get lower prior in future steps
+        new_prior =
+          Axon.layer(
+            fn m, p, _opts ->
+              Nx.multiply(p, Nx.subtract(relaxation_factor, m))
+            end,
+            [mask, prior],
+            name: "step_#{step}_prior_update",
+            op_name: :prior_update
           )
 
         # Apply mask to input features: selected = mask * input
@@ -150,7 +162,7 @@ defmodule Edifice.Feedforward.TabNet do
           end
 
         # Use transformed output as input for next step's attention
-        {new_agg, transformed}
+        {new_agg, new_prior, transformed}
       end)
 
     # Final output
@@ -159,6 +171,32 @@ defmodule Edifice.Feedforward.TabNet do
     else
       aggregated
     end
+  end
+
+  # Sparsemax activation: Euclidean projection onto the probability simplex
+  # Martins & Astudillo, "From Softmax to Sparsemax" (ICML 2016)
+  # Returns sparse probability distribution where many elements are exactly 0
+  defp sparsemax(z) do
+    dim = Nx.axis_size(z, -1)
+    sorted = Nx.sort(z, axis: -1, direction: :desc)
+    cumsum = Nx.cumulative_sum(sorted, axis: -1)
+    k_range = Nx.add(Nx.iota({dim}, type: :f32), 1.0)
+
+    # Support condition: 1 + k * z_(k) > cumsum(z, k)
+    support = Nx.greater(Nx.add(1.0, Nx.multiply(k_range, sorted)), cumsum)
+    support_float = Nx.select(support, 1.0, 0.0)
+
+    # k = number of support elements
+    k = Nx.sum(support_float, axes: [-1], keep_axes: true)
+
+    # tau = (sum of top-k sorted values - 1) / k
+    tau_num = Nx.subtract(
+      Nx.sum(Nx.multiply(sorted, support_float), axes: [-1], keep_axes: true),
+      1.0
+    )
+    tau = Nx.divide(tau_num, Nx.max(k, 1.0))
+
+    Nx.max(Nx.subtract(z, tau), 0.0)
   end
 
   @doc """

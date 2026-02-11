@@ -125,6 +125,7 @@ defmodule Edifice.SSM.Hyena do
           order: Keyword.get(opts, :order, @default_order),
           filter_size: Keyword.get(opts, :filter_size, @default_filter_size),
           dropout: dropout,
+          seq_len: seq_len,
           name: "hyena_block_#{layer_idx}"
         )
       end)
@@ -150,19 +151,25 @@ defmodule Edifice.SSM.Hyena do
     order = Keyword.get(opts, :order, @default_order)
     filter_size = Keyword.get(opts, :filter_size, @default_filter_size)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
+    seq_len = Keyword.get(opts, :seq_len, @default_window_size)
     name = Keyword.get(opts, :name, "hyena_block")
 
     x = Axon.layer_norm(input, name: "#{name}_norm")
 
-    # Short convolution first (captures very local patterns)
-    x = build_short_conv(x, hidden_size, 3, "#{name}_short_conv")
+    # Short depthwise convolution (captures very local patterns)
+    x =
+      Axon.conv(x, hidden_size,
+        kernel_size: {3},
+        padding: [{2, 0}],
+        feature_group_size: hidden_size,
+        name: "#{name}_short_dw_conv"
+      )
 
     # Project to (order + 1) * hidden_size for v + x_1..x_order
     num_projections = order + 1
     projections = Axon.dense(x, hidden_size * num_projections, name: "#{name}_proj")
 
     # Split projections: v, x_1, x_2, ...
-    # v is the value, x_i are the gates
     splits =
       for i <- 0..(num_projections - 1) do
         Axon.nx(
@@ -176,19 +183,35 @@ defmodule Edifice.SSM.Hyena do
 
     [v | gates] = splits
 
+    # Precompute positional encoding for filter MLP
+    # Normalized positions [0, 1/L, 2/L, ..., (L-1)/L] as constant
+    positions =
+      Nx.iota({1, seq_len, 1}, axis: 1, type: :f32)
+      |> Nx.divide(max(seq_len - 1, 1))
+
+    positions_node = Axon.constant(positions)
+
     # Apply order rounds of long convolution + gating
     y =
       Enum.with_index(gates)
       |> Enum.reduce(v, fn {gate_i, idx}, acc ->
-        # Implicit long convolution via learned filter
+        # Build implicit filter via MLP: positions -> filter kernel
+        filter =
+          positions_node
+          |> Axon.dense(filter_size, name: "#{name}_filter#{idx}_dense1")
+          |> Axon.nx(&Nx.sin/1, name: "#{name}_filter#{idx}_sin1")
+          |> Axon.dense(filter_size, name: "#{name}_filter#{idx}_dense2")
+          |> Axon.nx(&Nx.sin/1, name: "#{name}_filter#{idx}_sin2")
+          |> Axon.dense(hidden_size, name: "#{name}_filter#{idx}_dense3")
+
+        # Causal long convolution: convolve signal with learned filter
         conv_out =
           Axon.layer(
-            &implicit_long_conv_impl/2,
-            [acc],
+            &causal_long_conv_impl/3,
+            [acc, filter],
             name: "#{name}_long_conv_#{idx}",
             hidden_size: hidden_size,
-            filter_size: filter_size,
-            op_name: :implicit_long_conv
+            op_name: :causal_long_conv
           )
 
         # Element-wise gating
@@ -215,44 +238,38 @@ defmodule Edifice.SSM.Hyena do
     )
   end
 
-  # Implicit long convolution: approximate with windowed causal convolution
-  # In full implementation this would use FFT for O(L log L) or a learned filter MLP.
-  # We approximate with a causal windowed operation.
-  defp implicit_long_conv_impl(x, opts) do
-    hidden_size = opts[:hidden_size]
-    _filter_size = opts[:filter_size]
+  # Causal long convolution using Nx.conv with dynamic kernel
+  # signal: [batch, seq_len, hidden_size]
+  # filter: [1, seq_len, hidden_size] (from filter MLP, batch=1 since positions are constant)
+  defp causal_long_conv_impl(signal, filter, _opts) do
+    hidden_size = Nx.axis_size(signal, 2)
+    seq_len = Nx.axis_size(signal, 1)
 
-    batch = Nx.axis_size(x, 0)
-    seq_len = Nx.axis_size(x, 1)
+    # Transpose signal: [batch, hidden_size, seq_len] for Nx.conv
+    signal_t = Nx.transpose(signal, axes: [0, 2, 1])
 
-    # Exponential decay filter (approximation of learned implicit filter)
-    positions = Nx.iota({1, seq_len, 1}, axis: 1, type: :f32)
-    decay = Nx.exp(Nx.negate(Nx.divide(positions, max(seq_len / 4, 1))))
+    # Squeeze filter batch dim and build depthwise conv kernel
+    # filter: [1, seq_len, hidden_size] -> [seq_len, hidden_size]
+    h = Nx.squeeze(filter, axes: [0])
 
-    # Apply causal convolution via cumulative weighted sum
-    weighted = Nx.multiply(x, decay)
-    # Cumulative sum along sequence (causal)
-    cum = Nx.cumulative_sum(weighted, axis: 1)
+    # Reverse for convolution (Nx.conv does cross-correlation, need flip for true convolution)
+    h_rev = Nx.reverse(h, axes: [0])
 
-    # Normalize by cumulative decay weight
-    decay_cum = Nx.cumulative_sum(Nx.broadcast(decay, {batch, seq_len, hidden_size}), axis: 1)
-    Nx.divide(cum, Nx.add(decay_cum, 1.0e-8))
-  end
+    # Reshape to depthwise kernel: [hidden_size, 1, seq_len]
+    kernel =
+      h_rev
+      |> Nx.transpose(axes: [1, 0])
+      |> Nx.reshape({hidden_size, 1, seq_len})
 
-  defp build_short_conv(input, channels, kernel_size, name) do
-    Axon.nx(
-      input,
-      fn x ->
-        batch = Nx.axis_size(x, 0)
-        ch = Nx.axis_size(x, 2)
-        padding = kernel_size - 1
-        pad_shape = {batch, padding, ch}
-        padded = Nx.concatenate([Nx.broadcast(0.0, pad_shape), x], axis: 1)
-        Nx.window_mean(padded, {1, kernel_size, 1}, strides: [1, 1, 1], padding: :valid)
-      end,
-      name: "#{name}_causal"
-    )
-    |> Axon.dense(channels, name: "#{name}_proj")
+    # Causal depthwise conv: pad left by (seq_len - 1) for causal
+    result =
+      Nx.conv(signal_t, kernel,
+        padding: [{seq_len - 1, 0}],
+        feature_group_size: hidden_size
+      )
+
+    # Transpose back: [batch, hidden_size, seq_len] -> [batch, seq_len, hidden_size]
+    Nx.transpose(result, axes: [0, 2, 1])
   end
 
   defp build_ffn_block(input, opts) do
@@ -294,18 +311,21 @@ defmodule Edifice.SSM.Hyena do
     embed_size = Keyword.get(opts, :embed_size, 287)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     order = Keyword.get(opts, :order, @default_order)
+    filter_size = Keyword.get(opts, :filter_size, @default_filter_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     inner_size = hidden_size * 4
 
     # Projections: (order+1) * hidden * hidden
     proj_params = (order + 1) * hidden_size * hidden_size
-    # Short conv proj
-    short_conv = hidden_size * hidden_size
+    # Short depthwise conv: hidden * 3 (kernel_size=3, depthwise)
+    short_conv = hidden_size * 3
+    # Filter MLPs: order * (1 * filter + filter * filter + filter * hidden)
+    filter_params = order * (1 * filter_size + filter_size * filter_size + filter_size * hidden_size)
     # Output proj
     out_proj = hidden_size * hidden_size
     # FFN
     ffn_params = 2 * hidden_size * inner_size + inner_size * hidden_size
-    per_layer = proj_params + short_conv + out_proj + ffn_params
+    per_layer = proj_params + short_conv + filter_params + out_proj + ffn_params
     input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
 
     input_proj + per_layer * num_layers

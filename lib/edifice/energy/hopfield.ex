@@ -131,28 +131,45 @@ defmodule Edifice.Energy.Hopfield do
     beta = Keyword.get(opts, :beta, @default_beta)
     name = Keyword.get(opts, :name, "hopfield")
 
-    # Project input to similarity scores with stored patterns
-    # This is equivalent to X * Y^T where Y is the pattern matrix
-    # scores: [batch, ..., num_patterns]
-    scores = Axon.dense(input, num_patterns, name: "#{name}_similarity")
-
-    # Scale by inverse temperature and apply softmax
-    # Higher beta -> sharper retrieval (closer to argmax)
-    attention_weights =
-      Axon.nx(
-        scores,
-        fn s ->
-          scaled = Nx.multiply(s, beta)
-
-          Nx.exp(Nx.subtract(scaled, Nx.reduce_max(scaled, axes: [-1], keep_axes: true)))
-          |> then(fn e -> Nx.divide(e, Nx.sum(e, axes: [-1], keep_axes: true)) end)
-        end,
-        name: "#{name}_softmax"
+    # Stored pattern matrix Y: [num_patterns, pattern_dim]
+    # The SAME Y is used for both similarity (X@Y^T) and retrieval (weights@Y),
+    # which is the key insight: Modern Hopfield = attention with K=V=Y.
+    patterns =
+      Axon.param("#{name}_patterns", {num_patterns, pattern_dim},
+        initializer: :glorot_uniform
       )
 
-    # Retrieve patterns: weighted sum over stored patterns
-    # This is equivalent to softmax(beta * X * Y^T) * Y
-    Axon.dense(attention_weights, pattern_dim, name: "#{name}_retrieval")
+    # Project input to pattern_dim for compatibility
+    x_proj = Axon.dense(input, pattern_dim, name: "#{name}_query_proj")
+
+    # Hopfield retrieval: softmax(beta * X @ Y^T) @ Y
+    Axon.layer(
+      &hopfield_retrieve_impl/3,
+      [x_proj, patterns],
+      name: "#{name}_retrieve",
+      beta: beta,
+      op_name: :hopfield_retrieve
+    )
+  end
+
+  # Hopfield retrieval: softmax(beta * X @ Y^T) @ Y
+  defp hopfield_retrieve_impl(x, patterns, opts) do
+    beta = opts[:beta] || 1.0
+
+    # x: [batch, pattern_dim] or [batch, seq_len, pattern_dim]
+    # patterns: [num_patterns, pattern_dim]
+
+    # Similarity scores: X @ Y^T -> [batch, ..., num_patterns]
+    scores = Nx.dot(x, [-1], patterns, [1])
+    scaled = Nx.multiply(scores, beta)
+
+    # Stable softmax
+    max_s = Nx.reduce_max(scaled, axes: [-1], keep_axes: true)
+    exp_s = Nx.exp(Nx.subtract(scaled, max_s))
+    weights = Nx.divide(exp_s, Nx.sum(exp_s, axes: [-1], keep_axes: true))
+
+    # Retrieval: weights @ Y -> [batch, ..., pattern_dim]
+    Nx.dot(weights, [-1], patterns, [0])
   end
 
   @doc """

@@ -144,33 +144,51 @@ defmodule Edifice.SSM.H3 do
 
     x = Axon.layer_norm(input, name: "#{name}_norm")
 
-    # Branch 1: Shift SSM
+    # Branch 1: Shift SSM with learnable A and dt
     shift_b = Axon.dense(x, state_size, name: "#{name}_shift_b")
     shift_c = Axon.dense(x, state_size, name: "#{name}_shift_c")
 
+    shift_a_log = Axon.param("#{name}_shift_a_log", {state_size},
+      initializer: fn {n}, _type, _key ->
+        Nx.log(Nx.add(Nx.iota({n}, type: :f32), 1.0))
+      end)
+
+    shift_dt_log = Axon.param("#{name}_shift_dt_log", {1},
+      initializer: fn _shape, _type, _key ->
+        Nx.tensor([:math.log(:math.exp(0.01) - 1)], type: :f32)
+      end)
+
     shift_out =
       Axon.layer(
-        &diagonal_ssm_impl/4,
-        [x, shift_b, shift_c],
+        &diagonal_ssm_impl/6,
+        [x, shift_b, shift_c, shift_a_log, shift_dt_log],
         name: "#{name}_shift_ssm",
         hidden_size: hidden_size,
         state_size: state_size,
-        dt_init: 0.01,
         op_name: :shift_ssm
       )
 
-    # Branch 2: Diagonal SSM
+    # Branch 2: Diagonal SSM with learnable A and dt
     diag_b = Axon.dense(x, state_size, name: "#{name}_diag_b")
     diag_c = Axon.dense(x, state_size, name: "#{name}_diag_c")
 
+    diag_a_log = Axon.param("#{name}_diag_a_log", {state_size},
+      initializer: fn {n}, _type, _key ->
+        Nx.log(Nx.add(Nx.iota({n}, type: :f32), 1.0))
+      end)
+
+    diag_dt_log = Axon.param("#{name}_diag_dt_log", {1},
+      initializer: fn _shape, _type, _key ->
+        Nx.tensor([:math.log(:math.exp(0.001) - 1)], type: :f32)
+      end)
+
     diag_out =
       Axon.layer(
-        &diagonal_ssm_impl/4,
-        [x, diag_b, diag_c],
+        &diagonal_ssm_impl/6,
+        [x, diag_b, diag_c, diag_a_log, diag_dt_log],
         name: "#{name}_diag_ssm",
         hidden_size: hidden_size,
         state_size: state_size,
-        dt_init: 0.001,
         op_name: :diag_ssm
       )
 
@@ -200,23 +218,28 @@ defmodule Edifice.SSM.H3 do
     )
   end
 
-  # Diagonal SSM implementation shared by both branches
-  defp diagonal_ssm_impl(x, b, c, opts) do
+  # Diagonal SSM implementation with learnable A and dt parameters
+  defp diagonal_ssm_impl(x, b, c, a_log, dt_log, opts) do
     hidden_size = opts[:hidden_size]
     state_size = opts[:state_size]
-    dt_init = opts[:dt_init] || 0.01
 
     batch = Nx.axis_size(x, 0)
     seq_len = Nx.axis_size(x, 1)
 
-    a_diag = Nx.negate(Nx.add(Nx.iota({state_size}, type: :f32), 1.0))
+    # Learnable A diagonal: A = -exp(a_log) (always negative for stability)
+    a_diag = Nx.negate(Nx.exp(a_log))
+    # Learnable dt: softplus(dt_log) ensures positive timestep
+    dt = Nx.log(Nx.add(Nx.exp(dt_log), 1.0))
+    dt_scalar = Nx.squeeze(dt)
 
-    a_bar = Nx.exp(Nx.multiply(dt_init, a_diag))
+    # Discretize: a_bar = exp(dt * A), b_bar = dt * B
+    a_bar = Nx.exp(Nx.multiply(dt_scalar, a_diag))
     a_bar = Nx.broadcast(a_bar, {batch, seq_len, state_size})
 
-    b_bar = Nx.multiply(dt_init, b)
+    b_bar = Nx.multiply(dt_scalar, b)
     bu = Nx.multiply(b_bar, Nx.mean(Nx.reshape(x, {batch, seq_len, hidden_size, 1}), axes: [2]))
 
+    # Parallel scan via cumulative product/sum in log space
     log_a = Nx.log(Nx.add(Nx.abs(a_bar), 1.0e-10))
     log_a_cumsum = Nx.cumulative_sum(log_a, axis: 1)
     a_cumprod = Nx.exp(log_a_cumsum)
@@ -232,22 +255,16 @@ defmodule Edifice.SSM.H3 do
     Nx.broadcast(y_expanded, {batch, seq_len, hidden_size})
   end
 
-  # Short causal convolution
+  # Short causal depthwise convolution
+  # Each channel gets its own learnable 1D filter with causal (left) padding
   defp build_short_conv(input, channels, kernel_size, name) do
-    Axon.nx(
-      input,
-      fn x ->
-        batch = Nx.axis_size(x, 0)
-        ch = Nx.axis_size(x, 2)
-        padding = kernel_size - 1
-        pad_shape = {batch, padding, ch}
-        padded = Nx.concatenate([Nx.broadcast(0.0, pad_shape), x], axis: 1)
-
-        Nx.window_mean(padded, {1, kernel_size, 1}, strides: [1, 1, 1], padding: :valid)
-      end,
-      name: "#{name}_causal"
+    input
+    |> Axon.conv(channels,
+      kernel_size: {kernel_size},
+      feature_group_size: channels,
+      padding: [{kernel_size - 1, 0}],
+      name: "#{name}_dw_conv"
     )
-    |> Axon.dense(channels, name: "#{name}_proj")
     |> Axon.activation(:silu, name: "#{name}_silu")
   end
 

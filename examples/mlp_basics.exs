@@ -43,21 +43,18 @@ template = Nx.template({1, 32}, :f32)
 params = init_fn.(template, Axon.ModelState.empty())
 
 # Let's see what parameters were created
-param_count =
-  params
-  |> Axon.ModelState.data()
-  |> Enum.reduce(0, fn {_name, layer_params}, acc ->
-    layer_count =
-      layer_params
-      |> Map.values()
-      |> Enum.map(&Nx.size/1)
-      |> Enum.sum()
-
-    acc + layer_count
+count_params = fn count_params, data ->
+  Enum.reduce(data, 0, fn
+    {_k, %Nx.Tensor{} = t}, acc -> acc + Nx.size(t)
+    {_k, %{} = nested}, acc -> acc + count_params.(count_params, nested)
+    _, acc -> acc
   end)
+end
+
+param_count = count_params.(count_params, params.data)
 
 IO.puts("3. Initialized #{param_count} parameters")
-IO.puts("   Layer names: #{params |> Axon.ModelState.data() |> Map.keys() |> Enum.join(", ")}")
+IO.puts("   Layer names: #{params.data |> Map.keys() |> Enum.join(", ")}")
 
 # ---------------------------------------------------------------
 # 4. Run inference

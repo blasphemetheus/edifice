@@ -189,14 +189,23 @@ defmodule Edifice.Recurrent.TTT do
         name: "#{name}_cat"
       )
 
-    # Apply TTT recurrence
+    # Learnable W_0: initial inner model weights (paper uses learnable, not zeros)
+    w0_param =
+      Axon.param("#{name}_w0", {inner_size, inner_size},
+        initializer: fn {n, m}, _type, _key ->
+          # Small random init (scaled identity-like)
+          Nx.multiply(Nx.eye({n, m}, type: :f32), 0.01)
+        end
+      )
+
+    # Apply TTT recurrence with learnable W_0
     recurrence_output =
-      Axon.nx(
-        recurrence_input,
-        fn combined ->
-          ttt_scan(combined, inner_size)
-        end,
-        name: "#{name}_recurrence"
+      Axon.layer(
+        &ttt_scan_impl/3,
+        [recurrence_input, w0_param],
+        name: "#{name}_recurrence",
+        inner_size: inner_size,
+        op_name: :ttt_scan
       )
 
     # Project back to hidden_size
@@ -206,7 +215,13 @@ defmodule Edifice.Recurrent.TTT do
     Axon.add(input, output, name: "#{name}_residual")
   end
 
-  defp ttt_scan(combined, inner_size) do
+  # Wrapper for Axon.layer callback
+  defp ttt_scan_impl(combined, w0, opts) do
+    inner_size = opts[:inner_size]
+    ttt_scan(combined, w0, inner_size)
+  end
+
+  defp ttt_scan(combined, w0, inner_size) do
     # combined: [batch, seq_len, inner_size * 4]
     batch_size = Nx.axis_size(combined, 0)
     seq_len = Nx.axis_size(combined, 1)
@@ -220,9 +235,9 @@ defmodule Edifice.Recurrent.TTT do
     # Learning rate gate
     eta = Nx.sigmoid(eta_pre)
 
-    # Initialize inner model weights W: [batch, inner_size, inner_size]
-    # Start as identity-like for stable initialization
-    w_init = Nx.broadcast(0.0, {batch_size, inner_size, inner_size})
+    # Initialize inner model weights from learnable W_0
+    # w0: [inner_size, inner_size] -> broadcast to [batch, inner_size, inner_size]
+    w_init = Nx.broadcast(w0, {batch_size, inner_size, inner_size})
 
     # Sequential scan with TTT update
     {_, output_list} =
@@ -254,9 +269,13 @@ defmodule Edifice.Recurrent.TTT do
 
         w_t = Nx.subtract(w_prev, grad)
 
-        # Output: W_t @ q_t
+        # Output: W_t @ q_t with per-token normalization for stability
         o_t = Nx.dot(w_t, [2], [0], Nx.new_axis(q_t, 2), [1], [0])
         o_t = Nx.squeeze(o_t, axes: [2])
+
+        # RMS normalization on output (stabilizes varying W scales)
+        rms = Nx.sqrt(Nx.mean(Nx.pow(o_t, 2), axes: [-1], keep_axes: true) |> Nx.add(1.0e-6))
+        o_t = Nx.divide(o_t, rms)
 
         {w_t, [o_t | acc]}
       end)

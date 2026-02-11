@@ -27,22 +27,23 @@ end
 IO.puts("\n2. Building one architecture from each family:\n")
 
 # Helper to count parameters
-count_params = fn params ->
-  params
-  |> Axon.ModelState.data()
-  |> Enum.reduce(0, fn {_name, layer_params}, acc ->
-    acc + (layer_params |> Map.values() |> Enum.map(&Nx.size/1) |> Enum.sum())
+count_params_rec = fn count_params_rec, data ->
+  Enum.reduce(data, 0, fn
+    {_k, %Nx.Tensor{} = t}, acc -> acc + Nx.size(t)
+    {_k, %{} = nested}, acc -> acc + count_params_rec.(count_params_rec, nested)
+    _, acc -> acc
   end)
 end
+
+count_params = fn params -> count_params_rec.(count_params_rec, params.data) end
 
 # Sequence models: {batch, seq_len, features} -> {batch, hidden}
 sequence_models = [
   {:mamba, "Mamba (SSM)", [embed_size: 64, hidden_size: 128, state_size: 16, num_layers: 2, window_size: 30]},
-  {:attention, "Multi-Head Attention", [embed_size: 64, hidden_size: 128, num_heads: 4, num_layers: 2, window_size: 30]},
+  {:gla, "GLA (Gated Linear Attention)", [embed_size: 64, hidden_size: 128, num_heads: 4, num_layers: 2, window_size: 30]},
   {:lstm, "LSTM (Recurrent)", [embed_size: 64, hidden_size: 128, num_layers: 2, window_size: 30]},
   {:retnet, "RetNet (Retention)", [embed_size: 64, hidden_size: 128, num_heads: 4, num_layers: 2, window_size: 30]},
-  {:rwkv, "RWKV-7 (Linear Attention)", [embed_size: 64, hidden_size: 128, num_heads: 4, num_layers: 2, window_size: 30]},
-  {:tcn, "TCN (Temporal Conv)", [embed_size: 64, hidden_size: 128, num_layers: 4, kernel_size: 3, window_size: 30]}
+  {:rwkv, "RWKV-7 (Linear Attention)", [embed_size: 64, hidden_size: 128, num_heads: 4, num_layers: 2, window_size: 30]}
 ]
 
 seq_template = Nx.template({1, 30, 64}, :f32)
@@ -67,7 +68,6 @@ IO.puts("\n   --- Feedforward Models: {4, 32} input ---")
 
 ff_models = [
   {:mlp, "MLP", [input_size: 32, hidden_sizes: [128, 64]]},
-  {:kan, "KAN", [input_size: 32, hidden_sizes: [128, 64]]},
   {:tabnet, "TabNet", [input_size: 32, hidden_size: 64, output_size: 16]}
 ]
 
@@ -143,8 +143,8 @@ graph_input = %{
 
 graph_archs = [
   {"GCN", Edifice.Graph.GCN.build_classifier(input_dim: 16, hidden_dims: [32, 32], num_classes: 3, pool: :mean)},
-  {"GAT", Edifice.Graph.GAT.build_classifier(input_dim: 16, hidden_dims: [32, 32], num_classes: 3, num_heads: 2, pool: :mean)},
-  {"GIN", Edifice.Graph.GIN.build_classifier(input_dim: 16, hidden_dims: [32, 32], num_classes: 3, pool: :mean)}
+  {"GAT", Edifice.Graph.GAT.build(input_dim: 16, hidden_dim: 8, num_classes: 3, num_heads: 2)},
+  {"GIN", Edifice.Graph.GIN.build(input_dim: 16, hidden_dims: [32, 32], num_classes: 3, pool: :mean)}
 ]
 
 for {name, model} <- graph_archs do
@@ -162,7 +162,7 @@ end
 IO.puts("\n3. The point: architecture search is a loop\n")
 
 IO.puts("""
-   for arch <- [:mamba, :retnet, :griffin, :lstm, :attention] do
+   for arch <- [:mamba, :retnet, :griffin, :lstm, :gla] do
      model = Edifice.build(arch, embed_size: 128, hidden_size: 256, ...)
      # ... train and evaluate
    end

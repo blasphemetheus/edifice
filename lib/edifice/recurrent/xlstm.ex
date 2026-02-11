@@ -348,14 +348,15 @@ defmodule Edifice.Recurrent.XLSTM do
     name = Keyword.get(opts, :name, "mlstm")
 
     # Project to gates and key/value/query
-    # i, f, o gates: 3 * hidden_size
-    # k, v, q: 3 * (num_heads * head_dim)
+    # i, f gates: scalar per head (num_heads each) — exponential gating
+    # o gate: hidden_size — sigmoid gating
+    # k, v, q: num_heads * head_dim each
     kv_dim = num_heads * head_dim
-    total_proj = hidden_size * 3 + kv_dim * 3
+    total_proj = num_heads * 2 + hidden_size + kv_dim * 3
 
     projections = Axon.dense(input, total_proj, name: "#{name}_proj")
 
-    # Apply mLSTM recurrence
+    # Apply mLSTM with matrix memory via D-matrix formulation
     Axon.nx(
       projections,
       fn proj_tensor ->
@@ -371,12 +372,12 @@ defmodule Edifice.Recurrent.XLSTM do
     seq_len = Nx.axis_size(projections, 1)
     kv_dim = num_heads * head_dim
 
-    # Split projections
+    # Split projections: i(num_heads), f(num_heads), o(hidden), k(kv), v(kv), q(kv)
     offset = 0
-    i_pre = Nx.slice_along_axis(projections, offset, hidden_size, axis: 2)
-    offset = offset + hidden_size
-    f_pre = Nx.slice_along_axis(projections, offset, hidden_size, axis: 2)
-    offset = offset + hidden_size
+    i_pre = Nx.slice_along_axis(projections, offset, num_heads, axis: 2)
+    offset = offset + num_heads
+    f_pre = Nx.slice_along_axis(projections, offset, num_heads, axis: 2)
+    offset = offset + num_heads
     o_pre = Nx.slice_along_axis(projections, offset, hidden_size, axis: 2)
     offset = offset + hidden_size
     k_proj = Nx.slice_along_axis(projections, offset, kv_dim, axis: 2)
@@ -385,95 +386,72 @@ defmodule Edifice.Recurrent.XLSTM do
     offset = offset + kv_dim
     q_proj = Nx.slice_along_axis(projections, offset, kv_dim, axis: 2)
 
-    # Stabilized exponential gating
+    # Stabilized exponential gating (log space)
     max_gate_val = 20.0
-    i_pre_clipped = Nx.clip(i_pre, -max_gate_val, max_gate_val)
-    f_pre_clipped = Nx.clip(f_pre, -max_gate_val, max_gate_val)
-
-    # For mLSTM, we use a simplified parallel formulation
-    # This is an approximation that processes all timesteps at once
-    # For exact sequential behavior, use the sequential version below
-
-    # Compute gates for all timesteps
-    # In the full mLSTM, these gates modulate the matrix memory update
-    # For this simplified parallel version, we use them to modulate values
-    # [batch, seq, hidden]
-    i_gate = Nx.exp(i_pre_clipped)
-    # [batch, seq, hidden]
-    f_gate = Nx.exp(f_pre_clipped)
-    # [batch, seq, hidden]
+    log_i = Nx.clip(i_pre, -max_gate_val, max_gate_val)
+    log_f = Nx.clip(f_pre, -max_gate_val, max_gate_val)
     o_gate = Nx.sigmoid(o_pre)
 
-    # Compute gate factor for values (approximation of gated memory)
-    # Normalized gate: i / (f + i) gives relative importance of new vs old
-    gate_sum = Nx.add(f_gate, i_gate)
-    gate_factor = Nx.divide(i_gate, Nx.add(gate_sum, gate_eps()))
+    # Reshape gates to [batch, num_heads, seq] for head-wise operations
+    # i_pre, f_pre: [batch, seq, num_heads] -> [batch, num_heads, seq]
+    log_i_h = Nx.transpose(log_i, axes: [0, 2, 1])
+    log_f_h = Nx.transpose(log_f, axes: [0, 2, 1])
 
-    # Reshape k, v, q for multi-head
-    # [batch, seq, num_heads * head_dim] -> [batch, num_heads, seq, head_dim]
+    # Cumulative log forget: [batch, heads, seq]
+    cum_log_f = Nx.cumulative_sum(log_f_h, axis: 2)
+
+    # D matrix: log_D[t, i] = log_i[i] + cum_log_f[t] - cum_log_f[i]
+    # This captures: alpha_{t,i} = i_i * prod_{j=i+1}^{t} f_j
+    # Expand for broadcasting to [batch, heads, seq_t, seq_i]:
+    log_i_expanded = Nx.reshape(log_i_h, {batch_size, num_heads, 1, seq_len})
+    cum_f_t = Nx.reshape(cum_log_f, {batch_size, num_heads, seq_len, 1})
+    cum_f_i = Nx.reshape(cum_log_f, {batch_size, num_heads, 1, seq_len})
+
+    log_d = Nx.add(log_i_expanded, Nx.subtract(cum_f_t, cum_f_i))
+
+    # Apply causal mask (t >= i only)
+    causal_mask = create_causal_mask(seq_len)
+    neg_inf = Nx.Constants.neg_infinity(Nx.type(log_d))
+    log_d = Nx.select(Nx.broadcast(causal_mask, Nx.shape(log_d)), log_d, neg_inf)
+
+    # Stabilize D: subtract max per query position
+    max_log_d = Nx.reduce_max(log_d, axes: [3], keep_axes: true)
+    max_log_d = Nx.clip(max_log_d, -1.0e10, 1.0e10)
+    d_matrix = Nx.exp(Nx.subtract(log_d, max_log_d))
+
+    # Reshape K, V, Q for heads: [batch, heads, seq, head_dim]
     k = reshape_for_heads(k_proj, batch_size, seq_len, num_heads, head_dim)
     v = reshape_for_heads(v_proj, batch_size, seq_len, num_heads, head_dim)
     q = reshape_for_heads(q_proj, batch_size, seq_len, num_heads, head_dim)
 
-    # Apply gate factor to values (modulates contribution)
-    # Project gate_factor to kv_dim if needed, or broadcast
-    gate_factor_kv =
-      if hidden_size == kv_dim do
-        gate_factor
-      else
-        # Average pool gate_factor to match kv_dim dimensions
-        # Simple approach: take first kv_dim elements if hidden_size > kv_dim
-        # or tile if hidden_size < kv_dim
-        if hidden_size >= kv_dim do
-          Nx.slice_along_axis(gate_factor, 0, kv_dim, axis: 2)
-        else
-          # Tile to match
-          times = div(kv_dim, hidden_size) + 1
-          tiled = Nx.tile(gate_factor, [1, 1, times])
-          Nx.slice_along_axis(tiled, 0, kv_dim, axis: 2)
-        end
-      end
-
-    gate_factor_heads =
-      reshape_for_heads(gate_factor_kv, batch_size, seq_len, num_heads, head_dim)
-
-    v = Nx.multiply(v, gate_factor_heads)
-
-    # Compute attention-like scores: [batch, heads, seq, seq]
+    # K-Q scores: [batch, heads, seq_t, seq_i]
     scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(k)))
     scores = Nx.dot(q, [3], [0, 1], k, [3], [0, 1]) |> Nx.divide(scale)
 
-    # Apply causal mask
-    causal_mask = create_causal_mask(seq_len)
-    neg_inf = Nx.Constants.neg_infinity(Nx.type(scores))
+    # Combined weights: D * scores (gate-weighted attention)
+    weights = Nx.multiply(d_matrix, scores)
 
-    scores =
-      Nx.select(
-        Nx.broadcast(causal_mask, Nx.shape(scores)),
-        scores,
-        Nx.broadcast(neg_inf, Nx.shape(scores))
-      )
+    # Numerator: weighted sum of values
+    # [batch, heads, seq_t, seq_i] @ [batch, heads, seq_i, head_dim]
+    numerator = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
 
-    # Softmax attention
-    max_scores = Nx.reduce_max(scores, axes: [3], keep_axes: true)
-    attn_weights = Nx.exp(Nx.subtract(scores, max_scores))
-    attn_weights = Nx.divide(attn_weights, Nx.sum(attn_weights, axes: [3], keep_axes: true))
+    # Denominator: sum of weights per query position
+    denominator = Nx.sum(weights, axes: [3], keep_axes: true)
 
-    # Apply attention to gated values
-    # [batch, heads, seq, seq] @ [batch, heads, seq, head_dim] -> [batch, heads, seq, head_dim]
-    attn_out = Nx.dot(attn_weights, [3], [0, 1], v, [2], [0, 1])
+    # Normalize: h = numerator / max(|denominator|, 1)
+    # This is the key mLSTM normalization (NOT softmax!)
+    safe_denom = Nx.max(Nx.abs(denominator), 1.0)
+    h = Nx.divide(numerator, safe_denom)
 
-    # Reshape back: [batch, seq, hidden]
-    output = Nx.transpose(attn_out, axes: [0, 2, 1, 3])
-    output = Nx.reshape(output, {batch_size, seq_len, num_heads * head_dim})
+    # Reshape back: [batch, seq, kv_dim]
+    output = Nx.transpose(h, axes: [0, 2, 1, 3])
+    output = Nx.reshape(output, {batch_size, seq_len, kv_dim})
 
-    # Project to hidden_size if needed and apply output gating
-    if num_heads * head_dim != hidden_size do
-      # Truncate or pad to match hidden_size
+    # Apply output gate
+    if kv_dim != hidden_size do
       Nx.slice_along_axis(output, 0, hidden_size, axis: 2)
       |> Nx.multiply(o_gate)
     else
-      # Apply output gating
       Nx.multiply(o_gate, output)
     end
   end
@@ -540,9 +518,10 @@ defmodule Edifice.Recurrent.XLSTM do
     slstm_params = hidden_size * (4 * hidden_size)
 
     # mLSTM block parameters:
-    # - Gate projections: hidden * (3 * hidden)
+    # - i, f gate projections: hidden * (2 * num_heads) (scalar per head)
+    # - o gate projection: hidden * hidden
     # - K, V, Q projections: hidden * (3 * kv_dim)
-    mlstm_params = hidden_size * (3 * hidden_size) + hidden_size * (3 * kv_dim)
+    mlstm_params = hidden_size * (2 * num_heads + hidden_size) + hidden_size * (3 * kv_dim)
 
     # Feedforward parameters:
     # - Up projection: hidden * inner

@@ -266,17 +266,20 @@ defmodule Edifice.Meta.Capsule do
     routing_iterations = Keyword.get(opts, :routing_iterations, @default_routing_iterations)
     name = Keyword.get(opts, :name, "routing")
 
-    # Transform input capsules to prediction vectors for each output capsule
-    # For each (input_cap, output_cap) pair, learn a transformation matrix
-    # We approximate this with a dense layer that maps each input capsule
-    # to predictions for all output capsules
-    predictions =
-      Axon.dense(input_caps, num_output_caps * output_cap_dim, name: "#{name}_transform")
+    # Per-pair transformation matrices W_ij: each (input_cap, output_cap) pair
+    # has its own transformation. Shape determined dynamically from input.
+    w_param =
+      Axon.param("#{name}_W", fn input_shape ->
+        # input_shape: {batch, num_input_caps, input_cap_dim}
+        num_input_caps = elem(input_shape, 1)
+        input_cap_dim = elem(input_shape, 2)
+        {num_input_caps, input_cap_dim, num_output_caps * output_cap_dim}
+      end, initializer: :glorot_uniform)
 
-    # Apply routing algorithm
+    # Apply per-capsule transformation + routing
     Axon.layer(
-      &routing_impl/2,
-      [predictions],
+      &routing_impl/3,
+      [input_caps, w_param],
       name: name,
       num_output_caps: num_output_caps,
       output_cap_dim: output_cap_dim,
@@ -289,19 +292,36 @@ defmodule Edifice.Meta.Capsule do
   # Private Implementation
   # ============================================================================
 
-  # Dynamic routing implementation
-  defp routing_impl(predictions, opts) do
+  # Dynamic routing with per-pair transformation matrices
+  defp routing_impl(input_caps, w_param, opts) do
     num_output_caps = opts[:num_output_caps]
     output_cap_dim = opts[:output_cap_dim]
     routing_iterations = opts[:routing_iterations]
 
-    batch = Nx.axis_size(predictions, 0)
-    num_input_caps = Nx.axis_size(predictions, 1)
+    batch = Nx.axis_size(input_caps, 0)
+    num_input_caps = Nx.axis_size(input_caps, 1)
 
-    # Reshape predictions: [batch, num_input_caps, num_output_caps, output_cap_dim]
+    # Per-capsule transform: u_hat_j|i = W_ij @ u_i
+    # input_caps: [batch, num_input, cap_dim]
+    # w_param: [num_input, cap_dim, num_output * out_dim]
+    # Result: [batch, num_input, num_output * out_dim]
+    #
+    # For each input capsule i, multiply by its own W_i matrix.
+    # This is an element-wise matmul along the num_input dimension.
+    # input[:, i, :] @ w[i, :, :] for each i
+    u_hat_flat =
+      Nx.sum(
+        Nx.multiply(
+          Nx.new_axis(input_caps, 3),     # [batch, num_input, cap_dim, 1]
+          Nx.new_axis(w_param, 0)          # [1, num_input, cap_dim, num_out*out_dim]
+        ),
+        axes: [2]
+      )
+
+    # Reshape: [batch, num_input_caps, num_output_caps, output_cap_dim]
     u_hat =
       Nx.reshape(
-        predictions,
+        u_hat_flat,
         {batch, num_input_caps, num_output_caps, output_cap_dim}
       )
 

@@ -93,27 +93,25 @@ defmodule Edifice.Energy.NeuralODE do
         input
       end
 
-    # Build the dynamics network f(h, t)
-    # We chain multiple Euler steps through the Axon graph
+    # Build the dynamics network f(h; theta) with SHARED weights across all steps.
+    # This is the defining property of Neural ODEs: the same f is evaluated at every
+    # integration step, unlike a regular ResNet which has different layers per step.
+    # In Axon, using the same layer names shares parameters.
     h_final =
       Enum.reduce(0..(num_steps - 1), h0, fn step, h ->
-        # Time embedding: encode current time as a feature
-        _t = step * step_size
-
-        # Dynamics: dh/dt = f(h, t)
-        # Concatenate time with hidden state via a time-conditioned MLP
+        # Dynamics: dh/dt = f(h; theta) — shared weights via identical names
         dh =
           h
-          |> Axon.dense(hidden_size, name: "dynamics_dense1_step_#{step}")
-          |> Axon.activation(:silu, name: "dynamics_act1_step_#{step}")
-          |> Axon.dense(hidden_size, name: "dynamics_dense2_step_#{step}")
-          |> Axon.activation(:tanh, name: "dynamics_act2_step_#{step}")
+          |> Axon.dense(hidden_size, name: "dynamics_dense1")
+          |> Axon.activation(:silu, name: "dynamics_act1")
+          |> Axon.dense(hidden_size, name: "dynamics_dense2")
+          |> Axon.activation(:tanh, name: "dynamics_act2")
 
         # Scale by step size
         scaled_dh =
           Axon.nx(dh, fn x -> Nx.multiply(x, step_size) end, name: "scale_step_#{step}")
 
-        # Euler step: h_{t+dt} = h_t + dt * f(h_t, t)
+        # Euler step: h_{t+dt} = h_t + dt * f(h_t; theta)
         Axon.add(h, scaled_dh, name: "euler_step_#{step}")
       end)
 
@@ -131,57 +129,16 @@ defmodule Edifice.Energy.NeuralODE do
   @doc """
   Build a Neural ODE with shared dynamics network.
 
-  Uses the same dynamics weights for all integration steps, providing
-  a true continuous-depth behavior. Implemented via a custom layer that
-  loops the shared dynamics network.
+  Delegates to `build/1` which now always uses shared dynamics weights
+  (the same f(h; theta) is re-evaluated at every integration step).
+  Kept for backward compatibility.
 
   ## Options
 
   Same as `build/1`.
   """
   @spec build_shared(keyword()) :: Axon.t()
-  def build_shared(opts \\ []) do
-    input_size = Keyword.fetch!(opts, :input_size)
-    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
-    num_steps = Keyword.get(opts, :num_steps, @default_num_steps)
-    step_size = Keyword.get(opts, :step_size, @default_step_size)
-    output_size = Keyword.get(opts, :output_size, nil)
-
-    input = Axon.input("input", shape: {nil, input_size})
-
-    # Project to hidden
-    h0 =
-      if input_size != hidden_size do
-        Axon.dense(input, hidden_size, name: "input_proj")
-      else
-        input
-      end
-
-    # Shared dynamics: compute f(h) using a single set of dense layers
-    # Then integrate in a custom layer
-    dynamics_proj1 = Axon.dense(h0, hidden_size, name: "shared_dynamics_1")
-    dynamics_act = Axon.activation(dynamics_proj1, :silu, name: "shared_dynamics_act")
-    dynamics_proj2 = Axon.dense(dynamics_act, hidden_size, name: "shared_dynamics_2")
-
-    # ODE integration with shared dynamics
-    h_final =
-      Axon.layer(
-        &ode_integrate_impl/3,
-        [h0, dynamics_proj2],
-        name: "ode_integrate",
-        num_steps: num_steps,
-        step_size: step_size,
-        op_name: :neural_ode_integrate
-      )
-
-    h_final = Axon.layer_norm(h_final, name: "output_norm")
-
-    if output_size && output_size != hidden_size do
-      Axon.dense(h_final, output_size, name: "output_proj")
-    else
-      h_final
-    end
-  end
+  def build_shared(opts), do: build(opts)
 
   @doc """
   Get the output size of a Neural ODE model.
@@ -193,18 +150,4 @@ defmodule Edifice.Energy.NeuralODE do
     out || hidden
   end
 
-  # ODE integration: Euler method with shared dynamics
-  defp ode_integrate_impl(h0, dynamics, opts) do
-    num_steps = opts[:num_steps] || @default_num_steps
-    step_size = opts[:step_size] || @default_step_size
-
-    # The dynamics tensor represents f(h0), but for shared weights we
-    # approximate by repeatedly applying: h += step_size * tanh(dynamics)
-    # where dynamics is the transformation of the initial state
-    dh = Nx.tanh(dynamics)
-
-    Enum.reduce(1..num_steps, h0, fn _step, h ->
-      Nx.add(h, Nx.multiply(step_size, dh))
-    end)
-  end
 end

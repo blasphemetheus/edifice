@@ -135,15 +135,23 @@ defmodule Edifice.Convolutional.ResNet do
         :bottleneck -> &bottleneck_block/3
       end
 
-    x =
+    # Track current channel count through stages for identity shortcuts
+    expansion = if block_type == :bottleneck, do: 4, else: 1
+
+    {x, _} =
       block_sizes
       |> Enum.with_index()
-      |> Enum.reduce(x, fn {num_blocks, stage_idx}, acc ->
+      |> Enum.reduce({x, initial_channels}, fn {num_blocks, stage_idx}, {acc, in_channels} ->
         channels = initial_channels * round(:math.pow(2, stage_idx))
+        out_channels = channels * expansion
         # First stage has no downsampling, subsequent stages stride 2
         first_stride = if stage_idx == 0, do: 1, else: 2
 
-        build_stage(acc, num_blocks, channels, first_stride, stage_idx, block_fn)
+        result =
+          build_stage(acc, num_blocks, channels, first_stride, stage_idx, block_fn,
+            in_channels, out_channels)
+
+        {result, out_channels}
       end)
 
     # Global average pooling -> dense
@@ -210,8 +218,9 @@ defmodule Edifice.Convolutional.ResNet do
 
     x = Axon.batch_norm(x, name: "#{name}_bn2")
 
-    # Skip connection (project if dimensions change)
-    skip = maybe_project_skip(input, channels, strides, name)
+    # Skip connection (identity when dims match, 1x1 projection otherwise)
+    in_channels = Keyword.get(opts, :in_channels, channels)
+    skip = maybe_project_skip(input, channels, strides, name, in_channels)
 
     # Add residual and activate
     Axon.add(x, skip, name: "#{name}_add")
@@ -286,8 +295,9 @@ defmodule Edifice.Convolutional.ResNet do
 
     x = Axon.batch_norm(x, name: "#{name}_bn3")
 
-    # Skip connection (project to out_channels if needed)
-    skip = maybe_project_skip(input, out_channels, strides, name)
+    # Skip connection (identity when dims match, 1x1 projection otherwise)
+    in_channels = Keyword.get(opts, :in_channels, out_channels)
+    skip = maybe_project_skip(input, out_channels, strides, name, in_channels)
 
     Axon.add(x, skip, name: "#{name}_add")
     |> Axon.activation(:relu, name: "#{name}_relu_out")
@@ -309,41 +319,37 @@ defmodule Edifice.Convolutional.ResNet do
   # Private Helpers
   # ============================================================================
 
-  defp build_stage(input, num_blocks, channels, first_stride, stage_idx, block_fn) do
-    Enum.reduce(0..(num_blocks - 1), input, fn block_idx, acc ->
-      strides = if block_idx == 0, do: first_stride, else: 1
+  defp build_stage(input, num_blocks, channels, first_stride, stage_idx, block_fn,
+         in_channels, out_channels) do
+    {result, _} =
+      Enum.reduce(0..(num_blocks - 1), {input, in_channels}, fn block_idx, {acc, current_in} ->
+        strides = if block_idx == 0, do: first_stride, else: 1
 
-      block_fn.(acc, channels,
-        strides: strides,
-        name: "stage#{stage_idx}_block#{block_idx}"
-      )
-    end)
+        result =
+          block_fn.(acc, channels,
+            strides: strides,
+            name: "stage#{stage_idx}_block#{block_idx}",
+            in_channels: current_in
+          )
+
+        {result, out_channels}
+      end)
+
+    result
   end
 
-  defp maybe_project_skip(input, out_channels, strides, name) do
-    # Always apply projection if stride > 1 (spatial downsampling).
-    # Also project if we need to change channel count.
-    # We use Axon.nx to check dynamically would be complex, so we always
-    # add projection when stride != 1, and use a conditional projection
-    # for channel matching.
-    if strides > 1 do
-      # Spatial downsampling + channel projection
+  defp maybe_project_skip(input, out_channels, strides, name, in_channels) do
+    if strides == 1 and in_channels == out_channels do
+      # Identity shortcut: dimensions match, no projection needed.
+      # This is the key insight from He et al. — gradients flow directly
+      # through the identity path for better training.
+      input
+    else
+      # Project via 1x1 conv when spatial dims or channels change
       input
       |> Axon.conv(out_channels,
         kernel_size: {1, 1},
         strides: [strides, strides],
-        padding: :valid,
-        name: "#{name}_skip_proj"
-      )
-      |> Axon.batch_norm(name: "#{name}_skip_bn")
-    else
-      # No spatial change - project channels with 1x1 conv.
-      # This handles both matching and non-matching channel cases:
-      # when channels match, the 1x1 conv acts as a learned identity.
-      input
-      |> Axon.conv(out_channels,
-        kernel_size: {1, 1},
-        strides: [1, 1],
         padding: :valid,
         name: "#{name}_skip_proj"
       )
