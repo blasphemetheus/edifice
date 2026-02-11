@@ -293,11 +293,12 @@ defmodule Edifice.Attention.GLA do
     v = Nx.reshape(v, {batch, seq_len, num_heads, head_dim})
     g = Nx.reshape(g, {batch, seq_len, num_heads, head_dim})
 
-    # Apply feature map to Q and K (ELU + 1 for positive features)
-    # This is a common choice for linear attention
-    # Simple ReLU + 1
-    q_feat = Nx.add(1.0, Nx.max(q, 0.0))
-    k_feat = Nx.add(1.0, Nx.max(k, 0.0))
+    # Apply feature map to Q and K: 1 + ELU(x) for positive features
+    # ELU ensures smooth gradients for negative values (vs ReLU's dead zone)
+    # 1 + ELU(x) = 1 + x if x > 0, 1 + exp(x) - 1 = exp(x) if x <= 0
+    # All outputs are strictly positive, required for valid linear attention
+    q_feat = Nx.add(1.0, Nx.select(Nx.greater(q, 0.0), q, Nx.subtract(Nx.exp(q), 1.0)))
+    k_feat = Nx.add(1.0, Nx.select(Nx.greater(k, 0.0), k, Nx.subtract(Nx.exp(k), 1.0)))
 
     # Causal linear attention with gating
     # For each position t:

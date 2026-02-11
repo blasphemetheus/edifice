@@ -140,34 +140,56 @@ defmodule Edifice.Probabilistic.Bayesian do
   def bayesian_dense(input, units, opts \\ []) do
     name = Keyword.get(opts, :name, "bayesian_dense")
 
-    # Learn mu and rho for weights via two separate dense layers
-    # mu: weight means
-    mu = Axon.dense(input, units, name: "#{name}_mu", use_bias: true)
+    # True weight-level reparameterization: each weight element W_ij has its
+    # own (mu_ij, rho_ij) pair. On each forward pass we sample:
+    #   W = mu_kernel + softplus(rho_kernel) * epsilon
+    #   b = mu_bias + softplus(rho_bias) * epsilon_b
+    #   output = input @ W + b
+    rho_init = fn shape, type, _key ->
+      Nx.broadcast(Nx.tensor(-3.0, type: type), shape)
+    end
 
-    # rho: weight log-variance (sigma = softplus(rho))
-    # Initialize rho to small negative values so initial sigma is small
-    rho =
-      Axon.dense(input, units,
-        name: "#{name}_rho",
-        kernel_initializer: Axon.Initializers.uniform(scale: 0.01),
-        use_bias: true
-      )
-
-    # Reparameterization trick: sample = mu + softplus(rho) * epsilon
     Axon.layer(
-      &bayesian_sample_impl/3,
-      [mu, rho],
+      &bayesian_dense_impl/2,
+      [input],
       name: name,
-      op_name: :bayesian_sample
+      units: units,
+      op_name: :bayesian_dense,
+      mu_kernel:
+        Axon.param("mu_kernel", fn input_shape ->
+          {elem(input_shape, tuple_size(input_shape) - 1), units}
+        end),
+      rho_kernel:
+        Axon.param("rho_kernel", fn input_shape ->
+          {elem(input_shape, tuple_size(input_shape) - 1), units}
+        end, initializer: rho_init),
+      mu_bias:
+        Axon.param("mu_bias", fn _input_shape -> {units} end, initializer: :zeros),
+      rho_bias:
+        Axon.param("rho_bias", fn _input_shape -> {units} end, initializer: rho_init)
     )
   end
 
-  # Reparameterization trick implementation
-  defp bayesian_sample_impl(mu, rho, _opts) do
-    sigma = Nx.log1p(Nx.exp(rho))
+  # True weight-level reparameterization: sample entire weight matrix each forward pass
+  defp bayesian_dense_impl(input, opts) do
+    mu_kernel = opts[:mu_kernel]
+    rho_kernel = opts[:rho_kernel]
+    mu_bias = opts[:mu_bias]
+    rho_bias = opts[:rho_bias]
+
+    # Sample kernel: W = mu + softplus(rho) * epsilon
+    sigma_kernel = Nx.log1p(Nx.exp(rho_kernel))
     key = Nx.Random.key(:erlang.system_time())
-    {epsilon, _new_key} = Nx.Random.normal(key, shape: Nx.shape(mu), type: Nx.type(mu))
-    Nx.add(mu, Nx.multiply(sigma, epsilon))
+    {eps_k, key2} = Nx.Random.normal(key, shape: Nx.shape(mu_kernel), type: Nx.type(mu_kernel))
+    kernel = Nx.add(mu_kernel, Nx.multiply(sigma_kernel, eps_k))
+
+    # Sample bias: b = mu_b + softplus(rho_b) * epsilon_b
+    sigma_bias = Nx.log1p(Nx.exp(rho_bias))
+    {eps_b, _key3} = Nx.Random.normal(key2, shape: Nx.shape(mu_bias), type: Nx.type(mu_bias))
+    bias = Nx.add(mu_bias, Nx.multiply(sigma_bias, eps_b))
+
+    # Forward: input @ W + b
+    Nx.add(Nx.dot(input, [Nx.rank(input) - 1], kernel, [0]), bias)
   end
 
   # ============================================================================

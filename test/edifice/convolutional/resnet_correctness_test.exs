@@ -39,6 +39,7 @@ defmodule Edifice.Convolutional.ResNetCorrectnessTest do
         "stage0_block1 should use identity skip (no projection), but found: #{inspect(stage0_block1_skip)}"
     end
 
+    @tag :slow
     test "first block in stage 1 uses projection skip (stride 2 + channel change)" do
       # Stage 1 doubles channels and uses stride 2 for downsampling.
       # The first block (block0) must project the skip connection.

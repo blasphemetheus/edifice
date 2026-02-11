@@ -156,6 +156,7 @@ defmodule Edifice.Misc.MiscNewTest do
   describe "EfficientNet.build/1" do
     @input_dim 32
 
+    @tag :slow
     test "produces correct output shape" do
       model =
         EfficientNet.build(

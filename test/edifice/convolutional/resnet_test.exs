@@ -6,6 +6,7 @@ defmodule Edifice.Convolutional.ResNetTest do
   @batch_size 2
 
   describe "build/1 with residual blocks" do
+    @tag :slow
     test "builds ResNet-18 style model with correct output shape" do
       num_classes = 10
 

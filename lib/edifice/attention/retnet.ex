@@ -265,6 +265,11 @@ defmodule Edifice.Attention.RetNet do
     k = reshape_for_heads(k, batch_size, seq_len, num_heads, head_dim)
     v = reshape_for_heads(v, batch_size, seq_len, num_heads, head_dim)
 
+    # Apply xPos rotations for positional awareness (RetNet paper Section 3.1)
+    # Q gets standard rotation Θ_n = e^{inθ}, K gets conjugate Θ̄_m = e^{-imθ}
+    # This produces position-dependent retention: e^{i(n-m)θ} in the scores
+    {q, k} = apply_xpos_rotation(q, k, seq_len, head_dim)
+
     # Compute decay rates for each head: gamma_h = 1 - 2^(-5-h)
     gammas = compute_head_gammas(num_heads)
 
@@ -272,7 +277,7 @@ defmodule Edifice.Attention.RetNet do
     # D[n,m] = gamma^(n-m) if n >= m, else 0
     d_matrix = build_decay_matrix(seq_len, gammas)
 
-    # Compute retention: (Q . K^T) . D . V
+    # Compute retention: (QΘ) . D . (KΘ̄)^T . V
     # QK^T: [batch, heads, seq, seq]
     scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
     qk = Nx.dot(q, [3], [0, 1], k, [3], [0, 1]) |> Nx.divide(scale)
@@ -332,6 +337,49 @@ defmodule Edifice.Attention.RetNet do
     # Apply causal mask - broadcast to match decay shape
     causal_broadcast = Nx.broadcast(causal_mask, {num_heads, seq_len, seq_len})
     Nx.select(causal_broadcast, decay, Nx.tensor(0.0))
+  end
+
+  # Apply xPos (complex exponential) rotations to Q and K
+  # Q gets standard rotation, K gets conjugate rotation
+  # Input/output: [batch, heads, seq, head_dim]
+  defp apply_xpos_rotation(q, k, seq_len, head_dim) do
+    half_dim = div(head_dim, 2)
+
+    # Frequency table: θ_i = base^(-2i/d)
+    freqs =
+      Nx.pow(
+        10_000.0,
+        Nx.negate(Nx.divide(Nx.multiply(2, Nx.iota({half_dim})), head_dim))
+      )
+      |> Nx.as_type(:f32)
+
+    # Position angles: [seq_len, half_dim]
+    positions = Nx.iota({seq_len}, type: :f32)
+    angles = Nx.outer(positions, freqs)
+    cos_table = Nx.cos(angles)
+    sin_table = Nx.sin(angles)
+
+    # Reshape for broadcasting: [1, 1, seq_len, half_dim]
+    cos_t = Nx.reshape(cos_table, {1, 1, seq_len, half_dim})
+    sin_t = Nx.reshape(sin_table, {1, 1, seq_len, half_dim})
+
+    # Q: standard rotation [q1*cos - q2*sin, q1*sin + q2*cos]
+    q1 = Nx.slice_along_axis(q, 0, half_dim, axis: 3)
+    q2 = Nx.slice_along_axis(q, half_dim, half_dim, axis: 3)
+    q_rot = Nx.concatenate([
+      Nx.subtract(Nx.multiply(q1, cos_t), Nx.multiply(q2, sin_t)),
+      Nx.add(Nx.multiply(q1, sin_t), Nx.multiply(q2, cos_t))
+    ], axis: 3)
+
+    # K: conjugate rotation [k1*cos + k2*sin, k2*cos - k1*sin]
+    k1 = Nx.slice_along_axis(k, 0, half_dim, axis: 3)
+    k2 = Nx.slice_along_axis(k, half_dim, half_dim, axis: 3)
+    k_rot = Nx.concatenate([
+      Nx.add(Nx.multiply(k1, cos_t), Nx.multiply(k2, sin_t)),
+      Nx.subtract(Nx.multiply(k2, cos_t), Nx.multiply(k1, sin_t))
+    ], axis: 3)
+
+    {q_rot, k_rot}
   end
 
   # ============================================================================
