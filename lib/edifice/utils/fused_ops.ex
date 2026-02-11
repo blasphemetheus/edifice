@@ -72,6 +72,7 @@ defmodule Edifice.Utils.FusedOps do
       iex> bias = Nx.broadcast(0.0, {8})
       iex> FusedOps.dense_activation(input, weight, bias, :relu)
   """
+  @spec dense_activation(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), atom()) :: Nx.Tensor.t()
   def dense_activation(input, weight, bias, activation) do
     # Dispatch to specific defn based on activation (compile-time dispatch)
     case activation do
@@ -124,6 +125,7 @@ defmodule Edifice.Utils.FusedOps do
 
   Slightly faster than `dense_activation/4` when bias is not needed.
   """
+  @spec dense_activation_no_bias(Nx.Tensor.t(), Nx.Tensor.t(), atom()) :: Nx.Tensor.t()
   def dense_activation_no_bias(input, weight, activation) do
     case activation do
       :relu -> dense_relu_no_bias(input, weight)
@@ -181,6 +183,8 @@ defmodule Edifice.Utils.FusedOps do
   Even when input is BF16, we compute mean/variance in FP32 to avoid
   precision loss, then cast back to input precision for the output.
   """
+  @spec layernorm_activation(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), atom(), keyword()) ::
+          Nx.Tensor.t()
   def layernorm_activation(input, gamma, beta, activation, opts \\ []) do
     epsilon = Keyword.get(opts, :epsilon, 1.0e-5)
     # Note: axis is always -1 for fused layer norm (standard for layer normalization)
@@ -239,6 +243,7 @@ defmodule Edifice.Utils.FusedOps do
 
   Note: Uses axis=-1 (last axis) which is the standard for layer normalization.
   """
+  @spec fused_layernorm(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), keyword()) :: Nx.Tensor.t()
   def fused_layernorm(input, gamma, beta, opts \\ []) do
     epsilon = Keyword.get(opts, :epsilon, 1.0e-5)
     # axis option is accepted but ignored - always uses -1 for compile-time optimization
@@ -295,6 +300,14 @@ defmodule Edifice.Utils.FusedOps do
   - Reduces to ~4 tensor accesses
   - Register-level optimization for activation
   """
+  @spec fused_ffn(
+          Nx.Tensor.t(),
+          Nx.Tensor.t(),
+          Nx.Tensor.t(),
+          Nx.Tensor.t(),
+          Nx.Tensor.t(),
+          atom()
+        ) :: Nx.Tensor.t()
   def fused_ffn(input, w1, b1, w2, b2, activation) do
     case activation do
       :relu -> fused_ffn_relu(input, w1, b1, w2, b2)
@@ -330,6 +343,7 @@ defmodule Edifice.Utils.FusedOps do
 
   Some architectures (like LLaMA) don't use biases in FFN layers.
   """
+  @spec fused_ffn_no_bias(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), atom()) :: Nx.Tensor.t()
   def fused_ffn_no_bias(input, w1, w2, activation) do
     case activation do
       :relu -> fused_ffn_relu_no_bias(input, w1, w2)
@@ -376,6 +390,7 @@ defmodule Edifice.Utils.FusedOps do
   Instead of two separate dense layers followed by element-wise multiply,
   we structure the computation to enable better memory access patterns.
   """
+  @spec gated_linear_unit(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), atom()) :: Nx.Tensor.t()
   def gated_linear_unit(input, w_gate, w_up, activation) do
     case activation do
       :silu -> swiglu(input, w_gate, w_up)
@@ -438,6 +453,7 @@ defmodule Edifice.Utils.FusedOps do
   Note: Always computes over axis=-1 (last axis), which is standard for softmax
   over class logits.
   """
+  @spec fused_softmax(Nx.Tensor.t(), keyword()) :: Nx.Tensor.t()
   def fused_softmax(logits, _opts \\ []) do
     # axis option is accepted but ignored - always uses -1 for compile-time optimization
     fused_softmax_impl(logits)
@@ -472,6 +488,7 @@ defmodule Edifice.Utils.FusedOps do
 
   Note: Always computes over axis=-1 (last axis).
   """
+  @spec fused_log_softmax(Nx.Tensor.t(), keyword()) :: Nx.Tensor.t()
   def fused_log_softmax(logits, _opts \\ []) do
     # axis option is accepted but ignored - always uses -1 for compile-time optimization
     fused_log_softmax_impl(logits)
@@ -500,6 +517,7 @@ defmodule Edifice.Utils.FusedOps do
 
   Fuses the scaling, matmul, and softmax operations.
   """
+  @spec fused_attention_scores(Nx.Tensor.t(), Nx.Tensor.t(), keyword()) :: Nx.Tensor.t()
   def fused_attention_scores(query, key, opts \\ []) do
     mask = Keyword.get(opts, :mask, nil)
 
@@ -581,6 +599,7 @@ defmodule Edifice.Utils.FusedOps do
   This uses runtime dispatch to select the appropriate defn implementation,
   which still allows XLA to inline and optimize each activation path.
   """
+  @spec apply_activation(Nx.Tensor.t(), atom()) :: Nx.Tensor.t()
   def apply_activation(x, activation) do
     case activation do
       :relu -> apply_relu(x)
@@ -624,6 +643,7 @@ defmodule Edifice.Utils.FusedOps do
   @doc """
   Check if an activation function is supported.
   """
+  @spec supported_activation?(atom()) :: boolean()
   def supported_activation?(activation) do
     activation in [:relu, :silu, :gelu, :gelu_approx, :sigmoid, :tanh, :softplus, :identity, :none]
   end
@@ -631,6 +651,7 @@ defmodule Edifice.Utils.FusedOps do
   @doc """
   List all supported activation functions.
   """
+  @spec supported_activations() :: [atom()]
   def supported_activations do
     [:relu, :silu, :gelu, :gelu_approx, :sigmoid, :tanh, :softplus, :identity, :none]
   end

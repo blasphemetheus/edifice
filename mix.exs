@@ -53,7 +53,7 @@ defmodule Edifice.MixProject do
   defp docs do
     [
       main: "Edifice",
-      extras: ["README.md", "CHANGELOG.md"],
+      extras: ["README.md", "CHANGELOG.md", "LICENSE"],
       groups_for_modules: [
         "Feedforward": [
           Edifice.Feedforward.MLP,
