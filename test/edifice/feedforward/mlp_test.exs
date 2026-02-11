@@ -70,6 +70,7 @@ defmodule Edifice.Feedforward.MLPTest do
   end
 
   describe "build_temporal/1" do
+    @tag :slow
     test "processes sequence input and outputs last frame hidden" do
       seq_len = 12
       embed_size = 64

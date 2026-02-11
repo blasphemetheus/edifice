@@ -203,6 +203,7 @@ defmodule Edifice.Blocks.CorrectnessTest do
       assert Nx.shape(output) == {@batch, @seq_len, @hidden}
     end
 
+    @tag :slow
     test "inner size defaults to roughly hidden * 2.667" do
       input = Axon.input("input", shape: {nil, @seq_len, 256})
       model = SwiGLU.layer(input, hidden_size: 256, name: "test")

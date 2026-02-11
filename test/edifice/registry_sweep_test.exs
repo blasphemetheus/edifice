@@ -443,6 +443,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "pointnet (sets)" do
     for batch <- @batches do
+      @tag :slow
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
         model = Edifice.build(:pointnet, num_classes: @num_classes, input_dim: @point_dim)
@@ -786,6 +787,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "tcn (convolutional)" do
     for batch <- @batches do
+      @tag :slow
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
         model = Edifice.build(:tcn, input_size: @embed, hidden_size: @hidden, num_layers: 2)
@@ -1135,6 +1137,7 @@ defmodule Edifice.RegistrySweepTest do
   for {arch, opts} <- @contrastive_single_archs do
     describe "#{arch} (contrastive)" do
       for batch <- @batches do
+        @tag :slow
         test "batch=#{batch} produces correct shape with finite values" do
           batch = unquote(batch)
           arch = unquote(arch)

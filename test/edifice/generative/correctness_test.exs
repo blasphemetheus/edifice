@@ -62,6 +62,7 @@ defmodule Edifice.Generative.CorrectnessTest do
 
   # ── GAN Generator/Discriminator Consistency ──────────────────
 
+  @tag :slow
   test "gan generator output is valid discriminator input" do
     {gen, disc} = Edifice.build(:gan, output_size: @embed, latent_size: @latent)
 

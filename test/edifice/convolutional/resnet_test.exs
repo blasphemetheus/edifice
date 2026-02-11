@@ -49,6 +49,7 @@ defmodule Edifice.Convolutional.ResNetTest do
   end
 
   describe "build/1 with bottleneck blocks" do
+    @tag :slow
     test "builds bottleneck ResNet with correct output shape" do
       num_classes = 10
 

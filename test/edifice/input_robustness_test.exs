@@ -198,6 +198,7 @@ defmodule Edifice.InputRobustnessTest do
     assert_robust(decoder, "latent", {@batch, 4})
   end
 
+  @tag :slow
   @tag timeout: 120_000
   test "gan generator handles pathological noise" do
     {gen, _disc} = Edifice.build(:gan, output_size: @embed, latent_size: 4)
@@ -248,6 +249,7 @@ defmodule Edifice.InputRobustnessTest do
 
   # ── Contrastive ──────────────────────────────────────────────────
 
+  @tag :slow
   @tag timeout: 120_000
   test "simclr handles pathological inputs" do
     model = Edifice.build(:simclr, encoder_dim: @embed, projection_dim: @hidden)
@@ -270,6 +272,7 @@ defmodule Edifice.InputRobustnessTest do
 
   # ── Memory ──────────────────────────────────────────────────────
 
+  @tag :slow
   @tag timeout: 120_000
   test "ntm handles pathological inputs" do
     model =
