@@ -142,10 +142,14 @@ defmodule Edifice.Attention.Performer do
     k_proj = Axon.dense(input, hidden_size, name: "#{name}_k_proj")
     v_proj = Axon.dense(input, hidden_size, name: "#{name}_v_proj")
 
+    # Precompute orthogonal random features at build time via QR decomposition
+    omega = generate_orthogonal_features(head_dim, num_features)
+    omega_node = Axon.constant(omega)
+
     attn_out =
       Axon.layer(
-        &favor_plus_attention_impl/4,
-        [q_proj, k_proj, v_proj],
+        &favor_plus_attention_impl/5,
+        [q_proj, k_proj, v_proj, omega_node],
         name: "#{name}_favor_attn",
         num_heads: num_heads,
         head_dim: head_dim,
@@ -158,7 +162,7 @@ defmodule Edifice.Attention.Performer do
 
   # FAVOR+ attention implementation
   # Uses random feature maps to approximate softmax attention in O(N*d*m)
-  defp favor_plus_attention_impl(q, k, v, opts) do
+  defp favor_plus_attention_impl(q, k, v, omega, opts) do
     num_heads = opts[:num_heads]
     head_dim = opts[:head_dim]
     num_features = opts[:num_features]
@@ -172,46 +176,26 @@ defmodule Edifice.Attention.Performer do
     k = k |> Nx.reshape({batch, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
     v = v |> Nx.reshape({batch, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
 
-    # Generate random projection matrix for FAVOR+
-    # omega: [num_features, head_dim] - random orthogonal features
-    # Use a deterministic key derived from tensor shape for reproducibility within a session
-    omega = generate_random_features(head_dim, num_features, Nx.type(q))
-
-    # Apply FAVOR+ feature map: phi(x) = exp(-||x||^2/2) / sqrt(m) * exp(x @ omega^T)
-    # [batch, heads, seq, num_features]
+    # Apply FAVOR+ feature map with precomputed orthogonal random features
+    # phi(x) = exp(x @ omega^T - ||x||^2/2) / sqrt(m)
     q_prime = favor_feature_map(q, omega, num_features)
-    # [batch, heads, seq, num_features]
     k_prime = favor_feature_map(k, omega, num_features)
 
     # Causal FAVOR+ attention using cumulative sums
-    # KV[t] = sum_{i<=t} phi(K[i])^T * V[i]
-    # Z[t] = sum_{i<=t} phi(K[i])
-
     # K'^T * V outer products: [batch, heads, seq, num_features, head_dim]
-    # [batch, heads, seq, num_features, 1]
     k_expanded = Nx.new_axis(k_prime, 4)
-    # [batch, heads, seq, 1, head_dim]
     v_expanded = Nx.new_axis(v, 3)
-    # [batch, heads, seq, num_features, head_dim]
     kv = Nx.multiply(k_expanded, v_expanded)
 
     # Cumulative sums for causal attention
-    # [batch, heads, seq, num_features, head_dim]
     kv_cumsum = Nx.cumulative_sum(kv, axis: 2)
-    # [batch, heads, seq, num_features]
     k_cumsum = Nx.cumulative_sum(k_prime, axis: 2)
 
     # Compute output: phi(Q) @ KV_cumsum
-    # q_prime: [batch, heads, seq, num_features]
-    # kv_cumsum: [batch, heads, seq, num_features, head_dim]
-    # We want to dot q along num_features dimension with kv_cumsum
-    # [batch, heads, seq, num_features, 1]
     q_expanded = Nx.new_axis(q_prime, 4)
-    # [batch, heads, seq, head_dim]
     numerator = Nx.sum(Nx.multiply(q_expanded, kv_cumsum), axes: [3])
 
     # Normalizer: phi(Q) . sum(phi(K))
-    # [batch, heads, seq, 1]
     denominator = Nx.sum(Nx.multiply(q_prime, k_cumsum), axes: [3], keep_axes: true)
 
     # Normalized output
@@ -223,23 +207,44 @@ defmodule Edifice.Attention.Performer do
     |> Nx.reshape({batch, seq_len, num_heads * head_dim})
   end
 
-  # Generate random orthogonal features for FAVOR+
-  # Returns [num_features, head_dim] matrix of orthogonal random vectors
-  defp generate_random_features(head_dim, num_features, type) do
-    # Use a fixed random key for deterministic features
+  @doc """
+  Generate orthogonal random features for FAVOR+ via QR decomposition.
+
+  Returns a `[num_features, head_dim]` matrix with orthogonal rows (within blocks
+  of size head_dim). Multiple orthogonal blocks are concatenated if num_features > head_dim.
+  """
+  @spec generate_orthogonal_features(pos_integer(), pos_integer()) :: Nx.Tensor.t()
+  def generate_orthogonal_features(head_dim, num_features) do
     key = Nx.Random.key(42)
 
-    # Generate random Gaussian matrix
-    {random_matrix, _key} = Nx.Random.normal(key, shape: {num_features, head_dim}, type: type)
+    # Generate blocks of orthogonal features via QR decomposition
+    num_full_blocks = div(num_features, head_dim)
+    remainder = rem(num_features, head_dim)
 
-    # Orthogonalize via QR decomposition for better approximation
-    # For simplicity, use Gram-Schmidt-like normalization
-    # Normalize each row to unit length
-    norms = Nx.sqrt(Nx.sum(Nx.multiply(random_matrix, random_matrix), axes: [1], keep_axes: true))
-    Nx.divide(random_matrix, Nx.add(norms, 1.0e-8))
+    {blocks, key} =
+      Enum.reduce(1..max(num_full_blocks, 0), {[], key}, fn _, {acc, k} ->
+        {mat, k} = Nx.Random.normal(k, shape: {head_dim, head_dim}, type: :f32)
+        {q, _r} = Nx.LinAlg.qr(mat)
+        {[q | acc], k}
+      end)
+
+    blocks = Enum.reverse(blocks)
+
+    blocks =
+      if remainder > 0 do
+        {mat, _} = Nx.Random.normal(key, shape: {head_dim, head_dim}, type: :f32)
+        {q, _r} = Nx.LinAlg.qr(mat)
+        partial = Nx.slice(q, [0, 0], [remainder, head_dim])
+        blocks ++ [partial]
+      else
+        blocks
+      end
+
+    # Concatenate all blocks: [num_features, head_dim]
+    Nx.concatenate(blocks, axis: 0)
   end
 
-  # FAVOR+ feature map: phi(x) = exp(-||x||^2/2) / sqrt(m) * exp(x @ omega^T)
+  # FAVOR+ feature map: phi(x) = exp(x @ omega^T - ||x||^2/2) / sqrt(m)
   # Returns non-negative random features for approximating softmax kernel
   defp favor_feature_map(x, omega, num_features) do
     # x: [batch, heads, seq, head_dim]

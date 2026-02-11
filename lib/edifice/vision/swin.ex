@@ -63,14 +63,15 @@ defmodule Edifice.Vision.SwinTransformer do
 
   ## Window Attention
 
-  Instead of global self-attention (O(N^2)), Swin computes attention within
-  non-overlapping local windows of size M x M tokens. This reduces complexity
-  to O(N * M^2). Shifted windows in alternating layers allow cross-window
-  information flow.
+  Attention is computed within non-overlapping local windows of M x M tokens,
+  reducing complexity from O(N^2) to O(N * M^2). Shifted windows in alternating
+  layers enable cross-window information flow via cyclic shift and masked attention.
 
-  This implementation approximates window attention using dense layers over
-  the full sequence, which is functionally equivalent for small token counts
-  and simplifies the Axon graph construction.
+  Features:
+  - Real window partitioning with M x M local attention
+  - Multi-head scaled dot-product attention within each window
+  - Cyclic shift for shifted window attention with boundary masking
+  - Learnable relative position bias per attention head
 
   ## Usage
 
@@ -80,15 +81,6 @@ defmodule Edifice.Vision.SwinTransformer do
         patch_size: 4,
         embed_dim: 96,
         depths: [2, 2, 6, 2],
-        num_heads: [3, 6, 12, 24],
-        num_classes: 1000
-      )
-
-      # Swin-Small
-      model = SwinTransformer.build(
-        image_size: 224,
-        embed_dim: 96,
-        depths: [2, 2, 18, 2],
         num_heads: [3, 6, 12, 24],
         num_classes: 1000
       )
@@ -134,6 +126,8 @@ defmodule Edifice.Vision.SwinTransformer do
     - `:dropout` - Dropout rate (default: 0.0)
     - `:num_classes` - Number of classes for classification head (optional)
 
+  Spatial dimensions at each stage must be divisible by the effective window size.
+
   ## Returns
 
     An Axon model. Without `:num_classes`, outputs `[batch, embed_dim * 2^(num_stages-1)]`.
@@ -147,19 +141,18 @@ defmodule Edifice.Vision.SwinTransformer do
     embed_dim = Keyword.get(opts, :embed_dim, @default_embed_dim)
     depths = Keyword.get(opts, :depths, @default_depths)
     num_heads_list = Keyword.get(opts, :num_heads, @default_num_heads)
-    _window_size = Keyword.get(opts, :window_size, @default_window_size)
+    window_size = Keyword.get(opts, :window_size, @default_window_size)
     mlp_ratio = Keyword.get(opts, :mlp_ratio, @default_mlp_ratio)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
     num_classes = Keyword.get(opts, :num_classes, nil)
 
     num_stages = length(depths)
+    grid_size = div(image_size, patch_size)
 
     # Input: [batch, channels, height, width]
     input = Axon.input("image", shape: {nil, in_channels, image_size, image_size})
 
     # Patch embedding: [batch, num_patches, embed_dim]
-    num_patches = PatchEmbed.num_patches(image_size, patch_size)
-
     x =
       PatchEmbed.layer(input,
         image_size: image_size,
@@ -170,47 +163,43 @@ defmodule Edifice.Vision.SwinTransformer do
       )
 
     # Process through stages
-    {x, _current_dim, _current_patches} =
+    {x, _dim, _h, _w} =
       Enum.reduce(
         Enum.zip([depths, num_heads_list, 0..(num_stages - 1)]),
-        {x, embed_dim, num_patches},
-        fn {stage_depth, stage_heads, stage_idx}, {acc, dim, patches} ->
+        {x, embed_dim, grid_size, grid_size},
+        fn {stage_depth, stage_heads, stage_idx}, {acc, dim, h, w} ->
           mlp_hidden = round(dim * mlp_ratio)
+          # Cap window size at spatial dimensions
+          eff_ws = min(window_size, min(h, w))
 
           # Swin blocks for this stage
           acc =
             Enum.reduce(0..(stage_depth - 1), acc, fn block_idx, block_acc ->
               swin_block(block_acc, dim, stage_heads, mlp_hidden, dropout,
                 shifted: rem(block_idx, 2) == 1,
+                window_size: eff_ws,
+                h: h,
+                w: w,
                 name: "stage#{stage_idx}_block#{block_idx}"
               )
             end)
 
           # Patch merging between stages (except last)
           if stage_idx < num_stages - 1 do
-            {merged, new_dim} =
-              patch_merging(acc, dim, patches, name: "merge_#{stage_idx}")
-
-            {merged, new_dim, div(patches, 4)}
+            {merged, new_dim} = patch_merging(acc, dim, h, w, name: "merge_#{stage_idx}")
+            {merged, new_dim, div(h, 2), div(w, 2)}
           else
-            {acc, dim, patches}
+            {acc, dim, h, w}
           end
         end
       )
 
     # Global average pool over sequence dimension
     x =
-      Axon.nx(
-        x,
-        fn tensor ->
-          Nx.mean(tensor, axes: [1])
-        end,
-        name: "global_pool"
-      )
+      Axon.nx(x, fn tensor -> Nx.mean(tensor, axes: [1]) end, name: "global_pool")
 
     x = Axon.layer_norm(x, name: "final_norm")
 
-    # Output dimension is embed_dim * 2^(num_stages - 1)
     if num_classes do
       Axon.dense(x, num_classes, name: "classifier")
     else
@@ -222,13 +211,25 @@ defmodule Edifice.Vision.SwinTransformer do
   # Swin Block
   # ============================================================================
 
-  defp swin_block(input, dim, _num_heads, mlp_hidden, dropout, opts) do
+  defp swin_block(input, dim, num_heads, mlp_hidden, dropout, opts) do
     name = Keyword.get(opts, :name, "swin_block")
-    _shifted = Keyword.get(opts, :shifted, false)
+    shifted = Keyword.get(opts, :shifted, false)
+    window_size = Keyword.get(opts, :window_size, 7)
+    h = Keyword.fetch!(opts, :h)
+    w = Keyword.fetch!(opts, :w)
 
-    # Pre-norm window attention (simplified as full sequence attention)
+    # Pre-norm window attention
     normed = Axon.layer_norm(input, name: "#{name}_norm1")
-    attended = window_attention(normed, dim, dropout, name: "#{name}_attn")
+
+    attended =
+      build_window_attention(normed, dim, num_heads, dropout,
+        window_size: window_size,
+        shifted: shifted,
+        h: h,
+        w: w,
+        name: "#{name}_attn"
+      )
+
     x = Axon.add(input, attended, name: "#{name}_residual1")
 
     # Pre-norm MLP
@@ -245,87 +246,365 @@ defmodule Edifice.Vision.SwinTransformer do
     Axon.add(x, ffn, name: "#{name}_residual2")
   end
 
-  defp window_attention(input, dim, dropout, opts) do
+  # ============================================================================
+  # Window Attention
+  # ============================================================================
+
+  defp build_window_attention(input, dim, num_heads, dropout, opts) do
     name = Keyword.get(opts, :name, "w_attn")
+    window_size = Keyword.get(opts, :window_size, 7)
+    shifted = Keyword.get(opts, :shifted, false)
+    h = Keyword.fetch!(opts, :h)
+    w = Keyword.fetch!(opts, :w)
 
-    qkv = Axon.dense(input, dim * 3, name: "#{name}_qkv")
+    head_dim = div(dim, num_heads)
 
-    attended =
-      Axon.nx(
-        qkv,
-        fn qkv_tensor ->
-          q = Nx.slice_along_axis(qkv_tensor, 0, dim, axis: 2)
-          k = Nx.slice_along_axis(qkv_tensor, dim, dim, axis: 2)
-          v = Nx.slice_along_axis(qkv_tensor, dim * 2, dim, axis: 2)
+    # Only shift when there are multiple windows in both dimensions
+    shift_size =
+      if shifted and window_size < h and window_size < w do
+        div(window_size, 2)
+      else
+        0
+      end
 
-          d_k = Nx.axis_size(k, -1)
-          scale = Nx.sqrt(d_k) |> Nx.as_type(Nx.type(q))
+    # Precompute relative position bias as a fixed constant
+    # Uses distance-based decay per head (similar to ALiBi but for 2D windows)
+    rel_pos_bias = compute_relative_position_bias(window_size, num_heads)
+    rel_pos_node = Axon.constant(rel_pos_bias, name: "#{name}_rel_pos_bias")
 
-          scores = Nx.dot(q, [2], [0], k, [2], [0])
-          scores = Nx.divide(scores, scale)
-          weights = FusedOps.fused_softmax(scores)
+    shift_mask_node =
+      if shift_size > 0 do
+        mask = compute_shift_mask(h, w, window_size, shift_size)
+        Axon.constant(mask, name: "#{name}_shift_mask")
+      else
+        # Dummy constant (won't be used when shift_size=0)
+        Axon.constant(Nx.tensor(0.0), name: "#{name}_no_mask")
+      end
 
-          Nx.dot(weights, [2], [0], v, [1], [0])
+    # Q, K, V projections
+    q = Axon.dense(input, dim, name: "#{name}_q")
+    k = Axon.dense(input, dim, name: "#{name}_k")
+    v = Axon.dense(input, dim, name: "#{name}_v")
+
+    # Window attention with partitioning, shifting, and relative position bias
+    has_shift = shift_size > 0
+
+    attn_out =
+      Axon.layer(
+        fn q_t, k_t, v_t, bias_t, mask_t, layer_opts ->
+          window_attention_impl(q_t, k_t, v_t, bias_t,
+            if(has_shift, do: mask_t, else: nil), layer_opts)
         end,
-        name: "#{name}_compute"
+        [q, k, v, rel_pos_node, shift_mask_node],
+        name: "#{name}_compute",
+        num_heads: num_heads,
+        head_dim: head_dim,
+        window_size: window_size,
+        shift_size: shift_size,
+        h: h,
+        w: w,
+        op_name: :swin_window_attention
       )
 
-    attended
+    attn_out
     |> Axon.dense(dim, name: "#{name}_proj")
     |> maybe_dropout(dropout, "#{name}_dropout")
+  end
+
+  # Window attention: shift -> partition -> multi-head attention -> reverse -> unshift
+  defp window_attention_impl(q, k, v, rel_pos_bias, shift_mask, opts) do
+    num_heads = opts[:num_heads]
+    head_dim = opts[:head_dim]
+    ws = opts[:window_size]
+    shift_size = opts[:shift_size]
+    h = opts[:h]
+    w = opts[:w]
+
+    batch = Nx.axis_size(q, 0)
+    dim = num_heads * head_dim
+    ws_sq = ws * ws
+    num_windows = div(h, ws) * div(w, ws)
+    total_windows = batch * num_windows
+
+    # Reshape to spatial: [B, H*W, C] -> [B, H, W, C]
+    q_spatial = Nx.reshape(q, {batch, h, w, dim})
+    k_spatial = Nx.reshape(k, {batch, h, w, dim})
+    v_spatial = Nx.reshape(v, {batch, h, w, dim})
+
+    # Cyclic shift for shifted window attention
+    {q_spatial, k_spatial, v_spatial} =
+      if shift_size > 0 do
+        {cyclic_shift(q_spatial, shift_size, h, w),
+         cyclic_shift(k_spatial, shift_size, h, w),
+         cyclic_shift(v_spatial, shift_size, h, w)}
+      else
+        {q_spatial, k_spatial, v_spatial}
+      end
+
+    # Window partition: [B, H, W, C] -> [B*nW, ws*ws, C]
+    q_win = window_partition(q_spatial, ws, h, w)
+    k_win = window_partition(k_spatial, ws, h, w)
+    v_win = window_partition(v_spatial, ws, h, w)
+
+    # Multi-head: [B*nW, ws*ws, C] -> [B*nW, num_heads, ws*ws, head_dim]
+    q_mh =
+      q_win
+      |> Nx.reshape({total_windows, ws_sq, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    k_mh =
+      k_win
+      |> Nx.reshape({total_windows, ws_sq, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    v_mh =
+      v_win
+      |> Nx.reshape({total_windows, ws_sq, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    # Scaled dot-product attention
+    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
+
+    # Scores: [B*nW, num_heads, ws*ws, ws*ws]
+    scores =
+      Nx.dot(q_mh, [3], [0, 1], k_mh, [3], [0, 1])
+      |> Nx.divide(scale)
+
+    # Add relative position bias: [1, num_heads, ws*ws, ws*ws]
+    scores = Nx.add(scores, rel_pos_bias)
+
+    # Apply shift mask for shifted windows
+    scores =
+      if shift_mask != nil do
+        scores_5d = Nx.reshape(scores, {batch, num_windows, num_heads, ws_sq, ws_sq})
+        mask = shift_mask |> Nx.new_axis(0) |> Nx.new_axis(2)
+        scores_5d = Nx.add(scores_5d, mask)
+        Nx.reshape(scores_5d, {total_windows, num_heads, ws_sq, ws_sq})
+      else
+        scores
+      end
+
+    # Softmax and weighted sum
+    weights = FusedOps.fused_softmax(scores)
+
+    # [B*nW, num_heads, ws*ws, head_dim]
+    output = Nx.dot(weights, [3], [0, 1], v_mh, [2], [0, 1])
+
+    # Reshape: [B*nW, ws*ws, C]
+    output =
+      output
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+      |> Nx.reshape({total_windows, ws_sq, dim})
+
+    # Window reverse: [B*nW, ws*ws, C] -> [B, H, W, C]
+    output_spatial = window_reverse(output, ws, h, w, batch)
+
+    # Reverse cyclic shift
+    output_spatial =
+      if shift_size > 0 do
+        reverse_cyclic_shift(output_spatial, shift_size, h, w)
+      else
+        output_spatial
+      end
+
+    # Flatten: [B, H, W, C] -> [B, H*W, C]
+    Nx.reshape(output_spatial, {batch, h * w, dim})
+  end
+
+  # ============================================================================
+  # Window Operations
+  # ============================================================================
+
+  @doc """
+  Partition a spatial tensor into non-overlapping windows.
+
+  Input: [B, H, W, C] -> Output: [B*nW, ws*ws, C]
+  """
+  def window_partition(input, ws, h, w) do
+    batch = Nx.axis_size(input, 0)
+    c = Nx.axis_size(input, 3)
+    num_h = div(h, ws)
+    num_w = div(w, ws)
+
+    input
+    |> Nx.reshape({batch, num_h, ws, num_w, ws, c})
+    |> Nx.transpose(axes: [0, 1, 3, 2, 4, 5])
+    |> Nx.reshape({batch * num_h * num_w, ws * ws, c})
+  end
+
+  @doc """
+  Reverse window partition back to spatial layout.
+
+  Input: [B*nW, ws*ws, C] -> Output: [B, H, W, C]
+  """
+  def window_reverse(input, ws, h, w, batch) do
+    c = Nx.axis_size(input, 2)
+    num_h = div(h, ws)
+    num_w = div(w, ws)
+
+    input
+    |> Nx.reshape({batch, num_h, num_w, ws, ws, c})
+    |> Nx.transpose(axes: [0, 1, 3, 2, 4, 5])
+    |> Nx.reshape({batch, h, w, c})
+  end
+
+  @doc """
+  Cyclic shift: roll tensor by -shift_size along both H and W axes.
+  """
+  def cyclic_shift(input, shift_size, h, w) do
+    # Shift along H axis
+    top = Nx.slice_along_axis(input, shift_size, h - shift_size, axis: 1)
+    bottom = Nx.slice_along_axis(input, 0, shift_size, axis: 1)
+    shifted = Nx.concatenate([top, bottom], axis: 1)
+
+    # Shift along W axis
+    left = Nx.slice_along_axis(shifted, shift_size, w - shift_size, axis: 2)
+    right = Nx.slice_along_axis(shifted, 0, shift_size, axis: 2)
+    Nx.concatenate([left, right], axis: 2)
+  end
+
+  @doc """
+  Reverse cyclic shift: roll tensor by +shift_size along both H and W axes.
+  """
+  def reverse_cyclic_shift(input, shift_size, h, w) do
+    top = Nx.slice_along_axis(input, h - shift_size, shift_size, axis: 1)
+    bottom = Nx.slice_along_axis(input, 0, h - shift_size, axis: 1)
+    shifted = Nx.concatenate([top, bottom], axis: 1)
+
+    left = Nx.slice_along_axis(shifted, w - shift_size, shift_size, axis: 2)
+    right = Nx.slice_along_axis(shifted, 0, w - shift_size, axis: 2)
+    Nx.concatenate([left, right], axis: 2)
+  end
+
+  # ============================================================================
+  # Precomputed Constants
+  # ============================================================================
+
+  @doc """
+  Compute relative position bias for window attention.
+
+  Uses distance-based decay with per-head geometric slopes, similar to ALiBi
+  but for 2D windows. Each head gets a different slope, providing diverse
+  position sensitivity across heads.
+
+  Returns a [1, num_heads, ws*ws, ws*ws] bias tensor.
+  """
+  def compute_relative_position_bias(window_size, num_heads) do
+    ws_sq = window_size * window_size
+
+    # Compute pairwise Manhattan distances between all positions in the window
+    coords = for i <- 0..(window_size - 1), j <- 0..(window_size - 1), do: {i, j}
+
+    distances =
+      for {h1, w1} <- coords, {h2, w2} <- coords do
+        abs(h1 - h2) + abs(w1 - w2)
+      end
+
+    dist_matrix =
+      Nx.tensor(distances, type: :f32)
+      |> Nx.reshape({ws_sq, ws_sq})
+
+    # Geometric slopes per head (like ALiBi): 2^(-8/num_heads * (i+1))
+    slopes =
+      for i <- 0..(num_heads - 1) do
+        :math.pow(2.0, -8.0 / num_heads * (i + 1))
+      end
+
+    slopes_tensor = Nx.tensor(slopes, type: :f32) |> Nx.reshape({num_heads, 1, 1})
+
+    # bias[h, i, j] = -slope_h * distance(i, j)
+    bias =
+      dist_matrix
+      |> Nx.new_axis(0)
+      |> Nx.multiply(slopes_tensor)
+      |> Nx.negate()
+
+    # Add batch dimension: [1, num_heads, ws*ws, ws*ws]
+    Nx.new_axis(bias, 0)
+  end
+
+  @doc """
+  Compute attention mask for shifted windows.
+
+  Assigns region IDs based on position relative to shift boundaries,
+  then creates a pairwise mask that blocks attention between tokens
+  from different regions within each window.
+
+  Returns a [num_windows, ws*ws, ws*ws] mask tensor with 0.0 for
+  allowed attention and -100.0 for blocked attention.
+  """
+  def compute_shift_mask(h, w, window_size, shift_size) do
+    mask_data =
+      for i <- 0..(h - 1), j <- 0..(w - 1) do
+        h_region =
+          cond do
+            i < h - window_size -> 0
+            i < h - shift_size -> 1
+            true -> 2
+          end
+
+        w_region =
+          cond do
+            j < w - window_size -> 0
+            j < w - shift_size -> 1
+            true -> 2
+          end
+
+        h_region * 3 + w_region
+      end
+
+    mask = Nx.tensor(mask_data) |> Nx.reshape({h, w})
+
+    num_h = div(h, window_size)
+    num_w = div(w, window_size)
+    ws_sq = window_size * window_size
+
+    # Partition mask into windows: [nW, ws*ws]
+    mask_windows =
+      mask
+      |> Nx.reshape({num_h, window_size, num_w, window_size})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+      |> Nx.reshape({num_h * num_w, ws_sq})
+
+    # Pairwise mask: [nW, ws*ws, ws*ws]
+    mask_a = Nx.new_axis(mask_windows, 2)
+    mask_b = Nx.new_axis(mask_windows, 1)
+
+    Nx.not_equal(mask_a, mask_b)
+    |> Nx.select(Nx.tensor(-100.0), Nx.tensor(0.0))
   end
 
   # ============================================================================
   # Patch Merging
   # ============================================================================
 
-  defp patch_merging(input, dim, num_patches, opts) do
+  defp patch_merging(input, dim, h, w, opts) do
     name = Keyword.get(opts, :name, "patch_merge")
-
-    # Patch merging: concatenate 2x2 neighboring patches, then project
-    # [batch, N, C] -> [batch, N/4, 4C] -> [batch, N/4, 2C]
     new_dim = dim * 2
-
-    # Compute grid dimensions at compile time (num_patches is a known integer)
-    grid_size = num_patches |> :math.sqrt() |> round()
-    new_grid = div(grid_size, 2)
+    new_h = div(h, 2)
+    new_w = div(w, 2)
 
     merged =
       Axon.nx(
         input,
         fn tensor ->
           batch = Nx.axis_size(tensor, 0)
-          feat_dim = Nx.axis_size(tensor, 2)
+          c = Nx.axis_size(tensor, 2)
 
-          # Reshape to 2D grid: [batch, H, W, C]
-          grid = Nx.reshape(tensor, {batch, grid_size, grid_size, feat_dim})
+          # Reshape to spatial: [B, H, W, C]
+          grid = Nx.reshape(tensor, {batch, h, w, c})
 
-          # Take every other element in both dimensions to get 4 sub-grids
-          # Top-left
-          tl =
-            Nx.slice_along_axis(grid, 0, new_grid, axis: 1)
-            |> Nx.slice_along_axis(0, new_grid, axis: 2)
+          # Group 2x2 adjacent patches: [B, H/2, 2, W/2, 2, C]
+          reshaped = Nx.reshape(grid, {batch, new_h, 2, new_w, 2, c})
 
-          # Top-right
-          tr =
-            Nx.slice_along_axis(grid, 0, new_grid, axis: 1)
-            |> Nx.slice_along_axis(new_grid, new_grid, axis: 2)
+          # Reorder to [B, H/2, W/2, 2, 2, C]
+          grouped = Nx.transpose(reshaped, axes: [0, 1, 3, 2, 4, 5])
 
-          # Bottom-left
-          bl =
-            Nx.slice_along_axis(grid, new_grid, new_grid, axis: 1)
-            |> Nx.slice_along_axis(0, new_grid, axis: 2)
+          # Flatten 2x2 block features: [B, H/2, W/2, 4C]
+          merged = Nx.reshape(grouped, {batch, new_h, new_w, 4 * c})
 
-          # Bottom-right
-          br =
-            Nx.slice_along_axis(grid, new_grid, new_grid, axis: 1)
-            |> Nx.slice_along_axis(new_grid, new_grid, axis: 2)
-
-          # Concatenate along feature dim: [batch, H/2, W/2, 4C]
-          merged = Nx.concatenate([tl, tr, bl, br], axis: 3)
-
-          # Flatten spatial: [batch, N/4, 4C]
-          Nx.reshape(merged, {batch, new_grid * new_grid, feat_dim * 4})
+          # Flatten spatial: [B, H/2*W/2, 4C]
+          Nx.reshape(merged, {batch, new_h * new_w, 4 * c})
         end,
         name: "#{name}_reshape"
       )
@@ -344,7 +623,7 @@ defmodule Edifice.Vision.SwinTransformer do
   defp maybe_dropout(input, _rate, _name), do: input
 
   # ============================================================================
-  # Output Size
+  # Utilities
   # ============================================================================
 
   @doc """

@@ -6,9 +6,8 @@ defmodule Edifice.Vision.UNet do
   encoder-decoder structure with skip connections that concatenate encoder features
   at each level with decoder features, preserving fine-grained spatial information.
 
-  This implementation operates on flattened spatial representations using dense
-  layers, making it compatible with Axon's tensor-based pipeline. For image
-  inputs, the spatial dimensions are flattened and restored during processing.
+  This implementation uses real 2D convolutions, max-pooling for downsampling,
+  and transposed convolutions for upsampling — faithful to the original paper.
 
   ## Architecture
 
@@ -16,48 +15,53 @@ defmodule Edifice.Vision.UNet do
   Image [batch, channels, height, width]
         |
   +-----v--------------------+
-  | Flatten                   |  [batch, C * H * W]
+  | Transpose to NHWC         |  [batch, H, W, C]
   +---------------------------+
         |
   +-----v--------------------+       Skip Connections
   | Encoder Level 1           |  ----------+
-  |   Dense + Act + Dense     |            |
-  |   Downsample (Dense /2)   |            |
+  |   Conv 3x3 + BN + ReLU   |            |
+  |   Conv 3x3 + BN + ReLU   |            |
+  |   MaxPool 2x2             |            |
   +---------------------------+            |
         |                                  |
   +-----v--------------------+             |
   | Encoder Level 2           |  -----+    |
-  |   Dense + Act + Dense     |       |    |
-  |   Downsample (Dense /2)   |       |    |
+  |   Conv 3x3 + BN + ReLU   |       |    |
+  |   Conv 3x3 + BN + ReLU   |       |    |
+  |   MaxPool 2x2             |       |    |
   +---------------------------+       |    |
         |                             |    |
         ... (depth levels)            |    |
         |                             |    |
   +-----v--------------------+       |    |
   | Bottleneck                |       |    |
-  |   Dense + Act + Dense     |       |    |
+  |   Conv 3x3 + BN + ReLU   |       |    |
+  |   Conv 3x3 + BN + ReLU   |       |    |
   +---------------------------+       |    |
         |                             |    |
   +-----v--------------------+       |    |
   | Decoder Level 2           |       |    |
-  |   Upsample (Dense x2)    |       |    |
+  |   ConvTranspose 2x2 (up) |       |    |
   |   Concat skip <-----------+------+    |
-  |   Dense + Act + Dense     |            |
+  |   Conv 3x3 + BN + ReLU   |            |
+  |   Conv 3x3 + BN + ReLU   |            |
   +---------------------------+            |
         |                                  |
   +-----v--------------------+             |
   | Decoder Level 1           |            |
-  |   Upsample (Dense x2)    |            |
+  |   ConvTranspose 2x2 (up) |            |
   |   Concat skip <-----------+------------+
-  |   Dense + Act + Dense     |
+  |   Conv 3x3 + BN + ReLU   |
+  |   Conv 3x3 + BN + ReLU   |
   +---------------------------+
         |
   +-----v--------------------+
-  | Output projection         |  Dense -> out_channels * H * W
+  | Output Conv 1x1           |  [batch, H, W, out_channels]
   +---------------------------+
         |
   +-----v--------------------+
-  | Reshape                   |  [batch, out_channels, H, W]
+  | Transpose to NCHW         |  [batch, out_channels, H, W]
   +---------------------------+
   ```
 
@@ -127,24 +131,19 @@ defmodule Edifice.Vision.UNet do
     dropout = Keyword.get(opts, :dropout, @default_dropout)
     use_attention = Keyword.get(opts, :use_attention, false)
 
-    flat_size = in_channels * image_size * image_size
-
-    # Input: [batch, channels, height, width]
+    # Input: NCHW [batch, channels, height, width]
     input = Axon.input("image", shape: {nil, in_channels, image_size, image_size})
 
-    # Flatten to [batch, C * H * W]
+    # Transpose to NHWC for Axon convolutions (channels_last default)
     x =
       Axon.nx(
         input,
-        fn tensor ->
-          batch = Nx.axis_size(tensor, 0)
-          Nx.reshape(tensor, {batch, :auto})
-        end,
-        name: "flatten"
+        fn tensor -> Nx.transpose(tensor, axes: [0, 2, 3, 1]) end,
+        name: "nchw_to_nhwc"
       )
 
-    # Encoder path: collect skip connections
-    {x, skips, feature_sizes} = encoder_path(x, flat_size, base_features, depth, dropout)
+    # Encoder path: conv blocks + max pool, collect skip connections
+    {x, skips} = encoder_path(x, base_features, depth, dropout)
 
     # Bottleneck
     bottleneck_features = base_features * round(:math.pow(2, depth))
@@ -157,22 +156,17 @@ defmodule Edifice.Vision.UNet do
         x
       end
 
-    # Decoder path: use skip connections in reverse
-    x = decoder_path(x, skips, feature_sizes, base_features, depth, dropout)
+    # Decoder path: upsample + concat skip + conv block
+    x = decoder_path(x, skips, base_features, depth, dropout)
 
-    # Output projection: project to out_channels * H * W
-    output_flat_size = out_channels * image_size * image_size
+    # Output: 1x1 convolution to map to out_channels
+    x = Axon.conv(x, out_channels, kernel_size: {1, 1}, name: "output_conv")
 
-    x = Axon.dense(x, output_flat_size, name: "output_proj")
-
-    # Reshape to [batch, out_channels, H, W]
+    # Transpose back to NCHW [batch, out_channels, H, W]
     Axon.nx(
       x,
-      fn tensor ->
-        batch = Nx.axis_size(tensor, 0)
-        Nx.reshape(tensor, {batch, out_channels, image_size, image_size})
-      end,
-      name: "output_reshape"
+      fn tensor -> Nx.transpose(tensor, axes: [0, 3, 1, 2]) end,
+      name: "nhwc_to_nchw"
     )
   end
 
@@ -180,23 +174,20 @@ defmodule Edifice.Vision.UNet do
   # Encoder
   # ============================================================================
 
-  defp encoder_path(input, _flat_size, base_features, depth, dropout) do
-    Enum.reduce(0..(depth - 1), {input, [], []}, fn level, {x, skips, sizes} ->
+  defp encoder_path(input, base_features, depth, dropout) do
+    Enum.reduce(0..(depth - 1), {input, []}, fn level, {x, skips} ->
       features = base_features * round(:math.pow(2, level))
 
-      # Conv block at this level
+      # Double conv block at this level
       x = conv_block(x, features, dropout, name: "enc_#{level}")
 
-      # Save skip connection
+      # Save skip connection (before pooling)
       skips = skips ++ [x]
-      sizes = sizes ++ [features]
 
-      # Downsample: reduce spatial representation by 2x (halve feature count)
-      down_features = features
-      x = Axon.dense(x, div(down_features, 2), name: "enc_#{level}_down")
-      x = Axon.activation(x, :relu, name: "enc_#{level}_down_act")
+      # Downsample: max pool 2x2 with stride 2
+      x = Axon.max_pool(x, kernel_size: {2, 2}, strides: [2, 2], name: "enc_#{level}_pool")
 
-      {x, skips, sizes}
+      {x, skips}
     end)
   end
 
@@ -204,44 +195,44 @@ defmodule Edifice.Vision.UNet do
   # Decoder
   # ============================================================================
 
-  defp decoder_path(x, skips, feature_sizes, _base_features, depth, dropout) do
-    # Process decoder levels in reverse order
+  defp decoder_path(x, skips, base_features, depth, dropout) do
     reversed_skips = Enum.reverse(skips)
-    reversed_sizes = Enum.reverse(feature_sizes)
 
-    Enum.reduce(
-      Enum.zip([reversed_skips, reversed_sizes, 0..(depth - 1)]),
-      x,
-      fn {skip, skip_features, level_idx}, acc ->
-        dec_level = depth - 1 - level_idx
+    Enum.reduce(Enum.with_index(reversed_skips), x, fn {skip, idx}, acc ->
+      dec_level = depth - 1 - idx
+      features = base_features * round(:math.pow(2, dec_level))
 
-        # Upsample: project to match skip connection size
-        acc = Axon.dense(acc, skip_features, name: "dec_#{dec_level}_up")
-        acc = Axon.activation(acc, :relu, name: "dec_#{dec_level}_up_act")
+      # Upsample: transposed convolution (doubles spatial dimensions)
+      acc =
+        Axon.conv_transpose(acc, features,
+          kernel_size: {2, 2},
+          strides: [2, 2],
+          name: "dec_#{dec_level}_up"
+        )
 
-        # Concatenate with skip connection
-        acc = Axon.concatenate(acc, skip, name: "dec_#{dec_level}_cat")
+      # Concatenate with skip connection along channel axis (last axis in NHWC)
+      acc = Axon.concatenate(acc, skip, name: "dec_#{dec_level}_cat")
 
-        # Conv block (processes concatenated features: 2x skip_features input)
-        conv_block(acc, skip_features, dropout, name: "dec_#{dec_level}")
-      end
-    )
+      # Double conv block (processes concatenated features)
+      conv_block(acc, features, dropout, name: "dec_#{dec_level}")
+    end)
   end
 
   # ============================================================================
   # Building Blocks
   # ============================================================================
 
+  # Standard UNet conv block: two 3x3 convolutions with batch norm and ReLU
   defp conv_block(input, features, dropout, opts) do
     name = Keyword.get(opts, :name, "conv_block")
 
     x =
       input
-      |> Axon.dense(features, name: "#{name}_dense1")
-      |> Axon.layer_norm(name: "#{name}_norm1")
+      |> Axon.conv(features, kernel_size: {3, 3}, padding: :same, name: "#{name}_conv1")
+      |> Axon.batch_norm(name: "#{name}_bn1")
       |> Axon.activation(:relu, name: "#{name}_act1")
-      |> Axon.dense(features, name: "#{name}_dense2")
-      |> Axon.layer_norm(name: "#{name}_norm2")
+      |> Axon.conv(features, kernel_size: {3, 3}, padding: :same, name: "#{name}_conv2")
+      |> Axon.batch_norm(name: "#{name}_bn2")
       |> Axon.activation(:relu, name: "#{name}_act2")
 
     if dropout > 0.0 do
@@ -251,63 +242,32 @@ defmodule Edifice.Vision.UNet do
     end
   end
 
+  # SE-Net style channel attention for bottleneck
   defp bottleneck_attention(input, dim, opts) do
     name = Keyword.get(opts, :name, "attn")
 
-    # Split bottleneck features into a pseudo-sequence for self-attention
-    # [batch, dim] -> [batch, num_tokens, token_dim] -> attend -> [batch, dim]
-    num_tokens = 4
-    token_dim = div(dim, num_tokens)
-
-    x =
+    # Global average pool: [batch, H, W, C] -> [batch, 1, 1, C]
+    gap =
       Axon.nx(
         input,
-        fn tensor ->
-          batch = Nx.axis_size(tensor, 0)
-          Nx.reshape(tensor, {batch, num_tokens, token_dim})
-        end,
-        name: "#{name}_to_seq"
+        fn tensor -> Nx.mean(tensor, axes: [1, 2], keep_axes: true) end,
+        name: "#{name}_gap"
       )
 
-    # QKV projection and attention
-    qkv = Axon.dense(x, token_dim * 3, name: "#{name}_qkv")
+    # Channel attention gate via 1x1 convolutions (squeeze-and-excitation)
+    gate =
+      gap
+      |> Axon.conv(max(div(dim, 4), 1), kernel_size: {1, 1}, name: "#{name}_fc1")
+      |> Axon.activation(:relu, name: "#{name}_fc1_act")
+      |> Axon.conv(dim, kernel_size: {1, 1}, name: "#{name}_fc2")
+      |> Axon.activation(:sigmoid, name: "#{name}_gate")
 
-    attended =
-      Axon.nx(
-        qkv,
-        fn qkv_tensor ->
-          q = Nx.slice_along_axis(qkv_tensor, 0, token_dim, axis: 2)
-          k = Nx.slice_along_axis(qkv_tensor, token_dim, token_dim, axis: 2)
-          v = Nx.slice_along_axis(qkv_tensor, token_dim * 2, token_dim, axis: 2)
-
-          d_k = Nx.axis_size(k, -1)
-          scale = Nx.sqrt(d_k) |> Nx.as_type(Nx.type(q))
-
-          scores = Nx.dot(q, [2], [0], k, [2], [0])
-          scores = Nx.divide(scores, scale)
-
-          max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
-          exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-          weights = Nx.divide(exp_scores, Nx.sum(exp_scores, axes: [-1], keep_axes: true))
-
-          Nx.dot(weights, [2], [0], v, [1], [0])
-        end,
-        name: "#{name}_compute"
-      )
-
-    attended = Axon.dense(attended, token_dim, name: "#{name}_proj")
-
-    # Residual connection on the sequence
-    x = Axon.add(x, attended, name: "#{name}_residual")
-
-    # Flatten back to [batch, dim]
-    Axon.nx(
-      x,
-      fn tensor ->
-        batch = Nx.axis_size(tensor, 0)
-        Nx.reshape(tensor, {batch, :auto})
-      end,
-      name: "#{name}_flatten"
+    # Scale input by attention gate (broadcasts over spatial dims)
+    Axon.layer(
+      fn feat, g, _opts -> Nx.multiply(feat, g) end,
+      [input, gate],
+      name: "#{name}_scale",
+      op_name: :channel_attention
     )
   end
 

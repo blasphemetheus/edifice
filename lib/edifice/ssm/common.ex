@@ -245,32 +245,15 @@ defmodule Edifice.SSM.Common do
   """
   @spec build_depthwise_conv1d(Axon.t(), pos_integer(), pos_integer(), String.t()) :: Axon.t()
   def build_depthwise_conv1d(input, channels, kernel_size, name) do
-    # Simplified causal conv: use dense layer after windowed mean
-    # This approximates depthwise conv behavior for SSM input processing
-
-    Axon.nx(
-      input,
-      fn x ->
-        # x: [batch, seq_len, channels]
-        batch = Nx.axis_size(x, 0)
-        ch = Nx.axis_size(x, 2)
-
-        # Causal padding: pad (kernel_size - 1) on the left
-        padding = kernel_size - 1
-        pad_shape = {batch, padding, ch}
-        padded = Nx.concatenate([Nx.broadcast(0.0, pad_shape), x], axis: 1)
-
-        # Apply windowed mean (causal conv approximation)
-        Nx.window_mean(
-          padded,
-          {1, kernel_size, 1},
-          strides: [1, 1, 1],
-          padding: :valid
-        )
-      end,
-      name: "#{name}_causal"
+    # Real depthwise 1D convolution with causal padding
+    # Each channel has its own learned kernel (feature_group_size = channels)
+    # Causal: pad (kernel_size - 1) on the left, 0 on the right
+    Axon.conv(input, channels,
+      kernel_size: {kernel_size},
+      padding: [{kernel_size - 1, 0}],
+      feature_group_size: channels,
+      name: "#{name}_dw_conv"
     )
-    |> Axon.dense(channels, name: "#{name}_proj", use_bias: true)
   end
 
   # ============================================================================

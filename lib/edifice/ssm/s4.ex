@@ -70,6 +70,8 @@ defmodule Edifice.SSM.S4 do
 
   require Axon
 
+  alias Edifice.SSM.Common
+
   @default_hidden_size 256
   @default_state_size 64
   @default_num_layers 4
@@ -147,17 +149,24 @@ defmodule Edifice.SSM.S4 do
     # SSM sub-layer with pre-norm
     x = Axon.layer_norm(input, name: "#{name}_ssm_norm")
 
-    # Project to state_size for B and C
+    # B and C projections (input-dependent, per-timestep)
     b_proj = Axon.dense(x, state_size, name: "#{name}_b_proj")
     c_proj = Axon.dense(x, state_size, name: "#{name}_c_proj")
 
-    # SSM with HiPPO-initialized diagonal A
+    # dt projection: input-dependent discretization step (like Mamba/S6)
+    # Dense -> softplus in the SSM callback ensures positive dt
+    dt_proj = Axon.dense(x, hidden_size, name: "#{name}_dt_proj")
+
+    # HiPPO-LegS diagonal A: A_n = -(n + 1/2), passed as constant
+    a_init = Nx.negate(Nx.add(Nx.iota({state_size}, type: :f32), 0.5))
+    a_node = Axon.constant(a_init)
+
+    # SSM with proper discretization and parallel scan
     ssm_out =
       Axon.layer(
-        &hippo_ssm_impl/4,
-        [x, b_proj, c_proj],
+        &hippo_ssm_impl/6,
+        [x, b_proj, c_proj, dt_proj, a_node],
         name: "#{name}_ssm",
-        hidden_size: hidden_size,
         state_size: state_size,
         op_name: :s4_ssm
       )
@@ -179,47 +188,42 @@ defmodule Edifice.SSM.S4 do
     )
   end
 
-  # HiPPO-initialized SSM: diagonal A with negative entries for stability
-  defp hippo_ssm_impl(x, b, c, opts) do
-    hidden_size = opts[:hidden_size]
+  # S4 SSM with HiPPO-initialized A, input-dependent dt, and Blelloch parallel scan
+  defp hippo_ssm_impl(x, b, c, dt_logit, a_diag, opts) do
     state_size = opts[:state_size]
 
-    batch = Nx.axis_size(x, 0)
-    seq_len = Nx.axis_size(x, 1)
+    # Softplus for dt to ensure positive values
+    dt = Nx.log1p(Nx.exp(dt_logit))
+    # Clamp to reasonable range for numerical stability
+    dt = Nx.clip(dt, Common.dt_min(), Common.dt_max())
 
-    # HiPPO-LegS diagonal approximation: A_n = -(n + 1/2)
-    a_diag = Nx.negate(Nx.add(Nx.iota({state_size}, type: :f32), 0.5))
+    # Discretize: A_bar = exp(dt * A), B_bar = dt * B
+    # dt: [batch, seq_len, hidden_size]
+    # a_diag: [state_size] (negative values)
+    # -> a_bar: [batch, seq_len, hidden_size, state_size]
+    dt_expanded = Nx.new_axis(dt, 3)
+    a_expanded = Nx.reshape(a_diag, {1, 1, 1, state_size})
+    a_bar = Nx.exp(Nx.multiply(dt_expanded, a_expanded))
 
-    # Fixed discretization step
-    dt = 0.01
+    # B discretization: B_bar = dt_mean * B
+    # b: [batch, seq_len, state_size]
+    b_expanded = Nx.new_axis(b, 2)
+    dt_mean = Nx.mean(dt, axes: [2], keep_axes: true)
+    dt_for_b = Nx.new_axis(dt_mean, 3)
+    b_bar = Nx.multiply(dt_for_b, b_expanded)
 
-    # ZOH discretization: A_bar = exp(dt * A)
-    a_bar = Nx.exp(Nx.multiply(dt, a_diag))
-    a_bar = Nx.broadcast(a_bar, {batch, seq_len, state_size})
+    # Per-channel input contribution: B_bar * x
+    # x: [batch, seq_len, hidden_size] -> [batch, seq_len, hidden_size, 1]
+    x_expanded = Nx.new_axis(x, 3)
+    # bx: [batch, seq_len, hidden_size, state_size]
+    bx = Nx.multiply(b_bar, x_expanded)
 
-    # B_bar = dt * B
-    b_bar = Nx.multiply(dt, b)
-
-    # Project input to state_size
-    # x: [batch, seq_len, hidden_size] -> [batch, seq_len, state_size]
-    # Use B as the projection (input-dependent)
-    bu = Nx.multiply(b_bar, Nx.mean(Nx.reshape(x, {batch, seq_len, hidden_size, 1}), axes: [2]))
-
-    # Cumulative scan via log-space trick
-    log_a = Nx.log(Nx.add(Nx.abs(a_bar), 1.0e-10))
-    log_a_cumsum = Nx.cumulative_sum(log_a, axis: 1)
-    a_cumprod = Nx.exp(log_a_cumsum)
-
-    eps = 1.0e-10
-    bu_normalized = Nx.divide(bu, Nx.add(a_cumprod, eps))
-    bu_cumsum = Nx.cumulative_sum(bu_normalized, axis: 1)
-    h = Nx.multiply(a_cumprod, bu_cumsum)
+    # Parallel scan: h[t] = a_bar[t] * h[t-1] + bx[t]
+    h = Common.blelloch_scan(a_bar, bx)
 
     # Output: y = C * h, summed over state dimension
-    y = Nx.multiply(c, h)
-    y_summed = Nx.sum(y, axes: [2])
-    y_expanded = Nx.new_axis(y_summed, 2)
-    Nx.broadcast(y_expanded, {batch, seq_len, hidden_size})
+    # c: [batch, seq_len, state_size] -> [batch, seq_len, 1, state_size]
+    Common.compute_ssm_output(h, c)
   end
 
   defp build_ffn_block(input, opts) do
@@ -263,7 +267,8 @@ defmodule Edifice.SSM.S4 do
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     inner_size = hidden_size * 4
 
-    ssm_params = 2 * hidden_size * state_size
+    # B_proj + C_proj + dt_proj
+    ssm_params = 2 * hidden_size * state_size + hidden_size * hidden_size
     ffn_params = 2 * hidden_size * inner_size + inner_size * hidden_size
     per_layer = ssm_params + ffn_params
     input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
