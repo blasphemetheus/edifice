@@ -1,0 +1,251 @@
+defmodule Edifice.Recurrent.DeltaNet do
+  @moduledoc """
+  DeltaNet - Linear Attention with Delta Rule.
+
+  Implements linear attention with the delta rule update from
+  "Linear Transformers with Learnable Kernel Functions are Better
+  In-Context Models" (Schlag et al., 2021) and subsequent work.
+
+  DeltaNet maintains an associative memory matrix S that is updated
+  using the delta rule, which corrects previous associations rather
+  than blindly accumulating them. This gives it superior retrieval
+  accuracy compared to standard linear attention.
+
+  ## Key Innovations
+
+  - **Delta rule update**: S_t = S_{t-1} + beta_t * (v_t - S_{t-1} k_t) k_t^T
+  - **Error-correcting**: Subtracts the current retrieval S_{t-1} k_t before adding
+  - **Learnable beta**: Controls update rate per-token via a gate
+  - **Linear complexity**: O(d^2) memory vs O(n*d) for softmax attention
+
+  ## Equations
+
+  ```
+  q_t = W_q x_t                          # Query projection
+  k_t = W_k x_t                          # Key projection (L2 normalized)
+  v_t = W_v x_t                          # Value projection
+  beta_t = sigmoid(W_beta x_t)           # Update gate
+  S_t = S_{t-1} + beta_t * (v_t - S_{t-1} k_t) * k_t^T   # Delta rule
+  o_t = S_t q_t                          # Output retrieval
+  ```
+
+  ## Architecture
+
+  ```
+  Input [batch, seq_len, embed_size]
+        |
+        v
+  [Input Projection] -> hidden_size
+        |
+        v
+  +----------------------------------+
+  |      DeltaNet Layer              |
+  |  Project to Q, K, V, beta        |
+  |  For each timestep:              |
+  |    error = v - S @ k             |
+  |    S += beta * error * k^T       |
+  |    output = S @ q                |
+  +----------------------------------+
+        | (repeat num_layers)
+        v
+  [Layer Norm] -> [Last Timestep]
+        |
+        v
+  Output [batch, hidden_size]
+  ```
+
+  ## Usage
+
+      model = DeltaNet.build(
+        embed_size: 287,
+        hidden_size: 256,
+        num_layers: 4,
+        dropout: 0.1
+      )
+
+  ## References
+  - Paper: https://arxiv.org/abs/2102.11174
+  - Delta rule RNNs: https://arxiv.org/abs/2310.01655
+  """
+
+  require Axon
+
+  # ============================================================================
+  # Default Hyperparameters
+  # ============================================================================
+
+  @doc "Default hidden dimension"
+  def default_hidden_size, do: 256
+
+  @doc "Default number of layers"
+  def default_num_layers, do: 4
+
+  @doc "Default dropout rate"
+  def default_dropout, do: 0.1
+
+  @doc "Epsilon for normalization"
+  def norm_eps, do: 1.0e-6
+
+  # ============================================================================
+  # Model Building
+  # ============================================================================
+
+  @doc """
+  Build a DeltaNet model for sequence processing.
+
+  ## Options
+    - `:embed_size` - Size of input embedding per frame (required)
+    - `:hidden_size` - Internal hidden dimension (default: 256)
+    - `:num_layers` - Number of DeltaNet layers (default: 4)
+    - `:dropout` - Dropout rate between layers (default: 0.1)
+    - `:window_size` - Expected sequence length (default: 60)
+
+  ## Returns
+    An Axon model that processes sequences and outputs the last hidden state.
+  """
+  @spec build(keyword()) :: Axon.t()
+  def build(opts \\ []) do
+    embed_size = Keyword.fetch!(opts, :embed_size)
+    hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
+    num_layers = Keyword.get(opts, :num_layers, default_num_layers())
+    dropout = Keyword.get(opts, :dropout, default_dropout())
+    window_size = Keyword.get(opts, :window_size, 60)
+    seq_len = Keyword.get(opts, :seq_len, window_size)
+
+    input_seq_dim = if seq_len, do: seq_len, else: nil
+
+    # Input: [batch, seq_len, embed_size]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+
+    # Project to hidden dimension if needed
+    x =
+      if embed_size != hidden_size do
+        Axon.dense(input, hidden_size, name: "input_projection")
+      else
+        input
+      end
+
+    # Stack DeltaNet layers
+    output =
+      Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
+        layer = build_delta_net_layer(acc, hidden_size, "delta_net_#{layer_idx}")
+
+        if dropout > 0 and layer_idx < num_layers do
+          Axon.dropout(layer, rate: dropout, name: "dropout_#{layer_idx}")
+        else
+          layer
+        end
+      end)
+
+    # Final layer norm
+    output = Axon.layer_norm(output, name: "final_norm")
+
+    # Extract last timestep: [batch, seq_len, hidden] -> [batch, hidden]
+    Axon.nx(
+      output,
+      fn tensor ->
+        seq = Nx.axis_size(tensor, 1)
+        Nx.slice_along_axis(tensor, seq - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+      end,
+      name: "last_timestep"
+    )
+  end
+
+  # ============================================================================
+  # DeltaNet Layer
+  # ============================================================================
+
+  defp build_delta_net_layer(input, hidden_size, name) do
+    # Pre-norm for stability
+    normed = Axon.layer_norm(input, name: "#{name}_norm")
+
+    # Project to Q, K, V, beta: 4 * hidden_size total
+    projections = Axon.dense(normed, hidden_size * 4, name: "#{name}_qkvb_proj")
+
+    # Apply delta rule recurrence
+    recurrence_output =
+      Axon.nx(
+        projections,
+        fn proj ->
+          delta_net_scan(proj, hidden_size)
+        end,
+        name: "#{name}_recurrence"
+      )
+
+    # Output projection
+    output = Axon.dense(recurrence_output, hidden_size, name: "#{name}_out_proj")
+
+    # Residual connection
+    Axon.add(input, output, name: "#{name}_residual")
+  end
+
+  defp delta_net_scan(projections, hidden_size) do
+    # projections: [batch, seq_len, hidden_size * 4]
+    batch_size = Nx.axis_size(projections, 0)
+    seq_len = Nx.axis_size(projections, 1)
+
+    # Split into Q, K, V, beta
+    q_all = Nx.slice_along_axis(projections, 0, hidden_size, axis: 2)
+    k_all = Nx.slice_along_axis(projections, hidden_size, hidden_size, axis: 2)
+    v_all = Nx.slice_along_axis(projections, hidden_size * 2, hidden_size, axis: 2)
+    beta_pre = Nx.slice_along_axis(projections, hidden_size * 3, hidden_size, axis: 2)
+
+    # Beta gate: controls update rate
+    beta = Nx.sigmoid(beta_pre)
+
+    # L2 normalize keys for stable memory updates
+    k_norm = Nx.sqrt(Nx.add(Nx.sum(Nx.pow(k_all, 2), axes: [2], keep_axes: true), norm_eps()))
+    k_normalized = Nx.divide(k_all, k_norm)
+
+    # Initialize memory matrix S: [batch, hidden_size, hidden_size]
+    s_init = Nx.broadcast(0.0, {batch_size, hidden_size, hidden_size})
+
+    # Sequential scan with delta rule
+    {_, output_list} =
+      Enum.reduce(0..(seq_len - 1), {s_init, []}, fn t, {s_prev, acc} ->
+        q_t = Nx.slice_along_axis(q_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        k_t = Nx.slice_along_axis(k_normalized, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        v_t = Nx.slice_along_axis(v_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+        # Current retrieval: S_{t-1} @ k_t -> [batch, hidden_size]
+        # s_prev: [batch, hidden, hidden], k_t: [batch, hidden]
+        retrieval = Nx.dot(s_prev, [2], [0], Nx.new_axis(k_t, 2), [1], [0])
+        retrieval = Nx.squeeze(retrieval, axes: [2])
+
+        # Error: v_t - retrieval
+        error = Nx.subtract(v_t, retrieval)
+
+        # Delta update: S_t = S_{t-1} + beta_t * error * k_t^T
+        # error: [batch, hidden], k_t: [batch, hidden]
+        # outer product: [batch, hidden, hidden]
+        update = Nx.dot(
+          Nx.new_axis(Nx.multiply(beta_t, error), 2),
+          [2], [0],
+          Nx.new_axis(k_t, 1),
+          [1], [0]
+        )
+        s_t = Nx.add(s_prev, update)
+
+        # Output: S_t @ q_t -> [batch, hidden_size]
+        o_t = Nx.dot(s_t, [2], [0], Nx.new_axis(q_t, 2), [1], [0])
+        o_t = Nx.squeeze(o_t, axes: [2])
+
+        {s_t, [o_t | acc]}
+      end)
+
+    output_list |> Enum.reverse() |> Nx.stack(axis: 1)
+  end
+
+  # ============================================================================
+  # Utilities
+  # ============================================================================
+
+  @doc """
+  Get the output size of a DeltaNet model.
+  """
+  @spec output_size(keyword()) :: non_neg_integer()
+  def output_size(opts \\ []) do
+    Keyword.get(opts, :hidden_size, default_hidden_size())
+  end
+end

@@ -193,7 +193,7 @@ defmodule Edifice.Memory.MemoryNetwork do
     query_expanded = Nx.new_axis(query, 1)
 
     # scores: [batch, num_memories]
-    scores = Nx.sum(query_expanded * mem_attention, axes: [2])
+    scores = Nx.sum(Nx.multiply(query_expanded, mem_attention), axes: [2])
 
     # Softmax attention weights
     max_score = Nx.reduce_max(scores, axes: [1], keep_axes: true)
@@ -203,7 +203,7 @@ defmodule Edifice.Memory.MemoryNetwork do
     # Weighted read from output embedding: [batch, memory_dim]
     # weights: [batch, num_memories] -> [batch, num_memories, 1]
     weights_expanded = Nx.new_axis(weights, 2)
-    read_result = Nx.sum(weights_expanded * mem_output, axes: [1])
+    read_result = Nx.sum(Nx.multiply(weights_expanded, mem_output), axes: [1])
 
     # Residual update: q' = q + o
     Nx.add(query, read_result)

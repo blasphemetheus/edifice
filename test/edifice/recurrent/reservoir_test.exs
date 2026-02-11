@@ -6,12 +6,7 @@ defmodule Edifice.Recurrent.ReservoirTest do
   @batch_size 2
   @seq_len 8
 
-  # NOTE: The Reservoir.build/1 forward pass tests are tagged :skip because
-  # reservoir_forward/4 has arity 4 but the current Axon.layer API calls it
-  # with arity 2. This is a known issue in the source module that needs fixing.
-
   describe "build/1" do
-    @tag :skip
     test "builds reservoir with correct output shape" do
       input_size = 32
       reservoir_size = 64
@@ -34,7 +29,6 @@ defmodule Edifice.Recurrent.ReservoirTest do
       assert Nx.shape(output) == {@batch_size, output_size}
     end
 
-    @tag :skip
     test "uses default reservoir_size when output_size not specified" do
       input_size = 32
       reservoir_size = 64
@@ -55,7 +49,6 @@ defmodule Edifice.Recurrent.ReservoirTest do
       assert Nx.shape(output) == {@batch_size, reservoir_size}
     end
 
-    @tag :skip
     test "supports custom spectral_radius and sparsity" do
       input_size = 16
       reservoir_size = 32
@@ -79,7 +72,6 @@ defmodule Edifice.Recurrent.ReservoirTest do
       assert Nx.shape(output) == {@batch_size, output_size}
     end
 
-    @tag :skip
     test "supports custom input_scaling and leak_rate" do
       input_size = 16
       reservoir_size = 32

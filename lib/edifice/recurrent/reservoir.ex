@@ -77,7 +77,7 @@ defmodule Edifice.Recurrent.Reservoir do
     # Reservoir layer (fixed random weights, not trained)
     reservoir_output =
       Axon.layer(
-        &reservoir_forward/4,
+        &reservoir_forward/2,
         [input],
         name: "reservoir",
         reservoir_size: reservoir_size,
@@ -96,7 +96,7 @@ defmodule Edifice.Recurrent.Reservoir do
   # Reservoir forward pass using fixed random weights
   # In practice, the reservoir weights should be initialized once and frozen.
   # Here we use a deterministic seed-based approach for reproducibility.
-  defp reservoir_forward(input, _opts_or_params, _state, opts) do
+  defp reservoir_forward(input, opts) do
     reservoir_size = opts[:reservoir_size]
     input_size = opts[:input_size]
     spectral_radius = opts[:spectral_radius]

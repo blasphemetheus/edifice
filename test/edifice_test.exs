@@ -5,7 +5,7 @@ defmodule EdificeTest do
     test "returns a sorted list of atoms" do
       archs = Edifice.list_architectures()
       assert is_list(archs)
-      assert length(archs) > 30
+      assert length(archs) >= 90
       assert archs == Enum.sort(archs)
       assert :mamba in archs
       assert :mlp in archs
@@ -19,12 +19,25 @@ defmodule EdificeTest do
     test "includes architectures from all families" do
       archs = Edifice.list_architectures()
 
+      # Original families
       assert :gan in archs
       assert :deep_sets in archs
       assert :hopfield in archs
       assert :moe in archs
       assert :liquid in archs
       assert :snn in archs
+
+      # New architectures from expansion
+      assert :vit in archs
+      assert :gqa in archs
+      assert :s4 in archs
+      assert :dit in archs
+      assert :min_gru in archs
+      assert :simclr in archs
+      assert :graph_sage in archs
+      assert :lora in archs
+      assert :tabnet in archs
+      assert :neural_ode in archs
     end
   end
 
@@ -50,6 +63,10 @@ defmodule EdificeTest do
       assert Map.has_key?(families, :meta)
       assert Map.has_key?(families, :liquid)
       assert Map.has_key?(families, :neuromorphic)
+      assert Map.has_key?(families, :vision)
+      assert Map.has_key?(families, :contrastive)
+      assert Map.has_key?(families, :probabilistic)
+      assert Map.has_key?(families, :memory)
     end
 
     test "family members are all atoms" do
@@ -93,6 +110,21 @@ defmodule EdificeTest do
       assert Edifice.module_for(:hopfield) == Edifice.Energy.Hopfield
       assert Edifice.module_for(:moe) == Edifice.Meta.MoE
       assert Edifice.module_for(:liquid) == Edifice.Liquid
+    end
+
+    test "returns correct modules for new expansion architectures" do
+      assert Edifice.module_for(:vit) == Edifice.Vision.ViT
+      assert Edifice.module_for(:gqa) == Edifice.Attention.GQA
+      assert Edifice.module_for(:s4) == Edifice.SSM.S4
+      assert Edifice.module_for(:dit) == Edifice.Generative.DiT
+      assert Edifice.module_for(:min_gru) == Edifice.Recurrent.MinGRU
+      assert Edifice.module_for(:simclr) == Edifice.Contrastive.SimCLR
+      assert Edifice.module_for(:graph_sage) == Edifice.Graph.GraphSAGE
+      assert Edifice.module_for(:lora) == Edifice.Meta.LoRA
+      assert Edifice.module_for(:tabnet) == Edifice.Feedforward.TabNet
+      assert Edifice.module_for(:neural_ode) == Edifice.Energy.NeuralODE
+      assert Edifice.module_for(:evidential) == Edifice.Probabilistic.EvidentialNN
+      assert Edifice.module_for(:ann2snn) == Edifice.Neuromorphic.ANN2SNN
     end
 
     test "raises for unknown architecture" do
