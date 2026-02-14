@@ -197,10 +197,11 @@ defmodule Edifice.Generative.GAN do
 
   Penalizes gradients that deviate from unit norm along interpolations
   between real and fake data.
+
+  Requires a PRNG `key` for sampling random interpolation coefficients.
   """
-  defn gradient_penalty(real_data, fake_data, critic_fn, params) do
+  defn gradient_penalty(real_data, fake_data, critic_fn, params, key) do
     batch_size = Nx.axis_size(real_data, 0)
-    key = Nx.Random.key(42)
     {alpha, _key} = Nx.Random.uniform(key, shape: {batch_size, 1})
 
     interpolated =

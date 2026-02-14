@@ -189,7 +189,6 @@ defmodule Edifice.SSM.S4D do
 
   # Diagonal SSM with learnable A and dt parameters
   defp diagonal_ssm_impl(x, b, c, a_log, dt_log, opts) do
-    hidden_size = opts[:hidden_size]
     state_size = opts[:state_size]
 
     batch = Nx.axis_size(x, 0)
@@ -206,23 +205,34 @@ defmodule Edifice.SSM.S4D do
     a_bar = Nx.broadcast(a_bar, {batch, seq_len, state_size})
 
     b_bar = Nx.multiply(dt, b)
-    bu = Nx.multiply(b_bar, Nx.mean(Nx.reshape(x, {batch, seq_len, hidden_size, 1}), axes: [2]))
+
+    # Expand to 4D: each hidden channel gets its own state vector
+    # x: [batch, seq_len, hidden_size] -> [batch, seq_len, hidden_size, 1]
+    x_expanded = Nx.new_axis(x, 3)
+    # b_bar: [batch, seq_len, state_size] -> [batch, seq_len, 1, state_size]
+    b_expanded = Nx.new_axis(b_bar, 2)
+    # bu: [batch, seq_len, hidden_size, state_size]
+    bu = Nx.multiply(b_expanded, x_expanded)
+
+    # a_bar: [batch, seq_len, state_size] -> [batch, seq_len, 1, state_size]
+    a_bar_4d = Nx.new_axis(a_bar, 2)
 
     # Parallel scan via cumulative operations
-    log_a = Nx.log(Nx.add(Nx.abs(a_bar), 1.0e-10))
+    log_a = Nx.log(Nx.add(Nx.abs(a_bar_4d), 1.0e-10))
     log_a_cumsum = Nx.cumulative_sum(log_a, axis: 1)
     a_cumprod = Nx.exp(log_a_cumsum)
 
     eps = 1.0e-10
     bu_normalized = Nx.divide(bu, Nx.add(a_cumprod, eps))
     bu_cumsum = Nx.cumulative_sum(bu_normalized, axis: 1)
+    # h: [batch, seq_len, hidden_size, state_size]
     h = Nx.multiply(a_cumprod, bu_cumsum)
 
-    # Output
-    y = Nx.multiply(c, h)
-    y_summed = Nx.sum(y, axes: [2])
-    y_expanded = Nx.new_axis(y_summed, 2)
-    Nx.broadcast(y_expanded, {batch, seq_len, hidden_size})
+    # Output: sum over state_size, preserving hidden_size
+    # c: [batch, seq_len, state_size] -> [batch, seq_len, 1, state_size]
+    c_expanded = Nx.new_axis(c, 2)
+    # y: [batch, seq_len, hidden_size]
+    Nx.sum(Nx.multiply(c_expanded, h), axes: [3])
   end
 
   @doc """

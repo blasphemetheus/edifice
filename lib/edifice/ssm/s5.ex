@@ -209,9 +209,6 @@ defmodule Edifice.SSM.S5 do
     # Pre-LayerNorm
     x = Axon.layer_norm(input, name: "#{name}_norm")
 
-    # Encoder: project to state space dimension
-    encoded = Axon.dense(x, state_size, name: "#{name}_encoder")
-
     # B matrix projection (input -> state)
     b_proj = Axon.dense(x, state_size, name: "#{name}_b_proj")
 
@@ -221,11 +218,11 @@ defmodule Edifice.SSM.S5 do
     # D matrix (skip connection coefficient)
     d_proj = Axon.dense(x, hidden_size, name: "#{name}_d_proj")
 
-    # Apply MIMO SSM
+    # Apply MIMO SSM — pass x directly so SSM maintains hidden_size dim
     ssm_output =
       Axon.layer(
         &mimo_ssm_impl/5,
-        [encoded, b_proj, c_proj, d_proj],
+        [x, b_proj, c_proj, d_proj],
         name: "#{name}_ssm",
         hidden_size: hidden_size,
         state_size: state_size,
@@ -269,64 +266,58 @@ defmodule Edifice.SSM.S5 do
 
   # MIMO SSM implementation
   # Uses diagonal A matrix for efficient computation via parallel scan
-  defp mimo_ssm_impl(encoded, b_proj, c_proj, d_proj, opts) do
-    hidden_size = opts[:hidden_size]
+  # x carries hidden_size through the SSM via 4D state [batch, seq, hidden, state]
+  defp mimo_ssm_impl(x, b_proj, c_proj, d_proj, opts) do
     state_size = opts[:state_size]
 
-    # encoded: [batch, seq_len, state_size]
+    # x: [batch, seq_len, hidden_size]
     # b_proj: [batch, seq_len, state_size]
     # c_proj: [batch, seq_len, state_size]
     # d_proj: [batch, seq_len, hidden_size]
 
-    batch = Nx.axis_size(encoded, 0)
-    seq_len = Nx.axis_size(encoded, 1)
+    batch = Nx.axis_size(x, 0)
+    seq_len = Nx.axis_size(x, 1)
 
     # A matrix: diagonal, negative for stability
-    # Initialize as -exp(uniform) for HiPPO-like initialization
-    # We use fixed values here for simplicity
     a_diag = Nx.negate(Nx.add(Nx.iota({state_size}), 1.0))
-    # Normalize
     a_diag = Nx.divide(a_diag, state_size)
 
     # Discretization step (fixed for simplicity)
     dt = 0.1
 
-    # Discretize A: A_bar = exp(dt * A)
+    # Discretize A: A_bar = exp(dt * A) -> [state_size]
     a_bar = Nx.exp(Nx.multiply(dt, a_diag))
     a_bar = Nx.broadcast(a_bar, {batch, seq_len, state_size})
 
     # Discretize B: B_bar = dt * B
     b_bar = Nx.multiply(dt, b_proj)
 
-    # Input contribution: B_bar * encoded
-    bu = Nx.multiply(b_bar, encoded)
+    # Expand to 4D: each hidden channel gets its own state vector
+    x_expanded = Nx.new_axis(x, 3)
+    b_expanded = Nx.new_axis(b_bar, 2)
+    bu = Nx.multiply(b_expanded, x_expanded)
+
+    a_bar_4d = Nx.new_axis(a_bar, 2)
 
     # Parallel scan for h[t] = A_bar * h[t-1] + B_bar * u[t]
-    # Use cumulative operations for parallel computation
-    log_a = Nx.log(Nx.add(a_bar, 1.0e-10))
+    log_a = Nx.log(Nx.add(a_bar_4d, 1.0e-10))
     log_a_cumsum = Nx.cumulative_sum(log_a, axis: 1)
     a_cumprod = Nx.exp(log_a_cumsum)
 
-    # Normalize input by cumulative A product
     eps = 1.0e-10
     bu_normalized = Nx.divide(bu, Nx.add(a_cumprod, eps))
     bu_cumsum = Nx.cumulative_sum(bu_normalized, axis: 1)
 
-    # Hidden state: h = A_cumprod * cumsum(B*u / A_cumprod)
+    # h: [batch, seq_len, hidden_size, state_size]
     h = Nx.multiply(a_cumprod, bu_cumsum)
 
-    # Output: y = C * h
-    y = Nx.multiply(c_proj, h)
-
-    # Sum over state dimension and project to hidden_size
-    # [batch, seq_len]
-    y_summed = Nx.sum(y, axes: [2])
-    # [batch, seq_len, 1]
-    y_expanded = Nx.new_axis(y_summed, 2)
-    y_broadcast = Nx.broadcast(y_expanded, {batch, seq_len, hidden_size})
+    # Output: sum over state_size, preserving hidden_size
+    c_expanded = Nx.new_axis(c_proj, 2)
+    # y: [batch, seq_len, hidden_size]
+    y = Nx.sum(Nx.multiply(c_expanded, h), axes: [3])
 
     # Add skip connection (D term)
-    Nx.add(y_broadcast, d_proj)
+    Nx.add(y, d_proj)
   end
 
   # ============================================================================

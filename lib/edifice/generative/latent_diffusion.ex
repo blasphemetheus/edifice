@@ -234,13 +234,15 @@ defmodule Edifice.Generative.LatentDiffusion do
 
   @doc """
   Reparameterization trick for the encoder.
+
+  Requires a PRNG `key` for sampling. Returns `{z, new_key}`.
   """
-  @spec reparameterize(Nx.Tensor.t(), Nx.Tensor.t()) :: Nx.Tensor.t()
-  defn reparameterize(mu, log_var) do
+  @spec reparameterize(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t()) ::
+          {Nx.Tensor.t(), Nx.Tensor.t()}
+  defn reparameterize(mu, log_var, key) do
     std = Nx.exp(0.5 * log_var)
-    key = Nx.Random.key(42)
-    {eps, _key} = Nx.Random.normal(key, shape: Nx.shape(mu), type: Nx.type(mu))
-    mu + eps * std
+    {eps, key} = Nx.Random.normal(key, shape: Nx.shape(mu), type: Nx.type(mu))
+    {mu + eps * std, key}
   end
 
   @doc """

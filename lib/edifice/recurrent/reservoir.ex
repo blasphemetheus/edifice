@@ -80,7 +80,8 @@ defmodule Edifice.Recurrent.Reservoir do
 
     # Generate fixed reservoir weights at BUILD TIME (computed once, frozen forever)
     # This is the key property of ESNs: reservoir weights are never trained
-    key = Nx.Random.key(42)
+    seed = Keyword.get(opts, :seed, 42)
+    key = Nx.Random.key(seed)
 
     # Input weights: [input_size, reservoir_size]
     {w_in_data, key} = Nx.Random.normal(key, shape: {input_size, reservoir_size})

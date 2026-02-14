@@ -288,13 +288,13 @@ defmodule Edifice.Generative.VQVAE do
   ## Parameters
     - `num_embeddings` - Number of codebook entries
     - `embedding_dim` - Dimension of each codebook vector
+    - `key` - Optional PRNG key (default: `Nx.Random.key(42)`)
 
   ## Returns
     Codebook tensor `[num_embeddings, embedding_dim]` initialized from N(0, 1).
   """
-  @spec init_codebook(pos_integer(), pos_integer()) :: Nx.Tensor.t()
-  defn init_codebook(num_embeddings, embedding_dim) do
-    key = Nx.Random.key(42)
+  @spec init_codebook(pos_integer(), pos_integer(), Nx.Tensor.t()) :: Nx.Tensor.t()
+  defn init_codebook(num_embeddings, embedding_dim, key \\ Nx.Random.key(42)) do
     {codebook, _key} = Nx.Random.normal(key, shape: {num_embeddings, embedding_dim})
     codebook
   end

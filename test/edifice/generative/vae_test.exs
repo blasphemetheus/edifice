@@ -96,11 +96,12 @@ defmodule Edifice.Generative.VAETest do
     end
   end
 
-  describe "reparameterize/2" do
+  describe "reparameterize/3" do
     test "produces output with same shape as mu" do
       mu = Nx.broadcast(0.5, {4, 16})
       log_var = Nx.broadcast(0.5, {4, 16})
-      z = VAE.reparameterize(mu, log_var)
+      key = Nx.Random.key(0)
+      {z, _key} = VAE.reparameterize(mu, log_var, key)
 
       assert Nx.shape(z) == {4, 16}
     end
@@ -108,9 +109,19 @@ defmodule Edifice.Generative.VAETest do
     test "output type matches input type" do
       mu = Nx.broadcast(0.5, {2, 8})
       log_var = Nx.broadcast(0.5, {2, 8})
-      z = VAE.reparameterize(mu, log_var)
+      key = Nx.Random.key(0)
+      {z, _key} = VAE.reparameterize(mu, log_var, key)
 
       assert Nx.type(z) == {:f, 32}
+    end
+
+    test "different keys produce different samples" do
+      mu = Nx.broadcast(0.0, {2, 8})
+      log_var = Nx.broadcast(0.0, {2, 8})
+      {z1, _} = VAE.reparameterize(mu, log_var, Nx.Random.key(1))
+      {z2, _} = VAE.reparameterize(mu, log_var, Nx.Random.key(2))
+
+      refute Nx.to_flat_list(z1) == Nx.to_flat_list(z2)
     end
   end
 

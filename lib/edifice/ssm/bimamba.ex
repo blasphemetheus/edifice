@@ -230,7 +230,6 @@ defmodule Edifice.SSM.BiMamba do
   end
 
   defp run_directional_ssm(x, b, c, opts, direction) do
-    hidden_size = opts[:hidden_size]
     state_size = opts[:state_size]
 
     batch = Nx.axis_size(x, 0)
@@ -254,10 +253,14 @@ defmodule Edifice.SSM.BiMamba do
 
     b_bar = Nx.multiply(dt, b_dir)
 
-    bu =
-      Nx.multiply(b_bar, Nx.mean(Nx.reshape(x_dir, {batch, seq_len, hidden_size, 1}), axes: [2]))
+    # Expand to 4D: each hidden channel gets its own state vector
+    x_expanded = Nx.new_axis(x_dir, 3)
+    b_expanded = Nx.new_axis(b_bar, 2)
+    bu = Nx.multiply(b_expanded, x_expanded)
 
-    log_a = Nx.log(Nx.add(Nx.abs(a_bar), 1.0e-10))
+    a_bar_4d = Nx.new_axis(a_bar, 2)
+
+    log_a = Nx.log(Nx.add(Nx.abs(a_bar_4d), 1.0e-10))
     log_a_cumsum = Nx.cumulative_sum(log_a, axis: 1)
     a_cumprod = Nx.exp(log_a_cumsum)
 
@@ -266,10 +269,9 @@ defmodule Edifice.SSM.BiMamba do
     bu_cumsum = Nx.cumulative_sum(bu_normalized, axis: 1)
     h = Nx.multiply(a_cumprod, bu_cumsum)
 
-    y = Nx.multiply(c_dir, h)
-    y_summed = Nx.sum(y, axes: [2])
-    y_expanded = Nx.new_axis(y_summed, 2)
-    y_out = Nx.broadcast(y_expanded, {batch, seq_len, hidden_size})
+    # Output: sum over state_size, preserving hidden_size
+    c_expanded = Nx.new_axis(c_dir, 2)
+    y_out = Nx.sum(Nx.multiply(c_expanded, h), axes: [3])
 
     # Reverse output back for backward direction
     case direction do

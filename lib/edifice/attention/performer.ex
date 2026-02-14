@@ -214,10 +214,11 @@ defmodule Edifice.Attention.Performer do
   of size head_dim). Multiple orthogonal blocks are concatenated if num_features > head_dim.
   """
   # Nx.LinAlg.qr/1 typespec says Nx.Tensor.t() but actually returns {q, r} tuple
-  @dialyzer {:nowarn_function, generate_orthogonal_features: 2}
-  @spec generate_orthogonal_features(pos_integer(), pos_integer()) :: Nx.Tensor.t()
-  def generate_orthogonal_features(head_dim, num_features) do
-    key = Nx.Random.key(42)
+  @dialyzer {:nowarn_function, generate_orthogonal_features: 3}
+  @spec generate_orthogonal_features(pos_integer(), pos_integer(), keyword()) :: Nx.Tensor.t()
+  def generate_orthogonal_features(head_dim, num_features, opts \\ []) do
+    seed = Keyword.get(opts, :seed, 42)
+    key = Nx.Random.key(seed)
 
     # Generate blocks of orthogonal features via QR decomposition
     num_full_blocks = div(num_features, head_dim)

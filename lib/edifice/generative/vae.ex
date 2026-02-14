@@ -57,7 +57,8 @@ defmodule Edifice.Generative.VAE do
       encoder = VAE.build_encoder(input_size: 784, latent_size: 32)
 
       # Reparameterization and loss (in training loop)
-      z = VAE.reparameterize(mu, log_var)
+      key = Nx.Random.key(System.system_time())
+      {z, _key} = VAE.reparameterize(mu, log_var, key)
       kl = VAE.kl_divergence(mu, log_var)
       total = VAE.loss(reconstruction, target, mu, log_var, beta: 1.0)
   """
@@ -195,22 +196,22 @@ defmodule Edifice.Generative.VAE do
   ## Parameters
     - `mu` - Mean of the approximate posterior `[batch, latent_size]`
     - `log_var` - Log variance of the approximate posterior `[batch, latent_size]`
+    - `key` - PRNG key from `Nx.Random.key/1` (required for proper stochastic sampling)
 
   ## Returns
-    Sampled latent vector `z` with shape `[batch, latent_size]`.
+    `{z, new_key}` — Sampled latent vector and updated PRNG key.
   """
-  @spec reparameterize(Nx.Tensor.t(), Nx.Tensor.t()) :: Nx.Tensor.t()
-  defn reparameterize(mu, log_var) do
+  @spec reparameterize(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t()) ::
+          {Nx.Tensor.t(), Nx.Tensor.t()}
+  defn reparameterize(mu, log_var, key) do
     # Standard deviation: exp(0.5 * log_var) = sqrt(var)
     std = Nx.exp(0.5 * log_var)
 
-    # Sample epsilon from standard normal using a data-dependent seed
-    # In practice, callers should pass a PRNG key for proper randomness
-    key = Nx.Random.key(42)
-    {eps, _key} = Nx.Random.normal(key, shape: Nx.shape(mu), type: Nx.type(mu))
+    # Sample epsilon from standard normal
+    {eps, key} = Nx.Random.normal(key, shape: Nx.shape(mu), type: Nx.type(mu))
 
     # z = mu + eps * std
-    mu + eps * std
+    {mu + eps * std, key}
   end
 
   # ============================================================================
