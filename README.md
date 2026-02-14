@@ -62,6 +62,14 @@ Edifice.list_families()
 
 ## Architecture Families
 
+### Feedforward
+
+| Architecture | Module | Key Feature |
+|-------------|--------|-------------|
+| **MLP** | `Edifice.Feedforward.MLP` | Multi-layer perceptron with configurable hidden sizes |
+| **KAN** | `Edifice.Feedforward.KAN` | Kolmogorov-Arnold Networks, learnable activation functions |
+| **TabNet** | `Edifice.Feedforward.TabNet` | Attentive feature selection for tabular data |
+
 ### State Space Models
 
 | Architecture | Module | Key Feature |
