@@ -62,7 +62,7 @@ defmodule Edifice.Convolutional.Conv do
   # 1D Convolution
   # ============================================================================
 
-  @doc false
+  @doc "Alias for `build_conv1d/1`."
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []), do: build_conv1d(opts)
 

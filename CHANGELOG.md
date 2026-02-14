@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Expanded from 44 to 103 architectures across 19 families
+- Expanded from 44 to 91 registered architectures across 16 families
 - **State Space Models**: S4, S4D, H3, Hyena, MambaCumsum, MambaHillisSteele, BiMamba, HybridBuilder
 - **Attention**: GQA, Perceiver, FNet, LinearTransformer, Nystromformer, Performer
 - **Recurrent**: MinGRU, MinLSTM, DeltaNet, TTT (Test-Time Training), Titans
@@ -23,16 +23,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Meta**: Switch MoE, Soft MoE, LoRA, Adapter
 - **Neuromorphic**: ANN2SNN (ANN-to-SNN conversion)
 - **Feedforward**: TabNet (attentive tabular learning)
-- **Building Blocks**: RMSNorm, SwiGLU, RoPE, ALiBi, PatchEmbed, SinusoidalPE, AdaptiveNorm, CrossAttention
+- **Building Blocks**: RMSNorm, SwiGLU, FFN, RoPE, ALiBi, PatchEmbed, SinusoidalPE, AdaptiveNorm, CrossAttention
 - 12 conceptual guide documents covering theory, evolution, and decision tables for all families
 - `groups_for_extras` in ExDoc for organized guide sidebar navigation
-- ~549 tests covering all architecture families
+- Benchee-based profiling scripts (`bench/architecture_profile.exs`, `bench/scaling_profile.exs`)
+- `CONTRIBUTING.md` with architecture addition guide, test patterns, and Nx/Axon gotchas
+- `.credo.exs` config with documented threshold adjustments for ML library patterns
+- `mix_audit` for dependency vulnerability scanning
+- Explicit `:files` key in `package/0` for clean Hex.pm tarballs
+- ~1159 tests covering all architecture families
+
+### Changed
+
+- Migrated 8 modules from private FFN builders to shared `Edifice.Blocks.FFN` (S4, S4D, S5, H3, Hyena, BiMamba, Liquid, MoE)
+- Precomputed chunk A cumulative products in Mamba-2 SSD inter-chunk propagation (perf optimization)
 
 ### Fixed
 
 - Nx tensor arithmetic outside `defn` context (NTM, Capsule, NormalizingFlow, EBM)
 - `Nx.dot` batching with explicit batch axes (GAT, MessagePassing)
 - Activation naming (`:silu` instead of `:swish` for Axon 0.8)
+- Removed broken `sliding_window` registry alias (called wrong function)
+- Removed dead `_chunk_a_products` code in Mamba-2 SSD
+- README architecture count accuracy (was "90+", now exact "91 across 16 families")
+- All 72 Credo warnings resolved (alias ordering, `length/1`, nested module refs)
 
 ## [0.1.0] - 2026-02-10
 

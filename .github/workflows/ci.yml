@@ -48,7 +48,9 @@ jobs:
 
       - name: Run Credo
         run: mix credo
-        continue-on-error: true
+
+      - name: Audit dependencies
+        run: mix deps.audit
 
       - name: Restore Dialyzer PLT cache
         uses: actions/cache@v4
