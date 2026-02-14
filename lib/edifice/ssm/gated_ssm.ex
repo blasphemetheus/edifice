@@ -745,7 +745,7 @@ defmodule Edifice.SSM.GatedSSM do
 
     # Layer norm
     x =
-      if Map.has_key?(params, :norm) do
+      if params.norm != %{} do
         layer_norm_forward(x, params.norm)
       else
         x

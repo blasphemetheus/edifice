@@ -176,12 +176,15 @@ defmodule Edifice.Attention.GLA do
 
     # Gated FFN (norm + SwiGLU + residual)
     ffn_normed = Axon.layer_norm(x, name: "#{name}_ffn_norm")
-    ffn_out = FFN.gated_layer(ffn_normed,
-      hidden_size: hidden_size,
-      inner_size: hidden_size * expand_factor,
-      dropout: dropout,
-      name: "#{name}_ffn"
-    )
+
+    ffn_out =
+      FFN.gated_layer(ffn_normed,
+        hidden_size: hidden_size,
+        inner_size: hidden_size * expand_factor,
+        dropout: dropout,
+        name: "#{name}_ffn"
+      )
+
     Axon.add(x, ffn_out, name: "#{name}_ffn_residual")
   end
 

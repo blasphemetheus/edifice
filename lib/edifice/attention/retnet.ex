@@ -197,7 +197,13 @@ defmodule Edifice.Attention.RetNet do
 
     # 2. Feedforward branch
     ff_normed = Axon.layer_norm(after_retention, name: "#{name}_ff_norm")
-    ff_out = FFN.layer(ff_normed, hidden_size: hidden_size, expansion_factor: expand_factor, name: "#{name}_ffn")
+
+    ff_out =
+      FFN.layer(ff_normed,
+        hidden_size: hidden_size,
+        expansion_factor: expand_factor,
+        name: "#{name}_ffn"
+      )
 
     # Residual connection
     Axon.add(after_retention, ff_out, name: "#{name}_ff_residual")

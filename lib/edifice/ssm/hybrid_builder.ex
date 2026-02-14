@@ -478,7 +478,7 @@ defmodule Edifice.SSM.HybridBuilder do
     kan_out =
       KAN.build_kan_layer(
         normalized,
-        output_size: hidden_size,
+        hidden_size,
         grid_size: grid_size,
         name: name
       )

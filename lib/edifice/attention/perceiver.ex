@@ -252,7 +252,10 @@ defmodule Edifice.Attention.Perceiver do
 
     # FFN
     ffn_normed = Axon.layer_norm(after_attn, name: "#{name}_ffn_norm")
-    ffn_out = FFN.layer(ffn_normed, hidden_size: latent_dim, dropout: dropout, name: "#{name}_ffn")
+
+    ffn_out =
+      FFN.layer(ffn_normed, hidden_size: latent_dim, dropout: dropout, name: "#{name}_ffn")
+
     Axon.add(after_attn, ffn_out, name: "#{name}_ffn_residual")
   end
 
@@ -304,7 +307,10 @@ defmodule Edifice.Attention.Perceiver do
 
     # FFN
     ffn_normed = Axon.layer_norm(after_attn, name: "#{name}_ffn_norm")
-    ffn_out = FFN.layer(ffn_normed, hidden_size: latent_dim, dropout: dropout, name: "#{name}_ffn")
+
+    ffn_out =
+      FFN.layer(ffn_normed, hidden_size: latent_dim, dropout: dropout, name: "#{name}_ffn")
+
     Axon.add(after_attn, ffn_out, name: "#{name}_ffn_residual")
   end
 

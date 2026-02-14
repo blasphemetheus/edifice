@@ -89,41 +89,48 @@ defmodule Edifice.Generative.ConsistencyModelCorrectnessTest do
 
   describe "Karras noise schedule" do
     test "first step is approximately sigma_min" do
-      schedule = ConsistencyModel.noise_schedule(
-        n_steps: 40,
-        sigma_min: @sigma_min,
-        sigma_max: @sigma_max
-      )
+      schedule =
+        ConsistencyModel.noise_schedule(
+          n_steps: 40,
+          sigma_min: @sigma_min,
+          sigma_max: @sigma_max
+        )
 
       first =
         Nx.slice_along_axis(schedule, 0, 1, axis: 0) |> Nx.squeeze() |> Nx.to_number()
 
-      assert_in_delta first, @sigma_min, 1.0e-6,
-        "First schedule step should be sigma_min (#{@sigma_min}), got: #{first}"
+      assert_in_delta first,
+                      @sigma_min,
+                      1.0e-6,
+                      "First schedule step should be sigma_min (#{@sigma_min}), got: #{first}"
     end
 
     test "last step is approximately sigma_max" do
-      schedule = ConsistencyModel.noise_schedule(
-        n_steps: 40,
-        sigma_min: @sigma_min,
-        sigma_max: @sigma_max
-      )
+      schedule =
+        ConsistencyModel.noise_schedule(
+          n_steps: 40,
+          sigma_min: @sigma_min,
+          sigma_max: @sigma_max
+        )
 
       n = Nx.axis_size(schedule, 0)
 
       last =
         Nx.slice_along_axis(schedule, n - 1, 1, axis: 0) |> Nx.squeeze() |> Nx.to_number()
 
-      assert_in_delta last, @sigma_max, 1.0e-3,
-        "Last schedule step should be sigma_max (#{@sigma_max}), got: #{last}"
+      assert_in_delta last,
+                      @sigma_max,
+                      1.0e-3,
+                      "Last schedule step should be sigma_max (#{@sigma_max}), got: #{last}"
     end
 
     test "schedule is monotonically increasing" do
-      schedule = ConsistencyModel.noise_schedule(
-        n_steps: 20,
-        sigma_min: @sigma_min,
-        sigma_max: @sigma_max
-      )
+      schedule =
+        ConsistencyModel.noise_schedule(
+          n_steps: 20,
+          sigma_min: @sigma_min,
+          sigma_max: @sigma_max
+        )
 
       values = Nx.to_flat_list(schedule)
 

@@ -213,6 +213,8 @@ defmodule Edifice.Attention.Performer do
   Returns a `[num_features, head_dim]` matrix with orthogonal rows (within blocks
   of size head_dim). Multiple orthogonal blocks are concatenated if num_features > head_dim.
   """
+  # Nx.LinAlg.qr/1 typespec says Nx.Tensor.t() but actually returns {q, r} tuple
+  @dialyzer {:nowarn_function, generate_orthogonal_features: 2}
   @spec generate_orthogonal_features(pos_integer(), pos_integer()) :: Nx.Tensor.t()
   def generate_orthogonal_features(head_dim, num_features) do
     key = Nx.Random.key(42)

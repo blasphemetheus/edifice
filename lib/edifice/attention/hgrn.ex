@@ -184,7 +184,15 @@ defmodule Edifice.Attention.HGRN do
 
     # Feed-forward network (norm + FFN + dropout + residual)
     ffn_normed = Axon.layer_norm(x, name: "#{name}_ffn_norm")
-    ffn_out = FFN.layer(ffn_normed, hidden_size: hidden_size, activation: :silu, dropout: dropout, name: "#{name}_ffn")
+
+    ffn_out =
+      FFN.layer(ffn_normed,
+        hidden_size: hidden_size,
+        activation: :silu,
+        dropout: dropout,
+        name: "#{name}_ffn"
+      )
+
     Axon.add(x, ffn_out, name: "#{name}_ffn_residual")
   end
 
