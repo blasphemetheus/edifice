@@ -37,12 +37,12 @@ defmodule Edifice.MixProject do
   defp deps do
     [
       # ML Core
-      {:nx, "~> 0.9"},
-      {:axon, "~> 0.7"},
+      {:nx, "~> 0.10"},
+      {:axon, "~> 0.8"},
       {:polaris, "~> 0.1"},
 
       # GPU Backend (optional - users bring their own)
-      {:exla, "~> 0.9", optional: true},
+      {:exla, "~> 0.10", optional: true},
 
       # Dev & Test
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
