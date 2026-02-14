@@ -98,16 +98,16 @@ defmodule ScalingProfile do
           {init_fn, predict_fn} = Axon.build(model)
           params = init_fn.(template, Axon.ModelState.empty())
 
-          # Warm up
-          predict_fn.(params, input)
+          # Warm up (3 iters to ensure EXLA compilation is done)
+          for _ <- 1..3, do: predict_fn.(params, input)
 
-          # Time 5 iterations
+          # Time 10 iterations
           {total_us, _} =
             :timer.tc(fn ->
-              for _ <- 1..5, do: predict_fn.(params, input)
+              for _ <- 1..10, do: predict_fn.(params, input)
             end)
 
-          avg_ms = total_us / 5 / 1_000
+          avg_ms = total_us / 10 / 1_000
           {name, avg_ms}
         end
 

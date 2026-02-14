@@ -2,7 +2,7 @@
 
 A comprehensive ML architecture library for Elixir, built on [Nx](https://github.com/elixir-nx/nx) and [Axon](https://github.com/elixir-nx/axon).
 
-90+ neural network architectures across 19 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons.
+92 neural network architectures across 16 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons.
 
 ## Why Edifice?
 
@@ -125,7 +125,6 @@ Edifice.list_families()
 
 | Architecture | Module | Key Feature |
 |-------------|--------|-------------|
-| **Conv1D/2D** | `Edifice.Convolutional.Conv` | Configurable convolution blocks |
 | **ResNet** | `Edifice.Convolutional.ResNet` | Residual/bottleneck blocks, configurable depth |
 | **DenseNet** | `Edifice.Convolutional.DenseNet` | Dense connections, feature reuse |
 | **TCN** | `Edifice.Convolutional.TCN` | Dilated causal convolutions for sequences |
@@ -169,7 +168,6 @@ Edifice.list_families()
 | **Graph Transformer** | `Edifice.Graph.GraphTransformer` | Full attention over nodes with edge features |
 | **PNA** | `Edifice.Graph.PNA` | Principal Neighbourhood Aggregation |
 | **SchNet** | `Edifice.Graph.SchNet` | Continuous-filter convolutions for molecules |
-| **Message Passing** | `Edifice.Graph.MessagePassing` | Generic MPNN framework, global pooling |
 | **DeepSets** | `Edifice.Sets.DeepSets` | Permutation-invariant set functions |
 | **PointNet** | `Edifice.Sets.PointNet` | Point cloud processing with T-Net alignment |
 
@@ -213,6 +211,9 @@ Edifice.list_families()
 | **Sinusoidal PE** | `Edifice.Blocks.SinusoidalPE` | Fixed sinusoidal position encoding |
 | **Adaptive Norm** | `Edifice.Blocks.AdaptiveNorm` | Condition-dependent normalization (AdaLN) |
 | **Cross Attention** | `Edifice.Blocks.CrossAttention` | Cross-attention between two sequences |
+| **Conv1D/2D** | `Edifice.Convolutional.Conv` | Configurable convolution blocks |
+| **FFN** | `Edifice.Blocks.FFN` | Standard and gated feed-forward networks |
+| **Message Passing** | `Edifice.Graph.MessagePassing` | Generic MPNN framework, global pooling |
 
 ## Guides
 
