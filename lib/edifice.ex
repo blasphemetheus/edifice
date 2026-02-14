@@ -76,7 +76,6 @@ defmodule Edifice do
     zamba: Edifice.SSM.Zamba,
     # Attention
     attention: Edifice.Attention.MultiHead,
-    sliding_window: Edifice.Attention.MultiHead,
     retnet: Edifice.Attention.RetNet,
     rwkv: Edifice.Attention.RWKV,
     gla: Edifice.Attention.GLA,
@@ -198,7 +197,6 @@ defmodule Edifice do
       ],
       attention: [
         :attention,
-        :sliding_window,
         :retnet,
         :rwkv,
         :gla,
