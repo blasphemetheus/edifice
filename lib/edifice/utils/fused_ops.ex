@@ -450,12 +450,10 @@ defmodule Edifice.Utils.FusedOps do
   Standard softmax: 4 passes (max, subtract, exp, sum, divide)
   Fused softmax: XLA can reduce to 2-3 passes with better register usage
 
-  Note: Always computes over axis=-1 (last axis), which is standard for softmax
-  over class logits.
+  Always computes over the last axis, which is standard for softmax over class logits.
   """
-  @spec fused_softmax(Nx.Tensor.t(), keyword()) :: Nx.Tensor.t()
-  def fused_softmax(logits, _opts \\ []) do
-    # axis option is accepted but ignored - always uses -1 for compile-time optimization
+  @spec fused_softmax(Nx.Tensor.t()) :: Nx.Tensor.t()
+  def fused_softmax(logits) do
     fused_softmax_impl(logits)
   end
 

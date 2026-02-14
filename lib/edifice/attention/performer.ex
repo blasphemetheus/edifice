@@ -176,10 +176,16 @@ defmodule Edifice.Attention.Performer do
     k = k |> Nx.reshape({batch, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
     v = v |> Nx.reshape({batch, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
 
+    # Scale Q, K by 1/sqrt(d) before feature map (Choromanski et al.)
+    # This ensures the kernel approximation quality is dimension-independent
+    d_scale = Nx.rsqrt(Nx.tensor(head_dim, type: Nx.type(q)))
+    q_scaled = Nx.multiply(q, d_scale)
+    k_scaled = Nx.multiply(k, d_scale)
+
     # Apply FAVOR+ feature map with precomputed orthogonal random features
     # phi(x) = exp(x @ omega^T - ||x||^2/2) / sqrt(m)
-    q_prime = favor_feature_map(q, omega, num_features)
-    k_prime = favor_feature_map(k, omega, num_features)
+    q_prime = favor_feature_map(q_scaled, omega, num_features)
+    k_prime = favor_feature_map(k_scaled, omega, num_features)
 
     # Causal FAVOR+ attention using cumulative sums
     # K'^T * V outer products: [batch, heads, seq, num_features, head_dim]

@@ -240,13 +240,20 @@ defmodule Edifice do
 
   ## Parameters
     - `name` - Architecture name (see `list_architectures/0`)
-    - `opts` - Architecture-specific options (at minimum `:embed_size` or `:input_size`)
+    - `opts` - Architecture-specific options. The primary input dimension option
+      varies by family:
+      - `:embed_size` — sequence models (SSM, attention, recurrent)
+      - `:input_size` — flat-vector models (MLP, probabilistic, energy)
+      - `:input_dim` — graph/spatial models (GCN, DeepSets, vision)
+
+      You can pass any of these three interchangeably — `build/2` will
+      normalize to the name each module expects.
 
   ## Examples
 
       model = Edifice.build(:mamba, embed_size: 256, hidden_size: 512, num_layers: 4)
       model = Edifice.build(:mlp, input_size: 256, hidden_sizes: [512, 256])
-      model = Edifice.build(:lstm, embed_size: 256, hidden_size: 512)
+      model = Edifice.build(:gcn, input_dim: 8, hidden_dims: [32, 32], num_classes: 10)
 
   ## Returns
 
@@ -255,6 +262,8 @@ defmodule Edifice do
   """
   @spec build(atom(), keyword()) :: Axon.t() | tuple()
   def build(name, opts \\ []) do
+    opts = normalize_input_dim(opts)
+
     case Map.fetch(@architecture_registry, name) do
       {:ok, {module, default_opts}} ->
         merged_opts = Keyword.merge(default_opts, opts)
@@ -289,6 +298,24 @@ defmodule Edifice do
       :error ->
         available = list_architectures() |> Enum.join(", ")
         raise ArgumentError, "Unknown architecture #{inspect(name)}. Available: #{available}"
+    end
+  end
+
+  # Normalize input dimension options so users can pass any of the three
+  # names and the right one reaches each module.
+  defp normalize_input_dim(opts) do
+    value =
+      Keyword.get(opts, :embed_size) ||
+        Keyword.get(opts, :input_size) ||
+        Keyword.get(opts, :input_dim)
+
+    if value do
+      opts
+      |> Keyword.put_new(:embed_size, value)
+      |> Keyword.put_new(:input_size, value)
+      |> Keyword.put_new(:input_dim, value)
+    else
+      opts
     end
   end
 end
