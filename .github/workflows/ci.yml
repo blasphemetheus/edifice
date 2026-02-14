@@ -50,5 +50,15 @@ jobs:
         run: mix credo
         continue-on-error: true
 
+      - name: Restore Dialyzer PLT cache
+        uses: actions/cache@v4
+        with:
+          path: _build/dev/dialyxir_*.plt
+          key: ${{ runner.os }}-plt-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-plt-${{ matrix.elixir }}-${{ matrix.otp }}-
+
+      - name: Run Dialyzer
+        run: mix dialyzer
+
       - name: Run tests
         run: mix test

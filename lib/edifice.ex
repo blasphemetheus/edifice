@@ -249,9 +249,11 @@ defmodule Edifice do
       model = Edifice.build(:lstm, embed_size: 256, hidden_size: 512)
 
   ## Returns
-    An Axon model.
+
+  An `Axon.t()` model for most architectures. Generative architectures (VAE, GAN,
+  VQ-VAE) return tuples — see each module's docs for details.
   """
-  @spec build(atom(), keyword()) :: Axon.t()
+  @spec build(atom(), keyword()) :: Axon.t() | tuple()
   def build(name, opts \\ []) do
     case Map.fetch(@architecture_registry, name) do
       {:ok, {module, default_opts}} ->
