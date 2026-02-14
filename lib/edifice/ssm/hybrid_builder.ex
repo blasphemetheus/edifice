@@ -40,11 +40,11 @@ defmodule Edifice.SSM.HybridBuilder do
 
   require Axon
 
-  alias Edifice.SSM.GatedSSM
-  alias Edifice.Attention.MultiHead, as: Attention
   alias Edifice.Attention.{GLA, RWKV}
-  alias Edifice.Feedforward.KAN
+  alias Edifice.Attention.MultiHead, as: Attention
   alias Edifice.Blocks.FFN
+  alias Edifice.Feedforward.KAN
+  alias Edifice.SSM.GatedSSM
 
   @type layer_type :: :mamba | :attention | :gla | :rwkv | :ffn | :kan
   @type pattern :: [layer_type()]

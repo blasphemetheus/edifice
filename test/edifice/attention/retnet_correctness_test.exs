@@ -132,8 +132,8 @@ defmodule Edifice.Attention.RetNetCorrectnessTest do
       msr_keys_h2 = Enum.filter(keys_h2, &String.contains?(&1, "msr"))
       msr_keys_h4 = Enum.filter(keys_h4, &String.contains?(&1, "msr"))
 
-      assert length(msr_keys_h2) > 0, "2-head model should have MSR params"
-      assert length(msr_keys_h4) > 0, "4-head model should have MSR params"
+      assert msr_keys_h2 != [], "2-head model should have MSR params"
+      assert msr_keys_h4 != [], "4-head model should have MSR params"
     end
 
     test "models with different num_heads both produce valid outputs" do

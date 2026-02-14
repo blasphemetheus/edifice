@@ -1,7 +1,7 @@
 defmodule Edifice.Attention.AttentionVariantsTest do
   use ExUnit.Case, async: true
 
-  alias Edifice.Attention.{GQA, Perceiver, FNet, LinearTransformer, Nystromformer, Performer}
+  alias Edifice.Attention.{FNet, GQA, LinearTransformer, Nystromformer, Perceiver, Performer}
 
   # Small dimensions for fast testing
   @batch 2

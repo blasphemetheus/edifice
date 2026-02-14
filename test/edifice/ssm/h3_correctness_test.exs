@@ -43,12 +43,12 @@ defmodule Edifice.SSM.H3CorrectnessTest do
 
       a_log_keys = Enum.filter(ssm_sub_keys, &String.contains?(&1, "a_log"))
 
-      assert length(a_log_keys) > 0,
+      assert a_log_keys != [],
              "Shift SSM should contain 'a_log', got: #{inspect(ssm_sub_keys)}"
 
       dt_log_keys = Enum.filter(ssm_sub_keys, &String.contains?(&1, "dt_log"))
 
-      assert length(dt_log_keys) > 0,
+      assert dt_log_keys != [],
              "Shift SSM should contain 'dt_log', got: #{inspect(ssm_sub_keys)}"
     end
 
@@ -66,10 +66,10 @@ defmodule Edifice.SSM.H3CorrectnessTest do
       ssm_sub_keys = Map.keys(ssm_params)
 
       a_log_keys = Enum.filter(ssm_sub_keys, &String.contains?(&1, "a_log"))
-      assert length(a_log_keys) > 0, "Diag SSM should contain 'a_log'"
+      assert a_log_keys != [], "Diag SSM should contain 'a_log'"
 
       dt_log_keys = Enum.filter(ssm_sub_keys, &String.contains?(&1, "dt_log"))
-      assert length(dt_log_keys) > 0, "Diag SSM should contain 'dt_log'"
+      assert dt_log_keys != [], "Diag SSM should contain 'dt_log'"
     end
 
     test "params contain depthwise conv weights (not window_mean)" do
@@ -82,7 +82,7 @@ defmodule Edifice.SSM.H3CorrectnessTest do
       param_keys = Map.keys(params.data)
       conv_keys = Enum.filter(param_keys, &String.contains?(&1, "dw_conv"))
 
-      assert length(conv_keys) > 0,
+      assert conv_keys != [],
              "Should have depthwise conv params, got: #{inspect(param_keys)}"
     end
   end

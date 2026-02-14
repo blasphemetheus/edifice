@@ -1,10 +1,10 @@
 defmodule Edifice.Meta.MetaNewTest do
   use ExUnit.Case, async: true
 
-  alias Edifice.Meta.SwitchMoE
-  alias Edifice.Meta.SoftMoE
-  alias Edifice.Meta.LoRA
   alias Edifice.Meta.Adapter
+  alias Edifice.Meta.LoRA
+  alias Edifice.Meta.SoftMoE
+  alias Edifice.Meta.SwitchMoE
 
   @batch_size 2
   @embed_size 32

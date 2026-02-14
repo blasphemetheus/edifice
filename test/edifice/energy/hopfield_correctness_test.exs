@@ -34,7 +34,7 @@ defmodule Edifice.Energy.HopfieldCorrectnessTest do
 
       pattern_keys = Map.keys(retrieve_params) |> Enum.filter(&String.contains?(&1, "patterns"))
 
-      assert length(pattern_keys) > 0,
+      assert pattern_keys != [],
              "hopfield_retrieve should contain a 'patterns' sub-key, got: #{inspect(Map.keys(retrieve_params))}"
 
       # Verify pattern shape: [num_patterns, pattern_dim]

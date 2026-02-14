@@ -1,13 +1,13 @@
 defmodule Edifice.Misc.MiscNewTest do
   use ExUnit.Case, async: true
 
-  alias Edifice.Feedforward.TabNet
-  alias Edifice.Convolutional.MobileNet
   alias Edifice.Convolutional.EfficientNet
+  alias Edifice.Convolutional.MobileNet
   alias Edifice.Energy.NeuralODE
-  alias Edifice.Probabilistic.EvidentialNN
-  alias Edifice.Neuromorphic.ANN2SNN
+  alias Edifice.Feedforward.TabNet
   alias Edifice.Memory.MemoryNetwork
+  alias Edifice.Neuromorphic.ANN2SNN
+  alias Edifice.Probabilistic.EvidentialNN
 
   @batch_size 2
 

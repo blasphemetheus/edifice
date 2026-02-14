@@ -71,7 +71,7 @@ defmodule Edifice.Attention.LinearTransformer do
 
   require Axon
 
-  alias Edifice.Blocks.{TransformerBlock, ModelBuilder}
+  alias Edifice.Blocks.{ModelBuilder, TransformerBlock}
 
   # Default hyperparameters
   @default_hidden_size 256

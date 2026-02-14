@@ -82,7 +82,7 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
 
       # Should have short depthwise conv
       dw_keys = Enum.filter(param_keys, &String.contains?(&1, "short_dw_conv"))
-      assert length(dw_keys) > 0, "Should have short depthwise conv parameters"
+      assert dw_keys != [], "Should have short depthwise conv parameters"
 
       # Check kernel shape: for depthwise 1D conv, kernel is {kernel_size, 1, channels}
       for key <- dw_keys do
@@ -127,10 +127,10 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
       filter0_2 = Enum.filter(keys_2, &String.contains?(&1, "filter0"))
       filter1_2 = Enum.filter(keys_2, &String.contains?(&1, "filter1"))
 
-      assert length(filter0_1) > 0
-      assert length(filter1_1) == 0, "order=1 should NOT have filter1"
-      assert length(filter0_2) > 0
-      assert length(filter1_2) > 0, "order=2 should have filter1"
+      assert filter0_1 != []
+      assert filter1_1 == [], "order=1 should NOT have filter1"
+      assert filter0_2 != []
+      assert filter1_2 != [], "order=2 should have filter1"
     end
 
     test "different orders produce different outputs" do

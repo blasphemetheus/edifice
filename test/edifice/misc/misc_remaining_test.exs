@@ -2,16 +2,16 @@ defmodule Edifice.Misc.MiscRemainingTest do
   use ExUnit.Case, async: true
 
   alias Edifice.Convolutional.Conv
+  alias Edifice.Energy.EBM
   alias Edifice.Graph.GAT
   alias Edifice.Graph.MessagePassing
-  alias Edifice.Sets.PointNet
-  alias Edifice.Energy.EBM
+  alias Edifice.Memory.NTM
+  alias Edifice.Meta.Capsule
+  alias Edifice.Meta.Hypernetwork
+  alias Edifice.Neuromorphic.SNN
   alias Edifice.Probabilistic.Bayesian
   alias Edifice.Probabilistic.MCDropout
-  alias Edifice.Memory.NTM
-  alias Edifice.Meta.Hypernetwork
-  alias Edifice.Meta.Capsule
-  alias Edifice.Neuromorphic.SNN
+  alias Edifice.Sets.PointNet
 
   @batch_size 2
 

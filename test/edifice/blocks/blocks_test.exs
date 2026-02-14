@@ -2,14 +2,14 @@ defmodule Edifice.Blocks.BlocksTest do
   use ExUnit.Case, async: true
 
   alias Edifice.Blocks.{
-    RMSNorm,
-    SwiGLU,
-    RoPE,
-    ALiBi,
-    PatchEmbed,
-    SinusoidalPE,
     AdaptiveNorm,
-    CrossAttention
+    ALiBi,
+    CrossAttention,
+    PatchEmbed,
+    RMSNorm,
+    RoPE,
+    SinusoidalPE,
+    SwiGLU
   }
 
   @batch 2

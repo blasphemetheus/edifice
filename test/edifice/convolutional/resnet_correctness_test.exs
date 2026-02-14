@@ -54,7 +54,7 @@ defmodule Edifice.Convolutional.ResNetCorrectnessTest do
       stage1_block0_skip =
         Enum.filter(param_keys, &String.contains?(&1, "stage1_block0_skip_proj"))
 
-      assert length(stage1_block0_skip) > 0,
+      assert stage1_block0_skip != [],
              "stage1_block0 should have skip_proj for stride 2 + channel change"
     end
 

@@ -52,7 +52,7 @@ defmodule Edifice.Meta.CapsuleCorrectnessTest do
 
       w_keys = Map.keys(digit_caps_params) |> Enum.filter(&String.contains?(&1, "_W"))
 
-      assert length(w_keys) > 0,
+      assert w_keys != [],
              "digit_caps should contain a '_W' per-pair weight param, got: #{inspect(Map.keys(digit_caps_params))}"
     end
 

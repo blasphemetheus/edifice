@@ -54,7 +54,7 @@ defmodule Edifice.Recurrent.ReservoirCorrectnessTest do
       param_keys = Map.keys(params.data)
       readout_keys = Enum.filter(param_keys, &String.contains?(&1, "readout"))
 
-      assert length(readout_keys) > 0,
+      assert readout_keys != [],
              "Should have trainable readout params, got: #{inspect(param_keys)}"
     end
 

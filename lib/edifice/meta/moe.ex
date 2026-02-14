@@ -255,8 +255,8 @@ defmodule Edifice.Meta.MoE do
     window_size = Keyword.get(opts, :window_size, 60)
     seq_len = Keyword.get(opts, :seq_len, window_size)
 
-    alias Edifice.SSM.GatedSSM
     alias Edifice.Attention.MultiHead
+    alias Edifice.SSM.GatedSSM
 
     # Input
     input = Axon.input("state_sequence", shape: {nil, seq_len, embed_size})

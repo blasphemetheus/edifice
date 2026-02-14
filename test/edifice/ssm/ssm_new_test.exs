@@ -1,11 +1,11 @@
 defmodule Edifice.SSM.SSMNewTest do
   use ExUnit.Case, async: true
 
-  alias Edifice.SSM.S4
-  alias Edifice.SSM.S4D
+  alias Edifice.SSM.BiMamba
   alias Edifice.SSM.H3
   alias Edifice.SSM.Hyena
-  alias Edifice.SSM.BiMamba
+  alias Edifice.SSM.S4
+  alias Edifice.SSM.S4D
 
   @batch 2
   @seq_len 8

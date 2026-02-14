@@ -44,12 +44,12 @@ defmodule Edifice.SSM.S4DCorrectnessTest do
 
       a_log_keys = Enum.filter(ssm_sub_keys, &String.contains?(&1, "a_log"))
 
-      assert length(a_log_keys) > 0,
+      assert a_log_keys != [],
              "SSM params should contain 'a_log', got sub-keys: #{inspect(ssm_sub_keys)}"
 
       dt_log_keys = Enum.filter(ssm_sub_keys, &String.contains?(&1, "dt_log"))
 
-      assert length(dt_log_keys) > 0,
+      assert dt_log_keys != [],
              "SSM params should contain 'dt_log', got sub-keys: #{inspect(ssm_sub_keys)}"
     end
 

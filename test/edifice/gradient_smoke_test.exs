@@ -63,7 +63,7 @@ defmodule Edifice.GradientSmokeTest do
 
     # Assert gradients exist and are meaningful
     flat_grads = flatten_params(grads)
-    assert length(flat_grads) > 0, "model has no trainable parameters"
+    assert flat_grads != [], "model has no trainable parameters"
 
     # Assert all gradients are finite
     Enum.each(flat_grads, fn {path, grad_tensor} ->

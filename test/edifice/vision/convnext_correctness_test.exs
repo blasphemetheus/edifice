@@ -28,7 +28,7 @@ defmodule Edifice.Vision.ConvNeXtCorrectnessTest do
 
       # Should have depthwise conv layers
       dw_conv_keys = Enum.filter(param_keys, &String.contains?(&1, "dw_conv"))
-      assert length(dw_conv_keys) > 0
+      assert dw_conv_keys != []
 
       # Depthwise conv kernels should be 7x7
       # In Axon, conv kernels are named "kernel" within the layer
@@ -56,8 +56,8 @@ defmodule Edifice.Vision.ConvNeXtCorrectnessTest do
       pw_expand_keys = Enum.filter(param_keys, &String.contains?(&1, "pw_expand"))
       pw_project_keys = Enum.filter(param_keys, &String.contains?(&1, "pw_project"))
 
-      assert length(pw_expand_keys) > 0
-      assert length(pw_project_keys) > 0
+      assert pw_expand_keys != []
+      assert pw_project_keys != []
 
       # Pointwise kernels should be 1x1
       for key <- pw_expand_keys do
@@ -117,7 +117,7 @@ defmodule Edifice.Vision.ConvNeXtCorrectnessTest do
           &(String.contains?(&1, "downsample") and String.contains?(&1, "conv"))
         )
 
-      assert length(ds_keys) > 0
+      assert ds_keys != []
 
       # Downsample conv kernel should be 2x2
       for key <- ds_keys do

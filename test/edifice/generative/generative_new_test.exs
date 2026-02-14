@@ -1,10 +1,10 @@
 defmodule Edifice.Generative.GenerativeNewTest do
   use ExUnit.Case, async: true
 
-  alias Edifice.Generative.DiT
-  alias Edifice.Generative.DDIM
-  alias Edifice.Generative.LatentDiffusion
   alias Edifice.Generative.ConsistencyModel
+  alias Edifice.Generative.DDIM
+  alias Edifice.Generative.DiT
+  alias Edifice.Generative.LatentDiffusion
   alias Edifice.Generative.ScoreSDE
 
   @batch 2

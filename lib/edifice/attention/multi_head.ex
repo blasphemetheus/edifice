@@ -60,8 +60,8 @@ defmodule Edifice.Attention.MultiHead do
 
   require Axon
 
-  alias Edifice.Utils.FusedOps
   alias Edifice.Recurrent
+  alias Edifice.Utils.FusedOps
 
   # Default hyperparameters
   @default_num_heads 4

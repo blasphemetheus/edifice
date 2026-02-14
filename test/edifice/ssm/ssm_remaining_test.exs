@@ -1,11 +1,11 @@
 defmodule Edifice.SSM.SSMRemainingTest do
   use ExUnit.Case, async: true
 
+  alias Edifice.SSM.Hybrid
+  alias Edifice.SSM.HybridBuilder
   alias Edifice.SSM.MambaCumsum
   alias Edifice.SSM.MambaHillisSteele
-  alias Edifice.SSM.Hybrid
   alias Edifice.SSM.Zamba
-  alias Edifice.SSM.HybridBuilder
 
   @batch 2
   @seq_len 8

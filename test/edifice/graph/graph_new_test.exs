@@ -1,10 +1,10 @@
 defmodule Edifice.Graph.GraphNewTest do
   use ExUnit.Case, async: true
 
-  alias Edifice.Graph.GraphSAGE
   alias Edifice.Graph.GIN
-  alias Edifice.Graph.PNA
+  alias Edifice.Graph.GraphSAGE
   alias Edifice.Graph.GraphTransformer
+  alias Edifice.Graph.PNA
   alias Edifice.Graph.SchNet
 
   @batch_size 2

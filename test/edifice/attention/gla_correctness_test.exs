@@ -123,7 +123,7 @@ defmodule Edifice.Attention.GLACorrectnessTest do
       # GLA should have gate projection (data-dependent gating is the key innovation)
       gate_keys = Enum.filter(param_keys, &String.contains?(&1, "g_proj"))
 
-      assert length(gate_keys) > 0,
+      assert gate_keys != [],
              "GLA should have gate projection params for data-dependent gating, got: #{inspect(param_keys)}"
     end
 
@@ -139,7 +139,7 @@ defmodule Edifice.Attention.GLACorrectnessTest do
       for proj <- ["q_proj", "k_proj", "v_proj", "g_proj"] do
         matching = Enum.filter(param_keys, &String.contains?(&1, proj))
 
-        assert length(matching) > 0,
+        assert matching != [],
                "GLA should have #{proj} params, got: #{inspect(param_keys)}"
       end
     end

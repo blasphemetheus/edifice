@@ -2,15 +2,16 @@ defmodule Edifice.Blocks.CorrectnessTest do
   use ExUnit.Case, async: true
 
   alias Edifice.Blocks.{
-    RMSNorm,
-    SwiGLU,
-    RoPE,
-    ALiBi,
-    PatchEmbed,
-    SinusoidalPE,
     AdaptiveNorm,
+    ALiBi,
     CrossAttention,
     FFN,
+    ModelBuilder,
+    PatchEmbed,
+    RMSNorm,
+    RoPE,
+    SinusoidalPE,
+    SwiGLU,
     TransformerBlock
   }
 
@@ -817,7 +818,7 @@ defmodule Edifice.Blocks.CorrectnessTest do
       end
 
       model =
-        Edifice.Blocks.ModelBuilder.build_sequence_model(
+        ModelBuilder.build_sequence_model(
           embed_size: 16,
           hidden_size: 32,
           num_layers: 2,
@@ -844,7 +845,7 @@ defmodule Edifice.Blocks.CorrectnessTest do
       end
 
       model =
-        Edifice.Blocks.ModelBuilder.build_sequence_model(
+        ModelBuilder.build_sequence_model(
           embed_size: 32,
           hidden_size: 32,
           num_layers: 1,
@@ -869,7 +870,7 @@ defmodule Edifice.Blocks.CorrectnessTest do
       end
 
       model =
-        Edifice.Blocks.ModelBuilder.build_sequence_model(
+        ModelBuilder.build_sequence_model(
           embed_size: 32,
           hidden_size: 32,
           num_layers: 1,

@@ -1,11 +1,11 @@
 defmodule Edifice.Recurrent.NewArchitecturesTest do
   use ExUnit.Case, async: true
 
+  alias Edifice.Recurrent.DeltaNet
   alias Edifice.Recurrent.MinGRU
   alias Edifice.Recurrent.MinLSTM
-  alias Edifice.Recurrent.DeltaNet
-  alias Edifice.Recurrent.TTT
   alias Edifice.Recurrent.Titans
+  alias Edifice.Recurrent.TTT
 
   @batch_size 2
   @seq_len 8

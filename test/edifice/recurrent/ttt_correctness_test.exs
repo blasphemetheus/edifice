@@ -43,7 +43,7 @@ defmodule Edifice.Recurrent.TTTCorrectnessTest do
 
       w0_keys = Map.keys(recurrence_params) |> Enum.filter(&String.contains?(&1, "w0"))
 
-      assert length(w0_keys) > 0,
+      assert w0_keys != [],
              "Recurrence params should contain 'w0' for learnable initial weights, got: #{inspect(Map.keys(recurrence_params))}"
     end
 

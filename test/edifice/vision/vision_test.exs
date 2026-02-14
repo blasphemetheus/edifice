@@ -1,7 +1,7 @@
 defmodule Edifice.Vision.VisionTest do
   use ExUnit.Case, async: true
 
-  alias Edifice.Vision.{ViT, DeiT, SwinTransformer, UNet, ConvNeXt, MLPMixer}
+  alias Edifice.Vision.{ConvNeXt, DeiT, MLPMixer, SwinTransformer, UNet, ViT}
 
   # Small dimensions for fast testing
   @batch 2

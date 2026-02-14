@@ -180,25 +180,25 @@ defmodule Edifice.Memory.NTMCorrectnessTest do
         # Key projection for content addressing
         key_params = Enum.filter(param_keys, &String.contains?(&1, "#{head_type}_key"))
 
-        assert length(key_params) > 0,
+        assert key_params != [],
                "Should have key projection for #{head_type}, got: #{inspect(param_keys)}"
 
         # Beta for content sharpness
         beta_params = Enum.filter(param_keys, &String.contains?(&1, "#{head_type}_beta"))
 
-        assert length(beta_params) > 0,
+        assert beta_params != [],
                "Should have beta parameter for #{head_type}"
 
         # Shift kernel for location addressing
         shift_params = Enum.filter(param_keys, &String.contains?(&1, "#{head_type}_shift"))
 
-        assert length(shift_params) > 0,
+        assert shift_params != [],
                "Should have shift kernel for #{head_type}"
 
         # Gamma for sharpening
         gamma_params = Enum.filter(param_keys, &String.contains?(&1, "#{head_type}_gamma"))
 
-        assert length(gamma_params) > 0,
+        assert gamma_params != [],
                "Should have gamma parameter for #{head_type}"
       end
     end
@@ -218,12 +218,12 @@ defmodule Edifice.Memory.NTMCorrectnessTest do
 
       erase_keys = Enum.filter(param_keys, &String.contains?(&1, "write_head_erase"))
 
-      assert length(erase_keys) > 0,
+      assert erase_keys != [],
              "Write head should have erase vector params"
 
       add_keys = Enum.filter(param_keys, &String.contains?(&1, "write_head_add"))
 
-      assert length(add_keys) > 0,
+      assert add_keys != [],
              "Write head should have add vector params"
     end
   end

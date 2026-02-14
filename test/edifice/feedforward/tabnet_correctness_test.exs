@@ -58,7 +58,7 @@ defmodule Edifice.Feedforward.TabNetCorrectnessTest do
       for step <- 0..(@num_steps - 1) do
         attn_keys = Enum.filter(param_keys, &String.contains?(&1, "step_#{step}_attn_proj"))
 
-        assert length(attn_keys) > 0,
+        assert attn_keys != [],
                "Should have attention projection for step #{step}"
       end
     end

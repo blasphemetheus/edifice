@@ -60,7 +60,7 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
 
       # Should have mix_proj for time mixing
       mix_proj_keys = Enum.filter(param_keys, &String.contains?(&1, "mix_proj"))
-      assert length(mix_proj_keys) > 0
+      assert mix_proj_keys != []
 
       # The mix_proj kernel should have input dim = 2 * hidden_size
       mix_params = params.data[hd(mix_proj_keys)]
@@ -94,9 +94,9 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
       k_keys = Enum.filter(channel_keys, &String.contains?(&1, "k_proj"))
       v_keys = Enum.filter(channel_keys, &String.contains?(&1, "v_proj"))
 
-      assert length(r_keys) > 0, "Should have channel mixing r_proj"
-      assert length(k_keys) > 0, "Should have channel mixing k_proj"
-      assert length(v_keys) > 0, "Should have channel mixing v_proj"
+      assert r_keys != [], "Should have channel mixing r_proj"
+      assert k_keys != [], "Should have channel mixing k_proj"
+      assert v_keys != [], "Should have channel mixing v_proj"
     end
   end
 

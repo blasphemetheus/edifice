@@ -29,7 +29,7 @@ defmodule Edifice.Energy.NeuralODECorrectnessTest do
       # Should have shared dynamics layers
       dynamics_keys = Enum.filter(param_keys, &String.contains?(&1, "dynamics_dense1"))
 
-      assert length(dynamics_keys) > 0,
+      assert dynamics_keys != [],
              "Should have 'dynamics_dense1' param, got keys: #{inspect(param_keys)}"
 
       # Should NOT have per-step dynamics layers

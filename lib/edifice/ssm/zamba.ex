@@ -72,8 +72,8 @@ defmodule Edifice.SSM.Zamba do
 
   require Axon
 
-  alias Edifice.SSM.GatedSSM
   alias Edifice.Attention.MultiHead, as: Attention
+  alias Edifice.SSM.GatedSSM
 
   # Default hyperparameters
   @default_hidden_size 256

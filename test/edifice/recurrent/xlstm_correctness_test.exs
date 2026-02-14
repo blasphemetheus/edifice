@@ -48,7 +48,7 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
 
       # Find the mLSTM projection layer
       proj_keys = Enum.filter(param_keys, &String.contains?(&1, "mlstm_proj"))
-      assert length(proj_keys) > 0
+      assert proj_keys != []
 
       proj_params = params.data[hd(proj_keys)]
       kernel = proj_params["kernel"]
@@ -124,7 +124,7 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
 
       param_keys = Map.keys(params.data)
       gate_keys = Enum.filter(param_keys, &String.contains?(&1, "gates_proj"))
-      assert length(gate_keys) > 0
+      assert gate_keys != []
 
       gate_params = params.data[hd(gate_keys)]
       kernel = gate_params["kernel"]
@@ -162,11 +162,11 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
 
       # Layer 1 (odd) should be sLSTM
       slstm_keys = Enum.filter(param_keys, &String.contains?(&1, "block_1_slstm"))
-      assert length(slstm_keys) > 0, "Layer 1 should be sLSTM"
+      assert slstm_keys != [], "Layer 1 should be sLSTM"
 
       # Layer 2 (even) should be mLSTM
       mlstm_keys = Enum.filter(param_keys, &String.contains?(&1, "block_2_mlstm"))
-      assert length(mlstm_keys) > 0, "Layer 2 should be mLSTM"
+      assert mlstm_keys != [], "Layer 2 should be mLSTM"
     end
 
     test "different variants produce different outputs" do

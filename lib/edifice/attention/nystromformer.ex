@@ -73,8 +73,8 @@ defmodule Edifice.Attention.Nystromformer do
 
   require Axon
 
+  alias Edifice.Blocks.{ModelBuilder, TransformerBlock}
   alias Edifice.Utils.FusedOps
-  alias Edifice.Blocks.{TransformerBlock, ModelBuilder}
 
   # Default hyperparameters
   @default_hidden_size 256

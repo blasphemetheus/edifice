@@ -33,13 +33,13 @@ defmodule Edifice.Neuromorphic.SNNCorrectnessTest do
       # Should have dense layer for each hidden size
       layer_0_keys = Enum.filter(param_keys, &String.contains?(&1, "snn_layer_0_dense"))
 
-      assert length(layer_0_keys) > 0,
+      assert layer_0_keys != [],
              "Should have dense layer for hidden layer 0, got: #{inspect(param_keys)}"
 
       # Should have output readout layer
       output_keys = Enum.filter(param_keys, &String.contains?(&1, "snn_output"))
 
-      assert length(output_keys) > 0,
+      assert output_keys != [],
              "Should have output readout layer, got: #{inspect(param_keys)}"
     end
 

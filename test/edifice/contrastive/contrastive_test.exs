@@ -1,10 +1,10 @@
 defmodule Edifice.ContrastiveTest do
   use ExUnit.Case, async: true
 
-  alias Edifice.Contrastive.SimCLR
-  alias Edifice.Contrastive.BYOL
   alias Edifice.Contrastive.BarlowTwins
+  alias Edifice.Contrastive.BYOL
   alias Edifice.Contrastive.MAE
+  alias Edifice.Contrastive.SimCLR
   alias Edifice.Contrastive.VICReg
 
   @batch_size 4
