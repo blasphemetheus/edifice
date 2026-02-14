@@ -110,15 +110,20 @@ defmodule Edifice.Utils.ODESolver do
   """
   @spec solve_ltc(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), keyword()) :: Nx.Tensor.t()
   def solve_ltc(x, activation, tau, opts \\ []) do
-    solver = Keyword.get(opts, :solver, :rk4)
+    solver = Keyword.get(opts, :solver, :exact)
     steps = Keyword.get(opts, :steps, 1)
 
     # Total time for one frame = 1.0, split into steps
     dt = 1.0 / steps
 
     # LTC ODE: dx/dt = (-x + activation) / tau
-    # For this specific ODE, we can compute it efficiently
     case solver do
+      :exact ->
+        # Analytical solution: x(t+dt) = activation + (x - activation) * exp(-dt/tau)
+        # Unconditionally stable for any dt and tau values.
+        # This is the preferred solver for the LTC equation since it's linear.
+        exact_ltc_step(x, activation, tau, 1.0)
+
       :euler ->
         Enum.reduce(1..steps, x, fn _, h ->
           euler_ltc_step(h, activation, tau, dt)
@@ -139,9 +144,7 @@ defmodule Edifice.Utils.ODESolver do
         solve_ltc_adaptive(x, activation, tau, opts)
 
       _ ->
-        Enum.reduce(1..steps, x, fn _, h ->
-          rk4_ltc_step(h, activation, tau, dt)
-        end)
+        exact_ltc_step(x, activation, tau, 1.0)
     end
   end
 
@@ -328,6 +331,14 @@ defmodule Edifice.Utils.ODESolver do
 
   # LTC ODE: dx/dt = (-x + activation) / tau
   # These are specialized versions that don't need the general f(t, x) interface
+
+  # Exact analytical solution for the linear LTC ODE: dx/dt = (activation - x) / tau
+  # Solution: x(t+dt) = activation + (x(t) - activation) * exp(-dt/tau)
+  # Unconditionally stable — no step size constraints.
+  defp exact_ltc_step(x, activation, tau, dt) do
+    decay = Nx.exp(Nx.negate(Nx.divide(dt, tau)))
+    Nx.add(activation, Nx.multiply(Nx.subtract(x, activation), decay))
+  end
 
   defp euler_ltc_step(x, activation, tau, dt) do
     # dx/dt = (activation - x) / tau

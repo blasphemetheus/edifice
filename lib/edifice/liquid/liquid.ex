@@ -21,12 +21,13 @@ defmodule Edifice.Liquid do
 
   ## Available Solvers
 
-  | Solver | Order | Adaptive | Speed | Accuracy |
-  |--------|-------|----------|-------|----------|
-  | `:euler` | 1 | No | Fastest | Low |
-  | `:midpoint` | 2 | No | Fast | Medium |
-  | `:rk4` | 4 | No | Medium | Good |
-  | `:dopri5` | 4/5 | Yes | Slower | Best |
+  | Solver | Order | Adaptive | Speed | Stability |
+  |--------|-------|----------|-------|-----------|
+  | `:exact` | Exact | No | Fastest | Unconditional (default) |
+  | `:euler` | 1 | No | Fast | Requires dt/tau < 2 |
+  | `:midpoint` | 2 | No | Fast | Requires dt/tau < 2.8 |
+  | `:rk4` | 4 | No | Medium | Requires dt/tau < 2.8 |
+  | `:dopri5` | 4/5 | Yes | Slower | Adaptive |
 
   See `Edifice.Utils.ODESolver` for implementation details.
 
@@ -75,7 +76,7 @@ defmodule Edifice.Liquid do
   @default_dropout 0.1
   @default_window_size 60
   @default_integration_steps 1
-  @default_solver :rk4
+  @default_solver :exact
 
   @doc """
   Build a Liquid Neural Network model.
