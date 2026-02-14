@@ -246,9 +246,13 @@ defmodule Edifice.Vision.ConvNeXt do
         name: "#{name}_pw_project"
       )
 
-    # Layer scale: learnable per-channel scaling (initialized to small value)
-    gamma_init = Nx.broadcast(layer_scale_init, {1, 1, 1, dim}) |> Nx.as_type(:f32)
-    gamma_node = Axon.constant(gamma_init)
+    # Layer scale: learnable per-channel scaling (initialized to small value per Liu et al. 2022)
+    gamma_node =
+      Axon.param("#{name}_gamma", {1, 1, 1, dim},
+        initializer: fn shape, _type, _key ->
+          Nx.broadcast(layer_scale_init, shape) |> Nx.as_type(:f32)
+        end
+      )
 
     x =
       Axon.layer(

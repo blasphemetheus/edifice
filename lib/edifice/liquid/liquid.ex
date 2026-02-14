@@ -212,9 +212,6 @@ defmodule Edifice.Liquid do
     # Scale to reasonable range [0.1, 10.0]
     tau = Nx.add(softplus(tau_proj), 0.1)
 
-    # dt per integration step (normalized to 1.0 total per frame)
-    dt = 1.0 / integration_steps
-
     # Process sequence with ODE integration
     # Initialize hidden state as zeros
     h0 = Nx.broadcast(0.0, {batch, hidden_size})
@@ -224,12 +221,11 @@ defmodule Edifice.Liquid do
     {final_outputs, _} =
       Enum.reduce(0..(seq_len - 1), {[], h0}, fn t, {outputs, h} ->
         # Extract current timestep values
-        x_t = Nx.slice_along_axis(x, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         tau_t = Nx.slice_along_axis(tau, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         f_t = Nx.slice_along_axis(f_proj, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
         # Integrate ODE for this timestep
-        h_new = integrate_ode(h, x_t, tau_t, f_t, dt, integration_steps, solver)
+        h_new = integrate_ode(h, tau_t, f_t, integration_steps, solver)
 
         {outputs ++ [Nx.new_axis(h_new, 1)], h_new}
       end)
@@ -240,7 +236,7 @@ defmodule Edifice.Liquid do
 
   # Integrate the ODE using the ODESolver module
   # LTC ODE: dx/dt = (activation - x) / tau
-  defp integrate_ode(h, _x, tau, activation, _dt, steps, solver) do
+  defp integrate_ode(h, tau, activation, steps, solver) do
     alias Edifice.Utils.ODESolver
     ODESolver.solve_ltc(h, activation, tau, solver: solver, steps: steps)
   end

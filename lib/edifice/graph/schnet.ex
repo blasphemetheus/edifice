@@ -153,11 +153,24 @@ defmodule Edifice.Graph.SchNet do
     # Atom-wise layer (pre-convolution transform)
     x_proj = Axon.dense(nodes, num_filters, name: "#{name}_atom_proj")
 
+    # Learnable filter-generating network parameters (2-layer MLP: num_rbf -> num_filters -> num_filters)
+    filter_w1 =
+      Axon.param("#{name}_filter_w1", {num_rbf, num_filters}, initializer: :glorot_uniform)
+
+    filter_b1 =
+      Axon.param("#{name}_filter_b1", {num_filters}, initializer: :zeros)
+
+    filter_w2 =
+      Axon.param("#{name}_filter_w2", {num_filters, num_filters}, initializer: :glorot_uniform)
+
+    filter_b2 =
+      Axon.param("#{name}_filter_b2", {num_filters}, initializer: :zeros)
+
     # Continuous filter convolution with distance-based filters
     conv_out =
       Axon.layer(
-        &cfconv_impl/3,
-        [x_proj, adjacency],
+        &cfconv_impl/7,
+        [x_proj, adjacency, filter_w1, filter_b1, filter_w2, filter_b2],
         name: "#{name}_cfconv",
         num_filters: num_filters,
         hidden_size: hidden_size,
@@ -190,10 +203,11 @@ defmodule Edifice.Graph.SchNet do
   # Continuous-filter convolution implementation
   # x_proj: [batch, num_nodes, num_filters] - projected node features
   # adjacency: [batch, num_nodes, num_nodes] - pairwise distances
-  defp cfconv_impl(x_proj, adjacency, opts) do
+  # filter_w1/b1/w2/b2: learned filter-generating network parameters
+  defp cfconv_impl(x_proj, adjacency, filter_w1, filter_b1, filter_w2, filter_b2, opts) do
     cutoff = opts[:cutoff] || @default_cutoff
     num_rbf = opts[:num_rbf] || @default_num_rbf
-    _num_filters = opts[:num_filters] || @default_num_filters
+    num_filters = opts[:num_filters] || @default_num_filters
 
     batch_size = Nx.axis_size(adjacency, 0)
     num_nodes = Nx.axis_size(adjacency, 1)
@@ -219,23 +233,34 @@ defmodule Edifice.Graph.SchNet do
     rbf = Nx.exp(Nx.multiply(-gamma, Nx.pow(Nx.subtract(dist_expanded, centers_expanded), 2)))
     # rbf: [batch, nodes, nodes, num_rbf]
 
-    # Simple filter generation: project RBF features to get filter weights
-    # Since we're in a custom layer, use a simple linear transform
+    # Filter-generating network: Dense(RBF(d)) -> silu -> Dense
     # Reshape rbf for matmul: [batch * nodes * nodes, num_rbf]
     rbf_flat = Nx.reshape(rbf, {batch_size * num_nodes * num_nodes, num_rbf})
 
-    # Use the RBF values directly as filter weights (averaged across RBF channels)
-    # Scale to num_filters via simple projection (sum RBF with learned-like weighting)
-    # For simplicity, use mean pooling across RBF dimension and broadcast
-    filter_weights = Nx.mean(rbf_flat, axes: [1])
-    filter_weights = Nx.reshape(filter_weights, {batch_size, num_nodes, num_nodes})
+    # Layer 1: [batch*nodes*nodes, num_rbf] @ [num_rbf, num_filters] + bias
+    h = Nx.add(Nx.dot(rbf_flat, filter_w1), filter_b1)
+    # SiLU activation: x * sigmoid(x)
+    h = Nx.multiply(h, Nx.sigmoid(h))
+    # Layer 2: [batch*nodes*nodes, num_filters] @ [num_filters, num_filters] + bias
+    filter_out = Nx.add(Nx.dot(h, filter_w2), filter_b2)
+    # filter_out: [batch*nodes*nodes, num_filters]
 
-    # Apply cutoff envelope
-    filter_weights = Nx.multiply(filter_weights, cutoff_vals)
+    # Reshape to [batch, nodes, nodes, num_filters]
+    filter_out = Nx.reshape(filter_out, {batch_size, num_nodes, num_nodes, num_filters})
 
-    # Convolution: for each node, sum filtered neighbor features
-    # filter_weights: [batch, nodes, nodes]
-    # x_proj: [batch, nodes, num_filters]
-    Nx.dot(filter_weights, [2], [0], x_proj, [1], [0])
+    # Apply cutoff envelope: [batch, nodes, nodes, 1] * [batch, nodes, nodes, num_filters]
+    cutoff_expanded = Nx.new_axis(cutoff_vals, 3)
+    filter_out = Nx.multiply(filter_out, cutoff_expanded)
+
+    # Continuous convolution: element-wise multiply + sum over neighbors
+    # filter_out: [batch, nodes, nodes, num_filters]
+    # x_proj: [batch, nodes, num_filters] -> [batch, 1, nodes, num_filters]
+    x_expanded = Nx.new_axis(x_proj, 1)
+
+    # Element-wise multiply: filter * neighbor_features, sum over neighbor axis
+    # [batch, nodes_i, nodes_j, num_filters] * [batch, 1, nodes_j, num_filters]
+    conv = Nx.multiply(filter_out, x_expanded)
+    # Sum over neighbor dimension (axis 2): [batch, nodes, num_filters]
+    Nx.sum(conv, axes: [2])
   end
 end

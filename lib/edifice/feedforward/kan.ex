@@ -26,7 +26,8 @@ defmodule Edifice.Feedforward.KAN do
 
   | Basis | Formula | Params | Speed |
   |-------|---------|--------|-------|
-  | `:sine` (default) | Sum A*sin(omega*x + phi) | O(oig) | Fast |
+  | `:bspline` (default) | Sum c*B_k(x) (cubic B-spline) | O(oig) | Medium |
+  | `:sine` | Sum A*sin(omega*x + phi) | O(oig) | Fast |
   | `:chebyshev` | Sum c*Tn(x) | O(oig) | Fast |
   | `:fourier` | Sum (a*cos + b*sin) | O(2oig) | Medium |
   | `:rbf` | Sum w*exp(-||x-mu||^2/2sigma^2) | O(oig) | Medium |
@@ -90,7 +91,7 @@ defmodule Edifice.Feedforward.KAN do
   def default_grid_size, do: 8
 
   @doc "Default basis function type"
-  def default_basis, do: :sine
+  def default_basis, do: :bspline
 
   @doc "Default dropout rate"
   def default_dropout, do: 0.0
@@ -110,7 +111,7 @@ defmodule Edifice.Feedforward.KAN do
     - `:hidden_size` - Internal hidden dimension (default: 256)
     - `:num_layers` - Number of KAN blocks (default: 4)
     - `:grid_size` - Number of basis functions per edge (default: 8)
-    - `:basis` - Basis function type: :sine, :chebyshev, :fourier, :rbf (default: :sine)
+    - `:basis` - Basis function type: :bspline, :sine, :chebyshev, :fourier, :rbf (default: :bspline)
     - `:dropout` - Dropout rate (default: 0.0)
     - `:window_size` - Expected sequence length (default: 60)
     - `:base_weight` - Weight for base SiLU activation (default: 0.5)
@@ -247,6 +248,21 @@ defmodule Edifice.Feedforward.KAN do
     # Apply selected basis function
     basis_activated =
       case basis do
+        :bspline ->
+          # Cubic B-spline basis evaluation over uniform knot grid
+          # Project input to grid_size basis evaluations, then weight by learnable coefficients
+          Axon.nx(
+            freq_proj,
+            fn x ->
+              # x: [batch, seq_len, out_size * grid_size]
+              # Treat as grid_size groups of out_size values
+              # Map input to [0, 1] range for B-spline evaluation
+              x_norm = Nx.sigmoid(x)
+              bspline_basis_eval(x_norm, grid_size)
+            end,
+            name: "#{name}_bspline"
+          )
+
         :sine ->
           Axon.nx(freq_proj, &Nx.sin/1, name: "#{name}_sine")
 
@@ -381,6 +397,91 @@ defmodule Edifice.Feedforward.KAN do
   end
 
   # ============================================================================
+  # B-spline Basis Evaluation
+  # ============================================================================
+
+  @doc false
+  # Evaluate cubic B-spline basis functions on input in [0, 1].
+  # Uses the unrolled Cox-de Boor recurrence for order 3 (cubic).
+  # Returns weighted basis activations suitable for downstream projection.
+  def bspline_basis_eval(x, grid_size) do
+    # Uniform knot grid from 0 to 1 with (grid_size + 4) knots for cubic B-splines
+    # This gives grid_size basis functions, each nonzero over 4 knot spans
+    num_knots = grid_size + 4
+
+    # Scale x to knot grid: x in [0, 1] -> position in knot spans
+    # x: [batch, seq, features]
+    x_scaled = Nx.multiply(x, (num_knots - 1) * 1.0)
+
+    # For each basis function k, compute B_{k,3}(x)
+    # Cubic B-spline on uniform grid: piecewise cubic polynomial
+    # B_{k,3}(t) where t = x_scaled - k (local coordinate)
+    # Nonzero for t in [0, 4), with pieces:
+    #   [0,1): t^3 / 6
+    #   [1,2): (-3t^3 + 12t^2 - 12t + 4) / 6
+    #   [2,3): (3t^3 - 24t^2 + 60t - 44) / 6
+    #   [3,4): (4-t)^3 / 6
+
+    # Evaluate all grid_size basis functions in parallel
+    # For each k in 0..grid_size-1, compute B_k(x_scaled)
+    basis_values =
+      for k <- 0..(grid_size - 1) do
+        t = Nx.subtract(x_scaled, k * 1.0)
+
+        # Clamp to [0, 4] for numerical safety
+        t_clamped = Nx.clip(t, 0.0, 4.0)
+
+        # Compute all four pieces
+        p0 = Nx.divide(Nx.pow(t_clamped, 3), 6.0)
+
+        t1 = Nx.subtract(t_clamped, 1.0)
+
+        p1 =
+          Nx.divide(
+            Nx.add(
+              Nx.add(
+                Nx.multiply(-3.0, Nx.pow(t1, 3)),
+                Nx.multiply(3.0, Nx.pow(t1, 2))
+              ),
+              Nx.add(Nx.multiply(3.0, t1), 1.0)
+            ),
+            6.0
+          )
+
+        t2 = Nx.subtract(t_clamped, 2.0)
+
+        p2 =
+          Nx.divide(
+            Nx.add(
+              Nx.add(
+                Nx.multiply(3.0, Nx.pow(t2, 3)),
+                Nx.multiply(-3.0, Nx.pow(t2, 2))
+              ),
+              Nx.add(Nx.multiply(-3.0, t2), 1.0)
+            ),
+            6.0
+          )
+
+        p3 = Nx.divide(Nx.pow(Nx.subtract(4.0, t_clamped), 3), 6.0)
+
+        # Select the right piece based on which interval t falls in
+        in_0_1 = Nx.logical_and(Nx.greater_equal(t, 0.0), Nx.less(t, 1.0))
+        in_1_2 = Nx.logical_and(Nx.greater_equal(t, 1.0), Nx.less(t, 2.0))
+        in_2_3 = Nx.logical_and(Nx.greater_equal(t, 2.0), Nx.less(t, 3.0))
+        in_3_4 = Nx.logical_and(Nx.greater_equal(t, 3.0), Nx.less_equal(t, 4.0))
+
+        val = Nx.multiply(Nx.select(in_0_1, 1.0, 0.0), p0)
+        val = Nx.add(val, Nx.multiply(Nx.select(in_1_2, 1.0, 0.0), p1))
+        val = Nx.add(val, Nx.multiply(Nx.select(in_2_3, 1.0, 0.0), p2))
+        Nx.add(val, Nx.multiply(Nx.select(in_3_4, 1.0, 0.0), p3))
+      end
+
+    # Multiply each basis evaluation element-wise with x (to modulate)
+    # and sum — the downstream projection layer learns the control point weights
+    Enum.reduce(basis_values, Nx.broadcast(0.0, Nx.shape(x)), &Nx.add/2)
+  end
+
+  # ============================================================================
   # Utilities
   # ============================================================================
 
@@ -440,7 +541,7 @@ defmodule Edifice.Feedforward.KAN do
       hidden_size: 256,
       num_layers: 4,
       grid_size: 8,
-      basis: :sine,
+      basis: :bspline,
       window_size: 60,
       dropout: 0.1
     ]

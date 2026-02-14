@@ -1107,7 +1107,7 @@ defmodule Edifice.CoverageBatchFTest do
       defaults = KAN.recommended_defaults()
       assert Keyword.keyword?(defaults)
       assert Keyword.get(defaults, :grid_size) == 8
-      assert Keyword.get(defaults, :basis) == :sine
+      assert Keyword.get(defaults, :basis) == :bspline
       assert Keyword.get(defaults, :hidden_size) == 256
     end
 
@@ -1179,7 +1179,7 @@ defmodule Edifice.CoverageBatchFTest do
       assert KAN.default_hidden_size() == 256
       assert KAN.default_num_layers() == 4
       assert KAN.default_grid_size() == 8
-      assert KAN.default_basis() == :sine
+      assert KAN.default_basis() == :bspline
       assert KAN.default_dropout() == 0.0
       assert KAN.eps() == 1.0e-6
     end

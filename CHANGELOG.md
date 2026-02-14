@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-02-14
+
+### Fixed
+
+- **MoE top-k routing**: `top_k_forward` now uses `Nx.top_k` indices with one-hot mask for correct expert selection (was ignoring indices and averaging first k experts)
+- **MoE hash routing**: `hash_forward` now properly selects expert by hash (was always returning first expert)
+- **SwitchMoE routing**: Replaced soft weighted average with hard top-1 selection via straight-through estimator, restoring the sparsity that defines Switch Transformer
+- **SchNet filter generation**: Added learned 2-layer filter-generating network (RBF -> Dense -> SiLU -> Dense) replacing naive mean aggregation
+- **ConvNeXt layer scale**: Changed from frozen constant to learnable `Axon.param`, matching Liu et al. 2022
+- **MessagePassing aggregate**: Added batch axes to `Nx.dot` for correct batched matrix multiplication
+- **SNN docstring**: Corrected reset mechanism description from hard reset to soft reset (subtract threshold)
+
+### Changed
+
+- **KAN default basis**: Changed from `:sine` (Fourier features) to `:bspline` (cubic B-spline via Cox-de Boor), faithful to Liu et al. 2024. Previous bases (`:sine`, `:chebyshev`, `:fourier`, `:rbf`) remain available as options
+- **TTT W_0 initialization**: Changed from `0.01 * Identity` to `:glorot_uniform` per Sun et al. 2024
+- **TTT output RMS norm**: Made optional via `:output_rms_norm` option (default: `false`), was unconditionally applied
+
+### Removed
+
+- Unused `_x` and `_dt` parameters from Liquid `integrate_ode`
+
 ## [0.1.0] - 2026-02-14
 
 ### Added

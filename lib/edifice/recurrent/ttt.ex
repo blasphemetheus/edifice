@@ -114,6 +114,7 @@ defmodule Edifice.Recurrent.TTT do
     - `:num_layers` - Number of TTT layers (default: 4)
     - `:dropout` - Dropout rate between layers (default: 0.1)
     - `:window_size` - Expected sequence length (default: 60)
+    - `:output_rms_norm` - Apply per-timestep RMS norm to output (default: false)
 
   ## Returns
     An Axon model that processes sequences and outputs the last hidden state.
@@ -141,10 +142,12 @@ defmodule Edifice.Recurrent.TTT do
         input
       end
 
+    output_rms_norm = Keyword.get(opts, :output_rms_norm, false)
+
     # Stack TTT layers
     output =
       Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
-        layer = build_ttt_layer(acc, hidden_size, inner_size, "ttt_#{layer_idx}")
+        layer = build_ttt_layer(acc, hidden_size, inner_size, "ttt_#{layer_idx}", output_rms_norm)
 
         if dropout > 0 and layer_idx < num_layers do
           Axon.dropout(layer, rate: dropout, name: "dropout_#{layer_idx}")
@@ -171,7 +174,7 @@ defmodule Edifice.Recurrent.TTT do
   # TTT Layer
   # ============================================================================
 
-  defp build_ttt_layer(input, hidden_size, inner_size, name) do
+  defp build_ttt_layer(input, hidden_size, inner_size, name, output_rms_norm) do
     # Pre-norm for stability
     normed = Axon.layer_norm(input, name: "#{name}_norm")
 
@@ -189,14 +192,9 @@ defmodule Edifice.Recurrent.TTT do
         name: "#{name}_cat"
       )
 
-    # Learnable W_0: initial inner model weights (paper uses learnable, not zeros)
+    # Learnable W_0: initial inner model weights (standard random init per paper)
     w0_param =
-      Axon.param("#{name}_w0", {inner_size, inner_size},
-        initializer: fn {n, m}, _type, _key ->
-          # Small random init (scaled identity-like)
-          Nx.multiply(Nx.eye({n, m}, type: :f32), 0.01)
-        end
-      )
+      Axon.param("#{name}_w0", {inner_size, inner_size}, initializer: :glorot_uniform)
 
     # Apply TTT recurrence with learnable W_0
     recurrence_output =
@@ -205,6 +203,7 @@ defmodule Edifice.Recurrent.TTT do
         [recurrence_input, w0_param],
         name: "#{name}_recurrence",
         inner_size: inner_size,
+        output_rms_norm: output_rms_norm,
         op_name: :ttt_scan
       )
 
@@ -218,10 +217,11 @@ defmodule Edifice.Recurrent.TTT do
   # Wrapper for Axon.layer callback
   defp ttt_scan_impl(combined, w0, opts) do
     inner_size = opts[:inner_size]
-    ttt_scan(combined, w0, inner_size)
+    output_rms_norm = opts[:output_rms_norm] || false
+    ttt_scan(combined, w0, inner_size, output_rms_norm)
   end
 
-  defp ttt_scan(combined, w0, inner_size) do
+  defp ttt_scan(combined, w0, inner_size, output_rms_norm) do
     # combined: [batch, seq_len, inner_size * 4]
     batch_size = Nx.axis_size(combined, 0)
     seq_len = Nx.axis_size(combined, 1)
@@ -269,13 +269,18 @@ defmodule Edifice.Recurrent.TTT do
 
         w_t = Nx.subtract(w_prev, grad)
 
-        # Output: W_t @ q_t with per-token normalization for stability
+        # Output: W_t @ q_t
         o_t = Nx.dot(w_t, [2], [0], Nx.new_axis(q_t, 2), [1], [0])
         o_t = Nx.squeeze(o_t, axes: [2])
 
-        # RMS normalization on output (stabilizes varying W scales)
-        rms = Nx.sqrt(Nx.mean(Nx.pow(o_t, 2), axes: [-1], keep_axes: true) |> Nx.add(1.0e-6))
-        o_t = Nx.divide(o_t, rms)
+        # Optional RMS normalization (not in paper, but can stabilize varying W scales)
+        o_t =
+          if output_rms_norm do
+            rms = Nx.sqrt(Nx.add(Nx.mean(Nx.pow(o_t, 2), axes: [-1], keep_axes: true), 1.0e-6))
+            Nx.divide(o_t, rms)
+          else
+            o_t
+          end
 
         {w_t, [o_t | acc]}
       end)

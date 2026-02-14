@@ -524,21 +524,24 @@ defmodule Edifice.Meta.MoE do
     build_top_k_routing(input, experts_stacked, router_logits, 1, name)
   end
 
-  defp build_soft_routing(input, experts_stacked, router_logits, name) do
-    # Soft routing: weighted sum using all experts
-    # Simplified: use top-k with k=2 as approximation
-    _router_probs = Axon.softmax(router_logits, name: "#{name}_router_softmax")
-    build_top_k_routing(input, experts_stacked, router_logits, 2, name)
+  defp build_soft_routing(_input, experts_stacked, router_logits, name) do
+    # Soft routing: weighted sum using ALL experts with softmax weights
+    Axon.layer(
+      fn router_tensor, stacked, _opts ->
+        soft_forward(router_tensor, stacked)
+      end,
+      [router_logits, experts_stacked],
+      name: "#{name}_soft_combine"
+    )
   end
 
-  defp build_hash_routing(_input, experts_stacked, _num_experts, name) do
-    # Hash routing: deterministic based on input
-    # Simplified: use first expert
+  defp build_hash_routing(input, experts_stacked, _num_experts, name) do
+    # Hash routing: deterministic based on input features
     Axon.layer(
-      fn stacked, _opts ->
-        hash_forward(stacked)
+      fn input_tensor, stacked, _opts ->
+        hash_forward(input_tensor, stacked)
       end,
-      [experts_stacked],
+      [input, experts_stacked],
       name: "#{name}_hash_combine"
     )
   end
@@ -547,22 +550,70 @@ defmodule Edifice.Meta.MoE do
   defnp top_k_forward(router_logits, experts_stacked, top_k) do
     # router_logits: [batch, seq_len, num_experts]
     # experts_stacked: [num_experts, batch, seq_len, output_size]
+    num_experts = Nx.axis_size(router_logits, 2)
+
     # Get top-k indices and values
-    {top_values, _top_indices} = Nx.top_k(router_logits, k: top_k)
+    {top_values, top_indices} = Nx.top_k(router_logits, k: top_k)
 
-    # Softmax over top-k values only
+    # Softmax over top-k values for weighting
     top_probs = Nx.exp(top_values - Nx.reduce_max(top_values, axes: [-1], keep_axes: true))
-    _top_probs_normalized = top_probs / Nx.sum(top_probs, axes: [-1], keep_axes: true)
+    top_probs = top_probs / Nx.sum(top_probs, axes: [-1], keep_axes: true)
 
-    # For each position, combine top-k experts
-    # Using simple mean of top experts as placeholder
-    Nx.mean(experts_stacked[0..(top_k - 1)], axes: [0])
+    # Build per-expert weights from top-k selection
+    # one_hot: [batch, seq_len, top_k, num_experts]
+    one_hot =
+      Nx.equal(
+        Nx.new_axis(top_indices, 3),
+        Nx.iota({1, 1, 1, num_experts}, axis: 3)
+      )
+
+    # Weight each one-hot by its softmax probability, sum over top_k dim
+    # weighted: [batch, seq_len, top_k, num_experts] -> [batch, seq_len, num_experts]
+    expert_weights =
+      Nx.sum(Nx.multiply(one_hot, Nx.new_axis(top_probs, 3)), axes: [2])
+
+    # Transpose experts to [batch, seq_len, num_experts, output_size]
+    experts_t = Nx.transpose(experts_stacked, axes: [1, 2, 0, 3])
+
+    # Weighted combination: [batch, seq_len, 1, num_experts] @ [batch, seq_len, num_experts, output_size]
+    weights = Nx.new_axis(expert_weights, 2)
+    output = Nx.dot(weights, [3], [0, 1], experts_t, [2], [0, 1])
+    Nx.squeeze(output, axes: [2])
   end
 
-  defnp hash_forward(experts_stacked) do
-    # Hash-based routing - simplified to use first expert
-    # Real implementation would use input hash to select expert
-    experts_stacked[0]
+  defnp soft_forward(router_logits, experts_stacked) do
+    # Soft routing: softmax over all experts, weighted combination
+    # router_logits: [batch, seq_len, num_experts]
+    # experts_stacked: [num_experts, batch, seq_len, output_size]
+    probs = Nx.exp(router_logits - Nx.reduce_max(router_logits, axes: [-1], keep_axes: true))
+    probs = probs / Nx.sum(probs, axes: [-1], keep_axes: true)
+
+    # Transpose experts to [batch, seq_len, num_experts, output_size]
+    experts_t = Nx.transpose(experts_stacked, axes: [1, 2, 0, 3])
+
+    # Weighted combination
+    weights = Nx.new_axis(probs, 2)
+    output = Nx.dot(weights, [3], [0, 1], experts_t, [2], [0, 1])
+    Nx.squeeze(output, axes: [2])
+  end
+
+  defnp hash_forward(router_input, experts_stacked) do
+    # Hash-based routing: deterministic expert selection from input features
+    # Use sum of input features modulo num_experts as a simple hash
+    num_experts = Nx.axis_size(experts_stacked, 0)
+    hash_vals = Nx.sum(Nx.abs(router_input), axes: [-1])
+    # Discretize to expert index
+    indices =
+      Nx.remainder(Nx.as_type(Nx.floor(Nx.multiply(hash_vals, 1000.0)), :s64), num_experts)
+
+    # One-hot selection
+    one_hot = Nx.equal(Nx.new_axis(indices, -1), Nx.iota({1, 1, num_experts}, axis: 2))
+    expert_weights = Nx.as_type(one_hot, :f32)
+    # Transpose experts to [batch, seq_len, num_experts, output_size]
+    experts_t = Nx.transpose(experts_stacked, axes: [1, 2, 0, 3])
+    weights = Nx.new_axis(expert_weights, 2)
+    output = Nx.dot(weights, [3], [0, 1], experts_t, [2], [0, 1])
+    Nx.squeeze(output, axes: [2])
   end
 
   defp build_mamba_sublayer(input, hidden_size, dropout, name) do

@@ -14,7 +14,7 @@ defmodule Edifice.Neuromorphic.SNN do
 
       V[t] = beta * V[t-1] + W * x[t]    (leak + integrate)
       spike[t] = V[t] > threshold          (fire)
-      V[t] = V[t] * (1 - spike[t])        (reset after spike)
+      V[t] = V[t] - spike[t] * threshold   (soft reset after spike)
 
   where:
   - beta = exp(-dt/tau) is the membrane decay factor

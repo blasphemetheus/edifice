@@ -216,10 +216,11 @@ defmodule Edifice.Meta.SwitchMoE do
     end
   end
 
-  # Top-1 routing: select the expert with highest routing probability
+  # Top-1 routing: hard selection with straight-through estimator for gradients
   defnp route_top1(router_logits, experts_stacked) do
     # router_logits: [batch, seq_len, num_experts]
     # experts_stacked: [num_experts, batch, seq_len, hidden_size]
+    num_experts = Nx.axis_size(router_logits, 2)
 
     # Softmax router probabilities
     router_probs =
@@ -227,16 +228,26 @@ defmodule Edifice.Meta.SwitchMoE do
 
     router_probs = router_probs / Nx.sum(router_probs, axes: [-1], keep_axes: true)
 
-    # For top-1: weight each expert by its routing probability
-    # This approximates hard routing in a differentiable way
-    # router_probs: [batch, seq_len, num_experts]
-    # experts_stacked: [num_experts, batch, seq_len, hidden_size]
+    # Hard top-1 selection: one-hot mask from argmax
+    selected = Nx.argmax(router_logits, axis: -1)
+
+    hard_mask =
+      Nx.equal(
+        Nx.new_axis(selected, -1),
+        Nx.iota({1, 1, num_experts}, axis: 2)
+      )
+
+    hard_mask = Nx.as_type(hard_mask, :f32)
+
+    # Straight-through estimator: forward uses hard mask, gradients flow through soft probs
+    # STE: hard_mask in forward, router_probs gradient in backward
+    ste_weights = stop_grad(hard_mask - router_probs) + router_probs
 
     # Transpose experts to [batch, seq_len, num_experts, hidden_size]
     experts_t = Nx.transpose(experts_stacked, axes: [1, 2, 0, 3])
 
-    # Weight and sum: [batch, seq_len, 1, num_experts] @ [batch, seq_len, num_experts, hidden_size]
-    weights = Nx.new_axis(router_probs, 2)
+    # Weighted selection: [batch, seq_len, 1, num_experts] @ [batch, seq_len, num_experts, hidden_size]
+    weights = Nx.new_axis(ste_weights, 2)
     output = Nx.dot(weights, [3], [0, 1], experts_t, [2], [0, 1])
     Nx.squeeze(output, axes: [2])
   end

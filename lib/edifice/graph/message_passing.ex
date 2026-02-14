@@ -230,8 +230,8 @@ defmodule Edifice.Graph.MessagePassing do
   defp aggregate_impl(node_features, adjacency, opts) do
     mode = opts[:mode] || :sum
 
-    # A @ H gives neighbor feature sums per node
-    aggregated = Nx.dot(adjacency, [2], node_features, [1])
+    # A @ H gives neighbor feature sums per node (batched matmul)
+    aggregated = Nx.dot(adjacency, [2], [0], node_features, [1], [0])
 
     case mode do
       :sum ->
