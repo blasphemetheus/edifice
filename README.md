@@ -2,7 +2,7 @@
 
 A comprehensive ML architecture library for Elixir, built on [Nx](https://github.com/elixir-nx/nx) and [Axon](https://github.com/elixir-nx/axon).
 
-91 neural network architectures across 16 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons.
+92 neural network architectures across 16 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons.
 
 ## Why Edifice?
 
@@ -133,6 +133,7 @@ Edifice.list_families()
 
 | Architecture | Module | Key Feature |
 |-------------|--------|-------------|
+| **Conv1D/2D** | `Edifice.Convolutional.Conv` | Configurable convolution blocks with BN, activation, dropout |
 | **ResNet** | `Edifice.Convolutional.ResNet` | Residual/bottleneck blocks, configurable depth |
 | **DenseNet** | `Edifice.Convolutional.DenseNet` | Dense connections, feature reuse |
 | **TCN** | `Edifice.Convolutional.TCN` | Dilated causal convolutions for sequences |
@@ -265,6 +266,8 @@ Conceptual guides covering theory, architecture evolution, and decision tables f
 
 ## Examples
 
+See [`examples/`](examples/) for runnable scripts including `mlp_basics.exs`, `sequence_comparison.exs`, `graph_classification.exs`, `vae_generation.exs`, and `architecture_tour.exs`.
+
 ### Mamba for Sequence Modeling
 
 ```elixir
@@ -324,8 +327,9 @@ output = predict_fn.(params, %{
 params = init_fn.(Nx.template({1, 784}, :f32), Axon.ModelState.empty())
 %{mu: mu, log_var: log_var} = predict_fn.(params, Nx.broadcast(0.5, {1, 784}))
 
-# Sample latent vector
-z = Edifice.Generative.VAE.reparameterize(mu, log_var)
+# Sample latent vector (requires PRNG key for stochastic sampling)
+key = Nx.Random.key(42)
+{z, _new_key} = Edifice.Generative.VAE.reparameterize(mu, log_var, key)
 
 # KL divergence for training
 kl_loss = Edifice.Generative.VAE.kl_divergence(mu, log_var)

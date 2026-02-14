@@ -94,7 +94,7 @@ defmodule Edifice.Energy.EBM do
 
   - `:input_size` - Input feature dimension (required)
   - `:hidden_sizes` - List of hidden layer sizes (default: [256, 128])
-  - `:activation` - Activation function (default: :swish)
+  - `:activation` - Activation function (default: :silu)
   - `:dropout` - Dropout rate (default: 0.0)
   - `:spectral_norm` - Apply spectral normalization for Lipschitz constraint (default: false)
 

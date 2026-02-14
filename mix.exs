@@ -16,7 +16,8 @@ defmodule Edifice.MixProject do
 
       # Docs
       name: "Edifice",
-      description: "A comprehensive ML architecture library for Elixir/Nx/Axon",
+      description:
+        "90+ neural network architectures for Nx/Axon: transformers, Mamba, diffusion models, GNNs, and more",
       source_url: @source_url,
       homepage_url: @source_url,
       docs: docs(),
@@ -49,7 +50,8 @@ defmodule Edifice.MixProject do
       {:stream_data, "~> 1.1", only: [:dev, :test]},
       {:benchee, "~> 1.0", only: :dev},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
+      {:doctor, "~> 0.22.0", only: :dev, runtime: false}
     ]
   end
 
@@ -236,6 +238,9 @@ defmodule Edifice.MixProject do
         "Building Blocks": [
           Edifice.Blocks.RMSNorm,
           Edifice.Blocks.SwiGLU,
+          Edifice.Blocks.FFN,
+          Edifice.Blocks.TransformerBlock,
+          Edifice.Blocks.ModelBuilder,
           Edifice.Blocks.RoPE,
           Edifice.Blocks.ALiBi,
           Edifice.Blocks.PatchEmbed,
@@ -259,7 +264,15 @@ defmodule Edifice.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ["lib", "mix.exs", "README.md", "CHANGELOG.md", "LICENSE", "guides"]
+      files: [
+        "lib",
+        "mix.exs",
+        ".formatter.exs",
+        "README.md",
+        "CHANGELOG.md",
+        "LICENSE",
+        "guides"
+      ]
     ]
   end
 

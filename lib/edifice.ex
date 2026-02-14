@@ -179,7 +179,7 @@ defmodule Edifice do
   def list_families do
     %{
       feedforward: [:mlp, :kan, :tabnet],
-      convolutional: [:resnet, :densenet, :tcn, :mobilenet, :efficientnet],
+      convolutional: [:conv1d, :resnet, :densenet, :tcn, :mobilenet, :efficientnet],
       recurrent: [:lstm, :gru, :xlstm, :min_gru, :min_lstm, :delta_net, :ttt, :titans, :reservoir],
       ssm: [
         :mamba,
@@ -246,9 +246,12 @@ defmodule Edifice do
       - `:embed_size` — sequence models (SSM, attention, recurrent)
       - `:input_size` — flat-vector models (MLP, probabilistic, energy)
       - `:input_dim` — graph/spatial models (GCN, DeepSets, vision)
+      - `:obs_size` — diffusion models (Diffusion, DDIM, FlowMatching)
 
-      You can pass any of these three interchangeably — `build/2` will
-      normalize to the name each module expects.
+      You can pass any of the first three interchangeably — `build/2` will
+      normalize to the name each module expects. `:obs_size` is also
+      normalized from the above. Image models requiring `:input_shape`
+      (a tuple like `{nil, 32, 32, 3}`) must be passed explicitly.
 
   ## Examples
 
@@ -258,8 +261,17 @@ defmodule Edifice do
 
   ## Returns
 
-  An `Axon.t()` model for most architectures. Generative architectures (VAE, GAN,
-  VQ-VAE) return tuples — see each module's docs for details.
+  An `Axon.t()` model for most architectures. These architectures return tuples:
+
+    - `:vae` — `{encoder, decoder}`
+    - `:vq_vae` — `{encoder, decoder}`
+    - `:gan` — `{generator, discriminator}`
+    - `:normalizing_flow` — `{flow_model, log_det_fn}`
+    - `:simclr` — `{backbone, projection_head}`
+    - `:byol` — `{online_network, target_network}`
+    - `:barlow_twins` — `{backbone, projection_head}`
+    - `:vicreg` — `{backbone, projection_head}`
+    - `:mae` — `{encoder, decoder}`
   """
   @spec build(atom(), keyword()) :: Axon.t() | tuple()
   def build(name, opts \\ []) do
@@ -302,19 +314,21 @@ defmodule Edifice do
     end
   end
 
-  # Normalize input dimension options so users can pass any of the three
+  # Normalize input dimension options so users can pass any of the scalar
   # names and the right one reaches each module.
   defp normalize_input_dim(opts) do
     value =
       Keyword.get(opts, :embed_size) ||
         Keyword.get(opts, :input_size) ||
-        Keyword.get(opts, :input_dim)
+        Keyword.get(opts, :input_dim) ||
+        Keyword.get(opts, :obs_size)
 
     if value do
       opts
       |> Keyword.put_new(:embed_size, value)
       |> Keyword.put_new(:input_size, value)
       |> Keyword.put_new(:input_dim, value)
+      |> Keyword.put_new(:obs_size, value)
     else
       opts
     end
