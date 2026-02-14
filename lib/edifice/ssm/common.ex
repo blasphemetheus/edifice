@@ -21,8 +21,6 @@ defmodule Edifice.SSM.Common do
   | `MambaHillisSteele` | Hillis-Steele | O(L log L) work, more parallelism |
   | `MambaCumsum` | Cumsum-based | Experimental log-space approach |
   | `MambaSSD` | SSD chunked | Mamba-2's matmul approach |
-  | `MambaNIF` | CUDA NIF | 5x faster inference via Rust NIF |
-
   ## See Also
 
   - `Edifice.SSM.Mamba` - Main Mamba implementation

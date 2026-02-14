@@ -45,6 +45,7 @@ defmodule Edifice do
     kan: Edifice.Feedforward.KAN,
     tabnet: Edifice.Feedforward.TabNet,
     # Convolutional
+    conv1d: Edifice.Convolutional.Conv,
     resnet: Edifice.Convolutional.ResNet,
     densenet: Edifice.Convolutional.DenseNet,
     tcn: Edifice.Convolutional.TCN,

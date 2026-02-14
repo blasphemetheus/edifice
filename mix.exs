@@ -145,9 +145,7 @@ defmodule Edifice.MixProject do
           Edifice.SSM.BiMamba,
           Edifice.SSM.GatedSSM,
           Edifice.SSM.Hybrid,
-          Edifice.SSM.Zamba,
-          Edifice.SSM.HybridBuilder,
-          Edifice.SSM.Common
+          Edifice.SSM.Zamba
         ],
         Attention: [
           Edifice.Attention.MultiHead,
@@ -198,8 +196,7 @@ defmodule Edifice.MixProject do
           Edifice.Graph.GraphSAGE,
           Edifice.Graph.GraphTransformer,
           Edifice.Graph.PNA,
-          Edifice.Graph.SchNet,
-          Edifice.Graph.MessagePassing
+          Edifice.Graph.SchNet
         ],
         Sets: [
           Edifice.Sets.DeepSets,
@@ -245,7 +242,10 @@ defmodule Edifice.MixProject do
           Edifice.Blocks.AdaptiveNorm,
           Edifice.Blocks.CrossAttention
         ],
-        Utilities: [
+        Internals: [
+          Edifice.SSM.Common,
+          Edifice.SSM.HybridBuilder,
+          Edifice.Graph.MessagePassing,
           Edifice.Utils.FusedOps,
           Edifice.Utils.ODESolver,
           Edifice.Utils.Common

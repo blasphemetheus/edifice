@@ -62,6 +62,10 @@ defmodule Edifice.Convolutional.Conv do
   # 1D Convolution
   # ============================================================================
 
+  @doc false
+  @spec build(keyword()) :: Axon.t()
+  def build(opts \\ []), do: build_conv1d(opts)
+
   @doc """
   Build a 1D convolutional model for sequence processing.
 

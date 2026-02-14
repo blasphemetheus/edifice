@@ -101,7 +101,7 @@ defmodule Edifice.Meta.MoE do
     An Axon model for the MoE layer.
   """
   @spec build(keyword()) :: Axon.t()
-  def build(opts) do
+  def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
     hidden_size = Keyword.get(opts, :hidden_size, input_size * 4)
     output_size = Keyword.get(opts, :output_size, input_size)
