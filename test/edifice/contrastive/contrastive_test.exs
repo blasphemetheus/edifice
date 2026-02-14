@@ -22,7 +22,7 @@ defmodule Edifice.ContrastiveTest do
         SimCLR.build(
           encoder_dim: @encoder_dim,
           projection_dim: @projection_dim,
-          hidden_dim: @hidden_dim
+          hidden_size: @hidden_dim
         )
 
       assert %Axon{} = model
@@ -33,7 +33,7 @@ defmodule Edifice.ContrastiveTest do
         SimCLR.build(
           encoder_dim: @encoder_dim,
           projection_dim: @projection_dim,
-          hidden_dim: @hidden_dim
+          hidden_size: @hidden_dim
         )
 
       {init_fn, predict_fn} = Axon.build(model)
@@ -51,7 +51,7 @@ defmodule Edifice.ContrastiveTest do
         SimCLR.build(
           encoder_dim: @encoder_dim,
           projection_dim: @projection_dim,
-          hidden_dim: @hidden_dim
+          hidden_size: @hidden_dim
         )
 
       {init_fn, predict_fn} = Axon.build(model)
@@ -109,7 +109,7 @@ defmodule Edifice.ContrastiveTest do
         BYOL.build(
           encoder_dim: @encoder_dim,
           projection_dim: @projection_dim,
-          hidden_dim: @hidden_dim
+          hidden_size: @hidden_dim
         )
 
       assert %Axon{} = online
@@ -122,7 +122,7 @@ defmodule Edifice.ContrastiveTest do
           encoder_dim: @encoder_dim,
           projection_dim: @projection_dim,
           predictor_dim: 8,
-          hidden_dim: @hidden_dim
+          hidden_size: @hidden_dim
         )
 
       {init_fn, predict_fn} = Axon.build(online)
@@ -140,7 +140,7 @@ defmodule Edifice.ContrastiveTest do
         BYOL.build(
           encoder_dim: @encoder_dim,
           projection_dim: @projection_dim,
-          hidden_dim: @hidden_dim
+          hidden_size: @hidden_dim
         )
 
       {init_fn, predict_fn} = Axon.build(target)
@@ -158,7 +158,7 @@ defmodule Edifice.ContrastiveTest do
         BYOL.build(
           encoder_dim: @encoder_dim,
           projection_dim: @projection_dim,
-          hidden_dim: @hidden_dim
+          hidden_size: @hidden_dim
         )
 
       {init_fn, predict_fn} = Axon.build(online)
@@ -244,7 +244,7 @@ defmodule Edifice.ContrastiveTest do
         BarlowTwins.build(
           encoder_dim: @encoder_dim,
           projection_dim: @projection_dim,
-          hidden_dim: @hidden_dim
+          hidden_size: @hidden_dim
         )
 
       assert %Axon{} = model
@@ -255,7 +255,7 @@ defmodule Edifice.ContrastiveTest do
         BarlowTwins.build(
           encoder_dim: @encoder_dim,
           projection_dim: @projection_dim,
-          hidden_dim: @hidden_dim
+          hidden_size: @hidden_dim
         )
 
       {init_fn, predict_fn} = Axon.build(model)
@@ -273,7 +273,7 @@ defmodule Edifice.ContrastiveTest do
         BarlowTwins.build(
           encoder_dim: @encoder_dim,
           projection_dim: @projection_dim,
-          hidden_dim: @hidden_dim
+          hidden_size: @hidden_dim
         )
 
       {init_fn, predict_fn} = Axon.build(model)
@@ -498,7 +498,7 @@ defmodule Edifice.ContrastiveTest do
         VICReg.build(
           encoder_dim: @encoder_dim,
           projection_dim: @projection_dim,
-          hidden_dim: @hidden_dim
+          hidden_size: @hidden_dim
         )
 
       assert %Axon{} = model
@@ -509,7 +509,7 @@ defmodule Edifice.ContrastiveTest do
         VICReg.build(
           encoder_dim: @encoder_dim,
           projection_dim: @projection_dim,
-          hidden_dim: @hidden_dim
+          hidden_size: @hidden_dim
         )
 
       {init_fn, predict_fn} = Axon.build(model)
@@ -527,7 +527,7 @@ defmodule Edifice.ContrastiveTest do
         VICReg.build(
           encoder_dim: @encoder_dim,
           projection_dim: @projection_dim,
-          hidden_dim: @hidden_dim
+          hidden_size: @hidden_dim
         )
 
       {init_fn, predict_fn} = Axon.build(model)

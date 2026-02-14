@@ -17,7 +17,7 @@ defmodule Edifice.Vision.MLPMixer do
   +---------------------------+
         |
         v
-  [batch, num_patches, hidden_dim]
+  [batch, num_patches, hidden_size]
         |
   +-----v--------------------+
   | Mixer Layer x N           |
@@ -33,7 +33,7 @@ defmodule Edifice.Vision.MLPMixer do
   | Channel Mixing:           |
   |   LN -> Dense(ch_mlp_dim) |
   |   -> GELU                 |
-  |   -> Dense(hidden_dim)    |
+  |   -> Dense(hidden_size)   |
   |   + Residual              |
   +---------------------------+
         |
@@ -47,7 +47,7 @@ defmodule Edifice.Vision.MLPMixer do
   +---------------------------+
         |
         v
-  [batch, hidden_dim]
+  [batch, hidden_size]
         |
   +-----v--------------------+
   | Optional Classifier       |
@@ -67,7 +67,7 @@ defmodule Edifice.Vision.MLPMixer do
       model = MLPMixer.build(
         image_size: 224,
         patch_size: 16,
-        hidden_dim: 768,
+        hidden_size: 768,
         num_layers: 12,
         token_mlp_dim: 384,
         channel_mlp_dim: 3072,
@@ -78,7 +78,7 @@ defmodule Edifice.Vision.MLPMixer do
       model = MLPMixer.build(
         image_size: 32,
         patch_size: 4,
-        hidden_dim: 256,
+        hidden_size: 256,
         num_layers: 8,
         token_mlp_dim: 128,
         channel_mlp_dim: 1024,
@@ -98,7 +98,7 @@ defmodule Edifice.Vision.MLPMixer do
   @default_image_size 224
   @default_patch_size 16
   @default_in_channels 3
-  @default_hidden_dim 512
+  @default_hidden_size 512
   @default_num_layers 8
   @default_token_mlp_dim 256
   @default_channel_mlp_dim 2048
@@ -116,7 +116,7 @@ defmodule Edifice.Vision.MLPMixer do
     - `:image_size` - Input image size, square (default: 224)
     - `:patch_size` - Patch size, square (default: 16)
     - `:in_channels` - Number of input channels (default: 3)
-    - `:hidden_dim` - Hidden dimension per patch (default: 512)
+    - `:hidden_size` - Hidden dimension per patch (default: 512)
     - `:num_layers` - Number of mixer layers (default: 8)
     - `:token_mlp_dim` - Token-mixing MLP hidden dimension (default: 256)
     - `:channel_mlp_dim` - Channel-mixing MLP hidden dimension (default: 2048)
@@ -125,7 +125,7 @@ defmodule Edifice.Vision.MLPMixer do
 
   ## Returns
 
-    An Axon model. Without `:num_classes`, outputs `[batch, hidden_dim]`.
+    An Axon model. Without `:num_classes`, outputs `[batch, hidden_size]`.
     With `:num_classes`, outputs `[batch, num_classes]`.
   """
   @spec build(keyword()) :: Axon.t()
@@ -133,7 +133,7 @@ defmodule Edifice.Vision.MLPMixer do
     image_size = Keyword.get(opts, :image_size, @default_image_size)
     patch_size = Keyword.get(opts, :patch_size, @default_patch_size)
     in_channels = Keyword.get(opts, :in_channels, @default_in_channels)
-    hidden_dim = Keyword.get(opts, :hidden_dim, @default_hidden_dim)
+    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     token_mlp_dim = Keyword.get(opts, :token_mlp_dim, @default_token_mlp_dim)
     channel_mlp_dim = Keyword.get(opts, :channel_mlp_dim, @default_channel_mlp_dim)
@@ -145,20 +145,20 @@ defmodule Edifice.Vision.MLPMixer do
     # Input: [batch, channels, height, width]
     input = Axon.input("image", shape: {nil, in_channels, image_size, image_size})
 
-    # Patch embedding: [batch, num_patches, hidden_dim]
+    # Patch embedding: [batch, num_patches, hidden_size]
     x =
       PatchEmbed.layer(input,
         image_size: image_size,
         patch_size: patch_size,
         in_channels: in_channels,
-        embed_dim: hidden_dim,
+        embed_dim: hidden_size,
         name: "patch_embed"
       )
 
     # Stack of mixer layers
     x =
       Enum.reduce(0..(num_layers - 1), x, fn layer_idx, acc ->
-        mixer_layer(acc, num_patches, hidden_dim, token_mlp_dim, channel_mlp_dim, dropout,
+        mixer_layer(acc, num_patches, hidden_size, token_mlp_dim, channel_mlp_dim, dropout,
           name: "mixer_#{layer_idx}"
         )
       end)
@@ -166,7 +166,7 @@ defmodule Edifice.Vision.MLPMixer do
     # Final layer norm
     x = Axon.layer_norm(x, name: "final_norm")
 
-    # Global average pool: [batch, num_patches, hidden_dim] -> [batch, hidden_dim]
+    # Global average pool: [batch, num_patches, hidden_size] -> [batch, hidden_size]
     x =
       Axon.nx(
         x,
@@ -188,14 +188,14 @@ defmodule Edifice.Vision.MLPMixer do
   # Mixer Layer
   # ============================================================================
 
-  defp mixer_layer(input, num_patches, hidden_dim, token_mlp_dim, channel_mlp_dim, dropout, opts) do
+  defp mixer_layer(input, num_patches, hidden_size, token_mlp_dim, channel_mlp_dim, dropout, opts) do
     name = Keyword.get(opts, :name, "mixer")
 
     # Token-mixing MLP: operates across patches (spatial mixing)
     # LN -> transpose -> MLP -> transpose -> residual
     token_normed = Axon.layer_norm(input, name: "#{name}_token_norm")
 
-    # Transpose: [batch, num_patches, hidden_dim] -> [batch, hidden_dim, num_patches]
+    # Transpose: [batch, num_patches, hidden_size] -> [batch, hidden_size, num_patches]
     token_transposed =
       Axon.nx(
         token_normed,
@@ -213,7 +213,7 @@ defmodule Edifice.Vision.MLPMixer do
       |> Axon.dense(num_patches, name: "#{name}_token_fc2")
       |> maybe_dropout(dropout, "#{name}_token_drop2")
 
-    # Transpose back: [batch, hidden_dim, num_patches] -> [batch, num_patches, hidden_dim]
+    # Transpose back: [batch, hidden_size, num_patches] -> [batch, num_patches, hidden_size]
     token_mixed =
       Axon.nx(
         token_mixed,
@@ -235,7 +235,7 @@ defmodule Edifice.Vision.MLPMixer do
       |> Axon.dense(channel_mlp_dim, name: "#{name}_channel_fc1")
       |> Axon.activation(:gelu, name: "#{name}_channel_gelu")
       |> maybe_dropout(dropout, "#{name}_channel_drop1")
-      |> Axon.dense(hidden_dim, name: "#{name}_channel_fc2")
+      |> Axon.dense(hidden_size, name: "#{name}_channel_fc2")
       |> maybe_dropout(dropout, "#{name}_channel_drop2")
 
     # Residual
@@ -255,12 +255,12 @@ defmodule Edifice.Vision.MLPMixer do
   @doc """
   Get the output size of an MLP-Mixer model.
 
-  Returns `:num_classes` if set, otherwise `:hidden_dim`.
+  Returns `:num_classes` if set, otherwise `:hidden_size`.
   """
   @spec output_size(keyword()) :: pos_integer()
   def output_size(opts \\ []) do
     case Keyword.get(opts, :num_classes) do
-      nil -> Keyword.get(opts, :hidden_dim, @default_hidden_dim)
+      nil -> Keyword.get(opts, :hidden_size, @default_hidden_size)
       num_classes -> num_classes
     end
   end

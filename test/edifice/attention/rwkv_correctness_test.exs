@@ -5,12 +5,12 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
 
   @batch 2
   @seq_len 8
-  @embed_size 32
+  @embed_dim 32
   @hidden_size 32
   @head_size 16
 
   @rwkv_opts [
-    embed_size: @embed_size,
+    embed_dim: @embed_dim,
     hidden_size: @hidden_size,
     num_layers: 1,
     head_size: @head_size,
@@ -31,10 +31,10 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -54,7 +54,7 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
       {init_fn, _} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -84,7 +84,7 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
       {init_fn, _} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -113,13 +113,13 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
       {init_32, pred_32} = Axon.build(model_32, mode: :inference)
 
       params_16 =
-        init_16.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_16.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       params_32 =
-        init_32.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_32.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output_16 = pred_16.(params_16, input)
       output_32 = pred_32.(params_32, input)
@@ -136,10 +136,10 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output1 = predict_fn.(params, input)
       output2 = predict_fn.(params, input)
@@ -153,7 +153,7 @@ defmodule Edifice.Attention.RWKVCorrectnessTest do
       {init_fn, _} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
       time_keys = Enum.filter(param_keys, &String.contains?(&1, "time_mix"))

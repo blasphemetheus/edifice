@@ -8,13 +8,13 @@ defmodule Edifice.Feedforward.KANTest do
 
   describe "build/1" do
     test "builds model with correct output shape" do
-      embed_size = 64
+      embed_dim = 64
       hidden_size = 32
       seq_len = 8
 
       model =
         KAN.build(
-          embed_size: embed_size,
+          embed_dim: embed_dim,
           hidden_size: hidden_size,
           num_layers: 2,
           seq_len: seq_len
@@ -23,9 +23,9 @@ defmodule Edifice.Feedforward.KANTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, seq_len, embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, seq_len, embed_dim}, :f32), Axon.ModelState.empty())
 
-      input = Nx.iota({@batch_size, seq_len, embed_size}, type: :f32)
+      input = Nx.iota({@batch_size, seq_len, embed_dim}, type: :f32)
       output = predict_fn.(params, input)
 
       # Output is last timestep: [batch, hidden_size]
@@ -36,11 +36,11 @@ defmodule Edifice.Feedforward.KANTest do
       assert KAN.default_hidden_size() == 256
     end
 
-    test "handles embed_size equal to hidden_size (no projection)" do
+    test "handles embed_dim equal to hidden_size (no projection)" do
       size = 32
       seq_len = 4
 
-      model = KAN.build(embed_size: size, hidden_size: size, num_layers: 1, seq_len: seq_len)
+      model = KAN.build(embed_dim: size, hidden_size: size, num_layers: 1, seq_len: seq_len)
 
       {init_fn, predict_fn} = Axon.build(model)
       params = init_fn.(Nx.template({@batch_size, seq_len, size}, :f32), Axon.ModelState.empty())
@@ -52,13 +52,13 @@ defmodule Edifice.Feedforward.KANTest do
     end
 
     test "supports custom grid_size" do
-      embed_size = 32
+      embed_dim = 32
       hidden_size = 16
       seq_len = 4
 
       model =
         KAN.build(
-          embed_size: embed_size,
+          embed_dim: embed_dim,
           hidden_size: hidden_size,
           num_layers: 1,
           grid_size: 4,
@@ -68,9 +68,9 @@ defmodule Edifice.Feedforward.KANTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, seq_len, embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, seq_len, embed_dim}, :f32), Axon.ModelState.empty())
 
-      input = Nx.iota({@batch_size, seq_len, embed_size}, type: :f32)
+      input = Nx.iota({@batch_size, seq_len, embed_dim}, type: :f32)
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch_size, hidden_size}
@@ -89,7 +89,7 @@ defmodule Edifice.Feedforward.KANTest do
 
   describe "param_count/1" do
     test "returns a positive integer" do
-      count = KAN.param_count(embed_size: 64, hidden_size: 32, num_layers: 2, grid_size: 4)
+      count = KAN.param_count(embed_dim: 64, hidden_size: 32, num_layers: 2, grid_size: 4)
       assert is_integer(count)
       assert count > 0
     end

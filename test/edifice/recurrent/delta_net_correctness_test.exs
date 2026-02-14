@@ -9,12 +9,12 @@ defmodule Edifice.Recurrent.DeltaNetCorrectnessTest do
   alias Edifice.Recurrent.DeltaNet
 
   @batch 2
-  @embed_size 32
+  @embed_dim 32
   @hidden_size 16
   @seq_len 4
 
   @base_opts [
-    embed_size: @embed_size,
+    embed_dim: @embed_dim,
     hidden_size: @hidden_size,
     num_layers: 1,
     num_heads: 2,
@@ -37,10 +37,10 @@ defmodule Edifice.Recurrent.DeltaNetCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -58,10 +58,10 @@ defmodule Edifice.Recurrent.DeltaNetCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -72,10 +72,10 @@ defmodule Edifice.Recurrent.DeltaNetCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output1 = predict_fn.(params, input)
       output2 = predict_fn.(params, input)
@@ -89,11 +89,11 @@ defmodule Edifice.Recurrent.DeltaNetCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input1, key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
-      {input2, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input1, key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
+      {input2, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output1 = predict_fn.(params, input1)
       output2 = predict_fn.(params, input2)
@@ -114,10 +114,10 @@ defmodule Edifice.Recurrent.DeltaNetCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -130,10 +130,10 @@ defmodule Edifice.Recurrent.DeltaNetCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -146,10 +146,10 @@ defmodule Edifice.Recurrent.DeltaNetCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -158,7 +158,7 @@ defmodule Edifice.Recurrent.DeltaNetCorrectnessTest do
 
     test "all num_heads values produce same output shape" do
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       for num_heads <- [1, 2, 4] do
         opts = Keyword.put(@base_opts, :num_heads, num_heads)
@@ -166,7 +166,7 @@ defmodule Edifice.Recurrent.DeltaNetCorrectnessTest do
         {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
         params =
-          init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+          init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
         output = predict_fn.(params, input)
 

@@ -19,13 +19,13 @@ defmodule Edifice.Blocks.CrossAttention do
                       |
                Dense Wo (output projection)
                       |
-  Output [batch, seq_q, hidden_dim]
+  Output [batch, seq_q, hidden_size]
   ```
 
   ## Usage
 
       output = CrossAttention.layer(queries, context,
-        hidden_dim: 256,
+        hidden_size: 256,
         num_heads: 4,
         name: "cross_attn"
       )
@@ -45,23 +45,23 @@ defmodule Edifice.Blocks.CrossAttention do
     - `kv_input` - Key-value sequence Axon node [batch, seq_kv, dim_kv]
 
   ## Options
-    - `:hidden_dim` - Hidden dimension for Q, K, V projections (required)
+    - `:hidden_size` - Hidden dimension for Q, K, V projections (required)
     - `:num_heads` - Number of attention heads (default: 1)
     - `:dropout` - Dropout rate (default: 0.0)
     - `:name` - Layer name prefix (default: "cross_attn")
   """
   @spec layer(Axon.t(), Axon.t(), keyword()) :: Axon.t()
   def layer(query_input, kv_input, opts \\ []) do
-    hidden_dim = Keyword.fetch!(opts, :hidden_dim)
+    hidden_size = Keyword.fetch!(opts, :hidden_size)
     dropout = Keyword.get(opts, :dropout, 0.0)
     name = Keyword.get(opts, :name, "cross_attn")
 
     # Project queries from query input
-    query_proj = Axon.dense(query_input, hidden_dim, name: "#{name}_q_proj")
+    query_proj = Axon.dense(query_input, hidden_size, name: "#{name}_q_proj")
 
     # Project keys and values from kv input
-    key_proj = Axon.dense(kv_input, hidden_dim, name: "#{name}_k_proj")
-    value_proj = Axon.dense(kv_input, hidden_dim, name: "#{name}_v_proj")
+    key_proj = Axon.dense(kv_input, hidden_size, name: "#{name}_k_proj")
+    value_proj = Axon.dense(kv_input, hidden_size, name: "#{name}_v_proj")
 
     # Compute cross-attention
     attended =
@@ -73,7 +73,7 @@ defmodule Edifice.Blocks.CrossAttention do
       )
 
     # Output projection
-    output = Axon.dense(attended, hidden_dim, name: "#{name}_out_proj")
+    output = Axon.dense(attended, hidden_size, name: "#{name}_out_proj")
 
     if dropout > 0 do
       Axon.dropout(output, rate: dropout, name: "#{name}_dropout")
@@ -93,7 +93,7 @@ defmodule Edifice.Blocks.CrossAttention do
     # softmax over keys
     weights = FusedOps.fused_softmax(scores)
 
-    # weighted sum of values: [batch, seq_q, hidden_dim]
+    # weighted sum of values: [batch, seq_q, hidden_size]
     Nx.dot(weights, [2], [0], value, [1], [0])
   end
 end

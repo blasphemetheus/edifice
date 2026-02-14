@@ -9,10 +9,10 @@ defmodule Edifice do
   ## Quick Start
 
       # Build any architecture by name
-      model = Edifice.build(:mamba, embed_size: 256, hidden_size: 512)
+      model = Edifice.build(:mamba, embed_dim: 256, hidden_size: 512)
 
       # Or use the module directly
-      model = Edifice.SSM.Mamba.build(embed_size: 256, hidden_size: 512)
+      model = Edifice.SSM.Mamba.build(embed_dim: 256, hidden_size: 512)
 
       # List all available architectures
       Edifice.list_architectures()
@@ -243,7 +243,7 @@ defmodule Edifice do
     - `name` - Architecture name (see `list_architectures/0`)
     - `opts` - Architecture-specific options. The primary input dimension option
       varies by family:
-      - `:embed_size` — sequence models (SSM, attention, recurrent)
+      - `:embed_dim` — sequence models (SSM, attention, recurrent)
       - `:input_size` — flat-vector models (MLP, probabilistic, energy)
       - `:input_dim` — graph/spatial models (GCN, DeepSets, vision)
       - `:obs_size` — diffusion models (Diffusion, DDIM, FlowMatching)
@@ -255,7 +255,7 @@ defmodule Edifice do
 
   ## Examples
 
-      model = Edifice.build(:mamba, embed_size: 256, hidden_size: 512, num_layers: 4)
+      model = Edifice.build(:mamba, embed_dim: 256, hidden_size: 512, num_layers: 4)
       model = Edifice.build(:mlp, input_size: 256, hidden_sizes: [512, 256])
       model = Edifice.build(:gcn, input_dim: 8, hidden_dims: [32, 32], num_classes: 10)
 
@@ -318,14 +318,14 @@ defmodule Edifice do
   # names and the right one reaches each module.
   defp normalize_input_dim(opts) do
     value =
-      Keyword.get(opts, :embed_size) ||
+      Keyword.get(opts, :embed_dim) ||
         Keyword.get(opts, :input_size) ||
         Keyword.get(opts, :input_dim) ||
         Keyword.get(opts, :obs_size)
 
     if value do
       opts
-      |> Keyword.put_new(:embed_size, value)
+      |> Keyword.put_new(:embed_dim, value)
       |> Keyword.put_new(:input_size, value)
       |> Keyword.put_new(:input_dim, value)
       |> Keyword.put_new(:obs_size, value)

@@ -33,7 +33,7 @@ defmodule Edifice.SSM.Mamba do
   ## Architecture
 
   ```
-  Input [batch, seq_len, embed_size]
+  Input [batch, seq_len, embed_dim]
         │
         ▼
   ┌─────────────────────────────────────┐
@@ -57,7 +57,7 @@ defmodule Edifice.SSM.Mamba do
 
       # Build Mamba backbone
       model = Mamba.build(
-        embed_size: 287,
+        embed_dim: 287,
         hidden_size: 256,
         state_size: 16,
         num_layers: 2,
@@ -77,7 +77,7 @@ defmodule Edifice.SSM.Mamba do
   Build a Mamba model for sequence processing.
 
   ## Options
-    - `:embed_size` - Size of input embedding per frame (required)
+    - `:embed_dim` - Size of input embedding per frame (required)
     - `:hidden_size` - Internal hidden dimension D (default: 256)
     - `:state_size` - SSM state dimension N (default: 16)
     - `:expand_factor` - Expansion factor E for inner dim (default: 2)

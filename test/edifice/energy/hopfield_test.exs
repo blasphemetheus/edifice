@@ -71,13 +71,13 @@ defmodule Edifice.Energy.HopfieldTest do
   end
 
   describe "build_associative_memory/1" do
-    test "produces hidden_dim output" do
+    test "produces hidden_size output" do
       model =
         Hopfield.build_associative_memory(
           input_dim: 32,
           num_patterns: 8,
           pattern_dim: 32,
-          hidden_dim: 64,
+          hidden_size: 64,
           num_layers: 2,
           num_heads: 1,
           dropout: 0.0
@@ -98,7 +98,7 @@ defmodule Edifice.Energy.HopfieldTest do
           input_dim: 64,
           num_patterns: 16,
           pattern_dim: 64,
-          hidden_dim: 64,
+          hidden_size: 64,
           num_heads: 4,
           num_layers: 1,
           dropout: 0.0

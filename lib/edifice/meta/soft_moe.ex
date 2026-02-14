@@ -10,7 +10,7 @@ defmodule Edifice.Meta.SoftMoE do
   ## Architecture
 
   ```
-  Input [batch, seq_len, embed_size]
+  Input [batch, seq_len, embed_dim]
         |
         v
   +------------------------------------+
@@ -38,7 +38,7 @@ defmodule Edifice.Meta.SoftMoE do
   ## Usage
 
       model = SoftMoE.build(
-        embed_size: 256,
+        embed_dim: 256,
         hidden_size: 256,
         num_experts: 4,
         num_layers: 4
@@ -64,7 +64,7 @@ defmodule Edifice.Meta.SoftMoE do
 
   ## Options
 
-  - `:embed_size` - Input embedding dimension (required)
+  - `:embed_dim` - Input embedding dimension (required)
   - `:hidden_size` - Hidden dimension (default: 256)
   - `:num_experts` - Number of experts (default: 4)
   - `:num_layers` - Number of SoftMoE blocks (default: 4)
@@ -73,11 +73,11 @@ defmodule Edifice.Meta.SoftMoE do
 
   ## Returns
 
-  An Axon model: `[batch, seq_len, embed_size]` -> `[batch, hidden_size]`
+  An Axon model: `[batch, seq_len, embed_dim]` -> `[batch, hidden_size]`
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_experts = Keyword.get(opts, :num_experts, @default_num_experts)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
@@ -85,11 +85,11 @@ defmodule Edifice.Meta.SoftMoE do
     window_size = Keyword.get(opts, :window_size, @default_window_size)
     seq_len = Keyword.get(opts, :seq_len, window_size)
 
-    input = Axon.input("state_sequence", shape: {nil, seq_len, embed_size})
+    input = Axon.input("state_sequence", shape: {nil, seq_len, embed_dim})
 
     # Project to hidden size
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_proj")
       else
         input

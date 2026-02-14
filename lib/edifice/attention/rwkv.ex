@@ -14,7 +14,7 @@ defmodule Edifice.Attention.RWKV do
   ## Architecture
 
   ```
-  Input [batch, seq_len, embed_size]
+  Input [batch, seq_len, embed_dim]
         |
         v
   +-------------------------------------+
@@ -57,7 +57,7 @@ defmodule Edifice.Attention.RWKV do
   ## Usage
 
       model = RWKV.build(
-        embed_size: 287,
+        embed_dim: 287,
         hidden_size: 256,
         num_layers: 6
       )
@@ -83,7 +83,7 @@ defmodule Edifice.Attention.RWKV do
 
   ## Options
 
-    - `:embed_size` - Size of input embedding per timestep (required)
+    - `:embed_dim` - Size of input embedding per timestep (required)
     - `:hidden_size` - Internal hidden dimension (default: 256)
     - `:num_layers` - Number of RWKV blocks (default: 6)
     - `:head_size` - Size per attention head (default: 64)
@@ -96,7 +96,7 @@ defmodule Edifice.Attention.RWKV do
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     head_size = Keyword.get(opts, :head_size, @default_head_size)
@@ -110,12 +110,12 @@ defmodule Edifice.Attention.RWKV do
     # Number of heads
     num_heads = div(hidden_size, head_size)
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     # Project input to hidden dimension if different
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_projection")
       else
         input
@@ -455,7 +455,7 @@ defmodule Edifice.Attention.RWKV do
   """
   @spec param_count(keyword()) :: non_neg_integer()
   def param_count(opts) do
-    embed_size = Keyword.get(opts, :embed_size, 287)
+    embed_dim = Keyword.get(opts, :embed_dim, 287)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
 
@@ -483,7 +483,7 @@ defmodule Edifice.Attention.RWKV do
     per_layer = time_mix_params + channel_mix_params
 
     # Input projection
-    input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
+    input_proj = if embed_dim != hidden_size, do: embed_dim * hidden_size, else: 0
 
     input_proj + per_layer * num_layers
   end

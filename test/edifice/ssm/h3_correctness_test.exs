@@ -4,13 +4,13 @@ defmodule Edifice.SSM.H3CorrectnessTest do
   alias Edifice.SSM.H3
 
   @batch 2
-  @embed_size 32
+  @embed_dim 32
   @hidden_size 32
   @state_size 8
   @seq_len 4
 
   @base_opts [
-    embed_size: @embed_size,
+    embed_dim: @embed_dim,
     hidden_size: @hidden_size,
     state_size: @state_size,
     conv_size: 4,
@@ -29,7 +29,7 @@ defmodule Edifice.SSM.H3CorrectnessTest do
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       ssm_key = Enum.find(Map.keys(params.data), &String.contains?(&1, "shift_ssm"))
 
@@ -57,7 +57,7 @@ defmodule Edifice.SSM.H3CorrectnessTest do
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       ssm_key = Enum.find(Map.keys(params.data), &String.contains?(&1, "diag_ssm"))
       assert ssm_key != nil, "Should have diag SSM param group"
@@ -77,7 +77,7 @@ defmodule Edifice.SSM.H3CorrectnessTest do
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
       conv_keys = Enum.filter(param_keys, &String.contains?(&1, "dw_conv"))
@@ -97,10 +97,10 @@ defmodule Edifice.SSM.H3CorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -111,10 +111,10 @@ defmodule Edifice.SSM.H3CorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -126,10 +126,10 @@ defmodule Edifice.SSM.H3CorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output1 = predict_fn.(params, input)
       output2 = predict_fn.(params, input)

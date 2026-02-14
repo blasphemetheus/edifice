@@ -220,12 +220,12 @@ defmodule Edifice.Generative.Diffusion do
   """
   @spec build_obs_encoder(keyword()) :: Axon.t()
   def build_obs_encoder(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
     window_size = Keyword.get(opts, :window_size, 60)
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, window_size, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, window_size, embed_dim})
 
     # Simple temporal pooling encoder
     # Could be replaced with a temporal backbone for better modeling

@@ -9,7 +9,7 @@ defmodule Edifice.Sets.DeepSetsTest do
         DeepSets.build(
           input_dim: 3,
           output_dim: 10,
-          hidden_dim: 32,
+          hidden_size: 32,
           phi_sizes: [32],
           rho_sizes: [16]
         )
@@ -31,7 +31,7 @@ defmodule Edifice.Sets.DeepSetsTest do
         DeepSets.build(
           input_dim: 3,
           output_dim: 5,
-          hidden_dim: 16,
+          hidden_size: 16,
           phi_sizes: [16],
           rho_sizes: [8],
           aggregation: :sum
@@ -60,7 +60,7 @@ defmodule Edifice.Sets.DeepSetsTest do
         DeepSets.build(
           input_dim: 4,
           output_dim: 8,
-          hidden_dim: 16,
+          hidden_size: 16,
           phi_sizes: [16],
           rho_sizes: [8]
         )
@@ -87,7 +87,7 @@ defmodule Edifice.Sets.DeepSetsTest do
         DeepSets.build(
           input_dim: 3,
           output_dim: 5,
-          hidden_dim: 16,
+          hidden_size: 16,
           phi_sizes: [16],
           rho_sizes: [8],
           aggregation: :mean
@@ -107,7 +107,7 @@ defmodule Edifice.Sets.DeepSetsTest do
         DeepSets.build(
           input_dim: 3,
           output_dim: 5,
-          hidden_dim: 16,
+          hidden_size: 16,
           phi_sizes: [16],
           rho_sizes: [8],
           aggregation: :max

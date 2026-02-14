@@ -215,8 +215,35 @@ defmodule Edifice.Meta.MoE do
         )
       end
 
+    # Stack experts into a single tensor: [num_experts, batch, ...]
+    stack_fn =
+      case num_experts do
+        2 ->
+          fn a, b, _opts -> Nx.stack([a, b]) end
+
+        4 ->
+          fn a, b, c, d, _opts -> Nx.stack([a, b, c, d]) end
+
+        8 ->
+          fn a, b, c, d, e, f, g, h, _opts -> Nx.stack([a, b, c, d, e, f, g, h]) end
+
+        n ->
+          fn args_and_opts ->
+            {args, _} = Enum.split(Tuple.to_list(args_and_opts), n)
+            Nx.stack(args)
+          end
+      end
+
+    experts_stacked =
+      Axon.layer(
+        stack_fn,
+        experts,
+        name: "#{name}_stack_experts",
+        op_name: :stack_experts
+      )
+
     # Route
-    moe_output = build_top_k_routing(normalized, experts, router_logits, top_k, name)
+    moe_output = build_top_k_routing(normalized, experts_stacked, router_logits, top_k, name)
 
     # Dropout
     moe_output =
@@ -244,7 +271,7 @@ defmodule Edifice.Meta.MoE do
   """
   @spec build_moe_backbone(keyword()) :: Axon.t()
   def build_moe_backbone(opts) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, 256)
     num_layers = Keyword.get(opts, :num_layers, 6)
     moe_every = Keyword.get(opts, :moe_every, 2)
@@ -259,11 +286,11 @@ defmodule Edifice.Meta.MoE do
     alias Edifice.SSM.GatedSSM
 
     # Input
-    input = Axon.input("state_sequence", shape: {nil, seq_len, embed_size})
+    input = Axon.input("state_sequence", shape: {nil, seq_len, embed_dim})
 
     # Project to hidden
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_projection")
       else
         input

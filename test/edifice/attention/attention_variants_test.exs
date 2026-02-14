@@ -6,12 +6,12 @@ defmodule Edifice.Attention.AttentionVariantsTest do
   # Small dimensions for fast testing
   @batch 2
   @seq_len 8
-  @embed_size 32
+  @embed_dim 32
   @hidden_size 32
 
   defp random_input do
     key = Nx.Random.key(42)
-    {input, _key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+    {input, _key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
     input
   end
 
@@ -21,7 +21,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
 
   describe "GQA" do
     @gqa_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       num_heads: 4,
       num_kv_heads: 2,
@@ -42,7 +42,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -55,7 +55,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -73,7 +73,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
 
   describe "Perceiver" do
     @perceiver_opts [
-      input_dim: @embed_size,
+      input_dim: @embed_dim,
       latent_dim: @hidden_size,
       num_latents: 8,
       num_layers: 2,
@@ -93,7 +93,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -106,7 +106,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -124,7 +124,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
 
   describe "FNet" do
     @fnet_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       num_layers: 2,
       dropout: 0.0,
@@ -143,7 +143,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -156,7 +156,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -174,7 +174,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
 
   describe "LinearTransformer" do
     @linear_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       num_layers: 2,
       num_heads: 4,
@@ -194,7 +194,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -207,7 +207,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -225,7 +225,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
 
   describe "Nystromformer" do
     @nystrom_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       num_landmarks: 4,
       num_layers: 2,
@@ -246,7 +246,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -259,7 +259,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -277,7 +277,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
 
   describe "Performer" do
     @performer_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       num_features: 16,
       num_layers: 2,
@@ -298,7 +298,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -311,7 +311,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 

@@ -18,7 +18,7 @@ defmodule Edifice.SSM.Zamba do
   ## Architecture Pattern
 
   ```
-  Input [batch, seq_len, embed_size]
+  Input [batch, seq_len, embed_dim]
         │
         ▼
   ┌─────────────────────────────────────┐
@@ -51,7 +51,7 @@ defmodule Edifice.SSM.Zamba do
 
       # Default Zamba (6 Mamba layers, 1 shared attention applied every 3)
       model = Zamba.build(
-        embed_size: 287,
+        embed_dim: 287,
         hidden_size: 256,
         num_layers: 6,
         attention_every: 3
@@ -59,7 +59,7 @@ defmodule Edifice.SSM.Zamba do
 
       # Minimal attention variant (attention only at the end)
       model = Zamba.build(
-        embed_size: 287,
+        embed_dim: 287,
         num_layers: 6,
         attention_every: 6  # Only applied after final layer
       )
@@ -94,7 +94,7 @@ defmodule Edifice.SSM.Zamba do
   ## Options
 
   **Architecture:**
-    - `:embed_size` - Size of input embedding per frame (required)
+    - `:embed_dim` - Size of input embedding per frame (required)
     - `:hidden_size` - Internal hidden dimension (default: 256)
     - `:num_layers` - Number of Mamba layers (default: 6)
     - `:attention_every` - Apply shared attention every N Mamba layers (default: 3)
@@ -120,7 +120,7 @@ defmodule Edifice.SSM.Zamba do
   ## Example
 
       model = Zamba.build(
-        embed_size: 287,
+        embed_dim: 287,
         hidden_size: 256,
         num_layers: 6,
         attention_every: 3  # Shared attention applied 2x total
@@ -128,7 +128,7 @@ defmodule Edifice.SSM.Zamba do
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     attention_every = Keyword.get(opts, :attention_every, @default_attention_every)
@@ -158,12 +158,12 @@ defmodule Edifice.SSM.Zamba do
 
     attn_hidden_dim = num_heads * head_dim
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     # Project input to hidden dimension if different
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_projection")
       else
         input
@@ -363,7 +363,7 @@ defmodule Edifice.SSM.Zamba do
   """
   @spec param_count(keyword()) :: non_neg_integer()
   def param_count(opts) do
-    embed_size = Keyword.get(opts, :embed_size, 287)
+    embed_dim = Keyword.get(opts, :embed_dim, 287)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     state_size = Keyword.get(opts, :state_size, @default_state_size)
     expand_factor = Keyword.get(opts, :expand_factor, @default_expand_factor)
@@ -397,7 +397,7 @@ defmodule Edifice.SSM.Zamba do
         ffn_dim * hidden_size
 
     # Input projection
-    input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
+    input_proj = if embed_dim != hidden_size, do: embed_dim * hidden_size, else: 0
 
     # Total: all Mamba layers + ONE shared attention
     input_proj + mamba_per_layer * num_layers + shared_attn_params
@@ -456,7 +456,7 @@ defmodule Edifice.SSM.Zamba do
 
   ## Example
 
-      iex> Zamba.compare_to_jamba(embed_size: 287, num_layers: 6)
+      iex> Zamba.compare_to_jamba(embed_dim: 287, num_layers: 6)
       %{
         zamba_params: 450_000,
         jamba_params: 600_000,

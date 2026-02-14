@@ -50,7 +50,7 @@ defmodule Edifice.InputRobustnessTest do
   # ── Sequence Models (representative sample) ──────────────────────
 
   @sequence_opts [
-    embed_size: @embed,
+    embed_dim: @embed,
     hidden_size: @hidden,
     state_size: @state_size,
     num_layers: @num_layers,
@@ -111,7 +111,7 @@ defmodule Edifice.InputRobustnessTest do
     model =
       Edifice.build(:gcn,
         input_dim: @hidden,
-        hidden_dim: @hidden,
+        hidden_size: @hidden,
         num_classes: 4,
         num_layers: @num_layers,
         dropout: 0.0
@@ -132,7 +132,7 @@ defmodule Edifice.InputRobustnessTest do
     model =
       Edifice.build(:gcn,
         input_dim: @hidden,
-        hidden_dim: @hidden,
+        hidden_size: @hidden,
         num_classes: 4,
         num_layers: @num_layers,
         dropout: 0.0
@@ -151,7 +151,7 @@ defmodule Edifice.InputRobustnessTest do
     model =
       Edifice.build(:gat,
         input_dim: @hidden,
-        hidden_dim: @hidden,
+        hidden_size: @hidden,
         num_classes: 4,
         num_layers: @num_layers,
         num_heads: 2,

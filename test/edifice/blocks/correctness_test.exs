@@ -512,7 +512,7 @@ defmodule Edifice.Blocks.CorrectnessTest do
 
       model =
         CrossAttention.layer(queries, context,
-          hidden_dim: 16,
+          hidden_size: 16,
           name: "test_cross"
         )
 
@@ -543,7 +543,7 @@ defmodule Edifice.Blocks.CorrectnessTest do
 
       model =
         CrossAttention.layer(queries, context,
-          hidden_dim: 16,
+          hidden_size: 16,
           name: "test_cross"
         )
 
@@ -585,7 +585,7 @@ defmodule Edifice.Blocks.CorrectnessTest do
 
       model =
         CrossAttention.layer(queries, context,
-          hidden_dim: 16,
+          hidden_size: 16,
           name: "test_cross"
         )
 
@@ -618,7 +618,7 @@ defmodule Edifice.Blocks.CorrectnessTest do
 
       model =
         CrossAttention.layer(queries, context,
-          hidden_dim: 8,
+          hidden_size: 8,
           name: "test_cross"
         )
 
@@ -819,7 +819,7 @@ defmodule Edifice.Blocks.CorrectnessTest do
 
       model =
         ModelBuilder.build_sequence_model(
-          embed_size: 16,
+          embed_dim: 16,
           hidden_size: 32,
           num_layers: 2,
           seq_len: @seq_len,
@@ -846,7 +846,7 @@ defmodule Edifice.Blocks.CorrectnessTest do
 
       model =
         ModelBuilder.build_sequence_model(
-          embed_size: 32,
+          embed_dim: 32,
           hidden_size: 32,
           num_layers: 1,
           seq_len: @seq_len,
@@ -871,7 +871,7 @@ defmodule Edifice.Blocks.CorrectnessTest do
 
       model =
         ModelBuilder.build_sequence_model(
-          embed_size: 32,
+          embed_dim: 32,
           hidden_size: 32,
           num_layers: 1,
           seq_len: @seq_len,

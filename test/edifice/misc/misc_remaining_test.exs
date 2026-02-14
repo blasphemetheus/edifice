@@ -86,7 +86,7 @@ defmodule Edifice.Misc.MiscRemainingTest do
       model =
         GAT.build(
           input_dim: @gat_input_dim,
-          hidden_dim: 4,
+          hidden_size: 4,
           num_heads: 2,
           num_classes: @gat_num_classes,
           num_layers: 2,
@@ -117,7 +117,7 @@ defmodule Edifice.Misc.MiscRemainingTest do
       model =
         GAT.build(
           input_dim: @gat_input_dim,
-          hidden_dim: 4,
+          hidden_size: 4,
           num_heads: 2,
           num_classes: @gat_num_classes,
           num_layers: 2,

@@ -42,9 +42,9 @@ defmodule Edifice.RegistrySweepTest do
   # input_fn: (batch) -> input (tensor or map)
   # output_shape_fn: (batch) -> expected shape tuple
 
-  # --- Sequence models: "state_sequence" {batch, seq_len, embed_size} ---
+  # --- Sequence models: "state_sequence" {batch, seq_len, embed_dim} ---
   # NOTE: :attention and :sliding_window are building blocks (no build/1), not standalone models.
-  # :reservoir uses input_size not embed_size. :rwkv needs head_size explicitly.
+  # :reservoir uses input_size not embed_dim. :rwkv needs head_size explicitly.
   # These get dedicated blocks below.
   @sequence_archs [
     :mamba,
@@ -82,7 +82,7 @@ defmodule Edifice.RegistrySweepTest do
   ]
 
   @sequence_opts [
-    embed_size: @embed,
+    embed_dim: @embed,
     hidden_size: @hidden,
     state_size: @state_size,
     num_layers: @num_layers,
@@ -117,7 +117,7 @@ defmodule Edifice.RegistrySweepTest do
     end
   end
 
-  # --- Reservoir: uses input_size not embed_size ──────────────────────
+  # --- Reservoir: uses input_size not embed_dim ──────────────────────
   describe "reservoir (sequence)" do
     for batch <- @batches do
       @tag timeout: 120_000
@@ -150,7 +150,7 @@ defmodule Edifice.RegistrySweepTest do
         # RWKV defaults head_size=64, hidden_size=256. We need head_size <= hidden_size.
         model =
           Edifice.build(:rwkv,
-            embed_size: @embed,
+            embed_dim: @embed,
             hidden_size: @hidden,
             head_size: 8,
             num_layers: @num_layers,
@@ -167,7 +167,7 @@ defmodule Edifice.RegistrySweepTest do
     end
   end
 
-  # --- Switch/Soft MoE: sequence models with embed_size ──────────────
+  # --- Switch/Soft MoE: sequence models with embed_dim ──────────────
   @moe_sequence_archs [:switch_moe, :soft_moe]
 
   for arch <- @moe_sequence_archs do
@@ -179,7 +179,7 @@ defmodule Edifice.RegistrySweepTest do
           arch = unquote(arch)
 
           opts = [
-            embed_size: @embed,
+            embed_dim: @embed,
             hidden_size: @hidden,
             num_layers: @num_layers,
             seq_len: @seq_len,
@@ -247,7 +247,7 @@ defmodule Edifice.RegistrySweepTest do
             in_channels: @in_channels,
             patch_size: 4,
             embed_dim: @hidden,
-            hidden_dim: @hidden,
+            hidden_size: @hidden,
             depth: 1,
             num_heads: 2,
             dropout: 0.0
@@ -363,7 +363,7 @@ defmodule Edifice.RegistrySweepTest do
 
           opts = [
             input_dim: @node_dim,
-            hidden_dim: @hidden,
+            hidden_size: @hidden,
             num_classes: @num_classes,
             num_layers: @num_layers,
             num_heads: 2,
@@ -402,7 +402,7 @@ defmodule Edifice.RegistrySweepTest do
 
         opts = [
           input_dim: @node_dim,
-          hidden_dim: @hidden,
+          hidden_size: @hidden,
           num_interactions: 2,
           num_filters: @hidden,
           num_rbf: 10
@@ -587,7 +587,7 @@ defmodule Edifice.RegistrySweepTest do
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
-        # MoE.build/1 uses input_size (not embed_size) and "moe_input" name
+        # MoE.build/1 uses input_size (not embed_dim) and "moe_input" name
         opts = [
           input_size: @embed,
           hidden_size: @hidden * 4,

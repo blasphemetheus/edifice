@@ -26,7 +26,7 @@ defmodule Edifice.SSM.Hyena do
   ## Architecture
 
   ```
-  Input [batch, seq_len, embed_size]
+  Input [batch, seq_len, embed_dim]
         |
         v
   +-----------------------+
@@ -59,7 +59,7 @@ defmodule Edifice.SSM.Hyena do
   ## Usage
 
       model = Hyena.build(
-        embed_size: 287,
+        embed_dim: 287,
         hidden_size: 256,
         order: 2,
         filter_size: 64,
@@ -88,7 +88,7 @@ defmodule Edifice.SSM.Hyena do
 
   ## Options
 
-    - `:embed_size` - Size of input embedding per frame (required)
+    - `:embed_dim` - Size of input embedding per frame (required)
     - `:hidden_size` - Internal hidden dimension (default: 256)
     - `:order` - Number of gating levels (default: 2)
     - `:filter_size` - Implicit filter MLP hidden size (default: 64)
@@ -102,7 +102,7 @@ defmodule Edifice.SSM.Hyena do
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
@@ -111,10 +111,10 @@ defmodule Edifice.SSM.Hyena do
 
     input_seq_dim = if seq_len, do: seq_len, else: nil
 
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_projection")
       else
         input
@@ -294,7 +294,7 @@ defmodule Edifice.SSM.Hyena do
   """
   @spec param_count(keyword()) :: non_neg_integer()
   def param_count(opts) do
-    embed_size = Keyword.get(opts, :embed_size, 287)
+    embed_dim = Keyword.get(opts, :embed_dim, 287)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     order = Keyword.get(opts, :order, @default_order)
     filter_size = Keyword.get(opts, :filter_size, @default_filter_size)
@@ -314,7 +314,7 @@ defmodule Edifice.SSM.Hyena do
     # FFN
     ffn_params = 2 * hidden_size * inner_size + inner_size * hidden_size
     per_layer = proj_params + short_conv + filter_params + out_proj + ffn_params
-    input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
+    input_proj = if embed_dim != hidden_size, do: embed_dim * hidden_size, else: 0
 
     input_proj + per_layer * num_layers
   end

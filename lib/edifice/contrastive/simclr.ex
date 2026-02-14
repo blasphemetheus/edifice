@@ -54,7 +54,7 @@ defmodule Edifice.Contrastive.SimCLR do
   def default_projection_dim, do: 128
 
   @doc "Default hidden dimension for encoder and projection head"
-  def default_hidden_dim, do: 256
+  def default_hidden_size, do: 256
 
   @doc "Default temperature for NT-Xent loss"
   def default_temperature, do: 0.5
@@ -65,7 +65,7 @@ defmodule Edifice.Contrastive.SimCLR do
   ## Options
     - `:encoder_dim` - Input feature dimension (required)
     - `:projection_dim` - Projection head output dimension (default: 128)
-    - `:hidden_dim` - Hidden dimension (default: 256)
+    - `:hidden_size` - Hidden dimension (default: 256)
 
   ## Returns
     An Axon model mapping inputs to projection embeddings.
@@ -74,23 +74,23 @@ defmodule Edifice.Contrastive.SimCLR do
   def build(opts \\ []) do
     encoder_dim = Keyword.fetch!(opts, :encoder_dim)
     projection_dim = Keyword.get(opts, :projection_dim, default_projection_dim())
-    hidden_dim = Keyword.get(opts, :hidden_dim, default_hidden_dim())
+    hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
 
     input = Axon.input("features", shape: {nil, encoder_dim})
 
     # Encoder
     encoded =
       input
-      |> Axon.dense(hidden_dim, name: "encoder_fc1")
+      |> Axon.dense(hidden_size, name: "encoder_fc1")
       |> Axon.activation(:relu, name: "encoder_relu1")
       |> Axon.layer_norm(name: "encoder_norm1")
-      |> Axon.dense(hidden_dim, name: "encoder_fc2")
+      |> Axon.dense(hidden_size, name: "encoder_fc2")
       |> Axon.activation(:relu, name: "encoder_relu2")
       |> Axon.layer_norm(name: "encoder_norm2")
 
     # Projection head (2-layer MLP)
     encoded
-    |> Axon.dense(hidden_dim, name: "proj_fc1")
+    |> Axon.dense(hidden_size, name: "proj_fc1")
     |> Axon.activation(:relu, name: "proj_relu")
     |> Axon.dense(projection_dim, name: "proj_fc2")
   end

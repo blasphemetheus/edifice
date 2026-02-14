@@ -73,16 +73,16 @@ defmodule Edifice.Feedforward.MLPTest do
     @tag :slow
     test "processes sequence input and outputs last frame hidden" do
       seq_len = 12
-      embed_size = 64
+      embed_dim = 64
 
-      model = MLP.build_temporal(embed_size: embed_size, seq_len: seq_len)
+      model = MLP.build_temporal(embed_dim: embed_dim, seq_len: seq_len)
 
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, seq_len, embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, seq_len, embed_dim}, :f32), Axon.ModelState.empty())
 
-      input = Nx.iota({@batch_size, seq_len, embed_size}, type: :f32)
+      input = Nx.iota({@batch_size, seq_len, embed_dim}, type: :f32)
       output = predict_fn.(params, input)
 
       # Default hidden_sizes [512, 512], output is last hidden size
@@ -91,17 +91,17 @@ defmodule Edifice.Feedforward.MLPTest do
 
     test "respects custom hidden sizes" do
       seq_len = 12
-      embed_size = 64
+      embed_dim = 64
 
       model =
-        MLP.build_temporal(embed_size: embed_size, seq_len: seq_len, hidden_sizes: [128, 32])
+        MLP.build_temporal(embed_dim: embed_dim, seq_len: seq_len, hidden_sizes: [128, 32])
 
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, seq_len, embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, seq_len, embed_dim}, :f32), Axon.ModelState.empty())
 
-      input = Nx.iota({@batch_size, seq_len, embed_size}, type: :f32)
+      input = Nx.iota({@batch_size, seq_len, embed_dim}, type: :f32)
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch_size, 32}

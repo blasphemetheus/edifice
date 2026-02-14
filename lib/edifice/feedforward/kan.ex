@@ -34,7 +34,7 @@ defmodule Edifice.Feedforward.KAN do
   ## Architecture
 
   ```
-  Input [batch, seq_len, embed_size]
+  Input [batch, seq_len, embed_dim]
         |
         v
   +-------------------------------------+
@@ -51,7 +51,7 @@ defmodule Edifice.Feedforward.KAN do
 
       # Build KAN backbone
       model = KAN.build(
-        embed_size: 287,
+        embed_dim: 287,
         hidden_size: 256,
         num_layers: 4,
         grid_size: 8,
@@ -106,7 +106,7 @@ defmodule Edifice.Feedforward.KAN do
   Build a KAN model for sequence processing.
 
   ## Options
-    - `:embed_size` - Size of input embedding per frame (required)
+    - `:embed_dim` - Size of input embedding per frame (required)
     - `:hidden_size` - Internal hidden dimension (default: 256)
     - `:num_layers` - Number of KAN blocks (default: 4)
     - `:grid_size` - Number of basis functions per edge (default: 8)
@@ -120,7 +120,7 @@ defmodule Edifice.Feedforward.KAN do
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
     num_layers = Keyword.get(opts, :num_layers, default_num_layers())
     dropout = Keyword.get(opts, :dropout, default_dropout())
@@ -130,12 +130,12 @@ defmodule Edifice.Feedforward.KAN do
     # Use concrete seq_len for efficient JIT compilation
     input_seq_dim = if seq_len, do: seq_len, else: nil
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     # Project input to hidden dimension if different
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_projection")
       else
         input
@@ -397,7 +397,7 @@ defmodule Edifice.Feedforward.KAN do
   """
   @spec param_count(keyword()) :: non_neg_integer()
   def param_count(opts) do
-    embed_size = Keyword.get(opts, :embed_size, 287)
+    embed_dim = Keyword.get(opts, :embed_dim, 287)
     hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
     num_layers = Keyword.get(opts, :num_layers, default_num_layers())
     grid_size = Keyword.get(opts, :grid_size, default_grid_size())
@@ -426,7 +426,7 @@ defmodule Edifice.Feedforward.KAN do
         kan_layer_params.(hidden_size, inner_size) +
         kan_layer_params.(inner_size, hidden_size)
 
-    input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
+    input_proj = if embed_dim != hidden_size, do: embed_dim * hidden_size, else: 0
 
     input_proj + num_layers * block_params
   end

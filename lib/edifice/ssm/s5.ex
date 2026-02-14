@@ -19,7 +19,7 @@ defmodule Edifice.SSM.S5 do
   ## Architecture
 
   ```
-  Input [batch, seq_len, embed_size]
+  Input [batch, seq_len, embed_dim]
         │
         ▼
   ┌─────────────────────────────────────┐
@@ -64,7 +64,7 @@ defmodule Edifice.SSM.S5 do
   ## Usage
 
       model = S5.build(
-        embed_size: 287,
+        embed_dim: 287,
         hidden_size: 256,
         state_size: 64,
         num_layers: 4
@@ -97,7 +97,7 @@ defmodule Edifice.SSM.S5 do
 
   ## Options
 
-    - `:embed_size` - Size of input embedding per frame (required)
+    - `:embed_dim` - Size of input embedding per frame (required)
     - `:hidden_size` - Internal hidden dimension D (default: 256)
     - `:state_size` - SSM state dimension N (default: 64)
     - `:num_layers` - Number of S5 blocks (default: 4)
@@ -110,7 +110,7 @@ defmodule Edifice.SSM.S5 do
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     state_size = Keyword.get(opts, :state_size, @default_state_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
@@ -121,12 +121,12 @@ defmodule Edifice.SSM.S5 do
     # Use concrete seq_len for efficient JIT compilation
     input_seq_dim = if seq_len, do: seq_len, else: nil
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     # Project input to hidden dimension if different
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_projection")
       else
         input
@@ -337,7 +337,7 @@ defmodule Edifice.SSM.S5 do
   """
   @spec param_count(keyword()) :: non_neg_integer()
   def param_count(opts) do
-    embed_size = Keyword.get(opts, :embed_size, 287)
+    embed_dim = Keyword.get(opts, :embed_dim, 287)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     state_size = Keyword.get(opts, :state_size, @default_state_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
@@ -364,7 +364,7 @@ defmodule Edifice.SSM.S5 do
     per_layer = ssm_params + ffn_params
 
     # Input projection
-    input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
+    input_proj = if embed_dim != hidden_size, do: embed_dim * hidden_size, else: 0
 
     input_proj + per_layer * num_layers
   end

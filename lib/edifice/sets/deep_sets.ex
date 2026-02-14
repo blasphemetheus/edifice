@@ -45,7 +45,7 @@ defmodule Edifice.Sets.DeepSets do
       # Build a DeepSets model for set classification
       model = DeepSets.build(
         input_dim: 3,
-        hidden_dim: 64,
+        hidden_size: 64,
         output_dim: 10,
         phi_sizes: [64, 64],
         rho_sizes: [64, 32]
@@ -64,7 +64,7 @@ defmodule Edifice.Sets.DeepSets do
 
   require Axon
 
-  @default_hidden_dim 64
+  @default_hidden_size 64
   @default_phi_sizes [64, 64]
   @default_rho_sizes [64]
   @default_activation :relu
@@ -80,7 +80,7 @@ defmodule Edifice.Sets.DeepSets do
   ## Options
 
   - `:input_dim` - Dimension of each set element (required)
-  - `:hidden_dim` - Intermediate dimension for phi output (default: 64)
+  - `:hidden_size` - Intermediate dimension for phi output (default: 64)
   - `:output_dim` - Final output dimension (required)
   - `:phi_sizes` - Hidden layer sizes for per-element network (default: [64, 64])
   - `:rho_sizes` - Hidden layer sizes for post-aggregation network (default: [64])
@@ -97,7 +97,7 @@ defmodule Edifice.Sets.DeepSets do
   def build(opts \\ []) do
     input_dim = Keyword.fetch!(opts, :input_dim)
     output_dim = Keyword.fetch!(opts, :output_dim)
-    hidden_dim = Keyword.get(opts, :hidden_dim, @default_hidden_dim)
+    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     phi_sizes = Keyword.get(opts, :phi_sizes, @default_phi_sizes)
     rho_sizes = Keyword.get(opts, :rho_sizes, @default_rho_sizes)
     activation = Keyword.get(opts, :activation, @default_activation)
@@ -125,10 +125,10 @@ defmodule Edifice.Sets.DeepSets do
         end
       end)
 
-    # Final phi projection to hidden_dim
-    phi_final = Axon.dense(phi_output, hidden_dim, name: "phi_output")
+    # Final phi projection to hidden_size
+    phi_final = Axon.dense(phi_output, hidden_size, name: "phi_output")
 
-    # Permutation-invariant aggregation: [batch, set_size, hidden_dim] -> [batch, hidden_dim]
+    # Permutation-invariant aggregation: [batch, set_size, hidden_size] -> [batch, hidden_size]
     aggregated =
       Axon.nx(
         phi_final,

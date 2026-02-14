@@ -29,7 +29,7 @@ defmodule Edifice.Graph.GAT do
   +--------------------------------------+
         |
         v
-  Node Embeddings [batch, num_nodes, num_heads * hidden_dim]
+  Node Embeddings [batch, num_nodes, num_heads * hidden_size]
   ```
 
   Multi-head attention allows the model to jointly attend to information from
@@ -40,7 +40,7 @@ defmodule Edifice.Graph.GAT do
       # Build a GAT for node classification
       model = GAT.build(
         input_dim: 16,
-        hidden_dim: 8,
+        hidden_size: 8,
         num_heads: 8,
         num_classes: 7,
         dropout: 0.6
@@ -53,7 +53,7 @@ defmodule Edifice.Graph.GAT do
 
   require Axon
 
-  @default_hidden_dim 8
+  @default_hidden_size 8
   @default_num_heads 8
   @default_activation :elu
   @default_dropout 0.0
@@ -73,7 +73,7 @@ defmodule Edifice.Graph.GAT do
   ## Options
 
   - `:input_dim` - Input feature dimension per node (required)
-  - `:hidden_dim` - Hidden dimension per attention head (default: 8)
+  - `:hidden_size` - Hidden dimension per attention head (default: 8)
   - `:num_heads` - Number of attention heads (default: 8)
   - `:num_classes` - Number of output classes (required)
   - `:activation` - Activation function (default: :elu)
@@ -88,7 +88,7 @@ defmodule Edifice.Graph.GAT do
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
     input_dim = Keyword.fetch!(opts, :input_dim)
-    hidden_dim = Keyword.get(opts, :hidden_dim, @default_hidden_dim)
+    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_heads = Keyword.get(opts, :num_heads, @default_num_heads)
     num_classes = Keyword.fetch!(opts, :num_classes)
     activation = Keyword.get(opts, :activation, @default_activation)
@@ -103,7 +103,7 @@ defmodule Edifice.Graph.GAT do
     output =
       if num_layers > 1 do
         Enum.reduce(0..(num_layers - 2), nodes, fn idx, acc ->
-          gat_layer(acc, adjacency, hidden_dim,
+          gat_layer(acc, adjacency, hidden_size,
             num_heads: num_heads,
             name: "gat_#{idx}",
             activation: activation,
@@ -294,7 +294,7 @@ defmodule Edifice.Graph.GAT do
 
   - `nodes` - Node features Axon node `{batch, num_nodes, feature_dim}`
   - `adjacency` - Adjacency matrix Axon node `{batch, num_nodes, num_nodes}`
-  - `hidden_dim` - Projection dimension
+  - `hidden_size` - Projection dimension
   - `opts` - Options
 
   ## Options
@@ -307,12 +307,12 @@ defmodule Edifice.Graph.GAT do
   Axon node with attention coefficients `{batch, num_nodes, num_nodes}`.
   """
   @spec attention_coefficients(Axon.t(), Axon.t(), pos_integer(), keyword()) :: Axon.t()
-  def attention_coefficients(nodes, adjacency, hidden_dim, opts \\ []) do
+  def attention_coefficients(nodes, adjacency, hidden_size, opts \\ []) do
     name = Keyword.get(opts, :name, "gat_attn")
     negative_slope = Keyword.get(opts, :negative_slope, @default_negative_slope)
 
     # Project node features
-    projected = Axon.dense(nodes, hidden_dim, name: "#{name}_proj")
+    projected = Axon.dense(nodes, hidden_size, name: "#{name}_proj")
 
     # Attention score projections (single head)
     attn_src = Axon.dense(projected, 1, name: "#{name}_src", use_bias: false)

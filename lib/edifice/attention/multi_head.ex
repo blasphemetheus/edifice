@@ -43,7 +43,7 @@ defmodule Edifice.Attention.MultiHead do
 
       # Sliding window model
       model = MultiHead.build_sliding_window(
-        embed_size: 1024,
+        embed_dim: 1024,
         window_size: 60,
         num_heads: 4,
         head_dim: 64
@@ -51,7 +51,7 @@ defmodule Edifice.Attention.MultiHead do
 
       # Hybrid LSTM + Attention
       model = MultiHead.build_hybrid(
-        embed_size: 1024,
+        embed_dim: 1024,
         lstm_hidden: 256,
         num_heads: 4,
         head_dim: 64
@@ -396,7 +396,7 @@ defmodule Edifice.Attention.MultiHead do
   head computes its own independent attention pattern, then reshapes back.
 
   ## Options
-    - `:hidden_dim` - Hidden dimension = num_heads * head_dim (default: 256)
+    - `:hidden_size` - Hidden dimension = num_heads * head_dim (default: 256)
     - `:num_heads` - Number of attention heads (default: 1)
     - `:dropout` - Dropout rate (default: 0.1)
     - `:causal` - Use causal masking (default: true)
@@ -408,7 +408,7 @@ defmodule Edifice.Attention.MultiHead do
   """
   @spec self_attention(Axon.t(), keyword()) :: Axon.t()
   def self_attention(input, opts \\ []) do
-    hidden_dim = Keyword.get(opts, :hidden_dim, 256)
+    hidden_size = Keyword.get(opts, :hidden_size, 256)
     num_heads = Keyword.get(opts, :num_heads, 1)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
     causal = Keyword.get(opts, :causal, true)
@@ -418,10 +418,10 @@ defmodule Edifice.Attention.MultiHead do
     chunk_size = Keyword.get(opts, :chunk_size, 32)
     name = Keyword.get(opts, :name, "self_attn")
 
-    head_dim = div(hidden_dim, num_heads)
+    head_dim = div(hidden_size, num_heads)
 
     # Project to Q, K, V and concatenate for single layer call
-    qkv = Axon.dense(input, hidden_dim * 3, name: "#{name}_qkv")
+    qkv = Axon.dense(input, hidden_size * 3, name: "#{name}_qkv")
 
     # Apply attention in a single Axon.nx call
     attended =
@@ -430,10 +430,10 @@ defmodule Edifice.Attention.MultiHead do
         fn qkv_tensor ->
           {batch, seq_len, _} = Nx.shape(qkv_tensor)
 
-          # Split into Q, K, V: each [batch, seq, hidden_dim]
-          query = Nx.slice_along_axis(qkv_tensor, 0, hidden_dim, axis: 2)
-          key = Nx.slice_along_axis(qkv_tensor, hidden_dim, hidden_dim, axis: 2)
-          value = Nx.slice_along_axis(qkv_tensor, hidden_dim * 2, hidden_dim, axis: 2)
+          # Split into Q, K, V: each [batch, seq, hidden_size]
+          query = Nx.slice_along_axis(qkv_tensor, 0, hidden_size, axis: 2)
+          key = Nx.slice_along_axis(qkv_tensor, hidden_size, hidden_size, axis: 2)
+          value = Nx.slice_along_axis(qkv_tensor, hidden_size * 2, hidden_size, axis: 2)
 
           # Reshape to multi-head: [batch, seq, hidden] -> [batch, heads, seq, head_dim]
           query = reshape_to_heads(query, batch, seq_len, num_heads, head_dim)
@@ -471,7 +471,7 @@ defmodule Edifice.Attention.MultiHead do
                 multi_head_sdpa(query, key, value, mask: mask)
             end
 
-          # Reshape back: [batch, heads, seq, head_dim] -> [batch, seq, hidden_dim]
+          # Reshape back: [batch, heads, seq, head_dim] -> [batch, seq, hidden_size]
           reshape_from_heads(output, batch, seq_len, num_heads, head_dim)
         end,
         name: "#{name}_compute"
@@ -479,25 +479,25 @@ defmodule Edifice.Attention.MultiHead do
 
     # Output projection
     attended
-    |> Axon.dense(hidden_dim, name: "#{name}_output")
+    |> Axon.dense(hidden_size, name: "#{name}_output")
     |> Axon.dropout(rate: dropout, name: "#{name}_dropout")
   end
 
   @doc """
   Build multi-head attention with configurable heads and head dimension.
 
-  Computes `hidden_dim = num_heads * head_dim` and delegates to `self_attention/2`
+  Computes `hidden_size = num_heads * head_dim` and delegates to `self_attention/2`
   with proper multi-head reshaping.
   """
   @spec multi_head_attention(Axon.t(), keyword()) :: Axon.t()
   def multi_head_attention(input, opts \\ []) do
     num_heads = Keyword.get(opts, :num_heads, @default_num_heads)
     head_dim = Keyword.get(opts, :head_dim, @default_head_dim)
-    hidden_dim = num_heads * head_dim
+    hidden_size = num_heads * head_dim
 
     opts =
       opts
-      |> Keyword.put(:hidden_dim, hidden_dim)
+      |> Keyword.put(:hidden_size, hidden_size)
       |> Keyword.put(:num_heads, num_heads)
 
     self_attention(input, opts)
@@ -510,7 +510,7 @@ defmodule Edifice.Attention.MultiHead do
 
   ## Options
     - `:window_size` - Attention window size (default: 60)
-    - `:hidden_dim` - Hidden dimension (default: 256)
+    - `:hidden_size` - Hidden dimension (default: 256)
     - `:mask` - Pre-computed attention mask (recommended for efficient compilation)
     - `:qk_layernorm` - Normalize Q and K before attention (stabilizes training, default: false)
     - `:chunked` - Use chunked attention for lower memory (default: false)
@@ -530,10 +530,10 @@ defmodule Edifice.Attention.MultiHead do
     chunk_size = Keyword.get(opts, :chunk_size, 32)
     name = Keyword.get(opts, :name, "window_attn")
 
-    hidden_dim = num_heads * head_dim
+    hidden_size = num_heads * head_dim
 
     # Project to Q, K, V in single dense layer
-    qkv = Axon.dense(input, hidden_dim * 3, name: "#{name}_qkv")
+    qkv = Axon.dense(input, hidden_size * 3, name: "#{name}_qkv")
 
     # Apply windowed attention with pre-computed mask (captured from outer scope)
     # This avoids dynamic mask creation inside Axon.nx which causes XLA issues
@@ -542,10 +542,10 @@ defmodule Edifice.Attention.MultiHead do
       fn qkv_tensor ->
         {batch, seq_len, _} = Nx.shape(qkv_tensor)
 
-        # Split into Q, K, V: each [batch, seq, hidden_dim]
-        query = Nx.slice_along_axis(qkv_tensor, 0, hidden_dim, axis: 2)
-        key = Nx.slice_along_axis(qkv_tensor, hidden_dim, hidden_dim, axis: 2)
-        value = Nx.slice_along_axis(qkv_tensor, hidden_dim * 2, hidden_dim, axis: 2)
+        # Split into Q, K, V: each [batch, seq, hidden_size]
+        query = Nx.slice_along_axis(qkv_tensor, 0, hidden_size, axis: 2)
+        key = Nx.slice_along_axis(qkv_tensor, hidden_size, hidden_size, axis: 2)
+        value = Nx.slice_along_axis(qkv_tensor, hidden_size * 2, hidden_size, axis: 2)
 
         # Reshape to multi-head: [batch, seq, hidden] -> [batch, heads, seq, head_dim]
         query = reshape_to_heads(query, batch, seq_len, num_heads, head_dim)
@@ -589,7 +589,7 @@ defmodule Edifice.Attention.MultiHead do
               multi_head_sdpa(query, key, value, mask: mask)
           end
 
-        # Reshape back: [batch, heads, seq, head_dim] -> [batch, seq, hidden_dim]
+        # Reshape back: [batch, heads, seq, head_dim] -> [batch, seq, hidden_size]
         reshape_from_heads(output, batch, seq_len, num_heads, head_dim)
       end,
       name: "#{name}_compute"
@@ -677,7 +677,7 @@ defmodule Edifice.Attention.MultiHead do
   For a hybrid LSTM + attention model, use `build_hybrid/1` directly.
 
   ## Options
-    - `:embed_size` - Input embedding size (required)
+    - `:embed_dim` - Input embedding size (required)
     - `:hidden_size` - Total hidden dimension; overrides num_heads * head_dim (optional)
     - `:window_size` - Attention window / sequence length (default: 60)
     - `:num_heads` - Attention heads (default: 4)
@@ -687,7 +687,7 @@ defmodule Edifice.Attention.MultiHead do
     - `:dropout` - Dropout rate (default: 0.1)
 
   ## Returns
-    Model that outputs [batch, hidden_dim] from last position.
+    Model that outputs [batch, hidden_size] from last position.
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
@@ -716,7 +716,7 @@ defmodule Edifice.Attention.MultiHead do
   Efficient for real-time inference - only attends to recent timesteps.
 
   ## Options
-    - `:embed_size` - Input embedding size (required)
+    - `:embed_dim` - Input embedding size (required)
     - `:window_size` - Attention window (default: 60)
     - `:num_heads` - Attention heads (default: 4)
     - `:head_dim` - Dimension per head (default: 64)
@@ -725,11 +725,11 @@ defmodule Edifice.Attention.MultiHead do
     - `:dropout` - Dropout rate (default: 0.1)
 
   ## Returns
-    Model that outputs [batch, hidden_dim] from last position.
+    Model that outputs [batch, hidden_size] from last position.
   """
   @spec build_sliding_window(keyword()) :: Axon.t()
   def build_sliding_window(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     window_size = Keyword.get(opts, :window_size, @default_window_size)
     num_heads = Keyword.get(opts, :num_heads, @default_num_heads)
     head_dim = Keyword.get(opts, :head_dim, @default_head_dim)
@@ -737,7 +737,7 @@ defmodule Edifice.Attention.MultiHead do
     ffn_dim = Keyword.get(opts, :ffn_dim, 256)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
 
-    hidden_dim = num_heads * head_dim
+    hidden_size = num_heads * head_dim
 
     # Sequence length configuration:
     # - :seq_len option: Explicit sequence length for the input
@@ -758,11 +758,11 @@ defmodule Edifice.Attention.MultiHead do
         {nil, nil}
       end
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     # Project to hidden dimension
-    x = Axon.dense(input, hidden_dim, name: "input_proj")
+    x = Axon.dense(input, hidden_size, name: "input_proj")
 
     # Add positional encoding
     x = add_positional_encoding(x, name: "pos_encoding")
@@ -789,7 +789,7 @@ defmodule Edifice.Attention.MultiHead do
           acc
           |> Axon.dense(ffn_dim, name: "layer_#{layer_idx}_ffn1")
           |> Axon.gelu()
-          |> Axon.dense(hidden_dim, name: "layer_#{layer_idx}_ffn2")
+          |> Axon.dense(hidden_size, name: "layer_#{layer_idx}_ffn2")
           |> Axon.dropout(rate: dropout)
 
         # Residual + LayerNorm
@@ -831,7 +831,7 @@ defmodule Edifice.Attention.MultiHead do
   ```
 
   ## Options
-    - `:embed_size` - Input embedding size (required)
+    - `:embed_dim` - Input embedding size (required)
     - `:lstm_hidden` - LSTM hidden size (default: 256)
     - `:lstm_layers` - Number of LSTM layers (default: 1)
     - `:num_heads` - Attention heads (default: 4)
@@ -839,11 +839,11 @@ defmodule Edifice.Attention.MultiHead do
     - `:dropout` - Dropout rate (default: 0.1)
 
   ## Returns
-    Model that outputs [batch, hidden_dim] combining LSTM and attention.
+    Model that outputs [batch, hidden_size] combining LSTM and attention.
   """
   @spec build_hybrid(keyword()) :: Axon.t()
   def build_hybrid(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     lstm_hidden = Keyword.get(opts, :lstm_hidden, 256)
     lstm_layers = Keyword.get(opts, :lstm_layers, 1)
     num_heads = Keyword.get(opts, :num_heads, @default_num_heads)
@@ -851,14 +851,14 @@ defmodule Edifice.Attention.MultiHead do
     dropout = Keyword.get(opts, :dropout, @default_dropout)
     window_size = Keyword.get(opts, :window_size, @default_window_size)
 
-    hidden_dim = num_heads * head_dim
+    hidden_size = num_heads * head_dim
 
     # Sequence length configuration (same as build_sliding_window)
     seq_len = Keyword.get(opts, :seq_len, window_size)
     input_seq_dim = if seq_len, do: seq_len, else: nil
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     # LSTM backbone (returns all timesteps)
     lstm_output =
@@ -872,7 +872,7 @@ defmodule Edifice.Attention.MultiHead do
       )
 
     # Project LSTM output to attention dimension
-    x = Axon.dense(lstm_output, hidden_dim, name: "lstm_to_attn_proj")
+    x = Axon.dense(lstm_output, hidden_size, name: "lstm_to_attn_proj")
 
     # Self-attention over LSTM hidden states
     attended =

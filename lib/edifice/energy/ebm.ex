@@ -263,7 +263,7 @@ defmodule Edifice.Energy.EBM do
   # Single Langevin dynamics step
   defp langevin_step(predict_fn, params, x, step_size, noise_scale, clamp) do
     # Compute gradient of energy with respect to input
-    {_energy, grad} =
+    grad =
       Nx.Defn.grad(x, fn x_var ->
         input_map = %{"input" => x_var}
         energy = predict_fn.(params, input_map)

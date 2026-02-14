@@ -5,12 +5,12 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
 
   @batch 2
   @seq_len 12
-  @embed_size 16
+  @embed_dim 16
   @hidden_size 16
   @filter_size 8
 
   @hyena_opts [
-    embed_size: @embed_size,
+    embed_dim: @embed_dim,
     hidden_size: @hidden_size,
     order: 2,
     filter_size: @filter_size,
@@ -30,7 +30,7 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -52,7 +52,7 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       # Final filter dense should project to hidden_size
       dense3_params = params.data["hyena_block_1_filter0_dense3"]
@@ -76,7 +76,7 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -109,14 +109,14 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
       {init_fn_1, _} = Axon.build(model_o1, mode: :inference)
 
       params_1 =
-        init_fn_1.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn_1.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       # order=2: 2 rounds (v, x1, x2)
       model_o2 = Hyena.build(@hyena_opts)
       {init_fn_2, _} = Axon.build(model_o2, mode: :inference)
 
       params_2 =
-        init_fn_2.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn_2.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       keys_1 = Map.keys(params_1.data)
       keys_2 = Map.keys(params_2.data)
@@ -141,13 +141,13 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
       {init_2, pred_2} = Axon.build(model_o2, mode: :inference)
 
       params_1 =
-        init_1.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_1.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       params_2 =
-        init_2.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_2.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output_1 = pred_1.(params_1, input)
       output_2 = pred_2.(params_2, input)
@@ -171,10 +171,10 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output1 = predict_fn.(params, input)
       output2 = predict_fn.(params, input)
@@ -188,11 +188,11 @@ defmodule Edifice.SSM.HyenaCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input1, key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
-      {input2, _} = Nx.Random.normal(key, shape: {@batch, @seq_len, @embed_size})
+      {input1, key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
+      {input2, _} = Nx.Random.normal(key, shape: {@batch, @seq_len, @embed_dim})
 
       output1 = predict_fn.(params, input1)
       output2 = predict_fn.(params, input2)

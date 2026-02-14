@@ -21,7 +21,7 @@ defmodule Edifice.SSM.GatedSSM do
   ## Architecture
 
   ```
-  Input [batch, seq_len, embed_size]
+  Input [batch, seq_len, embed_dim]
         │
         ▼
   ┌─────────────────────────────────────┐
@@ -41,14 +41,14 @@ defmodule Edifice.SSM.GatedSSM do
         ▼ (repeat for num_layers)
         │
         ▼
-  [batch, seq_len, embed_size] -> last timestep -> [batch, embed_size]
+  [batch, seq_len, embed_dim] -> last timestep -> [batch, embed_dim]
   ```
 
   ## Usage
 
       # Build GatedSSM backbone
       model = GatedSSM.build(
-        embed_size: 256,
+        embed_dim: 256,
         hidden_size: 256,
         state_size: 16,
         num_layers: 2,
@@ -80,7 +80,7 @@ defmodule Edifice.SSM.GatedSSM do
   Build a Mamba model for sequence processing.
 
   ## Options
-    - `:embed_size` - Size of input embedding per frame (required)
+    - `:embed_dim` - Size of input embedding per frame (required)
     - `:hidden_size` - Internal hidden dimension D (default: 256)
     - `:state_size` - SSM state dimension N (default: 16)
     - `:expand_factor` - Expansion factor E for inner dim (default: 2)
@@ -94,7 +94,7 @@ defmodule Edifice.SSM.GatedSSM do
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     state_size = Keyword.get(opts, :state_size, @default_state_size)
     expand_factor = Keyword.get(opts, :expand_factor, @default_expand_factor)
@@ -107,12 +107,12 @@ defmodule Edifice.SSM.GatedSSM do
     # Use concrete seq_len for efficient JIT compilation
     input_seq_dim = if seq_len, do: seq_len, else: nil
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     # Project input to hidden dimension if different
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_projection")
       else
         input
@@ -436,7 +436,7 @@ defmodule Edifice.SSM.GatedSSM do
   """
   @spec build_checkpointed(keyword()) :: Axon.t()
   def build_checkpointed(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     state_size = Keyword.get(opts, :state_size, @default_state_size)
     expand_factor = Keyword.get(opts, :expand_factor, @default_expand_factor)
@@ -450,12 +450,12 @@ defmodule Edifice.SSM.GatedSSM do
     # Use concrete seq_len for efficient JIT compilation
     input_seq_dim = if seq_len, do: seq_len, else: nil
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     # Project input to hidden dimension if different
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_projection")
       else
         input
@@ -529,7 +529,7 @@ defmodule Edifice.SSM.GatedSSM do
   """
   @spec param_count(keyword()) :: non_neg_integer()
   def param_count(opts) do
-    embed_size = Keyword.get(opts, :embed_size, 1991)
+    embed_dim = Keyword.get(opts, :embed_dim, 1991)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     state_size = Keyword.get(opts, :state_size, @default_state_size)
     expand_factor = Keyword.get(opts, :expand_factor, @default_expand_factor)
@@ -557,7 +557,7 @@ defmodule Edifice.SSM.GatedSSM do
         inner_size * dt_rank + dt_rank * inner_size +
         inner_size * hidden_size
 
-    input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
+    input_proj = if embed_dim != hidden_size, do: embed_dim * hidden_size, else: 0
 
     input_proj + per_layer * num_layers
   end

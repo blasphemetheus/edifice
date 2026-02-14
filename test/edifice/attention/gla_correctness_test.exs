@@ -9,14 +9,14 @@ defmodule Edifice.Attention.GLACorrectnessTest do
   alias Edifice.Attention.GLA
 
   @batch 2
-  @embed_size 32
+  @embed_dim 32
   @hidden_size 16
   @seq_len 4
   @num_heads 2
   @head_dim 8
 
   @base_opts [
-    embed_size: @embed_size,
+    embed_dim: @embed_dim,
     hidden_size: @hidden_size,
     num_layers: 1,
     num_heads: @num_heads,
@@ -40,10 +40,10 @@ defmodule Edifice.Attention.GLACorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -61,10 +61,10 @@ defmodule Edifice.Attention.GLACorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -75,10 +75,10 @@ defmodule Edifice.Attention.GLACorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output1 = predict_fn.(params, input)
       output2 = predict_fn.(params, input)
@@ -92,11 +92,11 @@ defmodule Edifice.Attention.GLACorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input1, key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
-      {input2, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input1, key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
+      {input2, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output1 = predict_fn.(params, input1)
       output2 = predict_fn.(params, input2)
@@ -116,7 +116,7 @@ defmodule Edifice.Attention.GLACorrectnessTest do
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -132,7 +132,7 @@ defmodule Edifice.Attention.GLACorrectnessTest do
       {init_fn, _predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 

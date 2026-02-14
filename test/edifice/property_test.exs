@@ -127,7 +127,7 @@ defmodule Edifice.PropertyTest do
     model =
       Edifice.build(:gcn,
         input_dim: 4,
-        hidden_dim: 4,
+        hidden_size: 4,
         num_classes: 4,
         num_layers: 1,
         dropout: 0.0
@@ -208,7 +208,7 @@ defmodule Edifice.PropertyTest do
     model =
       Edifice.build(:gcn,
         input_dim: 4,
-        hidden_dim: 4,
+        hidden_size: 4,
         num_classes: 4,
         num_layers: 1,
         dropout: 0.0
@@ -233,7 +233,7 @@ defmodule Edifice.PropertyTest do
   property "mamba produces finite output for random sequences" do
     model =
       Edifice.build(:mamba,
-        embed_size: 8,
+        embed_dim: 8,
         hidden_size: 8,
         state_size: 4,
         num_layers: 1,
@@ -252,7 +252,7 @@ defmodule Edifice.PropertyTest do
   property "lstm produces finite output for random sequences" do
     model =
       Edifice.build(:lstm,
-        embed_size: 8,
+        embed_dim: 8,
         hidden_size: 8,
         num_layers: 1,
         seq_len: 4,

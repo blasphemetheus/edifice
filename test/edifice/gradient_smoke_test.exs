@@ -120,7 +120,7 @@ defmodule Edifice.GradientSmokeTest do
   ]
 
   @sequence_opts [
-    embed_size: @embed,
+    embed_dim: @embed,
     hidden_size: @hidden,
     state_size: @state_size,
     num_layers: @num_layers,
@@ -146,7 +146,7 @@ defmodule Edifice.GradientSmokeTest do
   test "gradient flows through rwkv" do
     model =
       Edifice.build(:rwkv,
-        embed_size: @embed,
+        embed_dim: @embed,
         hidden_size: @hidden,
         head_size: 4,
         num_layers: @num_layers,
@@ -180,7 +180,7 @@ defmodule Edifice.GradientSmokeTest do
     test "gradient flows through #{arch}" do
       model =
         Edifice.build(unquote(arch),
-          embed_size: @embed,
+          embed_dim: @embed,
           hidden_size: @hidden,
           num_layers: @num_layers,
           seq_len: @seq_len,
@@ -221,7 +221,7 @@ defmodule Edifice.GradientSmokeTest do
           in_channels: @in_channels,
           patch_size: 4,
           embed_dim: @hidden,
-          hidden_dim: @hidden,
+          hidden_size: @hidden,
           depth: 1,
           num_heads: 2,
           dropout: 0.0
@@ -364,7 +364,7 @@ defmodule Edifice.GradientSmokeTest do
       model =
         Edifice.build(unquote(arch),
           input_dim: @node_dim,
-          hidden_dim: @hidden,
+          hidden_size: @hidden,
           num_classes: @num_classes,
           num_layers: @num_layers,
           num_heads: 2,
@@ -382,7 +382,7 @@ defmodule Edifice.GradientSmokeTest do
     model =
       Edifice.build(:schnet,
         input_dim: @node_dim,
-        hidden_dim: @hidden,
+        hidden_size: @hidden,
         num_interactions: 1,
         num_filters: @hidden,
         num_rbf: 8

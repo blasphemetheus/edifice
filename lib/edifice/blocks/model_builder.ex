@@ -9,7 +9,7 @@ defmodule Edifice.Blocks.ModelBuilder do
   ## Sequence Model
 
   ```
-  Input [batch, seq_len, embed_size]
+  Input [batch, seq_len, embed_dim]
     -> Optional projection to hidden_size
     -> Stack N blocks (via block_builder callback)
     -> Final LayerNorm
@@ -31,7 +31,7 @@ defmodule Edifice.Blocks.ModelBuilder do
 
       # Build a sequence model with custom blocks
       model = ModelBuilder.build_sequence_model(
-        embed_size: 287,
+        embed_dim: 287,
         hidden_size: 256,
         num_layers: 4,
         block_builder: fn input, opts -> MyBlock.layer(input, opts) end
@@ -49,8 +49,8 @@ defmodule Edifice.Blocks.ModelBuilder do
   Build a sequence processing model.
 
   ## Options
-    - `:embed_size` - Input embedding dimension (required)
-    - `:hidden_size` - Internal hidden dimension (default: embed_size)
+    - `:embed_dim` - Input embedding dimension (required)
+    - `:hidden_size` - Internal hidden dimension (default: embed_dim)
     - `:num_layers` - Number of blocks to stack (required)
     - `:block_builder` - Function `(input, opts) -> Axon.t()` that builds one block (required)
     - `:seq_len` - Expected sequence length for JIT optimization (default: 60)
@@ -67,8 +67,8 @@ defmodule Edifice.Blocks.ModelBuilder do
   """
   @spec build_sequence_model(keyword()) :: Axon.t()
   def build_sequence_model(opts) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
-    hidden_size = Keyword.get(opts, :hidden_size, embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
+    hidden_size = Keyword.get(opts, :hidden_size, embed_dim)
     num_layers = Keyword.fetch!(opts, :num_layers)
     block_builder = Keyword.fetch!(opts, :block_builder)
     seq_len = Keyword.get(opts, :seq_len, Keyword.get(opts, :window_size, 60))
@@ -79,12 +79,12 @@ defmodule Edifice.Blocks.ModelBuilder do
     # Use concrete seq_len for efficient JIT compilation
     input_seq_dim = if seq_len, do: seq_len, else: nil
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     # Project input to hidden dimension if different
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_projection")
       else
         input

@@ -46,10 +46,10 @@ defmodule Edifice.SSM.MambaSSD do
   ## Usage
 
       # Training (matmul formulation)
-      model = MambaSSD.build(embed_size: 287, hidden_size: 256, training_mode: true)
+      model = MambaSSD.build(embed_dim: 287, hidden_size: 256, training_mode: true)
 
       # Inference (scan formulation)
-      model = MambaSSD.build(embed_size: 287, hidden_size: 256, training_mode: false)
+      model = MambaSSD.build(embed_dim: 287, hidden_size: 256, training_mode: false)
   """
 
   require Axon

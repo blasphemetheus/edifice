@@ -167,7 +167,7 @@ defmodule Edifice.Blocks.BlocksTest do
 
       model =
         CrossAttention.layer(queries, context,
-          hidden_dim: 32,
+          hidden_size: 32,
           name: "test_cross_attn"
         )
 

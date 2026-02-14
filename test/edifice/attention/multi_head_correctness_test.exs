@@ -5,7 +5,7 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
 
   @batch 2
   @seq_len 8
-  @embed_size 32
+  @embed_dim 32
   @num_heads 4
   @head_dim 8
   @hidden_dim @num_heads * @head_dim
@@ -19,7 +19,7 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
       # Build two models: 1 head vs 4 heads, same hidden_dim
       model_1h =
         MultiHead.build_sliding_window(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           num_heads: 1,
           head_dim: @hidden_dim,
           num_layers: 1,
@@ -30,7 +30,7 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
 
       model_4h =
         MultiHead.build_sliding_window(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           num_heads: 4,
           head_dim: @head_dim,
           num_layers: 1,
@@ -45,13 +45,13 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
       {init_4h, predict_4h} = Axon.build(model_4h, mode: :inference)
 
       params_1h =
-        init_1h.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_1h.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       params_4h =
-        init_4h.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_4h.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output_1h = predict_1h.(params_1h, input)
       output_4h = predict_4h.(params_4h, input)
@@ -66,11 +66,11 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
     end
 
     test "self_attention with num_heads > 1 produces correct output shape" do
-      input_node = Axon.input("x", shape: {nil, @seq_len, @embed_size})
+      input_node = Axon.input("x", shape: {nil, @seq_len, @embed_dim})
 
       attn =
         MultiHead.self_attention(input_node,
-          hidden_dim: @hidden_dim,
+          hidden_size: @hidden_dim,
           num_heads: @num_heads,
           causal: false,
           dropout: 0.0,
@@ -80,10 +80,10 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(attn, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       # Output should be [batch, seq_len, hidden_dim]
@@ -91,7 +91,7 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
     end
 
     test "multi_head_attention passes num_heads to self_attention" do
-      input_node = Axon.input("x", shape: {nil, @seq_len, @embed_size})
+      input_node = Axon.input("x", shape: {nil, @seq_len, @embed_dim})
 
       attn =
         MultiHead.multi_head_attention(input_node,
@@ -105,10 +105,10 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(attn, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch, @seq_len, @hidden_dim}
@@ -153,7 +153,7 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
     test "sliding window attention is deterministic in inference mode" do
       model =
         MultiHead.build_sliding_window(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           num_heads: @num_heads,
           head_dim: @head_dim,
           num_layers: 1,
@@ -165,10 +165,10 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output1 = predict_fn.(params, input)
       output2 = predict_fn.(params, input)
@@ -186,7 +186,7 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
     test "hybrid LSTM + attention produces correct shape" do
       model =
         MultiHead.build_hybrid(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           lstm_hidden: 16,
           lstm_layers: 1,
           num_heads: 2,
@@ -199,10 +199,10 @@ defmodule Edifice.Attention.MultiHeadCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       # hidden_dim = num_heads * head_dim = 2 * 8 = 16

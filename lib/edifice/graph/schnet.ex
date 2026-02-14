@@ -29,7 +29,7 @@ defmodule Edifice.Graph.SchNet do
   +--------------------------------------+
         |  (repeat N times)
         v
-  Node Embeddings [batch, num_nodes, hidden_dim]
+  Node Embeddings [batch, num_nodes, hidden_size]
   ```
 
   ## Continuous Convolution
@@ -43,7 +43,7 @@ defmodule Edifice.Graph.SchNet do
 
       model = SchNet.build(
         input_dim: 16,
-        hidden_dim: 64,
+        hidden_size: 64,
         num_interactions: 3,
         num_filters: 64,
         cutoff: 5.0,
@@ -61,7 +61,7 @@ defmodule Edifice.Graph.SchNet do
 
   alias Edifice.Graph.MessagePassing
 
-  @default_hidden_dim 64
+  @default_hidden_size 64
   @default_num_interactions 3
   @default_num_filters 64
   @default_cutoff 5.0
@@ -73,7 +73,7 @@ defmodule Edifice.Graph.SchNet do
   ## Options
 
   - `:input_dim` - Input feature dimension per atom (required)
-  - `:hidden_dim` - Hidden dimension (default: 64)
+  - `:hidden_size` - Hidden dimension (default: 64)
   - `:num_interactions` - Number of interaction blocks (default: 3)
   - `:num_filters` - Number of continuous filters (default: 64)
   - `:cutoff` - Distance cutoff for interactions (default: 5.0)
@@ -89,7 +89,7 @@ defmodule Edifice.Graph.SchNet do
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
     input_dim = Keyword.fetch!(opts, :input_dim)
-    hidden_dim = Keyword.get(opts, :hidden_dim, @default_hidden_dim)
+    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_interactions = Keyword.get(opts, :num_interactions, @default_num_interactions)
     num_filters = Keyword.get(opts, :num_filters, @default_num_filters)
     cutoff = Keyword.get(opts, :cutoff, @default_cutoff)
@@ -101,12 +101,12 @@ defmodule Edifice.Graph.SchNet do
     adjacency = Axon.input("adjacency", shape: {nil, nil, nil})
 
     # Project to hidden dim
-    x = Axon.dense(nodes, hidden_dim, name: "atom_embed")
+    x = Axon.dense(nodes, hidden_size, name: "atom_embed")
 
     # Stack interaction blocks
     x =
       Enum.reduce(0..(num_interactions - 1), x, fn idx, acc ->
-        interaction_block(acc, adjacency, hidden_dim,
+        interaction_block(acc, adjacency, hidden_size,
           num_filters: num_filters,
           cutoff: cutoff,
           num_rbf: num_rbf,
@@ -125,7 +125,7 @@ defmodule Edifice.Graph.SchNet do
     # Optional output head
     if num_classes do
       x
-      |> Axon.dense(hidden_dim, name: "output_dense")
+      |> Axon.dense(hidden_size, name: "output_dense")
       |> Axon.activation(:silu, name: "output_act")
       |> Axon.dense(num_classes, name: "output_proj")
     else
@@ -144,7 +144,7 @@ defmodule Edifice.Graph.SchNet do
   - `:name` - Layer name prefix
   """
   @spec interaction_block(Axon.t(), Axon.t(), pos_integer(), keyword()) :: Axon.t()
-  def interaction_block(nodes, adjacency, hidden_dim, opts \\ []) do
+  def interaction_block(nodes, adjacency, hidden_size, opts \\ []) do
     num_filters = Keyword.get(opts, :num_filters, @default_num_filters)
     cutoff = Keyword.get(opts, :cutoff, @default_cutoff)
     num_rbf = Keyword.get(opts, :num_rbf, @default_num_rbf)
@@ -160,7 +160,7 @@ defmodule Edifice.Graph.SchNet do
         [x_proj, adjacency],
         name: "#{name}_cfconv",
         num_filters: num_filters,
-        hidden_dim: hidden_dim,
+        hidden_size: hidden_size,
         cutoff: cutoff,
         num_rbf: num_rbf,
         op_name: :schnet_cfconv
@@ -169,9 +169,9 @@ defmodule Edifice.Graph.SchNet do
     # Atom-wise output layers
     update =
       conv_out
-      |> Axon.dense(hidden_dim, name: "#{name}_out_1")
+      |> Axon.dense(hidden_size, name: "#{name}_out_1")
       |> Axon.activation(:silu, name: "#{name}_act")
-      |> Axon.dense(hidden_dim, name: "#{name}_out_2")
+      |> Axon.dense(hidden_size, name: "#{name}_out_2")
 
     # Residual connection
     Axon.add(nodes, update, name: "#{name}_residual")
@@ -183,8 +183,8 @@ defmodule Edifice.Graph.SchNet do
   @spec output_size(keyword()) :: pos_integer()
   def output_size(opts \\ []) do
     num_classes = Keyword.get(opts, :num_classes, nil)
-    hidden_dim = Keyword.get(opts, :hidden_dim, @default_hidden_dim)
-    if num_classes, do: num_classes, else: hidden_dim
+    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
+    if num_classes, do: num_classes, else: hidden_size
   end
 
   # Continuous-filter convolution implementation

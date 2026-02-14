@@ -21,12 +21,12 @@ defmodule Edifice.SSM.HybridBuilder do
 
       # Custom hybrid: [Mamba, Mamba, Attention, Mamba, GLA, FFN]
       pattern = [:mamba, :mamba, :attention, :mamba, :gla, :ffn]
-      model = HybridBuilder.build(pattern, embed_size: 287, hidden_size: 256)
+      model = HybridBuilder.build(pattern, embed_dim: 287, hidden_size: 256)
 
       # With shared layers (like Zamba)
       model = HybridBuilder.build(
         [:mamba, :mamba, :mamba, :mamba, :mamba, :mamba],
-        embed_size: 287,
+        embed_dim: 287,
         shared_layers: %{attention: [2, 4, 6]}  # Apply shared attention after these
       )
 
@@ -62,7 +62,7 @@ defmodule Edifice.SSM.HybridBuilder do
   ## Options
 
   **Required:**
-    - `:embed_size` - Input embedding dimension
+    - `:embed_dim` - Input embedding dimension
 
   **Architecture:**
     - `:hidden_size` - Internal dimension (default: 256)
@@ -84,19 +84,19 @@ defmodule Edifice.SSM.HybridBuilder do
   """
   @spec build(pattern(), keyword()) :: Axon.t()
   def build(pattern, opts) when is_list(pattern) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
     window_size = Keyword.get(opts, :attention_window_size, @default_window_size)
     seq_len = Keyword.get(opts, :seq_len, window_size)
     shared_layers = Keyword.get(opts, :shared_layers, %{})
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, seq_len, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, seq_len, embed_dim})
 
     # Project to hidden dimension
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_projection")
       else
         input
@@ -200,7 +200,7 @@ defmodule Edifice.SSM.HybridBuilder do
 
   Convenience function combining pattern/2 and build/2.
 
-      HybridBuilder.build_pattern(:jamba_like, 6, embed_size: 287)
+      HybridBuilder.build_pattern(:jamba_like, 6, embed_dim: 287)
   """
   @spec build_pattern(atom(), pos_integer(), keyword()) :: Axon.t()
   def build_pattern(pattern_name, num_layers, opts) do
@@ -213,7 +213,7 @@ defmodule Edifice.SSM.HybridBuilder do
   @spec param_count(pattern(), keyword()) :: non_neg_integer()
   def param_count(pattern, opts) do
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
-    embed_size = Keyword.get(opts, :embed_size, 287)
+    embed_dim = Keyword.get(opts, :embed_dim, 287)
     state_size = Keyword.get(opts, :mamba_state_size, @default_state_size)
     expand_factor = Keyword.get(opts, :mamba_expand_factor, 2)
     num_heads = Keyword.get(opts, :attention_num_heads, @default_num_heads)
@@ -251,7 +251,7 @@ defmodule Edifice.SSM.HybridBuilder do
       kan: hidden_size * hidden_size * 10
     }
 
-    input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
+    input_proj = if embed_dim != hidden_size, do: embed_dim * hidden_size, else: 0
 
     total_layers =
       Enum.reduce(pattern, 0, fn layer_type, acc ->

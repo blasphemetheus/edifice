@@ -367,7 +367,7 @@ defmodule Edifice.Vision.VisionTest do
       image_size: @image_size,
       patch_size: @patch_size,
       in_channels: @channels,
-      hidden_dim: @embed_dim,
+      hidden_size: @embed_dim,
       num_layers: 2,
       token_mlp_dim: 16,
       channel_mlp_dim: 64
@@ -427,7 +427,7 @@ defmodule Edifice.Vision.VisionTest do
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
     end
 
-    test "output_size/1 returns hidden_dim by default" do
+    test "output_size/1 returns hidden_size by default" do
       assert MLPMixer.output_size(@mixer_opts) == @embed_dim
     end
 

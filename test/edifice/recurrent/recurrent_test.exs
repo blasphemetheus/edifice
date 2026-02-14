@@ -8,12 +8,12 @@ defmodule Edifice.RecurrentTest do
 
   describe "build/1 with LSTM" do
     test "builds LSTM model with correct output shape" do
-      embed_size = 64
+      embed_dim = 64
       hidden_size = 32
 
       model =
         Recurrent.build(
-          embed_size: embed_size,
+          embed_dim: embed_dim,
           hidden_size: hidden_size,
           cell_type: :lstm,
           seq_len: @seq_len
@@ -22,9 +22,9 @@ defmodule Edifice.RecurrentTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_dim}, :f32), Axon.ModelState.empty())
 
-      input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
+      input = Nx.iota({@batch_size, @seq_len, embed_dim}, type: :f32)
       output = predict_fn.(params, input)
 
       # Default return_sequences: false, so output is [batch, hidden_size]
@@ -32,12 +32,12 @@ defmodule Edifice.RecurrentTest do
     end
 
     test "supports multi-layer LSTM" do
-      embed_size = 64
+      embed_dim = 64
       hidden_size = 32
 
       model =
         Recurrent.build(
-          embed_size: embed_size,
+          embed_dim: embed_dim,
           hidden_size: hidden_size,
           cell_type: :lstm,
           num_layers: 2,
@@ -47,21 +47,21 @@ defmodule Edifice.RecurrentTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_dim}, :f32), Axon.ModelState.empty())
 
-      input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
+      input = Nx.iota({@batch_size, @seq_len, embed_dim}, type: :f32)
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch_size, hidden_size}
     end
 
     test "supports return_sequences option" do
-      embed_size = 64
+      embed_dim = 64
       hidden_size = 32
 
       model =
         Recurrent.build(
-          embed_size: embed_size,
+          embed_dim: embed_dim,
           hidden_size: hidden_size,
           cell_type: :lstm,
           return_sequences: true,
@@ -71,9 +71,9 @@ defmodule Edifice.RecurrentTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_dim}, :f32), Axon.ModelState.empty())
 
-      input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
+      input = Nx.iota({@batch_size, @seq_len, embed_dim}, type: :f32)
       output = predict_fn.(params, input)
 
       # return_sequences: true -> [batch, seq_len, hidden_size]
@@ -83,12 +83,12 @@ defmodule Edifice.RecurrentTest do
 
   describe "build/1 with GRU" do
     test "builds GRU model with correct output shape" do
-      embed_size = 64
+      embed_dim = 64
       hidden_size = 32
 
       model =
         Recurrent.build(
-          embed_size: embed_size,
+          embed_dim: embed_dim,
           hidden_size: hidden_size,
           cell_type: :gru,
           seq_len: @seq_len
@@ -97,21 +97,21 @@ defmodule Edifice.RecurrentTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_dim}, :f32), Axon.ModelState.empty())
 
-      input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
+      input = Nx.iota({@batch_size, @seq_len, embed_dim}, type: :f32)
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch_size, hidden_size}
     end
 
     test "supports return_sequences with GRU" do
-      embed_size = 64
+      embed_dim = 64
       hidden_size = 32
 
       model =
         Recurrent.build(
-          embed_size: embed_size,
+          embed_dim: embed_dim,
           hidden_size: hidden_size,
           cell_type: :gru,
           return_sequences: true,
@@ -121,9 +121,9 @@ defmodule Edifice.RecurrentTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, embed_dim}, :f32), Axon.ModelState.empty())
 
-      input = Nx.iota({@batch_size, @seq_len, embed_size}, type: :f32)
+      input = Nx.iota({@batch_size, @seq_len, embed_dim}, type: :f32)
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch_size, @seq_len, hidden_size}

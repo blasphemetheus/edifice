@@ -7,7 +7,7 @@ defmodule Edifice.Meta.MetaNewTest do
   alias Edifice.Meta.SwitchMoE
 
   @batch_size 2
-  @embed_size 32
+  @embed_dim 32
   @hidden_size 32
   @seq_len 8
 
@@ -19,7 +19,7 @@ defmodule Edifice.Meta.MetaNewTest do
     test "produces correct output shape" do
       model =
         SwitchMoE.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_experts: 4,
           expert_size: 64,
@@ -32,11 +32,11 @@ defmodule Edifice.Meta.MetaNewTest do
 
       params =
         init_fn.(
-          %{"state_sequence" => Nx.template({@batch_size, @seq_len, @embed_size}, :f32)},
+          %{"state_sequence" => Nx.template({@batch_size, @seq_len, @embed_dim}, :f32)},
           Axon.ModelState.empty()
         )
 
-      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_size})
+      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, %{"state_sequence" => input})
 
       # Extracts last timestep: [batch, hidden_size]
@@ -46,7 +46,7 @@ defmodule Edifice.Meta.MetaNewTest do
     test "with 2 experts" do
       model =
         SwitchMoE.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_experts: 2,
           num_layers: 1,
@@ -58,11 +58,11 @@ defmodule Edifice.Meta.MetaNewTest do
 
       params =
         init_fn.(
-          %{"state_sequence" => Nx.template({@batch_size, @seq_len, @embed_size}, :f32)},
+          %{"state_sequence" => Nx.template({@batch_size, @seq_len, @embed_dim}, :f32)},
           Axon.ModelState.empty()
         )
 
-      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_size})
+      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, %{"state_sequence" => input})
       assert Nx.shape(output) == {@batch_size, @hidden_size}
     end
@@ -71,7 +71,7 @@ defmodule Edifice.Meta.MetaNewTest do
     test "with 8 experts" do
       model =
         SwitchMoE.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_experts: 8,
           num_layers: 1,
@@ -83,11 +83,11 @@ defmodule Edifice.Meta.MetaNewTest do
 
       params =
         init_fn.(
-          %{"state_sequence" => Nx.template({@batch_size, @seq_len, @embed_size}, :f32)},
+          %{"state_sequence" => Nx.template({@batch_size, @seq_len, @embed_dim}, :f32)},
           Axon.ModelState.empty()
         )
 
-      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_size})
+      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, %{"state_sequence" => input})
       assert Nx.shape(output) == {@batch_size, @hidden_size}
     end
@@ -106,7 +106,7 @@ defmodule Edifice.Meta.MetaNewTest do
     test "produces correct output shape" do
       model =
         SoftMoE.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_experts: 4,
           num_layers: 1,
@@ -118,11 +118,11 @@ defmodule Edifice.Meta.MetaNewTest do
 
       params =
         init_fn.(
-          %{"state_sequence" => Nx.template({@batch_size, @seq_len, @embed_size}, :f32)},
+          %{"state_sequence" => Nx.template({@batch_size, @seq_len, @embed_dim}, :f32)},
           Axon.ModelState.empty()
         )
 
-      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_size})
+      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, %{"state_sequence" => input})
 
       # Extracts last timestep: [batch, hidden_size]
@@ -132,7 +132,7 @@ defmodule Edifice.Meta.MetaNewTest do
     test "with 2 experts" do
       model =
         SoftMoE.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_experts: 2,
           num_layers: 1,
@@ -144,11 +144,11 @@ defmodule Edifice.Meta.MetaNewTest do
 
       params =
         init_fn.(
-          %{"state_sequence" => Nx.template({@batch_size, @seq_len, @embed_size}, :f32)},
+          %{"state_sequence" => Nx.template({@batch_size, @seq_len, @embed_dim}, :f32)},
           Axon.ModelState.empty()
         )
 
-      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_size})
+      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, %{"state_sequence" => input})
       assert Nx.shape(output) == {@batch_size, @hidden_size}
     end
@@ -157,7 +157,7 @@ defmodule Edifice.Meta.MetaNewTest do
     test "with 8 experts" do
       model =
         SoftMoE.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_experts: 8,
           num_layers: 1,
@@ -169,11 +169,11 @@ defmodule Edifice.Meta.MetaNewTest do
 
       params =
         init_fn.(
-          %{"state_sequence" => Nx.template({@batch_size, @seq_len, @embed_size}, :f32)},
+          %{"state_sequence" => Nx.template({@batch_size, @seq_len, @embed_dim}, :f32)},
           Axon.ModelState.empty()
         )
 
-      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_size})
+      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, %{"state_sequence" => input})
       assert Nx.shape(output) == {@batch_size, @hidden_size}
     end

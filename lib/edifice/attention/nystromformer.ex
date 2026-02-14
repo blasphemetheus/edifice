@@ -24,7 +24,7 @@ defmodule Edifice.Attention.Nystromformer do
   ## Architecture
 
   ```
-  Input [batch, seq_len, embed_size]
+  Input [batch, seq_len, embed_dim]
         |
         v
   +-------------------------------------+
@@ -59,7 +59,7 @@ defmodule Edifice.Attention.Nystromformer do
   ## Usage
 
       model = Nystromformer.build(
-        embed_size: 287,
+        embed_dim: 287,
         hidden_size: 256,
         num_landmarks: 32,
         num_layers: 4,
@@ -88,7 +88,7 @@ defmodule Edifice.Attention.Nystromformer do
 
   ## Options
 
-    - `:embed_size` - Size of input embedding per timestep (required)
+    - `:embed_dim` - Size of input embedding per timestep (required)
     - `:hidden_size` - Internal hidden dimension (default: 256)
     - `:num_landmarks` - Number of Nystrom landmark points M (default: 32)
     - `:num_layers` - Number of Nystromformer blocks (default: 4)
@@ -270,7 +270,7 @@ defmodule Edifice.Attention.Nystromformer do
   """
   @spec param_count(keyword()) :: non_neg_integer()
   def param_count(opts) do
-    embed_size = Keyword.get(opts, :embed_size, 287)
+    embed_dim = Keyword.get(opts, :embed_dim, 287)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
 
@@ -287,7 +287,7 @@ defmodule Edifice.Attention.Nystromformer do
 
     per_layer = attn_params + ffn_params
 
-    input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
+    input_proj = if embed_dim != hidden_size, do: embed_dim * hidden_size, else: 0
 
     input_proj + per_layer * num_layers
   end

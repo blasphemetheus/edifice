@@ -14,7 +14,7 @@ defmodule Edifice.Recurrent do
   The recurrent backbone processes sequences of embedded states:
 
   ```
-  Frame Sequence [batch, seq_len, embed_size]
+  Frame Sequence [batch, seq_len, embed_dim]
         │
         ▼
   ┌─────────────┐
@@ -49,7 +49,7 @@ defmodule Edifice.Recurrent do
 
       # Build recurrent backbone
       model = Recurrent.build(
-        embed_size: 1024,
+        embed_dim: 1024,
         hidden_size: 256,
         num_layers: 2,
         cell_type: :lstm,
@@ -85,7 +85,7 @@ defmodule Edifice.Recurrent do
   Build a recurrent model for sequence processing.
 
   ## Options
-    - `:embed_size` - Size of input embedding per frame (required)
+    - `:embed_dim` - Size of input embedding per frame (required)
     - `:hidden_size` - Size of recurrent hidden state (default: 256)
     - `:num_layers` - Number of stacked recurrent layers (default: 1)
     - `:cell_type` - :lstm or :gru (default: :lstm)
@@ -98,7 +98,7 @@ defmodule Edifice.Recurrent do
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     cell_type = Keyword.get(opts, :cell_type, @default_cell_type)
@@ -110,8 +110,8 @@ defmodule Edifice.Recurrent do
     seq_len = Keyword.get(opts, :seq_len, window_size)
     input_seq_dim = if seq_len, do: seq_len, else: nil
 
-    # Input: [batch, seq_len, embed_size] - use concrete seq_len when available
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim] - use concrete seq_len when available
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     build_backbone(input,
       hidden_size: hidden_size,
@@ -276,7 +276,7 @@ defmodule Edifice.Recurrent do
   is handled externally using `initial_hidden/2`.
 
   ## Options
-    - `:embed_size` - Size of input embedding (required)
+    - `:embed_dim` - Size of input embedding (required)
     - `:hidden_size` - Size of hidden state (default: 256)
     - `:cell_type` - :lstm or :gru (default: :lstm)
 
@@ -285,12 +285,12 @@ defmodule Edifice.Recurrent do
   """
   @spec build_stateful(keyword()) :: Axon.t()
   def build_stateful(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     cell_type = Keyword.get(opts, :cell_type, @default_cell_type)
 
-    # Single frame input reshaped as sequence of 1: [batch, 1, embed_size]
-    frame_input = Axon.input("frame", shape: {nil, 1, embed_size})
+    # Single frame input reshaped as sequence of 1: [batch, 1, embed_dim]
+    frame_input = Axon.input("frame", shape: {nil, 1, embed_dim})
 
     # Build single recurrent layer
     # Axon.lstm/gru returns {output_sequence, hidden_state}
@@ -357,7 +357,7 @@ defmodule Edifice.Recurrent do
   for non-linear transformation. This often works better than pure RNN.
 
   ```
-  Sequence [batch, seq_len, embed_size]
+  Sequence [batch, seq_len, embed_dim]
         │
         ▼
   ┌─────────────┐
@@ -379,7 +379,7 @@ defmodule Edifice.Recurrent do
   ```
 
   ## Options
-    - `:embed_size` - Size of input embedding (required)
+    - `:embed_dim` - Size of input embedding (required)
     - `:recurrent_size` - Size of recurrent hidden (default: 256)
     - `:mlp_sizes` - List of MLP layer sizes (default: [256])
     - `:cell_type` - :lstm or :gru (default: :lstm)
@@ -389,7 +389,7 @@ defmodule Edifice.Recurrent do
   """
   @spec build_hybrid(keyword()) :: Axon.t()
   def build_hybrid(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     recurrent_size = Keyword.get(opts, :recurrent_size, @default_hidden_size)
     mlp_sizes = Keyword.get(opts, :mlp_sizes, [256])
     cell_type = Keyword.get(opts, :cell_type, @default_cell_type)
@@ -398,7 +398,7 @@ defmodule Edifice.Recurrent do
     activation = Keyword.get(opts, :activation, :relu)
 
     # Input sequence
-    input = Axon.input("state_sequence", shape: {nil, nil, embed_size})
+    input = Axon.input("state_sequence", shape: {nil, nil, embed_dim})
 
     # Recurrent backbone (outputs last timestep)
     recurrent_output =
@@ -440,8 +440,8 @@ defmodule Edifice.Recurrent do
   """
   @spec frames_to_sequence([Nx.Tensor.t()]) :: Nx.Tensor.t()
   def frames_to_sequence(frames) when is_list(frames) do
-    # frames: list of [embed_size] or [batch, embed_size] tensors
-    # output: [batch, seq_len, embed_size]
+    # frames: list of [embed_dim] or [batch, embed_dim] tensors
+    # output: [batch, seq_len, embed_dim]
     frames
     |> Enum.map(fn frame ->
       case Nx.shape(frame) do
@@ -476,10 +476,10 @@ defmodule Edifice.Recurrent do
       true ->
         # Pad at the beginning
         batch_size = Nx.axis_size(sequence, 0)
-        embed_size = Nx.axis_size(sequence, 2)
+        embed_dim = Nx.axis_size(sequence, 2)
         padding_length = target_length - current_length
 
-        padding = Nx.broadcast(pad_value, {batch_size, padding_length, embed_size})
+        padding = Nx.broadcast(pad_value, {batch_size, padding_length, embed_dim})
         Nx.concatenate([padding, sequence], axis: 1)
     end
   end
@@ -517,7 +517,7 @@ defmodule Edifice.Recurrent do
     Axon.nx(
       input,
       fn sequence ->
-        # sequence shape: [batch, seq_len, embed_size]
+        # sequence shape: [batch, seq_len, embed_dim]
         seq_len = Nx.axis_size(sequence, 1)
 
         if seq_len <= keep_steps do

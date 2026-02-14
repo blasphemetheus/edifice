@@ -5,13 +5,13 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
 
   @batch 2
   @seq_len 8
-  @embed_size 32
+  @embed_dim 32
   @hidden_size 32
   @num_heads 4
   @head_dim 8
 
   @mlstm_opts [
-    embed_size: @embed_size,
+    embed_dim: @embed_dim,
     hidden_size: @hidden_size,
     num_layers: 1,
     num_heads: @num_heads,
@@ -22,7 +22,7 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
   ]
 
   @slstm_opts [
-    embed_size: @embed_size,
+    embed_dim: @embed_dim,
     hidden_size: @hidden_size,
     num_layers: 1,
     variant: :slstm,
@@ -42,7 +42,7 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
       {init_fn, _} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -67,10 +67,10 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -82,10 +82,10 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output1 = predict_fn.(params, input)
       output2 = predict_fn.(params, input)
@@ -105,10 +105,10 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -120,7 +120,7 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
       {init_fn, _} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
       gate_keys = Enum.filter(param_keys, &String.contains?(&1, "gates_proj"))
@@ -143,7 +143,7 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
     test "mixed model alternates sLSTM and mLSTM" do
       model =
         XLSTM.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_layers: 2,
           num_heads: @num_heads,
@@ -156,7 +156,7 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
       {init_fn, _} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -177,13 +177,13 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
       {init_m, pred_m} = Axon.build(model_m, mode: :inference)
 
       params_s =
-        init_s.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_s.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       params_m =
-        init_m.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_m.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output_s = pred_s.(params_s, input)
       output_m = pred_m.(params_m, input)

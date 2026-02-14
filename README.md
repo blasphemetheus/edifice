@@ -26,10 +26,10 @@ def deps do
 end
 ```
 
-Edifice requires Nx ~> 0.9 and Axon ~> 0.7. For GPU acceleration, add EXLA:
+Edifice requires Nx ~> 0.10 and Axon ~> 0.8. For GPU acceleration, add EXLA:
 
 ```elixir
-{:exla, "~> 0.9"}
+{:exla, "~> 0.10"}
 ```
 
 ## Quick Start
@@ -384,10 +384,10 @@ end
 ## Requirements
 
 - Elixir >= 1.18
-- Nx ~> 0.9
-- Axon ~> 0.7
+- Nx ~> 0.10
+- Axon ~> 0.8
 - Polaris ~> 0.1
-- EXLA ~> 0.9 (optional, for GPU acceleration)
+- EXLA ~> 0.10 (optional, for GPU acceleration)
 
 ## License
 

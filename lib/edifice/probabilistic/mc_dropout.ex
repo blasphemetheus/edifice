@@ -176,12 +176,19 @@ defmodule Edifice.Probabilistic.MCDropout do
   def predict_with_uncertainty(model, params, input, opts \\ []) do
     num_samples = Keyword.get(opts, :num_samples, @default_num_samples)
 
-    # Run N forward passes in training mode (dropout active)
-    # Collect predictions from each stochastic forward pass
+    # Build model in training mode so dropout remains active
+    {_init_fn, predict_fn} = Axon.build(model, mode: :train)
+
+    # Run N forward passes with stochastic dropout
+    # In train mode, predict_fn returns %{prediction: tensor, state: map}
     predictions =
       Enum.map(1..num_samples, fn _i ->
-        # Run model in training mode to keep dropout active
-        Axon.predict(model, params, %{"input" => input}, mode: :train)
+        result = predict_fn.(params, %{"input" => input})
+
+        case result do
+          %{prediction: pred} -> pred
+          tensor -> tensor
+        end
       end)
 
     # Stack into [num_samples, batch, output_size]

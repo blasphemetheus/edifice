@@ -9,7 +9,7 @@ defmodule Edifice.SSM.Hybrid do
   ## Architecture Pattern
 
   ```
-  Input [batch, seq_len, embed_size]
+  Input [batch, seq_len, embed_dim]
         │
         ▼
   ┌─────────────────────────────────────┐
@@ -41,7 +41,7 @@ defmodule Edifice.SSM.Hybrid do
 
       # Default hybrid (3 Mamba : 1 Attention ratio)
       model = Hybrid.build(
-        embed_size: 256,
+        embed_dim: 256,
         hidden_size: 256,
         num_layers: 8,
         attention_every: 4
@@ -49,7 +49,7 @@ defmodule Edifice.SSM.Hybrid do
 
       # More attention for complex dependencies
       model = Hybrid.build(
-        embed_size: 256,
+        embed_dim: 256,
         num_layers: 6,
         attention_every: 2  # Alternating Mamba/Attention
       )
@@ -83,7 +83,7 @@ defmodule Edifice.SSM.Hybrid do
   ## Options
 
   **Architecture:**
-    - `:embed_size` - Size of input embedding per frame (required)
+    - `:embed_dim` - Size of input embedding per frame (required)
     - `:hidden_size` - Internal hidden dimension (default: 256)
     - `:num_layers` - Total number of layers (default: 6)
     - `:attention_every` - Insert attention every N layers (default: 3)
@@ -112,7 +112,7 @@ defmodule Edifice.SSM.Hybrid do
   ## Example
 
       model = Hybrid.build(
-        embed_size: 256,
+        embed_dim: 256,
         hidden_size: 256,
         num_layers: 6,
         attention_every: 3,  # 4 Mamba + 2 Attention layers
@@ -121,7 +121,7 @@ defmodule Edifice.SSM.Hybrid do
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     attention_every = Keyword.get(opts, :attention_every, @default_attention_every)
@@ -159,12 +159,12 @@ defmodule Edifice.SSM.Hybrid do
 
     attn_hidden_dim = num_heads * head_dim
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     # Project input to hidden dimension if different
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_projection")
       else
         input
@@ -440,7 +440,7 @@ defmodule Edifice.SSM.Hybrid do
   """
   @spec param_count(keyword()) :: non_neg_integer()
   def param_count(opts) do
-    embed_size = Keyword.get(opts, :embed_size, 1991)
+    embed_dim = Keyword.get(opts, :embed_dim, 1991)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     state_size = Keyword.get(opts, :state_size, @default_state_size)
     expand_factor = Keyword.get(opts, :expand_factor, @default_expand_factor)
@@ -483,7 +483,7 @@ defmodule Edifice.SSM.Hybrid do
     num_mamba_layers = num_layers - num_attn_layers
 
     # Input projection
-    input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
+    input_proj = if embed_dim != hidden_size, do: embed_dim * hidden_size, else: 0
 
     input_proj + mamba_per_layer * num_mamba_layers + attn_per_layer * num_attn_layers
   end

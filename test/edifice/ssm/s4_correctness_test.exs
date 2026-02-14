@@ -4,13 +4,13 @@ defmodule Edifice.SSM.S4CorrectnessTest do
   alias Edifice.SSM.S4
 
   @batch 2
-  @embed_size 16
+  @embed_dim 16
   @hidden_size 16
   @state_size 8
   @seq_len 10
 
   @s4_opts [
-    embed_size: @embed_size,
+    embed_dim: @embed_dim,
     hidden_size: @hidden_size,
     state_size: @state_size,
     num_layers: 1,
@@ -29,7 +29,7 @@ defmodule Edifice.SSM.S4CorrectnessTest do
       {init_fn, _predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
 
@@ -46,10 +46,10 @@ defmodule Edifice.SSM.S4CorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       # Output should be [batch, hidden_size]
@@ -73,14 +73,14 @@ defmodule Edifice.SSM.S4CorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input1, key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input1, key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       # Create input2: same last frame but different history
-      {different_history, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len - 1, @embed_size})
-      last_frame = Nx.slice(input1, [0, @seq_len - 1, 0], [@batch, 1, @embed_size])
+      {different_history, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len - 1, @embed_dim})
+      last_frame = Nx.slice(input1, [0, @seq_len - 1, 0], [@batch, 1, @embed_dim])
       input2 = Nx.concatenate([different_history, last_frame], axis: 1)
 
       output1 = predict_fn.(params, input1)
@@ -96,10 +96,10 @@ defmodule Edifice.SSM.S4CorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       # Constant input: all ones
-      input = Nx.broadcast(1.0, {@batch, @seq_len, @embed_size})
+      input = Nx.broadcast(1.0, {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       # Output should be finite
@@ -120,10 +120,10 @@ defmodule Edifice.SSM.S4CorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -135,10 +135,10 @@ defmodule Edifice.SSM.S4CorrectnessTest do
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+      {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
 
       output1 = predict_fn.(params, input)
       output2 = predict_fn.(params, input)

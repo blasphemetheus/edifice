@@ -5,12 +5,12 @@ defmodule Edifice.Attention.HGRNTest do
 
   @batch 4
   @seq_len 12
-  @embed_size 64
+  @embed_dim 64
   @hidden_size 32
   @num_layers 2
 
   @opts [
-    embed_size: @embed_size,
+    embed_dim: @embed_dim,
     hidden_size: @hidden_size,
     num_layers: @num_layers,
     state_expansion: 2,
@@ -19,7 +19,7 @@ defmodule Edifice.Attention.HGRNTest do
 
   defp random_input do
     key = Nx.Random.key(42)
-    {input, _key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+    {input, _key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
     input
   end
 
@@ -35,7 +35,7 @@ defmodule Edifice.Attention.HGRNTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -48,7 +48,7 @@ defmodule Edifice.Attention.HGRNTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 

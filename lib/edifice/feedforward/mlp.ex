@@ -80,7 +80,7 @@ defmodule Edifice.Feedforward.MLP do
   Useful for single-frame processing in temporal pipelines.
 
   ## Options
-    - `:embed_size` - Input embedding size per frame (required)
+    - `:embed_dim` - Input embedding size per frame (required)
     - `:hidden_sizes` - List of hidden layer sizes (default: [512, 512])
     - `:activation` - Activation function (default: :relu)
     - `:dropout` - Dropout rate (default: 0.1)
@@ -88,7 +88,7 @@ defmodule Edifice.Feedforward.MLP do
   """
   @spec build_temporal(keyword()) :: Axon.t()
   def build_temporal(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_sizes = Keyword.get(opts, :hidden_sizes, @default_hidden_sizes)
     activation = Keyword.get(opts, :activation, @default_activation)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
@@ -97,10 +97,10 @@ defmodule Edifice.Feedforward.MLP do
 
     input_seq_dim = if seq_len, do: seq_len, else: nil
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
-    # Take last frame: [batch, embed_size]
+    # Take last frame: [batch, embed_dim]
     last_frame =
       Axon.nx(
         input,

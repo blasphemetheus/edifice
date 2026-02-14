@@ -9,14 +9,14 @@ defmodule Edifice.SSM.SSMNewTest do
 
   @batch 2
   @seq_len 8
-  @embed_size 32
+  @embed_dim 32
   @hidden_size 32
   @state_size 8
   @num_layers 2
 
   defp random_input do
     key = Nx.Random.key(42)
-    {input, _key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+    {input, _key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
     input
   end
 
@@ -26,7 +26,7 @@ defmodule Edifice.SSM.SSMNewTest do
 
   describe "S4.build/1" do
     @s4_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       state_size: @state_size,
       num_layers: @num_layers,
@@ -44,7 +44,7 @@ defmodule Edifice.SSM.SSMNewTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -57,7 +57,7 @@ defmodule Edifice.SSM.SSMNewTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -77,7 +77,7 @@ defmodule Edifice.SSM.SSMNewTest do
 
   describe "S4D.build/1" do
     @s4d_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       state_size: @state_size,
       num_layers: @num_layers,
@@ -95,7 +95,7 @@ defmodule Edifice.SSM.SSMNewTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -108,7 +108,7 @@ defmodule Edifice.SSM.SSMNewTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -128,7 +128,7 @@ defmodule Edifice.SSM.SSMNewTest do
 
   describe "H3.build/1" do
     @h3_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       state_size: @state_size,
       conv_size: 4,
@@ -147,7 +147,7 @@ defmodule Edifice.SSM.SSMNewTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -160,7 +160,7 @@ defmodule Edifice.SSM.SSMNewTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -180,7 +180,7 @@ defmodule Edifice.SSM.SSMNewTest do
 
   describe "Hyena.build/1" do
     @hyena_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       order: 2,
       filter_size: 16,
@@ -199,7 +199,7 @@ defmodule Edifice.SSM.SSMNewTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -212,7 +212,7 @@ defmodule Edifice.SSM.SSMNewTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -232,7 +232,7 @@ defmodule Edifice.SSM.SSMNewTest do
 
   describe "BiMamba.build/1" do
     @bimamba_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       state_size: @state_size,
       num_layers: @num_layers,
@@ -250,7 +250,7 @@ defmodule Edifice.SSM.SSMNewTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -263,7 +263,7 @@ defmodule Edifice.SSM.SSMNewTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -277,7 +277,7 @@ defmodule Edifice.SSM.SSMNewTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 

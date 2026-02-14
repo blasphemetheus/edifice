@@ -78,7 +78,7 @@ defmodule Edifice.Contrastive.BYOL do
   def default_momentum, do: 0.996
 
   @doc "Default encoder hidden dimension"
-  def default_hidden_dim, do: 256
+  def default_hidden_size, do: 256
 
   # ============================================================================
   # Model Building
@@ -94,7 +94,7 @@ defmodule Edifice.Contrastive.BYOL do
     - `:encoder_dim` - Input feature dimension (required)
     - `:projection_dim` - Projector output dimension (default: 256)
     - `:predictor_dim` - Predictor hidden dimension (default: 64)
-    - `:hidden_dim` - Encoder hidden dimension (default: 256)
+    - `:hidden_size` - Encoder hidden dimension (default: 256)
 
   ## Returns
     `{online_model, target_model}` tuple of Axon models.
@@ -113,7 +113,7 @@ defmodule Edifice.Contrastive.BYOL do
     - `:encoder_dim` - Input feature dimension (required)
     - `:projection_dim` - Projector output dimension (default: 256)
     - `:predictor_dim` - Predictor hidden dimension (default: 64)
-    - `:hidden_dim` - Encoder hidden dimension (default: 256)
+    - `:hidden_size` - Encoder hidden dimension (default: 256)
 
   ## Returns
     An Axon model mapping inputs to predictor output.
@@ -123,17 +123,17 @@ defmodule Edifice.Contrastive.BYOL do
     encoder_dim = Keyword.fetch!(opts, :encoder_dim)
     projection_dim = Keyword.get(opts, :projection_dim, default_projection_dim())
     predictor_dim = Keyword.get(opts, :predictor_dim, default_predictor_dim())
-    hidden_dim = Keyword.get(opts, :hidden_dim, default_hidden_dim())
+    hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
 
     input = Axon.input("features", shape: {nil, encoder_dim})
 
     # Encoder
     encoded =
       input
-      |> Axon.dense(hidden_dim, name: "online_encoder_fc1")
+      |> Axon.dense(hidden_size, name: "online_encoder_fc1")
       |> Axon.activation(:relu, name: "online_encoder_relu1")
       |> Axon.layer_norm(name: "online_encoder_norm")
-      |> Axon.dense(hidden_dim, name: "online_encoder_fc2")
+      |> Axon.dense(hidden_size, name: "online_encoder_fc2")
       |> Axon.activation(:relu, name: "online_encoder_relu2")
 
     # Projector
@@ -160,7 +160,7 @@ defmodule Edifice.Contrastive.BYOL do
   ## Options
     - `:encoder_dim` - Input feature dimension (required)
     - `:projection_dim` - Projector output dimension (default: 256)
-    - `:hidden_dim` - Encoder hidden dimension (default: 256)
+    - `:hidden_size` - Encoder hidden dimension (default: 256)
 
   ## Returns
     An Axon model mapping inputs to projection output.
@@ -169,17 +169,17 @@ defmodule Edifice.Contrastive.BYOL do
   def build_target(opts \\ []) do
     encoder_dim = Keyword.fetch!(opts, :encoder_dim)
     projection_dim = Keyword.get(opts, :projection_dim, default_projection_dim())
-    hidden_dim = Keyword.get(opts, :hidden_dim, default_hidden_dim())
+    hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
 
     input = Axon.input("features", shape: {nil, encoder_dim})
 
     # Encoder (same architecture, different name prefix for separate params)
     encoded =
       input
-      |> Axon.dense(hidden_dim, name: "target_encoder_fc1")
+      |> Axon.dense(hidden_size, name: "target_encoder_fc1")
       |> Axon.activation(:relu, name: "target_encoder_relu1")
       |> Axon.layer_norm(name: "target_encoder_norm")
-      |> Axon.dense(hidden_dim, name: "target_encoder_fc2")
+      |> Axon.dense(hidden_size, name: "target_encoder_fc2")
       |> Axon.activation(:relu, name: "target_encoder_relu2")
 
     # Projector (no predictor)

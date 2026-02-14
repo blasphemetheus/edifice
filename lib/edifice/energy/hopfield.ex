@@ -182,12 +182,12 @@ defmodule Edifice.Energy.Hopfield do
     - `:pattern_dim` - Dimension of each pattern (default: 128)
     - `:beta` - Inverse temperature (default: 1.0)
     - `:num_heads` - Number of parallel Hopfield heads (default: 1)
-    - `:hidden_dim` - Hidden dimension for projection layers (default: 256)
+    - `:hidden_size` - Hidden dimension for projection layers (default: 256)
     - `:num_layers` - Number of Hopfield layers (default: 2)
     - `:dropout` - Dropout rate (default: 0.1)
 
   ## Returns
-    An Axon model: `[batch, input_dim]` -> `[batch, hidden_dim]`
+    An Axon model: `[batch, input_dim]` -> `[batch, hidden_size]`
   """
   @spec build_associative_memory(keyword()) :: Axon.t()
   def build_associative_memory(opts \\ []) do
@@ -196,14 +196,14 @@ defmodule Edifice.Energy.Hopfield do
     pattern_dim = Keyword.get(opts, :pattern_dim, @default_pattern_dim)
     beta = Keyword.get(opts, :beta, @default_beta)
     num_heads = Keyword.get(opts, :num_heads, 1)
-    hidden_dim = Keyword.get(opts, :hidden_dim, 256)
+    hidden_size = Keyword.get(opts, :hidden_size, 256)
     num_layers = Keyword.get(opts, :num_layers, 2)
     dropout = Keyword.get(opts, :dropout, 0.1)
 
     input = Axon.input("input", shape: {nil, input_dim})
 
     # Project input to hidden dimension
-    x = Axon.dense(input, hidden_dim, name: "input_proj")
+    x = Axon.dense(input, hidden_size, name: "input_proj")
     x = Axon.layer_norm(x, name: "input_norm")
 
     # Stack Hopfield layers with residual connections
@@ -212,7 +212,7 @@ defmodule Edifice.Energy.Hopfield do
         # Multi-head Hopfield: run multiple heads and concatenate
         head_outputs =
           Enum.map(1..num_heads, fn head_idx ->
-            head_dim = div(hidden_dim, num_heads)
+            head_dim = div(hidden_size, num_heads)
 
             # Project to per-head dimension
             head_input =
@@ -234,8 +234,8 @@ defmodule Edifice.Energy.Hopfield do
             Axon.concatenate(head_outputs, name: "layer_#{layer_idx}_concat")
           end
 
-        # Project back to hidden_dim if pattern_dim differs
-        hopfield_out = Axon.dense(hopfield_out, hidden_dim, name: "layer_#{layer_idx}_out_proj")
+        # Project back to hidden_size if pattern_dim differs
+        hopfield_out = Axon.dense(hopfield_out, hidden_size, name: "layer_#{layer_idx}_out_proj")
 
         hopfield_out =
           Axon.dropout(hopfield_out,

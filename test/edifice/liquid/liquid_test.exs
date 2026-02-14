@@ -3,7 +3,7 @@ defmodule Edifice.LiquidTest do
 
   alias Edifice.Liquid
 
-  @embed_size 16
+  @embed_dim 16
   @hidden_size 32
   @seq_len 4
   @batch_size 2
@@ -12,7 +12,7 @@ defmodule Edifice.LiquidTest do
     test "produces correct output shape" do
       model =
         Liquid.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_layers: 1,
           window_size: @seq_len,
@@ -26,21 +26,21 @@ defmodule Edifice.LiquidTest do
 
       params =
         init_fn.(
-          Nx.template({@batch_size, @seq_len, @embed_size}, :f32),
+          Nx.template({@batch_size, @seq_len, @embed_dim}, :f32),
           Axon.ModelState.empty()
         )
 
-      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_size})
+      input = Nx.broadcast(0.5, {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       # Output is last timestep: [batch, hidden_size]
       assert Nx.shape(output) == {@batch_size, @hidden_size}
     end
 
-    test "works when embed_size equals hidden_size (no projection)" do
+    test "works when embed_dim equals hidden_size (no projection)" do
       model =
         Liquid.build(
-          embed_size: @hidden_size,
+          embed_dim: @hidden_size,
           hidden_size: @hidden_size,
           num_layers: 1,
           window_size: @seq_len,
@@ -79,7 +79,7 @@ defmodule Edifice.LiquidTest do
     test "returns a positive integer" do
       count =
         Liquid.param_count(
-          embed_size: 64,
+          embed_dim: 64,
           hidden_size: 128,
           num_layers: 2
         )
@@ -89,8 +89,8 @@ defmodule Edifice.LiquidTest do
     end
 
     test "scales with num_layers" do
-      count_2 = Liquid.param_count(embed_size: 64, hidden_size: 128, num_layers: 2)
-      count_4 = Liquid.param_count(embed_size: 64, hidden_size: 128, num_layers: 4)
+      count_2 = Liquid.param_count(embed_dim: 64, hidden_size: 128, num_layers: 2)
+      count_4 = Liquid.param_count(embed_dim: 64, hidden_size: 128, num_layers: 4)
 
       assert count_4 > count_2
     end

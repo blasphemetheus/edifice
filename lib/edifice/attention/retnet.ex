@@ -33,7 +33,7 @@ defmodule Edifice.Attention.RetNet do
   ## Architecture
 
   ```
-  Input [batch, seq_len, embed_size]
+  Input [batch, seq_len, embed_dim]
         |
         v
   +-------------------------------------+
@@ -50,7 +50,7 @@ defmodule Edifice.Attention.RetNet do
 
       # Build RetNet backbone
       model = RetNet.build(
-        embed_size: 287,
+        embed_dim: 287,
         hidden_size: 256,
         num_layers: 6,
         num_heads: 4
@@ -103,7 +103,7 @@ defmodule Edifice.Attention.RetNet do
   Build a RetNet model for sequence processing.
 
   ## Options
-    - `:embed_size` - Size of input embedding per timestep (required)
+    - `:embed_dim` - Size of input embedding per timestep (required)
     - `:hidden_size` - Internal hidden dimension (default: 256)
     - `:num_layers` - Number of RetNet blocks (default: 6)
     - `:num_heads` - Number of retention heads (default: 4)
@@ -117,7 +117,7 @@ defmodule Edifice.Attention.RetNet do
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
     num_layers = Keyword.get(opts, :num_layers, default_num_layers())
     dropout = Keyword.get(opts, :dropout, default_dropout())
@@ -127,12 +127,12 @@ defmodule Edifice.Attention.RetNet do
     # Use concrete seq_len for efficient JIT compilation
     input_seq_dim = if seq_len, do: seq_len, else: nil
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     # Project input to hidden dimension if different
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_projection")
       else
         input
@@ -457,7 +457,7 @@ defmodule Edifice.Attention.RetNet do
   """
   @spec param_count(keyword()) :: non_neg_integer()
   def param_count(opts) do
-    embed_size = Keyword.get(opts, :embed_size, 287)
+    embed_dim = Keyword.get(opts, :embed_dim, 287)
     hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
     num_layers = Keyword.get(opts, :num_layers, default_num_layers())
     expand_factor = Keyword.get(opts, :expand_factor, default_expand_factor())
@@ -475,7 +475,7 @@ defmodule Edifice.Attention.RetNet do
     # - Down projection: inner * hidden
     ffn_params = hidden_size * inner_size + inner_size * hidden_size
 
-    input_proj = if embed_size != hidden_size, do: embed_size * hidden_size, else: 0
+    input_proj = if embed_dim != hidden_size, do: embed_dim * hidden_size, else: 0
 
     input_proj + num_layers * (msr_params + ffn_params)
   end

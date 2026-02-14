@@ -25,7 +25,7 @@ defmodule Edifice.Recurrent.MinGRU do
   ## Architecture
 
   ```
-  Input [batch, seq_len, embed_size]
+  Input [batch, seq_len, embed_dim]
         |
         v
   [Input Projection] -> hidden_size
@@ -48,7 +48,7 @@ defmodule Edifice.Recurrent.MinGRU do
   ## Usage
 
       model = MinGRU.build(
-        embed_size: 287,
+        embed_dim: 287,
         hidden_size: 256,
         num_layers: 4,
         dropout: 0.1
@@ -81,7 +81,7 @@ defmodule Edifice.Recurrent.MinGRU do
   Build a MinGRU model for sequence processing.
 
   ## Options
-    - `:embed_size` - Size of input embedding per frame (required)
+    - `:embed_dim` - Size of input embedding per frame (required)
     - `:hidden_size` - Internal hidden dimension (default: 256)
     - `:num_layers` - Number of MinGRU layers (default: 4)
     - `:dropout` - Dropout rate between layers (default: 0.1)
@@ -92,7 +92,7 @@ defmodule Edifice.Recurrent.MinGRU do
   """
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
-    embed_size = Keyword.fetch!(opts, :embed_size)
+    embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
     num_layers = Keyword.get(opts, :num_layers, default_num_layers())
     dropout = Keyword.get(opts, :dropout, default_dropout())
@@ -101,12 +101,12 @@ defmodule Edifice.Recurrent.MinGRU do
 
     input_seq_dim = if seq_len, do: seq_len, else: nil
 
-    # Input: [batch, seq_len, embed_size]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_size})
+    # Input: [batch, seq_len, embed_dim]
+    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     # Project to hidden dimension if needed
     x =
-      if embed_size != hidden_size do
+      if embed_dim != hidden_size do
         Axon.dense(input, hidden_size, name: "input_projection")
       else
         input

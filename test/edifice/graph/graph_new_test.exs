@@ -226,7 +226,7 @@ defmodule Edifice.Graph.GraphNewTest do
       model =
         GraphTransformer.build(
           input_dim: @input_dim,
-          hidden_dim: @hidden_dim,
+          hidden_size: @hidden_dim,
           num_heads: 4,
           num_layers: 2
         )
@@ -239,7 +239,7 @@ defmodule Edifice.Graph.GraphNewTest do
       model =
         GraphTransformer.build(
           input_dim: @input_dim,
-          hidden_dim: @hidden_dim,
+          hidden_size: @hidden_dim,
           num_heads: 4,
           num_layers: 1,
           num_classes: 6
@@ -253,13 +253,13 @@ defmodule Edifice.Graph.GraphNewTest do
     test "defaults produce correct shape" do
       model = GraphTransformer.build(input_dim: @input_dim)
       output = build_and_predict(model)
-      # Default hidden_dim=64, num_heads=4, num_layers=4
+      # Default hidden_size=64, num_heads=4, num_layers=4
       assert Nx.shape(output) == {@batch_size, @num_nodes, 64}
     end
 
     test "output_size/1 returns correct value" do
-      assert GraphTransformer.output_size(hidden_dim: 32) == 32
-      assert GraphTransformer.output_size(hidden_dim: 32, num_classes: 5) == 5
+      assert GraphTransformer.output_size(hidden_size: 32) == 32
+      assert GraphTransformer.output_size(hidden_size: 32, num_classes: 5) == 5
     end
   end
 
@@ -272,7 +272,7 @@ defmodule Edifice.Graph.GraphNewTest do
       model =
         SchNet.build(
           input_dim: @input_dim,
-          hidden_dim: @hidden_dim,
+          hidden_size: @hidden_dim,
           num_interactions: 2,
           num_filters: @hidden_dim
         )
@@ -285,7 +285,7 @@ defmodule Edifice.Graph.GraphNewTest do
       model =
         SchNet.build(
           input_dim: @input_dim,
-          hidden_dim: @hidden_dim,
+          hidden_size: @hidden_dim,
           num_interactions: 1,
           num_filters: @hidden_dim,
           num_classes: 3
@@ -299,7 +299,7 @@ defmodule Edifice.Graph.GraphNewTest do
       model =
         SchNet.build(
           input_dim: @input_dim,
-          hidden_dim: @hidden_dim,
+          hidden_size: @hidden_dim,
           num_interactions: 1,
           num_filters: @hidden_dim,
           cutoff: 3.0
@@ -335,13 +335,13 @@ defmodule Edifice.Graph.GraphNewTest do
     test "defaults produce correct shape" do
       model = SchNet.build(input_dim: @input_dim)
       output = build_and_predict(model)
-      # Default hidden_dim=64
+      # Default hidden_size=64
       assert Nx.shape(output) == {@batch_size, @num_nodes, 64}
     end
 
     test "output_size/1 returns correct value" do
-      assert SchNet.output_size(hidden_dim: 32) == 32
-      assert SchNet.output_size(hidden_dim: 32, num_classes: 1) == 1
+      assert SchNet.output_size(hidden_size: 32) == 32
+      assert SchNet.output_size(hidden_size: 32, num_classes: 1) == 1
     end
   end
 end

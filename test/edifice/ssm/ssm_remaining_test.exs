@@ -9,14 +9,14 @@ defmodule Edifice.SSM.SSMRemainingTest do
 
   @batch 2
   @seq_len 8
-  @embed_size 32
+  @embed_dim 32
   @hidden_size 32
   @state_size 8
   @num_layers 2
 
   defp random_input do
     key = Nx.Random.key(42)
-    {input, _key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_size})
+    {input, _key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
     input
   end
 
@@ -26,7 +26,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
 
   describe "MambaCumsum.build/1" do
     @cumsum_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       state_size: @state_size,
       num_layers: @num_layers,
@@ -43,7 +43,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -54,7 +54,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -77,7 +77,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
 
   describe "MambaHillisSteele.build/1" do
     @hs_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       state_size: @state_size,
       num_layers: @num_layers,
@@ -94,7 +94,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -105,7 +105,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -128,7 +128,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
 
   describe "Hybrid.build/1" do
     @hybrid_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       num_layers: 3,
       attention_every: 3,
@@ -149,7 +149,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -160,7 +160,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -183,7 +183,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
 
   describe "Zamba.build/1" do
     @zamba_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       num_layers: 3,
       attention_every: 3,
@@ -204,7 +204,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
       assert Nx.shape(output) == {@batch, @hidden_size}
@@ -215,7 +215,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
 
@@ -238,7 +238,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
 
   describe "HybridBuilder.build/2" do
     @builder_opts [
-      embed_size: @embed_size,
+      embed_dim: @embed_dim,
       hidden_size: @hidden_size,
       dropout: 0.0,
       seq_len: @seq_len
@@ -263,7 +263,7 @@ defmodule Edifice.SSM.SSMRemainingTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       output = predict_fn.(params, random_input())
       assert Nx.shape(output) == {@batch, @hidden_size}

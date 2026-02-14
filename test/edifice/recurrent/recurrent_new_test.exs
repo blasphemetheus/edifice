@@ -9,7 +9,7 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
 
   @batch_size 2
   @seq_len 8
-  @embed_size 32
+  @embed_dim 32
   @hidden_size 32
 
   # ============================================================================
@@ -18,14 +18,14 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
 
   describe "MinGRU.build/1" do
     test "returns an Axon model" do
-      model = MinGRU.build(embed_size: @embed_size, hidden_size: @hidden_size, seq_len: @seq_len)
+      model = MinGRU.build(embed_dim: @embed_dim, hidden_size: @hidden_size, seq_len: @seq_len)
       assert %Axon{} = model
     end
 
     test "forward pass produces expected output shape" do
       model =
         MinGRU.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_layers: 2,
           dropout: 0.0,
@@ -35,10 +35,10 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_size})
+      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch_size, @hidden_size}
@@ -47,7 +47,7 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
     test "output values are finite" do
       model =
         MinGRU.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_layers: 2,
           dropout: 0.0,
@@ -57,10 +57,10 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_size})
+      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.all(Nx.is_infinity(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -84,14 +84,14 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
 
   describe "MinLSTM.build/1" do
     test "returns an Axon model" do
-      model = MinLSTM.build(embed_size: @embed_size, hidden_size: @hidden_size, seq_len: @seq_len)
+      model = MinLSTM.build(embed_dim: @embed_dim, hidden_size: @hidden_size, seq_len: @seq_len)
       assert %Axon{} = model
     end
 
     test "forward pass produces expected output shape" do
       model =
         MinLSTM.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_layers: 2,
           dropout: 0.0,
@@ -101,10 +101,10 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(43)
-      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_size})
+      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch_size, @hidden_size}
@@ -113,7 +113,7 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
     test "output values are finite" do
       model =
         MinLSTM.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_layers: 2,
           dropout: 0.0,
@@ -123,10 +123,10 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(43)
-      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_size})
+      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.all(Nx.is_infinity(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -151,7 +151,7 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
   describe "DeltaNet.build/1" do
     test "returns an Axon model" do
       model =
-        DeltaNet.build(embed_size: @embed_size, hidden_size: @hidden_size, seq_len: @seq_len)
+        DeltaNet.build(embed_dim: @embed_dim, hidden_size: @hidden_size, seq_len: @seq_len)
 
       assert %Axon{} = model
     end
@@ -159,7 +159,7 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
     test "forward pass produces expected output shape" do
       model =
         DeltaNet.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_layers: 2,
           dropout: 0.0,
@@ -169,10 +169,10 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(44)
-      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_size})
+      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch_size, @hidden_size}
@@ -181,7 +181,7 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
     test "output values are finite" do
       model =
         DeltaNet.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_layers: 2,
           dropout: 0.0,
@@ -191,10 +191,10 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(44)
-      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_size})
+      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.all(Nx.is_infinity(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -218,14 +218,14 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
 
   describe "TTT.build/1" do
     test "returns an Axon model" do
-      model = TTT.build(embed_size: @embed_size, hidden_size: @hidden_size, seq_len: @seq_len)
+      model = TTT.build(embed_dim: @embed_dim, hidden_size: @hidden_size, seq_len: @seq_len)
       assert %Axon{} = model
     end
 
     test "forward pass produces expected output shape" do
       model =
         TTT.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           inner_size: 16,
           num_layers: 2,
@@ -236,10 +236,10 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(45)
-      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_size})
+      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch_size, @hidden_size}
@@ -248,7 +248,7 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
     test "output values are finite" do
       model =
         TTT.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           inner_size: 16,
           num_layers: 2,
@@ -259,10 +259,10 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(45)
-      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_size})
+      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.all(Nx.is_infinity(output) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -286,14 +286,14 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
 
   describe "Titans.build/1" do
     test "returns an Axon model" do
-      model = Titans.build(embed_size: @embed_size, hidden_size: @hidden_size, seq_len: @seq_len)
+      model = Titans.build(embed_dim: @embed_dim, hidden_size: @hidden_size, seq_len: @seq_len)
       assert %Axon{} = model
     end
 
     test "forward pass produces expected output shape" do
       model =
         Titans.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           memory_size: 16,
           num_layers: 2,
@@ -304,10 +304,10 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(46)
-      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_size})
+      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.shape(output) == {@batch_size, @hidden_size}
@@ -316,7 +316,7 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
     test "output values are finite" do
       model =
         Titans.build(
-          embed_size: @embed_size,
+          embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           memory_size: 16,
           num_layers: 2,
@@ -327,10 +327,10 @@ defmodule Edifice.Recurrent.NewArchitecturesTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       params =
-        init_fn.(Nx.template({@batch_size, @seq_len, @embed_size}, :f32), Axon.ModelState.empty())
+        init_fn.(Nx.template({@batch_size, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       key = Nx.Random.key(46)
-      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_size})
+      {input, _key} = Nx.Random.uniform(key, shape: {@batch_size, @seq_len, @embed_dim})
       output = predict_fn.(params, input)
 
       assert Nx.all(Nx.is_infinity(output) |> Nx.logical_not()) |> Nx.to_number() == 1

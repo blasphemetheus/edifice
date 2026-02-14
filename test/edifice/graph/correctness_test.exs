@@ -22,7 +22,7 @@ defmodule Edifice.Graph.CorrectnessTest do
       model =
         Edifice.build(unquote(arch),
           input_dim: @node_dim,
-          hidden_dim: @hidden,
+          hidden_size: @hidden,
           num_classes: @hidden,
           num_layers: 1,
           num_heads: 2,
@@ -64,7 +64,7 @@ defmodule Edifice.Graph.CorrectnessTest do
     model =
       Edifice.build(:gcn,
         input_dim: @node_dim,
-        hidden_dim: @hidden,
+        hidden_size: @hidden,
         num_classes: @hidden,
         num_layers: 1,
         dropout: 0.0
@@ -89,7 +89,7 @@ defmodule Edifice.Graph.CorrectnessTest do
     model =
       Edifice.build(:gcn,
         input_dim: @node_dim,
-        hidden_dim: @hidden,
+        hidden_size: @hidden,
         num_classes: @hidden,
         num_layers: 1,
         dropout: 0.0
@@ -114,7 +114,7 @@ defmodule Edifice.Graph.CorrectnessTest do
     model =
       Edifice.build(:schnet,
         input_dim: @node_dim,
-        hidden_dim: @hidden,
+        hidden_size: @hidden,
         num_interactions: 1,
         num_filters: @hidden,
         num_rbf: 8

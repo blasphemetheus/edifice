@@ -34,14 +34,14 @@ defmodule Edifice.Graph.GraphTransformer do
   +--------------------------------------+
         |
         v
-  Node Embeddings [batch, num_nodes, hidden_dim]
+  Node Embeddings [batch, num_nodes, hidden_size]
   ```
 
   ## Usage
 
       model = GraphTransformer.build(
         input_dim: 16,
-        hidden_dim: 64,
+        hidden_size: 64,
         num_heads: 4,
         num_layers: 4,
         num_classes: 7
@@ -57,7 +57,7 @@ defmodule Edifice.Graph.GraphTransformer do
 
   alias Edifice.Graph.MessagePassing
 
-  @default_hidden_dim 64
+  @default_hidden_size 64
   @default_num_heads 4
   @default_num_layers 4
   @default_dropout 0.0
@@ -69,7 +69,7 @@ defmodule Edifice.Graph.GraphTransformer do
   ## Options
 
   - `:input_dim` - Input feature dimension per node (required)
-  - `:hidden_dim` - Hidden dimension (default: 64)
+  - `:hidden_size` - Hidden dimension (default: 64)
   - `:num_heads` - Number of attention heads (default: 4)
   - `:num_layers` - Number of transformer layers (default: 4)
   - `:num_classes` - If provided, adds a classification head (default: nil)
@@ -83,7 +83,7 @@ defmodule Edifice.Graph.GraphTransformer do
   @spec build(keyword()) :: Axon.t()
   def build(opts \\ []) do
     input_dim = Keyword.fetch!(opts, :input_dim)
-    hidden_dim = Keyword.get(opts, :hidden_dim, @default_hidden_dim)
+    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_heads = Keyword.get(opts, :num_heads, @default_num_heads)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     num_classes = Keyword.get(opts, :num_classes, nil)
@@ -93,8 +93,8 @@ defmodule Edifice.Graph.GraphTransformer do
     nodes = Axon.input("nodes", shape: {nil, nil, input_dim})
     adjacency = Axon.input("adjacency", shape: {nil, nil, nil})
 
-    # Project input to hidden_dim
-    x = Axon.dense(nodes, hidden_dim, name: "input_proj")
+    # Project input to hidden_size
+    x = Axon.dense(nodes, hidden_size, name: "input_proj")
 
     # Add graph positional encoding derived from adjacency
     x =
@@ -102,14 +102,14 @@ defmodule Edifice.Graph.GraphTransformer do
         &add_graph_pe_impl/3,
         [x, adjacency],
         name: "graph_pe",
-        hidden_dim: hidden_dim,
+        hidden_size: hidden_size,
         op_name: :graph_pe
       )
 
     # Stack transformer layers
     x =
       Enum.reduce(0..(num_layers - 1), x, fn idx, acc ->
-        graph_transformer_layer(acc, adjacency, hidden_dim,
+        graph_transformer_layer(acc, adjacency, hidden_size,
           num_heads: num_heads,
           dropout: dropout,
           name: "gt_layer_#{idx}"
@@ -145,18 +145,18 @@ defmodule Edifice.Graph.GraphTransformer do
   - `:name` - Layer name prefix
   """
   @spec graph_transformer_layer(Axon.t(), Axon.t(), pos_integer(), keyword()) :: Axon.t()
-  def graph_transformer_layer(nodes, adjacency, hidden_dim, opts \\ []) do
+  def graph_transformer_layer(nodes, adjacency, hidden_size, opts \\ []) do
     num_heads = Keyword.get(opts, :num_heads, @default_num_heads)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
     name = Keyword.get(opts, :name, "gt")
-    head_dim = div(hidden_dim, num_heads)
+    head_dim = div(hidden_size, num_heads)
 
     # Pre-norm multi-head attention with graph bias
     normed = Axon.layer_norm(nodes, name: "#{name}_attn_ln")
 
-    q = Axon.dense(normed, hidden_dim, name: "#{name}_q")
-    k = Axon.dense(normed, hidden_dim, name: "#{name}_k")
-    v = Axon.dense(normed, hidden_dim, name: "#{name}_v")
+    q = Axon.dense(normed, hidden_size, name: "#{name}_q")
+    k = Axon.dense(normed, hidden_size, name: "#{name}_k")
+    v = Axon.dense(normed, hidden_size, name: "#{name}_v")
 
     attended =
       Axon.layer(
@@ -168,7 +168,7 @@ defmodule Edifice.Graph.GraphTransformer do
         op_name: :graph_transformer_attn
       )
 
-    attended = Axon.dense(attended, hidden_dim, name: "#{name}_attn_proj")
+    attended = Axon.dense(attended, hidden_size, name: "#{name}_attn_proj")
 
     attended =
       if dropout > 0.0 do
@@ -181,7 +181,7 @@ defmodule Edifice.Graph.GraphTransformer do
     x = Axon.add(nodes, attended, name: "#{name}_attn_res")
 
     # Pre-norm FFN
-    ffn_dim = hidden_dim * @default_ffn_multiplier
+    ffn_dim = hidden_size * @default_ffn_multiplier
 
     normed2 = Axon.layer_norm(x, name: "#{name}_ffn_ln")
 
@@ -189,7 +189,7 @@ defmodule Edifice.Graph.GraphTransformer do
       normed2
       |> Axon.dense(ffn_dim, name: "#{name}_ffn_up")
       |> Axon.gelu()
-      |> Axon.dense(hidden_dim, name: "#{name}_ffn_down")
+      |> Axon.dense(hidden_size, name: "#{name}_ffn_down")
 
     ffn =
       if dropout > 0.0 do
@@ -208,8 +208,8 @@ defmodule Edifice.Graph.GraphTransformer do
   @spec output_size(keyword()) :: pos_integer()
   def output_size(opts \\ []) do
     num_classes = Keyword.get(opts, :num_classes, nil)
-    hidden_dim = Keyword.get(opts, :hidden_dim, @default_hidden_dim)
-    if num_classes, do: num_classes, else: hidden_dim
+    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
+    if num_classes, do: num_classes, else: hidden_size
   end
 
   # Add graph positional encoding based on adjacency powers
@@ -274,7 +274,7 @@ defmodule Edifice.Graph.GraphTransformer do
     # Weighted sum: [batch, heads, nodes, head_dim]
     output = Nx.dot(attn_weights, [3], [0, 1], v, [2], [0, 1])
 
-    # Transpose and reshape back: [batch, nodes, hidden_dim]
+    # Transpose and reshape back: [batch, nodes, hidden_size]
     output = Nx.transpose(output, axes: [0, 2, 1, 3])
     Nx.reshape(output, {batch_size, num_nodes, num_heads * head_dim})
   end

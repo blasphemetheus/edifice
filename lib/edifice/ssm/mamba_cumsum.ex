@@ -17,7 +17,7 @@ defmodule Edifice.SSM.MambaCumsum do
 
   ## Usage
 
-      model = MambaCumsum.build(embed_size: 287, hidden_size: 256)
+      model = MambaCumsum.build(embed_dim: 287, hidden_size: 256)
   """
 
   require Axon

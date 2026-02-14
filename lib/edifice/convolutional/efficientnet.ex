@@ -167,18 +167,14 @@ defmodule Edifice.Convolutional.EfficientNet do
     se_ratio = Keyword.get(opts, :se_ratio, @default_se_ratio)
     name = Keyword.get(opts, :name, "mbconv")
 
-    # Expansion phase (if expand_ratio > 1)
+    # Expansion phase - always apply to ensure consistent dimensions for SE
     expanded_dim = output_dim * expand_ratio
 
     x =
-      if expand_ratio > 1 do
-        input
-        |> Axon.dense(expanded_dim, name: "#{name}_expand")
-        |> Axon.layer_norm(name: "#{name}_expand_bn")
-        |> Axon.activation(:silu, name: "#{name}_expand_act")
-      else
-        input
-      end
+      input
+      |> Axon.dense(expanded_dim, name: "#{name}_expand")
+      |> Axon.layer_norm(name: "#{name}_expand_bn")
+      |> Axon.activation(:silu, name: "#{name}_expand_act")
 
     # Squeeze-Excitation
     se_dim = max(1, round(expanded_dim * se_ratio))
