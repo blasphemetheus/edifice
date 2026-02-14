@@ -63,6 +63,8 @@ defmodule Edifice.Meta.MoE do
   """
 
   require Axon
+
+  alias Edifice.Blocks.FFN
   import Nx.Defn
 
   @default_num_experts 8
@@ -303,8 +305,18 @@ defmodule Edifice.Meta.MoE do
             name: "moe_layer_#{layer_idx}"
           )
         else
-          # Regular FFN
-          build_ffn_sublayer(backbone_out, hidden_size, dropout, "layer_#{layer_idx}")
+          # Regular FFN with pre-norm + residual
+          ffn_normed = Axon.layer_norm(backbone_out, name: "layer_#{layer_idx}_ffn_pre_norm")
+
+          ffn_out =
+            FFN.layer(ffn_normed,
+              hidden_size: hidden_size,
+              activation: :gelu,
+              dropout: dropout,
+              name: "layer_#{layer_idx}_ffn"
+            )
+
+          Axon.add(backbone_out, ffn_out, name: "layer_#{layer_idx}_ffn_residual")
         end
       end)
 
@@ -583,23 +595,5 @@ defmodule Edifice.Meta.MoE do
     Axon.add(input, attended, name: "#{name}_attn_residual")
   end
 
-  defp build_ffn_sublayer(input, hidden_size, dropout, name) do
-    ffn_input = Axon.layer_norm(input, name: "#{name}_ffn_pre_norm")
-    ffn_dim = hidden_size * 4
-
-    ffn =
-      ffn_input
-      |> Axon.dense(ffn_dim, name: "#{name}_ffn1")
-      |> Axon.gelu()
-      |> Axon.dense(hidden_size, name: "#{name}_ffn2")
-
-    ffn =
-      if dropout > 0 do
-        Axon.dropout(ffn, rate: dropout, name: "#{name}_ffn_dropout")
-      else
-        ffn
-      end
-
-    Axon.add(input, ffn, name: "#{name}_ffn_residual")
-  end
+  # FFN delegated to Edifice.Blocks.FFN
 end

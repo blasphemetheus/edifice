@@ -67,6 +67,8 @@ defmodule Edifice.Liquid do
 
   require Axon
 
+  alias Edifice.Blocks.FFN
+
   # Default hyperparameters
   @default_hidden_size 256
   @default_num_layers 4
@@ -291,12 +293,19 @@ defmodule Edifice.Liquid do
             name: "ltc_layer_#{layer_idx}"
           )
 
-        # FFN layer (SwiGLU style)
-        build_ffn(ltc_out,
-          hidden_size: hidden_size,
-          dropout: dropout,
-          name: "ffn_#{layer_idx}"
-        )
+        # FFN layer (SwiGLU style) with pre-norm + residual
+        ffn_normed = Axon.layer_norm(ltc_out, name: "ffn_#{layer_idx}_norm")
+
+        ffn_out =
+          FFN.gated_layer(ffn_normed,
+            hidden_size: hidden_size,
+            inner_size: hidden_size * 4,
+            activation: :silu,
+            dropout: dropout,
+            name: "ffn_#{layer_idx}"
+          )
+
+        Axon.add(ltc_out, ffn_out, name: "ffn_#{layer_idx}_residual")
       end)
 
     x = Axon.layer_norm(x, name: "final_norm")
@@ -313,33 +322,7 @@ defmodule Edifice.Liquid do
     )
   end
 
-  defp build_ffn(input, opts) do
-    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
-    dropout = Keyword.get(opts, :dropout, @default_dropout)
-    name = Keyword.get(opts, :name, "ffn")
-
-    inner_size = hidden_size * 4
-
-    x = Axon.layer_norm(input, name: "#{name}_norm")
-
-    # SwiGLU: gate * up
-    gate_proj = Axon.dense(x, inner_size, name: "#{name}_gate")
-    up_proj = Axon.dense(x, inner_size, name: "#{name}_up")
-
-    gate = Axon.activation(gate_proj, :silu, name: "#{name}_silu")
-    gated = Axon.multiply(gate, up_proj, name: "#{name}_gated")
-
-    x = Axon.dense(gated, hidden_size, name: "#{name}_down")
-
-    x =
-      if dropout > 0 do
-        Axon.dropout(x, rate: dropout, name: "#{name}_dropout")
-      else
-        x
-      end
-
-    Axon.add(input, x, name: "#{name}_residual")
-  end
+  # FFN delegated to Edifice.Blocks.FFN.gated_layer (SwiGLU)
 
   # ============================================================================
   # Utilities
