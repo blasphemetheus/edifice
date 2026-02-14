@@ -46,7 +46,8 @@ defmodule Edifice.MixProject do
       # Dev & Test
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:stream_data, "~> 1.1", only: [:dev, :test]}
+      {:stream_data, "~> 1.1", only: [:dev, :test]},
+      {:benchee, "~> 1.0", only: :dev}
     ]
   end
 
@@ -255,7 +256,8 @@ defmodule Edifice.MixProject do
   defp package do
     [
       licenses: ["MIT"],
-      links: %{"GitHub" => @source_url}
+      links: %{"GitHub" => @source_url},
+      files: ["lib", "mix.exs", "README.md", "CHANGELOG.md", "LICENSE", "guides"]
     ]
   end
 
