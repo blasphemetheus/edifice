@@ -17,6 +17,12 @@ erl_crash.dump
 *.swp
 *.swo
 
+# Planning docs
+RELEASE_PLAN.md
+
+# Hex build artifacts
+/edifice-*/
+
 # OS
 .DS_Store
 Thumbs.db
