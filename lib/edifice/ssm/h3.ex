@@ -64,6 +64,8 @@ defmodule Edifice.SSM.H3 do
 
   require Axon
 
+  alias Edifice.Blocks.FFN
+
   @default_hidden_size 256
   @default_state_size 64
   @default_conv_size 4
@@ -219,11 +221,17 @@ defmodule Edifice.SSM.H3 do
     x = Axon.add(input, proj, name: "#{name}_residual")
 
     # FFN sub-layer
-    build_ffn_block(x,
-      hidden_size: hidden_size,
-      dropout: dropout,
-      name: "#{name}_ffn"
-    )
+    ffn_normed = Axon.layer_norm(x, name: "#{name}_ffn_norm")
+
+    ffn_out =
+      FFN.layer(ffn_normed,
+        hidden_size: hidden_size,
+        activation: :gelu,
+        dropout: dropout,
+        name: "#{name}_ffn"
+      )
+
+    Axon.add(x, ffn_out, name: "#{name}_ffn_residual")
   end
 
   # Diagonal SSM implementation with learnable A and dt parameters
@@ -274,27 +282,6 @@ defmodule Edifice.SSM.H3 do
       name: "#{name}_dw_conv"
     )
     |> Axon.activation(:silu, name: "#{name}_silu")
-  end
-
-  defp build_ffn_block(input, opts) do
-    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
-    dropout = Keyword.get(opts, :dropout, @default_dropout)
-    name = Keyword.get(opts, :name, "ffn")
-    inner_size = hidden_size * 4
-
-    x = Axon.layer_norm(input, name: "#{name}_norm")
-    x = Axon.dense(x, inner_size, name: "#{name}_up")
-    x = Axon.activation(x, :gelu, name: "#{name}_gelu")
-    x = Axon.dense(x, hidden_size, name: "#{name}_down")
-
-    x =
-      if dropout > 0 do
-        Axon.dropout(x, rate: dropout, name: "#{name}_drop")
-      else
-        x
-      end
-
-    Axon.add(input, x, name: "#{name}_residual")
   end
 
   @doc """

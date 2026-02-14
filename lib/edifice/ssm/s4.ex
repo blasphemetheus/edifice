@@ -70,6 +70,7 @@ defmodule Edifice.SSM.S4 do
 
   require Axon
 
+  alias Edifice.Blocks.FFN
   alias Edifice.SSM.Common
 
   @default_hidden_size 256
@@ -181,11 +182,17 @@ defmodule Edifice.SSM.S4 do
     x = Axon.add(input, ssm_out, name: "#{name}_ssm_residual")
 
     # FFN sub-layer with pre-norm
-    build_ffn_block(x,
-      hidden_size: hidden_size,
-      dropout: dropout,
-      name: "#{name}_ffn"
-    )
+    ffn_normed = Axon.layer_norm(x, name: "#{name}_ffn_norm")
+
+    ffn_out =
+      FFN.layer(ffn_normed,
+        hidden_size: hidden_size,
+        activation: :gelu,
+        dropout: dropout,
+        name: "#{name}_ffn"
+      )
+
+    Axon.add(x, ffn_out, name: "#{name}_ffn_residual")
   end
 
   # S4 SSM with HiPPO-initialized A, input-dependent dt, and Blelloch parallel scan
@@ -224,28 +231,6 @@ defmodule Edifice.SSM.S4 do
     # Output: y = C * h, summed over state dimension
     # c: [batch, seq_len, state_size] -> [batch, seq_len, 1, state_size]
     Common.compute_ssm_output(h, c)
-  end
-
-  defp build_ffn_block(input, opts) do
-    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
-    dropout = Keyword.get(opts, :dropout, @default_dropout)
-    name = Keyword.get(opts, :name, "ffn")
-
-    inner_size = hidden_size * 4
-
-    x = Axon.layer_norm(input, name: "#{name}_norm")
-    x = Axon.dense(x, inner_size, name: "#{name}_up")
-    x = Axon.activation(x, :gelu, name: "#{name}_gelu")
-    x = Axon.dense(x, hidden_size, name: "#{name}_down")
-
-    x =
-      if dropout > 0 do
-        Axon.dropout(x, rate: dropout, name: "#{name}_drop")
-      else
-        x
-      end
-
-    Axon.add(input, x, name: "#{name}_residual")
   end
 
   @doc """

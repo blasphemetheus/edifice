@@ -74,6 +74,8 @@ defmodule Edifice.SSM.Hyena do
 
   require Axon
 
+  alias Edifice.Blocks.FFN
+
   @default_hidden_size 256
   @default_order 2
   @default_filter_size 64
@@ -231,11 +233,18 @@ defmodule Edifice.SSM.Hyena do
     x = Axon.add(input, out, name: "#{name}_residual")
 
     # FFN
-    build_ffn_block(x,
-      hidden_size: hidden_size,
-      dropout: dropout,
-      name: "#{name}_ffn"
-    )
+    ffn_normed = Axon.layer_norm(x, name: "#{name}_ffn_norm")
+
+    ffn_out =
+      FFN.gated_layer(ffn_normed,
+        hidden_size: hidden_size,
+        inner_size: hidden_size * 4,
+        activation: :silu,
+        dropout: dropout,
+        name: "#{name}_ffn"
+      )
+
+    Axon.add(x, ffn_out, name: "#{name}_ffn_residual")
   end
 
   # Causal long convolution using Nx.conv with dynamic kernel
@@ -270,29 +279,6 @@ defmodule Edifice.SSM.Hyena do
 
     # Transpose back: [batch, hidden_size, seq_len] -> [batch, seq_len, hidden_size]
     Nx.transpose(result, axes: [0, 2, 1])
-  end
-
-  defp build_ffn_block(input, opts) do
-    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
-    dropout = Keyword.get(opts, :dropout, @default_dropout)
-    name = Keyword.get(opts, :name, "ffn")
-    inner_size = hidden_size * 4
-
-    x = Axon.layer_norm(input, name: "#{name}_norm")
-    gate = Axon.dense(x, inner_size, name: "#{name}_gate")
-    gate = Axon.activation(gate, :silu, name: "#{name}_silu")
-    up = Axon.dense(x, inner_size, name: "#{name}_up")
-    gated = Axon.multiply(gate, up, name: "#{name}_gated")
-    x = Axon.dense(gated, hidden_size, name: "#{name}_down")
-
-    x =
-      if dropout > 0 do
-        Axon.dropout(x, rate: dropout, name: "#{name}_drop")
-      else
-        x
-      end
-
-    Axon.add(input, x, name: "#{name}_residual")
   end
 
   @doc """

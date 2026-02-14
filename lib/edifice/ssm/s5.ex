@@ -83,6 +83,8 @@ defmodule Edifice.SSM.S5 do
 
   require Axon
 
+  alias Edifice.Blocks.FFN
+
   # Default hyperparameters
   @default_hidden_size 256
   @default_state_size 64
@@ -251,33 +253,18 @@ defmodule Edifice.SSM.S5 do
     dropout = Keyword.get(opts, :dropout, @default_dropout)
     name = Keyword.get(opts, :name, "ffn")
 
-    # FFN expansion factor
-    inner_size = hidden_size * 4
+    ffn_normed = Axon.layer_norm(input, name: "#{name}_norm")
 
-    # Pre-LayerNorm
-    x = Axon.layer_norm(input, name: "#{name}_norm")
+    ffn_out =
+      FFN.gated_layer(ffn_normed,
+        hidden_size: hidden_size,
+        inner_size: hidden_size * 4,
+        activation: :silu,
+        dropout: dropout,
+        name: name
+      )
 
-    # GLU-style FFN
-    gate_proj = Axon.dense(x, inner_size, name: "#{name}_gate")
-    up_proj = Axon.dense(x, inner_size, name: "#{name}_up")
-
-    # SiLU gate * up
-    gate = Axon.activation(gate_proj, :silu, name: "#{name}_silu")
-    gated = Axon.multiply(gate, up_proj, name: "#{name}_gated")
-
-    # Down projection
-    x = Axon.dense(gated, hidden_size, name: "#{name}_down")
-
-    # Dropout
-    x =
-      if dropout > 0 do
-        Axon.dropout(x, rate: dropout, name: "#{name}_dropout")
-      else
-        x
-      end
-
-    # Residual connection
-    Axon.add(input, x, name: "#{name}_residual")
+    Axon.add(input, ffn_out, name: "#{name}_residual")
   end
 
   # MIMO SSM implementation
