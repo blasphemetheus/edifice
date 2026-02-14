@@ -405,63 +405,46 @@ defmodule Edifice.SSM.MambaSSD do
         Nx.slice_along_axis(chunk_h, chunk_len - 1, 1, axis: 1)
       end)
 
-    # Compute cumulative products of A for inter-chunk state propagation
-    # NOTE: Currently unused - the inter-chunk propagation recomputes A products inline
-    # TODO: Optimize by using precomputed chunk_a_products instead of recomputing
-    _chunk_a_products =
-      Enum.map(0..(length(chunk_outputs) - 1), fn chunk_idx ->
-        if chunk_idx == length(chunk_outputs) - 1 and remainder > 0 do
-          start_idx = num_chunks * chunk_size
-          a_chunk = Nx.slice_along_axis(a, start_idx, remainder, axis: 1)
-          Nx.product(a_chunk, axes: [1])
-        else
-          start_idx = chunk_idx * chunk_size
-          a_chunk = Nx.slice_along_axis(a, start_idx, chunk_size, axis: 1)
-          Nx.product(a_chunk, axes: [1])
-        end
+    # Precompute per-chunk A slices and their cumulative products to avoid
+    # redundant slice + cumprod work inside the inter-chunk reduce loop
+    chunk_a_cumprods =
+      Enum.with_index(chunk_outputs)
+      |> Enum.map(fn {_chunk_h, idx} ->
+        a_chunk =
+          if idx == length(chunk_outputs) - 1 and remainder > 0 do
+            start_idx = num_chunks * chunk_size
+            Nx.slice_along_axis(a, start_idx, remainder, axis: 1)
+          else
+            start_idx = idx * chunk_size
+            Nx.slice_along_axis(a, start_idx, chunk_size, axis: 1)
+          end
+
+        compute_cumulative_products(a_chunk)
       end)
 
     # Inter-chunk state propagation
-    # h_chunk[i] = h_intra[i] + A_prod[i] * h_final[i-1] + A_prod[i] * A_prod[i-1] * h_final[i-2] + ...
+    # h_chunk[i] = h_intra[i] + A_prod[i] * h_final[i-1] + ...
     # This is a small scan over chunk boundaries
 
     {_, propagated_outputs} =
       Enum.reduce(
-        Enum.with_index(chunk_outputs),
+        Enum.zip([chunk_outputs, chunk_a_cumprods])
+        |> Enum.with_index(),
         {Nx.broadcast(0.0, {batch, 1, hidden, state}), []},
-        fn {chunk_h, idx}, {running_state, acc} ->
-          # Add contribution from previous chunks to this chunk's output
-          # running_state: [batch, 1, hidden, state] - accumulated state from previous chunks
-
-          chunk_len = Nx.axis_size(chunk_h, 1)
-
-          # Compute A products for each position in chunk relative to chunk start
+        fn {{chunk_h, a_cumprods}, idx}, {running_state, acc} ->
           if idx == 0 do
             # First chunk: no inter-chunk contribution
             new_running = Enum.at(chunk_final_states, idx)
             {new_running, acc ++ [chunk_h]}
           else
-            # Get A for this chunk to propagate running state
-            a_chunk =
-              if idx == length(chunk_outputs) - 1 and remainder > 0 do
-                start_idx = num_chunks * chunk_size
-                Nx.slice_along_axis(a, start_idx, remainder, axis: 1)
-              else
-                start_idx = idx * chunk_size
-                Nx.slice_along_axis(a, start_idx, chunk_size, axis: 1)
-              end
-
-            # Compute cumulative A products within chunk for state propagation
-            # For position t: multiply running_state by prod(A[0..t])
-            a_cumprods = compute_cumulative_products(a_chunk)
-
-            # Propagate running state through chunk
+            # Propagate running state through chunk using precomputed cumprods
             state_contribution = Nx.multiply(a_cumprods, running_state)
 
             # Add to intra-chunk output
             adjusted_chunk = Nx.add(chunk_h, state_contribution)
 
             # Update running state: final state of this chunk
+            chunk_len = Nx.axis_size(chunk_h, 1)
             chunk_final = Nx.slice_along_axis(adjusted_chunk, chunk_len - 1, 1, axis: 1)
 
             {chunk_final, acc ++ [adjusted_chunk]}
