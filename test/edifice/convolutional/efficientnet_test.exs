@@ -30,6 +30,7 @@ defmodule Edifice.Convolutional.EfficientNetTest do
       assert Nx.shape(output) == {@batch, expected_dim}
     end
 
+    @tag :slow
     test "forward pass with classifier produces correct shape" do
       model = EfficientNet.build(input_dim: @input_dim, num_classes: 5, width_multiplier: 0.5)
 
@@ -44,6 +45,7 @@ defmodule Edifice.Convolutional.EfficientNetTest do
       assert %Axon{} = model
     end
 
+    @tag :slow
     test "supports depth and width multipliers" do
       model =
         EfficientNet.build(
