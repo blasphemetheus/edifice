@@ -1,5 +1,9 @@
 # Edifice
 
+[![Hex.pm](https://img.shields.io/hexpm/v/edifice.svg)](https://hex.pm/packages/edifice)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/edifice)
+[![License](https://img.shields.io/hexpm/l/edifice.svg)](https://github.com/blasphemetheus/edifice/blob/main/LICENSE)
+
 A comprehensive ML architecture library for Elixir, built on [Nx](https://github.com/elixir-nx/nx) and [Axon](https://github.com/elixir-nx/axon).
 
 92 neural network architectures across 16 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons.
