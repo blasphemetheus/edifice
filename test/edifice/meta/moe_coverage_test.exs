@@ -286,6 +286,7 @@ defmodule Edifice.Meta.MoECoverageTest do
     end
 
     @tag :slow
+    @tag timeout: 120_000
     test "with attention backbone" do
       # build_attention_sublayer hardcodes num_heads=4, head_dim=64
       # so hidden_size must be >= 256 for the residual to match

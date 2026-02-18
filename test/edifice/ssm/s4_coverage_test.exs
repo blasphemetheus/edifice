@@ -311,6 +311,7 @@ defmodule Edifice.SSM.S4CoverageTest do
     end
 
     @tag :slow
+    @tag timeout: 120_000
     test "block uses defaults for missing options" do
       input = Axon.input("state_sequence", shape: {nil, @seq_len, 256})
 
