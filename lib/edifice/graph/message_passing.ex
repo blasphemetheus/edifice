@@ -56,8 +56,6 @@ defmodule Edifice.Graph.MessagePassing do
       graph_repr = MessagePassing.global_pool(updated, :mean)
   """
 
-  require Axon
-
   @type aggregation :: :sum | :mean | :max
 
   # ============================================================================
@@ -220,46 +218,40 @@ defmodule Edifice.Graph.MessagePassing do
   @spec aggregate(Axon.t(), Axon.t(), aggregation()) :: Axon.t()
   def aggregate(node_features, adjacency, mode) do
     Axon.layer(
-      &aggregate_impl/3,
+      fn feats, adj, _opts -> aggregate_compute(feats, adj, mode) end,
       [node_features, adjacency],
-      mode: mode,
+      name: "graph_aggregate_#{mode}",
       op_name: :graph_aggregate
     )
   end
 
-  defp aggregate_impl(node_features, adjacency, opts) do
-    mode = opts[:mode] || :sum
+  defp aggregate_compute(node_features, adjacency, :sum) do
+    Nx.dot(adjacency, [2], [0], node_features, [1], [0])
+  end
 
-    # A @ H gives neighbor feature sums per node (batched matmul)
+  defp aggregate_compute(node_features, adjacency, :mean) do
     aggregated = Nx.dot(adjacency, [2], [0], node_features, [1], [0])
+    degree = Nx.sum(adjacency, axes: [2], keep_axes: true)
+    degree = Nx.max(degree, 1.0)
+    Nx.divide(aggregated, degree)
+  end
 
-    case mode do
-      :sum ->
-        aggregated
+  defp aggregate_compute(node_features, adjacency, :max) do
+    mask = Nx.greater(adjacency, 0)
+    features_expanded = Nx.new_axis(node_features, 1)
+    mask_expanded = Nx.new_axis(mask, 3)
 
-      :mean ->
-        degree = Nx.sum(adjacency, axes: [2], keep_axes: true)
-        degree = Nx.max(degree, 1.0)
-        Nx.divide(aggregated, degree)
+    broadcast_feats = Nx.multiply(features_expanded, mask_expanded)
+    neg_inf = Nx.broadcast(-1.0e9, Nx.shape(broadcast_feats))
 
-      :max ->
-        # Use masking approach for max
-        mask = Nx.greater(adjacency, 0)
-        features_expanded = Nx.new_axis(node_features, 1)
-        mask_expanded = Nx.new_axis(mask, 3)
+    masked =
+      Nx.select(
+        Nx.broadcast(mask_expanded, Nx.shape(broadcast_feats)),
+        broadcast_feats,
+        neg_inf
+      )
 
-        broadcast_feats = Nx.multiply(features_expanded, mask_expanded)
-        neg_inf = Nx.broadcast(-1.0e9, Nx.shape(broadcast_feats))
-
-        masked =
-          Nx.select(
-            Nx.broadcast(mask_expanded, Nx.shape(broadcast_feats)),
-            broadcast_feats,
-            neg_inf
-          )
-
-        Nx.reduce_max(masked, axes: [2])
-    end
+    Nx.reduce_max(masked, axes: [2])
   end
 
   # ============================================================================
@@ -283,17 +275,15 @@ defmodule Edifice.Graph.MessagePassing do
   """
   @spec global_pool(Axon.t(), aggregation()) :: Axon.t()
   def global_pool(node_features, mode \\ :mean) do
-    Axon.nx(
-      node_features,
-      fn features ->
-        # features: [batch, num_nodes, feature_dim]
-        case mode do
-          :sum -> Nx.sum(features, axes: [1])
-          :mean -> Nx.mean(features, axes: [1])
-          :max -> Nx.reduce_max(features, axes: [1])
-        end
-      end,
-      name: "global_pool_#{mode}"
-    )
+    case mode do
+      :sum ->
+        Axon.nx(node_features, fn f -> Nx.sum(f, axes: [1]) end, name: "global_pool_sum")
+
+      :mean ->
+        Axon.nx(node_features, fn f -> Nx.mean(f, axes: [1]) end, name: "global_pool_mean")
+
+      :max ->
+        Axon.nx(node_features, fn f -> Nx.reduce_max(f, axes: [1]) end, name: "global_pool_max")
+    end
   end
 end

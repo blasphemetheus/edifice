@@ -77,6 +77,39 @@ defmodule Edifice.Graph.MessagePassingCoverageTest do
   end
 
   # ============================================================================
+  # message_passing_layer with default opts (no fourth arg)
+  # ============================================================================
+  describe "message_passing_layer default opts" do
+    test "works without opts argument" do
+      nodes = Axon.input("nodes", shape: {nil, @num_nodes, @feature_dim})
+      adj = Axon.input("adjacency", shape: {nil, @num_nodes, @num_nodes})
+
+      model = MessagePassing.message_passing_layer(nodes, adj, @output_dim)
+
+      {init_fn, predict_fn} = Axon.build(model)
+
+      params =
+        init_fn.(
+          %{
+            "nodes" => Nx.template({@batch, @num_nodes, @feature_dim}, :f32),
+            "adjacency" => Nx.template({@batch, @num_nodes, @num_nodes}, :f32)
+          },
+          Axon.ModelState.empty()
+        )
+
+      adj_matrix = Nx.eye(@num_nodes) |> Nx.broadcast({@batch, @num_nodes, @num_nodes})
+
+      output =
+        predict_fn.(params, %{
+          "nodes" => Nx.broadcast(0.5, {@batch, @num_nodes, @feature_dim}),
+          "adjacency" => adj_matrix
+        })
+
+      assert Nx.shape(output) == {@batch, @num_nodes, @output_dim}
+    end
+  end
+
+  # ============================================================================
   # message_passing_layer forward passes with different aggregations
   # ============================================================================
   describe "message_passing_layer forward pass - :sum aggregation" do
