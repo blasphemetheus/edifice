@@ -73,6 +73,16 @@ defmodule Edifice.Attention.RetNet do
 
   alias Edifice.Blocks.FFN
 
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:embed_dim, pos_integer()}
+          | {:hidden_size, pos_integer()}
+          | {:num_layers, pos_integer()}
+          | {:num_heads, pos_integer()}
+          | {:expand_factor, pos_integer()}
+          | {:dropout, float()}
+          | {:window_size, pos_integer()}
+
   # ============================================================================
   # Default Hyperparameters
   # ============================================================================
@@ -121,7 +131,7 @@ defmodule Edifice.Attention.RetNet do
   ## Returns
     An Axon model that processes sequences and outputs the last hidden state.
   """
-  @spec build(keyword()) :: Axon.t()
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())

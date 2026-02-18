@@ -49,6 +49,15 @@ defmodule Edifice.Feedforward.MLP do
   @default_activation :relu
   @default_dropout 0.1
 
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:input_size, pos_integer()}
+          | {:hidden_sizes, [pos_integer()]}
+          | {:activation, atom()}
+          | {:dropout, float()}
+          | {:layer_norm, boolean()}
+          | {:residual, boolean()}
+
   @doc """
   Build a standalone MLP model.
 
@@ -63,7 +72,7 @@ defmodule Edifice.Feedforward.MLP do
   ## Returns
     An Axon model outputting `[batch, last_hidden_size]`.
   """
-  @spec build(keyword()) :: Axon.t()
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
     hidden_sizes = Keyword.get(opts, :hidden_sizes, @default_hidden_sizes)

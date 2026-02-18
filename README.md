@@ -36,6 +36,8 @@ Edifice requires Nx ~> 0.10 and Axon ~> 0.8. For GPU acceleration, add EXLA:
 {:exla, "~> 0.10"}
 ```
 
+> **Tip:** On Elixir 1.19+, set `MIX_OS_DEPS_COMPILE_PARTITION_COUNT=4` to compile dependencies in parallel (up to 4x faster first build).
+
 ## Quick Start
 
 ```elixir

@@ -71,6 +71,14 @@ defmodule Edifice.Generative.VAE do
   @default_decoder_sizes [128, 256]
   @default_activation :relu
 
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:input_size, pos_integer()}
+          | {:latent_size, pos_integer()}
+          | {:encoder_sizes, [pos_integer()]}
+          | {:decoder_sizes, [pos_integer()]}
+          | {:activation, atom()}
+
   # ============================================================================
   # Model Building
   # ============================================================================
@@ -94,7 +102,7 @@ defmodule Edifice.Generative.VAE do
     - Encoder: input -> `%{mu: [batch, latent], log_var: [batch, latent]}`
     - Decoder: latent -> `[batch, input_size]`
   """
-  @spec build(keyword()) :: {Axon.t(), Axon.t()}
+  @spec build([build_opt()]) :: {Axon.t(), Axon.t()}
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
 
