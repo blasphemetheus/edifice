@@ -53,12 +53,15 @@ defmodule Edifice.Contrastive.BarlowTwins do
   import Nx.Defn
 
   @doc "Default projection dimension"
+  @spec default_projection_dim() :: pos_integer()
   def default_projection_dim, do: 256
 
   @doc "Default hidden dimension"
+  @spec default_hidden_size() :: pos_integer()
   def default_hidden_size, do: 512
 
   @doc "Default redundancy reduction coefficient"
+  @spec default_lambda() :: float()
   def default_lambda, do: 0.005
 
   @doc """

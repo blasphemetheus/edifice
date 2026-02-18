@@ -51,12 +51,15 @@ defmodule Edifice.Contrastive.SimCLR do
   import Nx.Defn
 
   @doc "Default projection head output dimension"
+  @spec default_projection_dim() :: pos_integer()
   def default_projection_dim, do: 128
 
   @doc "Default hidden dimension for encoder and projection head"
+  @spec default_hidden_size() :: pos_integer()
   def default_hidden_size, do: 256
 
   @doc "Default temperature for NT-Xent loss"
+  @spec default_temperature() :: float()
   def default_temperature, do: 0.5
 
   @doc """

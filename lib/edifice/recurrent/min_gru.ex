@@ -65,12 +65,15 @@ defmodule Edifice.Recurrent.MinGRU do
   # ============================================================================
 
   @doc "Default hidden dimension"
+  @spec default_hidden_size() :: pos_integer()
   def default_hidden_size, do: 256
 
   @doc "Default number of layers"
+  @spec default_num_layers() :: pos_integer()
   def default_num_layers, do: 4
 
   @doc "Default dropout rate"
+  @spec default_dropout() :: float()
   def default_dropout, do: 0.1
 
   # ============================================================================

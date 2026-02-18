@@ -502,6 +502,7 @@ defmodule Edifice.Generative.DDIMCoverageTest do
 
       assert schedule.num_steps == 5
       assert Nx.shape(schedule.betas) == {5}
+
       assert Nx.all(Nx.is_nan(schedule.alphas_cumprod) |> Nx.logical_not()) |> Nx.to_number() ==
                1
     end

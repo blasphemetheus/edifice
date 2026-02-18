@@ -88,18 +88,23 @@ defmodule Edifice.Recurrent.Titans do
   # ============================================================================
 
   @doc "Default hidden dimension"
+  @spec default_hidden_size() :: pos_integer()
   def default_hidden_size, do: 256
 
   @doc "Default memory key/value dimension"
+  @spec default_memory_size() :: pos_integer()
   def default_memory_size, do: 64
 
   @doc "Default number of layers"
+  @spec default_num_layers() :: pos_integer()
   def default_num_layers, do: 4
 
   @doc "Default dropout rate"
+  @spec default_dropout() :: float()
   def default_dropout, do: 0.1
 
   @doc "Default momentum coefficient"
+  @spec default_momentum() :: float()
   def default_momentum, do: 0.9
 
   # ============================================================================

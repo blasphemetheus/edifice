@@ -87,21 +87,27 @@ defmodule Edifice.Generative.Diffusion do
   # ============================================================================
 
   @doc "Default number of diffusion timesteps"
+  @spec default_num_steps() :: pos_integer()
   def default_num_steps, do: 100
 
   @doc "Default action prediction horizon"
+  @spec default_action_horizon() :: pos_integer()
   def default_action_horizon, do: 8
 
   @doc "Default hidden dimension"
+  @spec default_hidden_size() :: pos_integer()
   def default_hidden_size, do: 256
 
   @doc "Default number of denoiser layers"
+  @spec default_num_layers() :: pos_integer()
   def default_num_layers, do: 4
 
   @doc "Beta schedule start"
+  @spec default_beta_start() :: float()
   def default_beta_start, do: 1.0e-4
 
   @doc "Beta schedule end"
+  @spec default_beta_end() :: float()
   def default_beta_end, do: 0.02
 
   # ============================================================================

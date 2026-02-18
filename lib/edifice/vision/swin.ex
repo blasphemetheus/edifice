@@ -425,6 +425,8 @@ defmodule Edifice.Vision.SwinTransformer do
 
   Input: [B, H, W, C] -> Output: [B*nW, ws*ws, C]
   """
+  @spec window_partition(Nx.Tensor.t(), pos_integer(), pos_integer(), pos_integer()) ::
+          Nx.Tensor.t()
   def window_partition(input, ws, h, w) do
     batch = Nx.axis_size(input, 0)
     c = Nx.axis_size(input, 3)
@@ -442,6 +444,8 @@ defmodule Edifice.Vision.SwinTransformer do
 
   Input: [B*nW, ws*ws, C] -> Output: [B, H, W, C]
   """
+  @spec window_reverse(Nx.Tensor.t(), pos_integer(), pos_integer(), pos_integer(), pos_integer()) ::
+          Nx.Tensor.t()
   def window_reverse(input, ws, h, w, batch) do
     c = Nx.axis_size(input, 2)
     num_h = div(h, ws)
@@ -456,6 +460,7 @@ defmodule Edifice.Vision.SwinTransformer do
   @doc """
   Cyclic shift: roll tensor by -shift_size along both H and W axes.
   """
+  @spec cyclic_shift(Nx.Tensor.t(), pos_integer(), pos_integer(), pos_integer()) :: Nx.Tensor.t()
   def cyclic_shift(input, shift_size, h, w) do
     # Shift along H axis
     top = Nx.slice_along_axis(input, shift_size, h - shift_size, axis: 1)
@@ -471,6 +476,8 @@ defmodule Edifice.Vision.SwinTransformer do
   @doc """
   Reverse cyclic shift: roll tensor by +shift_size along both H and W axes.
   """
+  @spec reverse_cyclic_shift(Nx.Tensor.t(), pos_integer(), pos_integer(), pos_integer()) ::
+          Nx.Tensor.t()
   def reverse_cyclic_shift(input, shift_size, h, w) do
     top = Nx.slice_along_axis(input, h - shift_size, shift_size, axis: 1)
     bottom = Nx.slice_along_axis(input, 0, h - shift_size, axis: 1)
@@ -494,6 +501,7 @@ defmodule Edifice.Vision.SwinTransformer do
 
   Returns a [1, num_heads, ws*ws, ws*ws] bias tensor.
   """
+  @spec compute_relative_position_bias(pos_integer(), pos_integer()) :: Nx.Tensor.t()
   def compute_relative_position_bias(window_size, num_heads) do
     ws_sq = window_size * window_size
 
@@ -538,6 +546,8 @@ defmodule Edifice.Vision.SwinTransformer do
   Returns a [num_windows, ws*ws, ws*ws] mask tensor with 0.0 for
   allowed attention and -100.0 for blocked attention.
   """
+  @spec compute_shift_mask(pos_integer(), pos_integer(), pos_integer(), pos_integer()) ::
+          Nx.Tensor.t()
   def compute_shift_mask(h, w, window_size, shift_size) do
     mask_data =
       for i <- 0..(h - 1), j <- 0..(w - 1) do

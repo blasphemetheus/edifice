@@ -69,21 +69,27 @@ defmodule Edifice.Contrastive.MAE do
   # ============================================================================
 
   @doc "Default encoder embedding dimension"
+  @spec default_embed_dim() :: pos_integer()
   def default_embed_dim, do: 256
 
   @doc "Default decoder dimension"
+  @spec default_decoder_dim() :: pos_integer()
   def default_decoder_dim, do: 128
 
   @doc "Default masking ratio"
+  @spec default_mask_ratio() :: float()
   def default_mask_ratio, do: 0.75
 
   @doc "Default number of encoder layers"
+  @spec default_num_encoder_layers() :: pos_integer()
   def default_num_encoder_layers, do: 4
 
   @doc "Default number of decoder layers"
+  @spec default_num_decoder_layers() :: pos_integer()
   def default_num_decoder_layers, do: 2
 
   @doc "Default feedforward expansion factor"
+  @spec default_expand_factor() :: pos_integer()
   def default_expand_factor, do: 2
 
   # ============================================================================

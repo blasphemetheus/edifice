@@ -33,27 +33,35 @@ defmodule Edifice.SSM.Common do
   # ============================================================================
 
   @doc "Default hidden dimension D"
+  @spec default_hidden_size() :: pos_integer()
   def default_hidden_size, do: 256
 
   @doc "Default SSM state dimension N"
+  @spec default_state_size() :: pos_integer()
   def default_state_size, do: 16
 
   @doc "Default expansion factor E"
+  @spec default_expand_factor() :: pos_integer()
   def default_expand_factor, do: 2
 
   @doc "Default convolution kernel size"
+  @spec default_conv_size() :: pos_integer()
   def default_conv_size, do: 4
 
   @doc "Default number of Mamba blocks"
+  @spec default_num_layers() :: pos_integer()
   def default_num_layers, do: 2
 
   @doc "Default dropout rate"
+  @spec default_dropout() :: float()
   def default_dropout, do: 0.0
 
   @doc "Minimum delta for numerical stability"
+  @spec dt_min() :: float()
   def dt_min, do: 0.001
 
   @doc "Maximum delta"
+  @spec dt_max() :: float()
   def dt_max, do: 0.1
 
   # ============================================================================

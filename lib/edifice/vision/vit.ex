@@ -197,6 +197,15 @@ defmodule Edifice.Vision.ViT do
   # ============================================================================
 
   @doc false
+  @spec transformer_block(
+          Axon.t(),
+          pos_integer(),
+          pos_integer(),
+          pos_integer(),
+          float(),
+          keyword()
+        ) ::
+          Axon.t()
   def transformer_block(input, embed_dim, num_heads, mlp_hidden, dropout, opts \\ []) do
     name = Keyword.get(opts, :name, "block")
 

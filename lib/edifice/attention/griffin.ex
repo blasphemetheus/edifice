@@ -78,24 +78,31 @@ defmodule Edifice.Attention.Griffin do
   # ============================================================================
 
   @doc "Default hidden dimension"
+  @spec default_hidden_size() :: pos_integer()
   def default_hidden_size, do: 256
 
   @doc "Default number of layers (should be divisible by 3 for 2:1 pattern)"
+  @spec default_num_layers() :: pos_integer()
   def default_num_layers, do: 6
 
   @doc "Default MLP expansion factor"
+  @spec default_expand_factor() :: pos_integer()
   def default_expand_factor, do: 3
 
   @doc "Default local attention window size"
+  @spec default_local_attn_window() :: pos_integer()
   def default_local_attn_window, do: 32
 
   @doc "Default dropout rate"
+  @spec default_dropout() :: float()
   def default_dropout, do: 0.0
 
   @doc "RG-LRU gate constant c (controls decay rate range)"
+  @spec rg_lru_c() :: float()
   def rg_lru_c, do: 8.0
 
   @doc "Number of attention heads for local attention"
+  @spec default_num_heads() :: pos_integer()
   def default_num_heads, do: 4
 
   # ============================================================================

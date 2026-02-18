@@ -82,21 +82,27 @@ defmodule Edifice.Feedforward.KAN do
   # ============================================================================
 
   @doc "Default hidden dimension"
+  @spec default_hidden_size() :: pos_integer()
   def default_hidden_size, do: 256
 
   @doc "Default number of layers"
+  @spec default_num_layers() :: pos_integer()
   def default_num_layers, do: 4
 
   @doc "Default grid size (number of basis functions)"
+  @spec default_grid_size() :: pos_integer()
   def default_grid_size, do: 8
 
   @doc "Default basis function type"
+  @spec default_basis() :: atom()
   def default_basis, do: :bspline
 
   @doc "Default dropout rate"
+  @spec default_dropout() :: float()
   def default_dropout, do: 0.0
 
   @doc "Epsilon for numerical stability"
+  @spec eps() :: float()
   def eps, do: 1.0e-6
 
   # ============================================================================
@@ -404,6 +410,7 @@ defmodule Edifice.Feedforward.KAN do
   # Evaluate cubic B-spline basis functions on input in [0, 1].
   # Uses the unrolled Cox-de Boor recurrence for order 3 (cubic).
   # Returns weighted basis activations suitable for downstream projection.
+  @spec bspline_basis_eval(Nx.Tensor.t(), pos_integer()) :: Nx.Tensor.t()
   def bspline_basis_eval(x, grid_size) do
     # Uniform knot grid from 0 to 1 with (grid_size + 4) knots for cubic B-splines
     # This gives grid_size basis functions, each nonzero over 4 knot spans

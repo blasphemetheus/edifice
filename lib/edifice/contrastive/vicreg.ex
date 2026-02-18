@@ -76,21 +76,27 @@ defmodule Edifice.Contrastive.VICReg do
   # ============================================================================
 
   @doc "Default projection head output dimension"
+  @spec default_projection_dim() :: pos_integer()
   def default_projection_dim, do: 256
 
   @doc "Default encoder/projector hidden dimension"
+  @spec default_hidden_size() :: pos_integer()
   def default_hidden_size, do: 512
 
   @doc "Default invariance loss coefficient"
+  @spec default_lambda_inv() :: float()
   def default_lambda_inv, do: 25.0
 
   @doc "Default variance loss coefficient"
+  @spec default_mu_var() :: float()
   def default_mu_var, do: 25.0
 
   @doc "Default covariance loss coefficient"
+  @spec default_nu_cov() :: float()
   def default_nu_cov, do: 1.0
 
   @doc "Default variance target threshold"
+  @spec default_variance_target() :: float()
   def default_variance_target, do: 1.0
 
   # ============================================================================

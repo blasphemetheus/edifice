@@ -23,6 +23,9 @@ RELEASE_PLAN.md
 # Hex build artifacts
 /edifice-*/
 
+# Version manager
+.tool-versions
+
 # OS
 .DS_Store
 Thumbs.db

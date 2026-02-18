@@ -249,10 +249,17 @@ defmodule Edifice.Contrastive.BYOLCoverageTest do
 
     test "loss of orthogonal inputs is close to 2" do
       # Create two vectors that are roughly orthogonal
-      pred = Nx.tensor([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                        [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
-      proj = Nx.tensor([[0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
-                        [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]])
+      pred =
+        Nx.tensor([
+          [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+          [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        ])
+
+      proj =
+        Nx.tensor([
+          [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+          [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+        ])
 
       loss = BYOL.loss(pred, proj)
 
@@ -261,10 +268,17 @@ defmodule Edifice.Contrastive.BYOLCoverageTest do
     end
 
     test "loss of opposite inputs is close to 4" do
-      pred = Nx.tensor([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                        [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
-      proj = Nx.tensor([[-1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                        [0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+      pred =
+        Nx.tensor([
+          [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+          [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        ])
+
+      proj =
+        Nx.tensor([
+          [-1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+          [0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        ])
 
       loss = BYOL.loss(pred, proj)
 

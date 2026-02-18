@@ -85,24 +85,31 @@ defmodule Edifice.Recurrent.XLSTM do
   # ============================================================================
 
   @doc "Default hidden dimension"
+  @spec default_hidden_size() :: pos_integer()
   def default_hidden_size, do: 256
 
   @doc "Default number of layers"
+  @spec default_num_layers() :: pos_integer()
   def default_num_layers, do: 4
 
   @doc "Default head dimension for mLSTM"
+  @spec default_head_dim() :: pos_integer()
   def default_head_dim, do: 64
 
   @doc "Default number of heads for mLSTM"
+  @spec default_num_heads() :: pos_integer()
   def default_num_heads, do: 4
 
   @doc "Default feedforward expansion factor"
+  @spec default_expand_factor() :: pos_integer()
   def default_expand_factor, do: 2
 
   @doc "Default dropout rate"
+  @spec default_dropout() :: float()
   def default_dropout, do: 0.0
 
   @doc "Stabilization epsilon for exponential gating"
+  @spec gate_eps() :: float()
   def gate_eps, do: 1.0e-6
 
   # ============================================================================

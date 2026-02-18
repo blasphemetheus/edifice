@@ -75,15 +75,19 @@ defmodule Edifice.Recurrent.DeltaNet do
   # ============================================================================
 
   @doc "Default hidden dimension"
+  @spec default_hidden_size() :: pos_integer()
   def default_hidden_size, do: 256
 
   @doc "Default number of layers"
+  @spec default_num_layers() :: pos_integer()
   def default_num_layers, do: 4
 
   @doc "Default dropout rate"
+  @spec default_dropout() :: float()
   def default_dropout, do: 0.1
 
   @doc "Epsilon for normalization"
+  @spec norm_eps() :: float()
   def norm_eps, do: 1.0e-6
 
   # ============================================================================
@@ -91,6 +95,7 @@ defmodule Edifice.Recurrent.DeltaNet do
   # ============================================================================
 
   @doc "Default number of attention heads"
+  @spec default_num_heads() :: pos_integer()
   def default_num_heads, do: 4
 
   @doc """

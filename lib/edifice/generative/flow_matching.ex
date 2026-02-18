@@ -111,18 +111,23 @@ defmodule Edifice.Generative.FlowMatching do
   # ============================================================================
 
   @doc "Default action prediction horizon"
+  @spec default_action_horizon() :: pos_integer()
   def default_action_horizon, do: 8
 
   @doc "Default hidden dimension"
+  @spec default_hidden_size() :: pos_integer()
   def default_hidden_size, do: 256
 
   @doc "Default number of network layers"
+  @spec default_num_layers() :: pos_integer()
   def default_num_layers, do: 4
 
   @doc "Default number of ODE integration steps"
+  @spec default_num_steps() :: pos_integer()
   def default_num_steps, do: 20
 
   @doc "Default ODE solver"
+  @spec default_solver() :: atom()
   def default_solver, do: :euler
 
   # ============================================================================

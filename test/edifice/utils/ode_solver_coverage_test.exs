@@ -439,8 +439,7 @@ defmodule Edifice.Utils.ODESolverCoverageTest do
         result = ODESolver.solve_ltc(x, activation, tau, solver: solver, steps: 20)
         val = Nx.to_number(result[0][0])
         # With small tau, state should converge close to activation (1.0)
-        assert_in_delta val, 1.0, 0.1,
-          "#{solver} should converge to activation, got #{val}"
+        assert_in_delta val, 1.0, 0.1, "#{solver} should converge to activation, got #{val}"
       end
     end
 

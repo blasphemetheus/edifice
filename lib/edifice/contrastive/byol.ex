@@ -69,15 +69,19 @@ defmodule Edifice.Contrastive.BYOL do
   # ============================================================================
 
   @doc "Default projection dimension"
+  @spec default_projection_dim() :: pos_integer()
   def default_projection_dim, do: 256
 
   @doc "Default predictor hidden dimension"
+  @spec default_predictor_dim() :: pos_integer()
   def default_predictor_dim, do: 64
 
   @doc "Default EMA momentum"
+  @spec default_momentum() :: float()
   def default_momentum, do: 0.996
 
   @doc "Default encoder hidden dimension"
+  @spec default_hidden_size() :: pos_integer()
   def default_hidden_size, do: 256
 
   # ============================================================================
