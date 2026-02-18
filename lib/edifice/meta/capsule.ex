@@ -87,6 +87,8 @@ defmodule Edifice.Meta.Capsule do
     - `:routing_iterations` - Number of dynamic routing iterations (default: 3)
     - `:conv_channels` - Initial convolution channels (default: 256)
     - `:conv_kernel` - Initial convolution kernel size (default: 9)
+    - `:primary_kernel` - Primary capsule convolution kernel size (default: 9)
+    - `:primary_strides` - Primary capsule convolution strides (default: 2)
 
   ## Returns
     An Axon model producing capsule norms `[batch, num_digit_caps]`
@@ -101,6 +103,8 @@ defmodule Edifice.Meta.Capsule do
           | {:num_digit_caps, pos_integer()}
           | {:num_primary_caps, pos_integer()}
           | {:primary_cap_dim, pos_integer()}
+          | {:primary_kernel, pos_integer()}
+          | {:primary_strides, pos_integer()}
           | {:routing_iterations, float()}
 
   @spec build([build_opt()]) :: Axon.t()
@@ -113,6 +117,8 @@ defmodule Edifice.Meta.Capsule do
     routing_iterations = Keyword.get(opts, :routing_iterations, @default_routing_iterations)
     conv_channels = Keyword.get(opts, :conv_channels, 256)
     conv_kernel = Keyword.get(opts, :conv_kernel, 9)
+    primary_kernel = Keyword.get(opts, :primary_kernel, 9)
+    primary_strides = Keyword.get(opts, :primary_strides, 2)
 
     input = Axon.input("input", shape: input_shape)
 
@@ -128,7 +134,11 @@ defmodule Edifice.Meta.Capsule do
 
     # Primary capsule layer: outputs capsule vectors
     primary_caps =
-      primary_capsule_layer(conv, num_primary_caps, primary_cap_dim, name: "primary_caps")
+      primary_capsule_layer(conv, num_primary_caps, primary_cap_dim,
+        kernel_size: primary_kernel,
+        strides: primary_strides,
+        name: "primary_caps"
+      )
 
     # Dynamic routing to digit/output capsules
     digit_caps =

@@ -185,7 +185,9 @@ defmodule Edifice.Meta.CorrectnessTest do
         digit_cap_dim: 8,
         routing_iterations: 2,
         conv_channels: 8,
-        conv_kernel: 3
+        conv_kernel: 3,
+        primary_kernel: 3,
+        primary_strides: 1
       )
 
     input = random_tensor({@batch, 8, 8, 1})

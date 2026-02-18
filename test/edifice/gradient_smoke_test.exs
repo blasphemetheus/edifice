@@ -39,7 +39,8 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Gradient checker ────────────────────────────────────────────
 
-  defp check_gradients(model, input_map) do
+  defp check_gradients(model, input_map, opts \\ []) do
+    compiler = Keyword.get(opts, :compiler)
     {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
     template =
@@ -56,7 +57,9 @@ defmodule Edifice.GradientSmokeTest do
       Nx.mean(output)
     end
 
+    prev_opts = if compiler, do: Nx.Defn.default_options(compiler: compiler)
     {loss, grads} = Nx.Defn.value_and_grad(params_data, loss_fn)
+    if compiler, do: Nx.Defn.default_options(prev_opts)
 
     # Assert loss is finite
     assert_finite!(loss, "loss")
@@ -298,7 +301,7 @@ defmodule Edifice.GradientSmokeTest do
       )
 
     input = random_tensor({@batch, @image_size, @image_size, @in_channels})
-    check_gradients(model, %{"input" => input})
+    check_gradients(model, %{"input" => input}, compiler: EXLA)
   end
 
   @tag timeout: 120_000
@@ -314,7 +317,7 @@ defmodule Edifice.GradientSmokeTest do
       )
 
     input = random_tensor({@batch, 32, 32, @in_channels})
-    check_gradients(model, %{"input" => input})
+    check_gradients(model, %{"input" => input}, compiler: EXLA)
   end
 
   @tag timeout: 120_000
@@ -322,7 +325,7 @@ defmodule Edifice.GradientSmokeTest do
   test "gradient flows through tcn" do
     model = Edifice.build(:tcn, input_size: @embed, hidden_size: @hidden, num_layers: 2)
     input = random_tensor({@batch, @seq_len, @embed})
-    check_gradients(model, %{"input" => input})
+    check_gradients(model, %{"input" => input}, compiler: EXLA)
   end
 
   @tag timeout: 120_000
@@ -351,7 +354,7 @@ defmodule Edifice.GradientSmokeTest do
       )
 
     input = random_tensor({@batch, 28, 28, 1})
-    check_gradients(model, %{"input" => input})
+    check_gradients(model, %{"input" => input}, compiler: EXLA)
   end
 
   # ── Graph Models ──────────────────────────────────────────────
