@@ -22,6 +22,7 @@ RELEASE_PLAN.md
 
 # Hex build artifacts
 /edifice-*/
+*.tar
 
 # Version manager
 .tool-versions
