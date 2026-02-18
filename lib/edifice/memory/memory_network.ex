@@ -59,8 +59,6 @@ defmodule Edifice.Memory.MemoryNetwork do
   - https://arxiv.org/abs/1503.08895
   """
 
-  require Axon
-
   @default_num_hops 3
   @default_memory_dim 128
 

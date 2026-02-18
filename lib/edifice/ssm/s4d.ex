@@ -51,8 +51,6 @@ defmodule Edifice.SSM.S4D do
   - arXiv: https://arxiv.org/abs/2206.11893
   """
 
-  require Axon
-
   alias Edifice.Blocks.FFN
 
   @default_hidden_size 256

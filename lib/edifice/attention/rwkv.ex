@@ -69,8 +69,6 @@ defmodule Edifice.Attention.RWKV do
   - Deployment: Shipped to 1.5B Windows devices for on-device Copilot
   """
 
-  require Axon
-
   # Default hyperparameters
   @default_hidden_size 256
   @default_num_layers 6

@@ -75,8 +75,6 @@ defmodule Edifice.Attention.HGRN do
   - Paper: "HGRN2: Gated Linear RNNs with State Expansion" (arXiv:2404.07904)
   """
 
-  require Axon
-
   alias Edifice.Blocks.FFN
   # Default hyperparameters
   @default_hidden_size 256

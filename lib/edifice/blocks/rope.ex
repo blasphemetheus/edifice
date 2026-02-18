@@ -30,8 +30,6 @@ defmodule Edifice.Blocks.RoPE do
   - "RoFormer: Enhanced Transformer with Rotary Position Embedding" (Su et al., 2021)
   - https://arxiv.org/abs/2104.09864
   """
-
-  require Axon
   import Nx.Defn
 
   @default_base 10_000.0

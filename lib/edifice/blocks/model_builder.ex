@@ -43,8 +43,6 @@ defmodule Edifice.Blocks.ModelBuilder do
   with any block type (SSM, attention, MLP mixer, etc.).
   """
 
-  require Axon
-
   @doc """
   Build a sequence processing model.
 

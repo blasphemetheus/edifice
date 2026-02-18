@@ -33,8 +33,6 @@ defmodule Edifice.Blocks.CrossAttention do
   ## References
   - "Attention Is All You Need" (Vaswani et al., 2017)
   """
-
-  require Axon
   alias Edifice.Utils.FusedOps
 
   @doc """

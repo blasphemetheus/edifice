@@ -67,8 +67,6 @@ defmodule Edifice.Contrastive.VICReg do
   ## References
   - Paper: https://arxiv.org/abs/2105.04906
   """
-
-  require Axon
   import Nx.Defn
 
   # ============================================================================

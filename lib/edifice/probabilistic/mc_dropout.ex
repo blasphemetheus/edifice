@@ -60,8 +60,6 @@ defmodule Edifice.Probabilistic.MCDropout do
   - Gal & Ghahramani, "Dropout as a Bayesian Approximation" (2016)
   - https://arxiv.org/abs/1506.02142
   """
-
-  require Axon
   import Nx.Defn
 
   @default_hidden_sizes [256, 128]

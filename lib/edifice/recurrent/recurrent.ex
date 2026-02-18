@@ -63,8 +63,6 @@ defmodule Edifice.Recurrent do
 
   """
 
-  require Axon
-
   # Default hyperparameters
   @default_hidden_size 256
   @default_num_layers 1

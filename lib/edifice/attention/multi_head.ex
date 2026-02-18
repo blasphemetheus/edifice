@@ -58,8 +58,6 @@ defmodule Edifice.Attention.MultiHead do
       )
   """
 
-  require Axon
-
   alias Edifice.Recurrent
   alias Edifice.Utils.FusedOps
 

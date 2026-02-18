@@ -59,8 +59,6 @@ defmodule Edifice.Energy.Hopfield do
   - Ramsauer et al., "Hopfield Networks is All You Need" (2020)
   - https://arxiv.org/abs/2008.02217
   """
-
-  require Axon
   import Nx.Defn
 
   @default_beta 1.0

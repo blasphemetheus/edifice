@@ -245,7 +245,9 @@ defmodule Edifice.Attention.RetNetCoverageTest do
       {out2, state2} = RetNet.recurrent_retention_step(q, k, v, state1, gamma)
 
       # State should grow (non-zero after updates)
-      assert Nx.to_number(Nx.reduce_max(Nx.abs(state2))) > Nx.to_number(Nx.reduce_max(Nx.abs(state1)))
+      assert Nx.to_number(Nx.reduce_max(Nx.abs(state2))) >
+               Nx.to_number(Nx.reduce_max(Nx.abs(state1)))
+
       # Outputs should differ due to different state
       assert Nx.to_number(Nx.reduce_max(Nx.abs(Nx.subtract(out1, out2)))) > 0
     end

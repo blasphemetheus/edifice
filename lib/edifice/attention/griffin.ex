@@ -71,8 +71,6 @@ defmodule Edifice.Attention.Griffin do
   - Hawk: RG-LRU only variant (no local attention)
   """
 
-  require Axon
-
   @typedoc "Options for `build/1`."
   @type build_opt ::
           {:embed_dim, pos_integer()}

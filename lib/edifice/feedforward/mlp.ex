@@ -43,8 +43,6 @@ defmodule Edifice.Feedforward.MLP do
       backbone = MLP.build_backbone(input, [512, 256], :relu, 0.1)
   """
 
-  require Axon
-
   @default_hidden_sizes [512, 512]
   @default_activation :relu
   @default_dropout 0.1

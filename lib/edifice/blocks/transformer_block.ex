@@ -49,8 +49,6 @@ defmodule Edifice.Blocks.TransformerBlock do
   handles the surrounding structure (normalization, residuals, FFN, dropout).
   """
 
-  require Axon
-
   alias Edifice.Blocks.FFN
 
   @doc """

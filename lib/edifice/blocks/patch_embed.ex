@@ -50,8 +50,6 @@ defmodule Edifice.Blocks.PatchEmbed do
   - "An Image is Worth 16x16 Words" (Dosovitskiy et al., 2021)
   """
 
-  require Axon
-
   @doc """
   Build a patch embedding Axon layer.
 

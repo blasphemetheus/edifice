@@ -66,8 +66,6 @@ defmodule Edifice.Liquid do
   - Company: Liquid AI (MIT spin-off, $250M from AMD)
   """
 
-  require Axon
-
   alias Edifice.Blocks.FFN
 
   # Default hyperparameters

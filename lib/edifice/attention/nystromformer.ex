@@ -71,8 +71,6 @@ defmodule Edifice.Attention.Nystromformer do
     (Xiong et al., AAAI 2021)
   """
 
-  require Axon
-
   alias Edifice.Blocks.{ModelBuilder, TransformerBlock}
   alias Edifice.Utils.FusedOps
 

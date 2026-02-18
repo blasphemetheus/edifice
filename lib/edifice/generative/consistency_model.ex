@@ -67,8 +67,6 @@ defmodule Edifice.Generative.ConsistencyModel do
   - Paper: "Consistency Models"
   - arXiv: https://arxiv.org/abs/2303.01469
   """
-
-  require Axon
   import Nx.Defn
 
   @default_hidden_size 256

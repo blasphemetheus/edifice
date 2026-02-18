@@ -68,8 +68,6 @@ defmodule Edifice.Recurrent.DeltaNet do
   - Delta rule RNNs: https://arxiv.org/abs/2310.01655
   """
 
-  require Axon
-
   # ============================================================================
   # Default Hyperparameters
   # ============================================================================

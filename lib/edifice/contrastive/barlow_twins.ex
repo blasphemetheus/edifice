@@ -48,8 +48,6 @@ defmodule Edifice.Contrastive.BarlowTwins do
   ## References
   - Paper: https://arxiv.org/abs/2103.03230
   """
-
-  require Axon
   import Nx.Defn
 
   @doc "Default projection dimension"

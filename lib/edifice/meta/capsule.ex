@@ -63,8 +63,6 @@ defmodule Edifice.Meta.Capsule do
   - Sabour et al., "Dynamic Routing Between Capsules" (2017)
   - https://arxiv.org/abs/1710.09829
   """
-
-  require Axon
   import Nx.Defn
 
   @default_num_primary_caps 32

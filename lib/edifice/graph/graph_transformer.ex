@@ -53,8 +53,6 @@ defmodule Edifice.Graph.GraphTransformer do
   - Ying et al., "Do Transformers Really Perform Bad for Graph Representation?" (NeurIPS 2021)
   """
 
-  require Axon
-
   alias Edifice.Graph.MessagePassing
 
   @default_hidden_size 64

@@ -68,8 +68,6 @@ defmodule Edifice.Generative.DDIM do
   - Paper: "Denoising Diffusion Implicit Models"
   - arXiv: https://arxiv.org/abs/2010.02502
   """
-
-  require Axon
   import Nx.Defn
 
   @default_hidden_size 256

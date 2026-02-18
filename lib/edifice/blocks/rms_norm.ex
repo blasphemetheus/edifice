@@ -22,8 +22,6 @@ defmodule Edifice.Blocks.RMSNorm do
   - "Root Mean Square Layer Normalization" (Zhang & Sennrich, 2019)
   - https://arxiv.org/abs/1910.07467
   """
-
-  require Axon
   import Nx.Defn
 
   @doc """

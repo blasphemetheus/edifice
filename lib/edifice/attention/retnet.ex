@@ -69,8 +69,6 @@ defmodule Edifice.Attention.RetNet do
   - Code: https://github.com/microsoft/unilm/tree/master/retnet
   """
 
-  require Axon
-
   alias Edifice.Blocks.FFN
 
   @typedoc "Options for `build/1`."

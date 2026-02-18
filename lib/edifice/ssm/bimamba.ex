@@ -69,8 +69,6 @@ defmodule Edifice.SSM.BiMamba do
   - Original Mamba: https://arxiv.org/abs/2312.00752
   """
 
-  require Axon
-
   alias Edifice.Blocks.FFN
 
   @default_hidden_size 256

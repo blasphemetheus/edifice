@@ -74,8 +74,6 @@ defmodule Edifice.Vision.DeiT do
     (Touvron et al., ICML 2021)
   """
 
-  require Axon
-
   alias Edifice.Blocks.PatchEmbed
   alias Edifice.Utils.FusedOps
 

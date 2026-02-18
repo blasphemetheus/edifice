@@ -71,8 +71,6 @@ defmodule Edifice.Convolutional.ResNet do
       )
   """
 
-  require Axon
-
   @default_initial_channels 64
   @default_block_sizes [2, 2, 2, 2]
   @default_num_classes 10

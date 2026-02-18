@@ -62,8 +62,6 @@ defmodule Edifice.SSM.GatedSSM do
   - When true Mamba isn't available or needed
   """
 
-  require Axon
-
   # Default hyperparameters (from paper)
   @default_hidden_size 256
   # N in the paper (SSM state dimension)

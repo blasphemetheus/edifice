@@ -29,8 +29,6 @@ defmodule Edifice.Blocks.AdaptiveNorm do
   - https://arxiv.org/abs/2212.09748
   """
 
-  require Axon
-
   @doc """
   Build an AdaLN / AdaLN-Zero layer.
 

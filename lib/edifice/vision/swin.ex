@@ -91,8 +91,6 @@ defmodule Edifice.Vision.SwinTransformer do
     (Liu et al., ICCV 2021)
   """
 
-  require Axon
-
   alias Edifice.Blocks.PatchEmbed
   alias Edifice.Utils.FusedOps
 

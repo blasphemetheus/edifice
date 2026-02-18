@@ -78,8 +78,6 @@ defmodule Edifice.Recurrent.XLSTM do
   - Official code: https://github.com/NX-AI/xlstm
   """
 
-  require Axon
-
   @typedoc "Options for `build/1`."
   @type build_opt ::
           {:embed_dim, pos_integer()}

@@ -67,8 +67,6 @@ defmodule Edifice.Generative.VQVAE do
       commit = VQVAE.commitment_loss(z_e, z_q)
       cb = VQVAE.codebook_loss(z_e, z_q)
   """
-
-  require Axon
   import Nx.Defn
 
   @default_embedding_dim 64

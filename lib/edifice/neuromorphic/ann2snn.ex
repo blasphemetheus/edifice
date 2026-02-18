@@ -56,8 +56,6 @@ defmodule Edifice.Neuromorphic.ANN2SNN do
   - Rueckauer et al., "Conversion of Continuous-Valued Deep Networks to
     Efficient Event-Driven Networks for Image Classification" (2017)
   """
-
-  require Axon
   import Nx.Defn
 
   @default_hidden_sizes [256, 128]

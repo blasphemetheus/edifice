@@ -45,8 +45,6 @@ defmodule Edifice.Recurrent.Reservoir do
       )
   """
 
-  require Axon
-
   @doc """
   Build an Echo State Network.
 

@@ -82,8 +82,6 @@ defmodule Edifice.Sets.PointNet do
     Segmentation" (Qi et al., CVPR 2017)
   """
 
-  require Axon
-
   @default_hidden_dims [64, 128, 1024]
   @default_global_dims [512, 256]
   @default_activation :relu

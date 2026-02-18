@@ -72,8 +72,6 @@ defmodule Edifice.Convolutional.DenseNet do
       )
   """
 
-  require Axon
-
   @default_growth_rate 32
   @default_block_config [6, 12, 24, 16]
   @default_num_classes 10

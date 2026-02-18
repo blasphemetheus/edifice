@@ -55,8 +55,6 @@ defmodule Edifice.SSM.Hybrid do
       )
   """
 
-  require Axon
-
   alias Edifice.Attention.MultiHead, as: Attention
   alias Edifice.SSM.GatedSSM
 

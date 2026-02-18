@@ -46,8 +46,6 @@ defmodule Edifice.Contrastive.SimCLR do
   ## References
   - Paper: https://arxiv.org/abs/2002.05709
   """
-
-  require Axon
   import Nx.Defn
 
   @doc "Default projection head output dimension"

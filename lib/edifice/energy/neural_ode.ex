@@ -54,8 +54,6 @@ defmodule Edifice.Energy.NeuralODE do
   - https://arxiv.org/abs/1806.07366
   """
 
-  require Axon
-
   @default_hidden_size 256
   @default_num_steps 10
   @default_step_size 0.1

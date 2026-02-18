@@ -67,8 +67,6 @@ defmodule Edifice.Memory.NTM do
   - Graves et al., "Neural Turing Machines" (2014)
   - https://arxiv.org/abs/1410.5401
   """
-
-  require Axon
   import Nx.Defn
 
   @default_memory_size 128

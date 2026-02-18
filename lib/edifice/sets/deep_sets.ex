@@ -62,8 +62,6 @@ defmodule Edifice.Sets.DeepSets do
   - "Deep Sets" (Zaheer et al., NeurIPS 2017)
   """
 
-  require Axon
-
   @default_hidden_size 64
   @default_phi_sizes [64, 64]
   @default_rho_sizes [64]

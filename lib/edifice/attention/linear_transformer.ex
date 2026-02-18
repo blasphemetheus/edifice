@@ -69,8 +69,6 @@ defmodule Edifice.Attention.LinearTransformer do
   - Feature map: ELU+1 from the original paper
   """
 
-  require Axon
-
   alias Edifice.Blocks.{ModelBuilder, TransformerBlock}
 
   # Default hyperparameters

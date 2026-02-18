@@ -49,8 +49,6 @@ defmodule Edifice.Meta.SoftMoE do
   - Puigcerver et al., "From Sparse to Soft Mixtures of Experts" (ICLR 2024)
   - https://arxiv.org/abs/2308.00951
   """
-
-  require Axon
   import Nx.Defn
 
   @default_hidden_size 256

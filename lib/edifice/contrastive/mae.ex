@@ -62,8 +62,6 @@ defmodule Edifice.Contrastive.MAE do
   - Paper: https://arxiv.org/abs/2111.06377
   """
 
-  require Axon
-
   # ============================================================================
   # Default Hyperparameters
   # ============================================================================

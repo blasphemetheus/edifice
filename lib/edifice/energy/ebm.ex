@@ -69,8 +69,6 @@ defmodule Edifice.Energy.EBM do
   - "A Tutorial on Energy-Based Learning" (LeCun et al., 2006)
   - "Implicit Generation and Modeling with Energy-Based Models" (Du & Mordatch, 2019)
   """
-
-  require Axon
   import Nx.Defn
 
   @default_hidden_sizes [256, 128]

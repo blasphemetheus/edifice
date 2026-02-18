@@ -78,8 +78,6 @@ defmodule Edifice.Generative.Diffusion do
   - Paper: https://arxiv.org/abs/2303.04137
   - Project: https://diffusion-policy.cs.columbia.edu/
   """
-
-  require Axon
   import Nx.Defn
 
   @typedoc "Options for `build/1`."

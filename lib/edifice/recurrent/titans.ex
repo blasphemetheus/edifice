@@ -81,8 +81,6 @@ defmodule Edifice.Recurrent.Titans do
   - Paper: https://arxiv.org/abs/2501.00663
   """
 
-  require Axon
-
   # ============================================================================
   # Default Hyperparameters
   # ============================================================================

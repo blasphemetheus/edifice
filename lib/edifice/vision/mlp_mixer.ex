@@ -91,8 +91,6 @@ defmodule Edifice.Vision.MLPMixer do
     (Tolstikhin et al., NeurIPS 2021)
   """
 
-  require Axon
-
   alias Edifice.Blocks.PatchEmbed
 
   @default_image_size 224

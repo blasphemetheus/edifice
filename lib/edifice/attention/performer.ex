@@ -76,8 +76,6 @@ defmodule Edifice.Attention.Performer do
   - FAVOR+: Fast Attention Via positive Orthogonal Random features
   """
 
-  require Axon
-
   alias Edifice.Blocks.{ModelBuilder, TransformerBlock}
 
   # Default hyperparameters

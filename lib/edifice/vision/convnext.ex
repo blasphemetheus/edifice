@@ -88,8 +88,6 @@ defmodule Edifice.Vision.ConvNeXt do
   - "A ConvNet for the 2020s" (Liu et al., CVPR 2022)
   """
 
-  require Axon
-
   @default_image_size 224
   @default_patch_size 4
   @default_in_channels 3

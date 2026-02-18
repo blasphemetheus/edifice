@@ -65,8 +65,6 @@ defmodule Edifice.Attention.GQA do
   - Used in: LLaMA 2 70B, Mistral 7B, Gemma
   """
 
-  require Axon
-
   alias Edifice.Blocks.{ModelBuilder, TransformerBlock}
   alias Edifice.Utils.FusedOps
 

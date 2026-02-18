@@ -57,8 +57,6 @@ defmodule Edifice.Meta.SwitchMoE do
     with Simple and Efficient Sparsity" (JMLR 2022)
   - https://arxiv.org/abs/2101.03961
   """
-
-  require Axon
   import Nx.Defn
 
   @default_hidden_size 256

@@ -81,8 +81,6 @@ defmodule Edifice.SSM.S5 do
   - arXiv: 2208.04933
   """
 
-  require Axon
-
   alias Edifice.Blocks.FFN
 
   # Default hyperparameters

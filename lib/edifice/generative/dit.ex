@@ -77,8 +77,6 @@ defmodule Edifice.Generative.DiT do
   - arXiv: https://arxiv.org/abs/2212.09748
   """
 
-  require Axon
-
   @default_hidden_size 256
   @default_depth 6
   @default_num_heads 4

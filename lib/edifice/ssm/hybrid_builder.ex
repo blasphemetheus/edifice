@@ -38,8 +38,6 @@ defmodule Edifice.SSM.HybridBuilder do
       HybridBuilder.pattern(:full_hybrid, 6)  # [M, A, GLA, RWKV, M, A]
   """
 
-  require Axon
-
   alias Edifice.Attention.{GLA, RWKV}
   alias Edifice.Attention.MultiHead, as: Attention
   alias Edifice.Blocks.FFN

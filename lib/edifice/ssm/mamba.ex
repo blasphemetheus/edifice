@@ -69,8 +69,6 @@ defmodule Edifice.SSM.Mamba do
   - Original code: https://github.com/state-spaces/mamba
   """
 
-  require Axon
-
   alias Edifice.SSM.Common
 
   @typedoc "Options for `build/1`."

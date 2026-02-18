@@ -46,8 +46,6 @@ defmodule Edifice.Graph.PNA do
   - https://arxiv.org/abs/2004.05718
   """
 
-  require Axon
-
   alias Edifice.Graph.MessagePassing
 
   @default_hidden_dims [64, 64]

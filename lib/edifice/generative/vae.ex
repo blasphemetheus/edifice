@@ -62,8 +62,6 @@ defmodule Edifice.Generative.VAE do
       kl = VAE.kl_divergence(mu, log_var)
       total = VAE.loss(reconstruction, target, mu, log_var, beta: 1.0)
   """
-
-  require Axon
   import Nx.Defn
 
   @default_latent_size 32

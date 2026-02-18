@@ -82,8 +82,6 @@ defmodule Edifice.Recurrent.TTT do
   - Paper: https://arxiv.org/abs/2407.04620
   """
 
-  require Axon
-
   # ============================================================================
   # Default Hyperparameters
   # ============================================================================

@@ -83,8 +83,6 @@ defmodule Edifice.Vision.ViT do
     (Dosovitskiy et al., ICLR 2021)
   """
 
-  require Axon
-
   alias Edifice.Blocks.PatchEmbed
   alias Edifice.Utils.FusedOps
 

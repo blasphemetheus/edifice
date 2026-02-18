@@ -67,8 +67,6 @@ defmodule Edifice.Attention.FNet do
   - Paper: "FNet: Mixing Tokens with Fourier Transforms" (Lee-Thorp et al., Google 2021)
   """
 
-  require Axon
-
   alias Edifice.Blocks.{ModelBuilder, TransformerBlock}
 
   # Default hyperparameters

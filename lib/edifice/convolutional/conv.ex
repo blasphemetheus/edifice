@@ -52,8 +52,6 @@ defmodule Edifice.Convolutional.Conv do
       block = Conv.conv1d_block(input, 128, kernel_size: 3, activation: :gelu)
   """
 
-  require Axon
-
   @default_activation :relu
   @default_dropout 0.1
   @default_kernel_size 3

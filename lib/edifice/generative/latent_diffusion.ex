@@ -75,8 +75,6 @@ defmodule Edifice.Generative.LatentDiffusion do
   - Paper: "High-Resolution Image Synthesis with Latent Diffusion Models"
   - arXiv: https://arxiv.org/abs/2112.10752
   """
-
-  require Axon
   import Nx.Defn
 
   @default_latent_size 32

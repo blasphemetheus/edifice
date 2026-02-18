@@ -56,8 +56,6 @@ defmodule Edifice.Convolutional.EfficientNet do
   - https://arxiv.org/abs/1905.11946
   """
 
-  require Axon
-
   @default_base_dim 32
   @default_depth_multiplier 1.0
   @default_width_multiplier 1.0

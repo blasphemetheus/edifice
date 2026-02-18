@@ -91,8 +91,6 @@ defmodule Edifice.Vision.UNet do
     (Ronneberger et al., MICCAI 2015)
   """
 
-  require Axon
-
   @default_in_channels 3
   @default_out_channels 1
   @default_image_size 256

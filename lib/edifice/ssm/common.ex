@@ -26,8 +26,6 @@ defmodule Edifice.SSM.Common do
   - `Edifice.SSM.Mamba` - Main Mamba implementation
   """
 
-  require Axon
-
   # ============================================================================
   # Default Hyperparameters
   # ============================================================================

@@ -65,8 +65,6 @@ defmodule Edifice.Generative.NormalizingFlow do
       # Log-likelihood
       log_prob = NormalizingFlow.log_probability(x, params, num_flows: 4, input_size: 16)
   """
-
-  require Axon
   import Nx.Defn
 
   @default_num_flows 4

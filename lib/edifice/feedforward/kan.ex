@@ -73,8 +73,6 @@ defmodule Edifice.Feedforward.KAN do
   - SineKAN: https://www.frontiersin.org/articles/10.3389/frai.2024.1462952
   - GitHub: https://github.com/KindXiaoming/pykan
   """
-
-  require Axon
   import Nx.Defn
 
   # ============================================================================

@@ -78,8 +78,6 @@ defmodule Edifice.Attention.Perceiver do
   - Original: "Perceiver: General Perception with Iterative Attention" (2021)
   """
 
-  require Axon
-
   alias Edifice.Blocks.FFN
   alias Edifice.Utils.FusedOps
 

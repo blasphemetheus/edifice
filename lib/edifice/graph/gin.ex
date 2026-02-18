@@ -49,8 +49,6 @@ defmodule Edifice.Graph.GIN do
   - https://arxiv.org/abs/1810.00826
   """
 
-  require Axon
-
   alias Edifice.Graph.MessagePassing
 
   @default_hidden_dims [64, 64]

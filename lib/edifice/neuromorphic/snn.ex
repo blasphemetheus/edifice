@@ -69,8 +69,6 @@ defmodule Edifice.Neuromorphic.SNN do
   - Neftci et al., "Surrogate Gradient Learning in SNNs" (2019)
   - https://arxiv.org/abs/1901.09948
   """
-
-  require Axon
   import Nx.Defn
 
   @default_hidden_sizes [256, 128]

@@ -70,8 +70,6 @@ defmodule Edifice.SSM.Zamba do
   - Key insight: Single shared attention achieves 10x KV cache reduction
   """
 
-  require Axon
-
   alias Edifice.Attention.MultiHead, as: Attention
   alias Edifice.SSM.GatedSSM
 

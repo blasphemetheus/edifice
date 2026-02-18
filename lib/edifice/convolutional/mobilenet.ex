@@ -57,8 +57,6 @@ defmodule Edifice.Convolutional.MobileNet do
   - https://arxiv.org/abs/1704.04861
   """
 
-  require Axon
-
   @default_hidden_dims [64, 128, 256]
   @default_width_multiplier 1.0
   @default_activation :relu6

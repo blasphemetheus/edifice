@@ -40,8 +40,6 @@ defmodule Edifice.Blocks.SwiGLU do
   - https://arxiv.org/abs/2002.05202
   """
 
-  require Axon
-
   @default_expansion_factor 2.667
 
   @doc """

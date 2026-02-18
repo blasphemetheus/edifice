@@ -61,8 +61,6 @@ defmodule Edifice.Attention.GLA do
   - Implementation: flash-linear-attention (https://github.com/fla-org/flash-linear-attention)
   """
 
-  require Axon
-
   alias Edifice.Blocks.FFN
 
   # Default hyperparameters

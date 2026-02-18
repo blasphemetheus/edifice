@@ -46,8 +46,6 @@ defmodule Edifice.Meta.LoRA do
   - https://arxiv.org/abs/2106.09685
   """
 
-  require Axon
-
   @default_rank 8
   @default_alpha 16.0
 

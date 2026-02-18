@@ -20,8 +20,6 @@ defmodule Edifice.SSM.MambaCumsum do
       model = MambaCumsum.build(embed_dim: 287, hidden_size: 256)
   """
 
-  require Axon
-
   alias Edifice.SSM.Common
 
   @doc """

@@ -49,8 +49,6 @@ defmodule Edifice.Meta.Hypernetwork do
   - https://arxiv.org/abs/1609.09106
   """
 
-  require Axon
-
   @default_hidden_sizes [256, 256]
 
   # ============================================================================

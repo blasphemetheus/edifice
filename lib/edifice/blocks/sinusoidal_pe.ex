@@ -24,8 +24,6 @@ defmodule Edifice.Blocks.SinusoidalPE do
   - https://arxiv.org/abs/1706.03762
   """
 
-  require Axon
-
   @doc """
   Build a sinusoidal positional encoding table.
 

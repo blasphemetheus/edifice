@@ -62,8 +62,6 @@ defmodule Edifice.SSM.H3 do
   - arXiv: https://arxiv.org/abs/2212.14052
   """
 
-  require Axon
-
   alias Edifice.Blocks.FFN
 
   @default_hidden_size 256

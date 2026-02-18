@@ -52,8 +52,6 @@ defmodule Edifice.SSM.MambaSSD do
       model = MambaSSD.build(embed_dim: 287, hidden_size: 256, training_mode: false)
   """
 
-  require Axon
-
   alias Edifice.SSM.Common
 
   @default_chunk_size 16

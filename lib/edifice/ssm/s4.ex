@@ -68,8 +68,6 @@ defmodule Edifice.SSM.S4 do
   - arXiv: https://arxiv.org/abs/2111.00396
   """
 
-  require Axon
-
   alias Edifice.Blocks.FFN
   alias Edifice.SSM.Common
 

@@ -59,8 +59,6 @@ defmodule Edifice.Probabilistic.Bayesian do
   - Blundell et al., "Weight Uncertainty in Neural Networks" (2015)
   - https://arxiv.org/abs/1505.05424
   """
-
-  require Axon
   import Nx.Defn
 
   @default_hidden_sizes [256, 128]

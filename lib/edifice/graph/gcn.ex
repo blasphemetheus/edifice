@@ -55,8 +55,6 @@ defmodule Edifice.Graph.GCN do
     (Kipf & Welling, ICLR 2017)
   """
 
-  require Axon
-
   alias Edifice.Graph.MessagePassing
 
   @default_hidden_dims [64, 64]

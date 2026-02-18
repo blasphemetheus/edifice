@@ -56,8 +56,6 @@ defmodule Edifice.Graph.GraphSAGE do
   - https://arxiv.org/abs/1706.02216
   """
 
-  require Axon
-
   alias Edifice.Graph.MessagePassing
 
   @default_hidden_dims [64, 64]

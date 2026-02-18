@@ -102,8 +102,6 @@ defmodule Edifice.Generative.FlowMatching do
   - Conditional Flow Matching: https://arxiv.org/abs/2302.00482
   - Rectified Flow: https://arxiv.org/abs/2209.03003
   """
-
-  require Axon
   import Nx.Defn
 
   # ============================================================================

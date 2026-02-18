@@ -35,8 +35,6 @@ defmodule Edifice.Generative.GAN do
         discriminator_sizes: [512, 256]
       )
   """
-
-  require Axon
   import Nx.Defn
 
   @doc """

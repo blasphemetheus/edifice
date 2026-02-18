@@ -51,8 +51,6 @@ defmodule Edifice.Graph.GAT do
   - "Graph Attention Networks" (Velickovic et al., ICLR 2018)
   """
 
-  require Axon
-
   @default_hidden_size 8
   @default_num_heads 8
   @default_activation :elu

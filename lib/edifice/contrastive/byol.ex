@@ -60,8 +60,6 @@ defmodule Edifice.Contrastive.BYOL do
   ## References
   - Paper: https://arxiv.org/abs/2006.07733
   """
-
-  require Axon
   import Nx.Defn
 
   # ============================================================================

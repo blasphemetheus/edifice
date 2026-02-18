@@ -58,8 +58,6 @@ defmodule Edifice.Recurrent.MinGRU do
   - Paper: https://arxiv.org/abs/2410.01201
   """
 
-  require Axon
-
   # ============================================================================
   # Default Hyperparameters
   # ============================================================================

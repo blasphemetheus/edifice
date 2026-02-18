@@ -42,8 +42,6 @@ defmodule Edifice.Meta.Adapter do
   - https://arxiv.org/abs/1902.00751
   """
 
-  require Axon
-
   @default_bottleneck_size 64
   @default_activation :relu
 

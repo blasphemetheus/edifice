@@ -72,8 +72,6 @@ defmodule Edifice.Generative.ScoreSDE do
   - Paper: "Score-Based Generative Modeling through Stochastic Differential Equations"
   - arXiv: https://arxiv.org/abs/2011.13456
   """
-
-  require Axon
   import Nx.Defn
 
   @default_hidden_size 256

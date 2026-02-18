@@ -72,8 +72,6 @@ defmodule Edifice.SSM.Hyena do
   - arXiv: https://arxiv.org/abs/2302.10866
   """
 
-  require Axon
-
   alias Edifice.Blocks.FFN
 
   @default_hidden_size 256

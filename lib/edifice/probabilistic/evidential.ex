@@ -71,8 +71,6 @@ defmodule Edifice.Probabilistic.EvidentialNN do
     Uncertainty" (NeurIPS 2018)
   - https://arxiv.org/abs/1806.01768
   """
-
-  require Axon
   import Nx.Defn
 
   @default_hidden_sizes [256, 128]

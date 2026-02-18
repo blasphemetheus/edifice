@@ -57,8 +57,6 @@ defmodule Edifice.Graph.SchNet do
   - https://arxiv.org/abs/1706.08566
   """
 
-  require Axon
-
   alias Edifice.Graph.MessagePassing
 
   @default_hidden_size 64

@@ -67,8 +67,6 @@ defmodule Edifice.Convolutional.TCN do
       layers = TCN.layers_for_receptive_field(256, kernel_size: 3)
   """
 
-  require Axon
-
   @default_channels [64, 64, 64, 64]
   @default_kernel_size 3
   @default_dropout 0.1

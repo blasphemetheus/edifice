@@ -63,8 +63,6 @@ defmodule Edifice.Recurrent.MinLSTM do
   - Paper: https://arxiv.org/abs/2410.01201
   """
 
-  require Axon
-
   # ============================================================================
   # Default Hyperparameters
   # ============================================================================

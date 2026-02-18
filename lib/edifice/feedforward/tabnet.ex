@@ -58,8 +58,6 @@ defmodule Edifice.Feedforward.TabNet do
   - https://arxiv.org/abs/1908.07442
   """
 
-  require Axon
-
   @default_hidden_size 64
   @default_num_steps 3
   @default_relaxation_factor 1.5

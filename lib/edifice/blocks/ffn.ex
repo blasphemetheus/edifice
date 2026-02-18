@@ -27,8 +27,6 @@ defmodule Edifice.Blocks.FFN do
   - "GLU Variants Improve Transformer" (Shazeer, 2020) - gated variants
   """
 
-  require Axon
-
   alias Edifice.Blocks.SwiGLU
 
   @default_expansion_factor 4

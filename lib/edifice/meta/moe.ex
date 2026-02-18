@@ -62,8 +62,6 @@ defmodule Edifice.Meta.MoE do
       {output, aux_loss} = MoE.forward_with_aux(moe, input, params)
   """
 
-  require Axon
-
   alias Edifice.Blocks.FFN
   import Nx.Defn
 
