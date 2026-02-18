@@ -41,7 +41,18 @@ defmodule Edifice.GradientSmokeTest do
 
   defp check_gradients(model, input_map, opts \\ []) do
     compiler = Keyword.get(opts, :compiler)
-    {init_fn, predict_fn} = Axon.build(model, mode: :inference)
+
+    # When using a compiler like EXLA, use raw (non-JIT-wrapped) functions
+    # from Axon.Compiler.build. Axon.build/2 wraps predict_fn in Nx.Defn.jit,
+    # creating a compilation boundary that EXLA's tracer can't cross — it falls
+    # back to runtime_fun, which evaluates Nx.conv outside the compilation
+    # context, dispatching to BinaryBackend on expression tensors.
+    {init_fn, predict_fn} =
+      if compiler do
+        Axon.Compiler.build(model, mode: :inference)
+      else
+        Axon.build(model, mode: :inference)
+      end
 
     template =
       Map.new(input_map, fn {name, tensor} ->

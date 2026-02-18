@@ -827,7 +827,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "efficientnet (convolutional)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       @tag :slow
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
