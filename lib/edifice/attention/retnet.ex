@@ -445,13 +445,13 @@ defmodule Edifice.Attention.RetNet do
     # gamma: scalar
 
     # Update state: s_n = gamma * s_{n-1} + k^T * v
-    # k^T * v: [head_dim, 1] * [1, head_dim] = [head_dim, head_dim]
-    kv_outer = Nx.dot(Nx.new_axis(k, 2), Nx.new_axis(v, 1))
+    # k^T * v: [batch, head_dim, 1] x [batch, 1, head_dim] -> [batch, head_dim, head_dim]
+    kv_outer = Nx.dot(Nx.new_axis(k, 2), [2], [0], Nx.new_axis(v, 1), [1], [0])
     new_state = Nx.add(Nx.multiply(gamma, state), kv_outer)
 
     # Output: o_n = q * s_n
-    # q: [batch, head_dim], s: [batch, head_dim, head_dim]
-    output = Nx.dot(Nx.new_axis(q, 1), new_state) |> Nx.squeeze(axes: [1])
+    # [batch, 1, head_dim] x [batch, head_dim, head_dim] -> [batch, 1, head_dim]
+    output = Nx.dot(Nx.new_axis(q, 1), [2], [0], new_state, [1], [0]) |> Nx.squeeze(axes: [1])
 
     {output, new_state}
   end

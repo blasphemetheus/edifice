@@ -448,7 +448,7 @@ defmodule Edifice.SSM.Common do
 
     # Sequential recurrence for remaining timesteps
     {_, h_list} =
-      Enum.reduce(1..(seq_len - 1), {h0, [Nx.squeeze(h0, axes: [1])]}, fn t, {h_prev, acc} ->
+      Enum.reduce(1..(seq_len - 1)//1, {h0, [Nx.squeeze(h0, axes: [1])]}, fn t, {h_prev, acc} ->
         a_t = Nx.slice_along_axis(a, t, 1, axis: 1)
         b_t = Nx.slice_along_axis(b, t, 1, axis: 1)
 

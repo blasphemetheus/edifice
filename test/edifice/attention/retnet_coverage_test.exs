@@ -211,9 +211,45 @@ defmodule Edifice.Attention.RetNetCoverageTest do
   # recurrent_retention_step/5
   # ============================================================================
 
-  # Note: recurrent_retention_step/5 has a batched Nx.dot issue (outer product
-  # via Nx.dot with new_axis doesn't handle batch dims correctly). Testing the
-  # other public functions instead to maximize coverage.
+  describe "recurrent_retention_step/5" do
+    test "produces correct shapes with batched input" do
+      batch = 2
+      head_dim = 4
+
+      q = Nx.broadcast(0.5, {batch, head_dim})
+      k = Nx.broadcast(0.3, {batch, head_dim})
+      v = Nx.broadcast(0.7, {batch, head_dim})
+      state = Nx.broadcast(0.0, {batch, head_dim, head_dim})
+      gamma = Nx.tensor(0.9)
+
+      {output, new_state} = RetNet.recurrent_retention_step(q, k, v, state, gamma)
+
+      assert Nx.shape(output) == {batch, head_dim}
+      assert Nx.shape(new_state) == {batch, head_dim, head_dim}
+      assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
+      assert Nx.all(Nx.is_nan(new_state) |> Nx.logical_not()) |> Nx.to_number() == 1
+    end
+
+    test "state accumulates across multiple steps" do
+      batch = 2
+      head_dim = 4
+      state = Nx.broadcast(0.0, {batch, head_dim, head_dim})
+      gamma = Nx.tensor(0.95)
+
+      key = Nx.Random.key(42)
+      {q, key} = Nx.Random.uniform(key, shape: {batch, head_dim})
+      {k, key} = Nx.Random.uniform(key, shape: {batch, head_dim})
+      {v, _key} = Nx.Random.uniform(key, shape: {batch, head_dim})
+
+      {out1, state1} = RetNet.recurrent_retention_step(q, k, v, state, gamma)
+      {out2, state2} = RetNet.recurrent_retention_step(q, k, v, state1, gamma)
+
+      # State should grow (non-zero after updates)
+      assert Nx.to_number(Nx.reduce_max(Nx.abs(state2))) > Nx.to_number(Nx.reduce_max(Nx.abs(state1)))
+      # Outputs should differ due to different state
+      assert Nx.to_number(Nx.reduce_max(Nx.abs(Nx.subtract(out1, out2)))) > 0
+    end
+  end
 
   describe "different expand_factors" do
     test "expand_factor = 4" do
