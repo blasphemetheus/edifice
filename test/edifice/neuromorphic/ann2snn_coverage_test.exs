@@ -522,8 +522,8 @@ defmodule Edifice.Neuromorphic.ANN2SNNCoverageTest do
       snn_dense_keys =
         snn_keys |> Enum.filter(&(String.contains?(&1, "dense_") or String.contains?(&1, "bn_")))
 
-      assert length(ann_dense_keys) > 0
-      assert length(snn_dense_keys) > 0
+      assert ann_dense_keys != []
+      assert snn_dense_keys != []
 
       # The shared layer names should be the same
       ann_shared = ann_dense_keys |> MapSet.new()

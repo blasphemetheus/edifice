@@ -305,7 +305,7 @@ defmodule Edifice.Generative.DiTCoverageTest do
       # Verify custom name is used in params
       param_keys = Map.keys(params.data)
       custom_keys = Enum.filter(param_keys, &String.contains?(&1, "custom_block"))
-      assert length(custom_keys) > 0, "Should have params with custom block name"
+      assert custom_keys != [], "Should have params with custom block name"
     end
 
     test "block uses default options when not all specified" do
