@@ -86,6 +86,7 @@ defmodule Edifice.Attention.GQA do
     - `:num_kv_heads` - Number of key/value heads (default: 2)
     - `:num_layers` - Number of transformer blocks (default: 4)
     - `:dropout` - Dropout rate (default: 0.1)
+    - `:rope` - Apply Rotary Position Embedding to Q and K (default: false)
     - `:window_size` - Expected sequence length for JIT optimization (default: 60)
 
   ## Returns
@@ -97,6 +98,7 @@ defmodule Edifice.Attention.GQA do
           {:dropout, float()}
           | {:hidden_size, pos_integer()}
           | {:num_layers, pos_integer()}
+          | {:rope, boolean()}
 
   @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
@@ -150,6 +152,8 @@ defmodule Edifice.Attention.GQA do
     k_proj = Axon.dense(input, kv_dim, name: "#{name}_k_proj")
     v_proj = Axon.dense(input, kv_dim, name: "#{name}_v_proj")
 
+    use_rope = Keyword.get(opts, :rope, false)
+
     # Apply GQA attention
     output =
       Axon.layer(
@@ -159,6 +163,7 @@ defmodule Edifice.Attention.GQA do
         num_heads: num_heads,
         num_kv_heads: num_kv_heads,
         head_dim: head_dim,
+        rope: use_rope,
         op_name: :gqa_attention
       )
 
@@ -171,6 +176,7 @@ defmodule Edifice.Attention.GQA do
     num_heads = opts[:num_heads]
     num_kv_heads = opts[:num_kv_heads]
     head_dim = opts[:head_dim]
+    use_rope = opts[:rope] || false
 
     batch = Nx.axis_size(q, 0)
     seq_len = Nx.axis_size(q, 1)
@@ -194,6 +200,22 @@ defmodule Edifice.Attention.GQA do
       v
       |> Nx.reshape({batch, seq_len, num_kv_heads, head_dim})
       |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    # Apply RoPE to Q and K before repeating K for groups
+    {q, k} =
+      if use_rope do
+        # Flatten heads into batch for RoPE: [batch*heads, seq, head_dim]
+        q_flat = Nx.reshape(q, {batch * num_heads, seq_len, head_dim})
+        k_flat = Nx.reshape(k, {batch * num_kv_heads, seq_len, head_dim})
+
+        {q_rot, k_rot} = Edifice.Blocks.RoPE.apply_rotary(q_flat, k_flat)
+
+        q_out = Nx.reshape(q_rot, {batch, num_heads, seq_len, head_dim})
+        k_out = Nx.reshape(k_rot, {batch, num_kv_heads, seq_len, head_dim})
+        {q_out, k_out}
+      else
+        {q, k}
+      end
 
     # Repeat K, V for each group of Q heads
     # [batch, num_kv_heads, seq, head_dim] -> [batch, num_heads, seq, head_dim]

@@ -116,6 +116,10 @@ defmodule Edifice.Recurrent.TTT do
     - `:num_layers` - Number of TTT layers (default: 4)
     - `:dropout` - Dropout rate between layers (default: 0.1)
     - `:window_size` - Expected sequence length (default: 60)
+    - `:variant` - Inner model variant: `:linear` (default) or `:mlp`.
+      The `:mlp` variant applies SiLU activation to keys and queries before
+      the inner model, making the hidden state a 2-layer MLP instead of
+      a single linear layer.
     - `:output_rms_norm` - Apply per-timestep RMS norm to output (default: false)
 
   ## Returns
@@ -130,6 +134,7 @@ defmodule Edifice.Recurrent.TTT do
           | {:num_layers, pos_integer()}
           | {:output_rms_norm, boolean()}
           | {:seq_len, pos_integer()}
+          | {:variant, :linear | :mlp}
           | {:window_size, pos_integer()}
 
   @spec build([build_opt()]) :: Axon.t()
@@ -156,11 +161,20 @@ defmodule Edifice.Recurrent.TTT do
       end
 
     output_rms_norm = Keyword.get(opts, :output_rms_norm, false)
+    variant = Keyword.get(opts, :variant, :linear)
 
     # Stack TTT layers
     output =
       Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
-        layer = build_ttt_layer(acc, hidden_size, inner_size, "ttt_#{layer_idx}", output_rms_norm)
+        layer =
+          build_ttt_layer(
+            acc,
+            hidden_size,
+            inner_size,
+            "ttt_#{layer_idx}",
+            output_rms_norm,
+            variant
+          )
 
         if dropout > 0 and layer_idx < num_layers do
           Axon.dropout(layer, rate: dropout, name: "dropout_#{layer_idx}")
@@ -187,7 +201,7 @@ defmodule Edifice.Recurrent.TTT do
   # TTT Layer
   # ============================================================================
 
-  defp build_ttt_layer(input, hidden_size, inner_size, name, output_rms_norm) do
+  defp build_ttt_layer(input, hidden_size, inner_size, name, output_rms_norm, variant) do
     # Pre-norm for stability
     normed = Axon.layer_norm(input, name: "#{name}_norm")
 
@@ -217,6 +231,7 @@ defmodule Edifice.Recurrent.TTT do
         name: "#{name}_recurrence",
         inner_size: inner_size,
         output_rms_norm: output_rms_norm,
+        variant: variant,
         op_name: :ttt_scan
       )
 
@@ -231,10 +246,11 @@ defmodule Edifice.Recurrent.TTT do
   defp ttt_scan_impl(combined, w0, opts) do
     inner_size = opts[:inner_size]
     output_rms_norm = opts[:output_rms_norm] || false
-    ttt_scan(combined, w0, inner_size, output_rms_norm)
+    variant = opts[:variant] || :linear
+    ttt_scan(combined, w0, inner_size, output_rms_norm, variant)
   end
 
-  defp ttt_scan(combined, w0, inner_size, output_rms_norm) do
+  defp ttt_scan(combined, w0, inner_size, output_rms_norm, variant) do
     # combined: [batch, seq_len, inner_size * 4]
     batch_size = Nx.axis_size(combined, 0)
     seq_len = Nx.axis_size(combined, 1)
@@ -260,31 +276,53 @@ defmodule Edifice.Recurrent.TTT do
         v_t = Nx.slice_along_axis(v_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         eta_t = Nx.slice_along_axis(eta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        # Inner model forward: pred = W @ k
-        # w_prev: [batch, inner, inner], k_t: [batch, inner]
-        pred = Nx.dot(w_prev, [2], [0], Nx.new_axis(k_t, 2), [1], [0])
-        pred = Nx.squeeze(pred, axes: [2])
+        # Inner model forward and update depend on variant
+        {w_t, o_t} =
+          case variant do
+            :mlp ->
+              # MLP variant: 2-layer inner model (k -> silu -> W @ k)
+              # First apply non-linearity, then linear
+              k_act = Nx.multiply(k_t, Nx.sigmoid(k_t))
 
-        # Self-supervised loss gradient: error = pred - v
-        error = Nx.subtract(pred, v_t)
+              pred = Nx.dot(w_prev, [2], [0], Nx.new_axis(k_act, 2), [1], [0])
+              pred = Nx.squeeze(pred, axes: [2])
+              error = Nx.subtract(pred, v_t)
 
-        # Weight update: W -= eta * error * k^T (outer product)
-        # eta_t * error: [batch, inner], k_t: [batch, inner]
-        grad =
-          Nx.dot(
-            Nx.new_axis(Nx.multiply(eta_t, error), 2),
-            [2],
-            [0],
-            Nx.new_axis(k_t, 1),
-            [1],
-            [0]
-          )
+              grad =
+                Nx.dot(
+                  Nx.new_axis(Nx.multiply(eta_t, error), 2),
+                  [2],
+                  [0],
+                  Nx.new_axis(k_act, 1),
+                  [1],
+                  [0]
+                )
 
-        w_t = Nx.subtract(w_prev, grad)
+              w_new = Nx.subtract(w_prev, grad)
+              q_act = Nx.multiply(q_t, Nx.sigmoid(q_t))
+              out = Nx.dot(w_new, [2], [0], Nx.new_axis(q_act, 2), [1], [0])
+              {w_new, Nx.squeeze(out, axes: [2])}
 
-        # Output: W_t @ q_t
-        o_t = Nx.dot(w_t, [2], [0], Nx.new_axis(q_t, 2), [1], [0])
-        o_t = Nx.squeeze(o_t, axes: [2])
+            _linear ->
+              # Linear variant (default): pred = W @ k
+              pred = Nx.dot(w_prev, [2], [0], Nx.new_axis(k_t, 2), [1], [0])
+              pred = Nx.squeeze(pred, axes: [2])
+              error = Nx.subtract(pred, v_t)
+
+              grad =
+                Nx.dot(
+                  Nx.new_axis(Nx.multiply(eta_t, error), 2),
+                  [2],
+                  [0],
+                  Nx.new_axis(k_t, 1),
+                  [1],
+                  [0]
+                )
+
+              w_new = Nx.subtract(w_prev, grad)
+              out = Nx.dot(w_new, [2], [0], Nx.new_axis(q_t, 2), [1], [0])
+              {w_new, Nx.squeeze(out, axes: [2])}
+          end
 
         # Optional RMS normalization (not in paper, but can stabilize varying W scales)
         o_t =

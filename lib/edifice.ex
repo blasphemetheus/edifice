@@ -21,29 +21,34 @@ defmodule Edifice do
 
   | Family | Architectures |
   |--------|--------------|
-  | Feedforward | MLP, KAN, TabNet |
+  | Transformer | Decoder-Only (GPT-style) |
+  | Feedforward | MLP, KAN, KAT, TabNet, BitNet |
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
-  | Recurrent | LSTM, GRU, xLSTM, MinGRU, MinLSTM, DeltaNet, TTT, Titans, Reservoir (ESN) |
-  | State Space | Mamba, Mamba-2 (SSD), S4, S4D, S5, H3, Hyena, BiMamba, GatedSSM |
-  | Attention | Multi-Head, GQA, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RWKV, GLA, HGRN, Griffin |
-  | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer |
+  | Recurrent | LSTM, GRU, xLSTM, mLSTM, MinGRU, MinLSTM, DeltaNet, TTT, Titans, Reservoir (ESN) |
+  | State Space | Mamba, Mamba-2 (SSD), S4, S4D, S5, H3, Hyena, BiMamba, GatedSSM, StripedHyena |
+  | Attention | Multi-Head, GQA, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RWKV, GLA, HGRN, Griffin, Based, InfiniAttention, Conformer, Mega, RingAttention |
+  | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Normalizing Flow |
-  | Graph | GCN, GAT, GraphSAGE, GIN, PNA, GraphTransformer, SchNet, Message Passing |
+  | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
   | Sets | DeepSets, PointNet |
   | Energy | EBM, Hopfield, Neural ODE |
   | Probabilistic | Bayesian, MC Dropout, Evidential |
   | Memory | NTM, Memory Networks |
-  | Meta | MoE, Switch MoE, Soft MoE, LoRA, Adapter, Hypernetworks, Capsules |
+  | Meta | MoE, Switch MoE, Soft MoE, LoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead |
   | Liquid | Liquid Neural Networks |
   | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg |
   | Neuromorphic | SNN, ANN2SNN |
   """
 
   @architecture_registry %{
+    # Transformer
+    decoder_only: Edifice.Transformer.DecoderOnly,
     # Feedforward
     mlp: Edifice.Feedforward.MLP,
     kan: Edifice.Feedforward.KAN,
+    kat: Edifice.Feedforward.KAT,
     tabnet: Edifice.Feedforward.TabNet,
+    bitnet: Edifice.Feedforward.BitNet,
     # Convolutional
     conv1d: Edifice.Convolutional.Conv,
     resnet: Edifice.Convolutional.ResNet,
@@ -55,6 +60,7 @@ defmodule Edifice do
     lstm: {Edifice.Recurrent, [cell_type: :lstm]},
     gru: {Edifice.Recurrent, [cell_type: :gru]},
     xlstm: Edifice.Recurrent.XLSTM,
+    mlstm: {Edifice.Recurrent.XLSTM, [variant: :mlstm]},
     min_gru: Edifice.Recurrent.MinGRU,
     min_lstm: Edifice.Recurrent.MinLSTM,
     delta_net: Edifice.Recurrent.DeltaNet,
@@ -75,6 +81,7 @@ defmodule Edifice do
     gated_ssm: Edifice.SSM.GatedSSM,
     jamba: Edifice.SSM.Hybrid,
     zamba: Edifice.SSM.Zamba,
+    striped_hyena: Edifice.SSM.StripedHyena,
     # Attention
     attention: Edifice.Attention.MultiHead,
     retnet: Edifice.Attention.RetNet,
@@ -88,6 +95,11 @@ defmodule Edifice do
     linear_transformer: Edifice.Attention.LinearTransformer,
     nystromformer: Edifice.Attention.Nystromformer,
     performer: Edifice.Attention.Performer,
+    mega: Edifice.Attention.Mega,
+    based: Edifice.Attention.Based,
+    infini_attention: Edifice.Attention.InfiniAttention,
+    conformer: Edifice.Attention.Conformer,
+    ring_attention: Edifice.Attention.RingAttention,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -95,6 +107,9 @@ defmodule Edifice do
     unet: Edifice.Vision.UNet,
     convnext: Edifice.Vision.ConvNeXt,
     mlp_mixer: Edifice.Vision.MLPMixer,
+    focalnet: Edifice.Vision.FocalNet,
+    poolformer: Edifice.Vision.PoolFormer,
+    nerf: Edifice.Vision.NeRF,
     # Generative
     diffusion: Edifice.Generative.Diffusion,
     ddim: Edifice.Generative.DDIM,
@@ -115,6 +130,7 @@ defmodule Edifice do
     pna: Edifice.Graph.PNA,
     graph_transformer: Edifice.Graph.GraphTransformer,
     schnet: Edifice.Graph.SchNet,
+    gin_v2: Edifice.Graph.GINv2,
     # Sets
     deep_sets: Edifice.Sets.DeepSets,
     pointnet: Edifice.Sets.PointNet,
@@ -137,6 +153,9 @@ defmodule Edifice do
     adapter: Edifice.Meta.Adapter,
     hypernetwork: Edifice.Meta.Hypernetwork,
     capsule: Edifice.Meta.Capsule,
+    mixture_of_depths: Edifice.Meta.MixtureOfDepths,
+    mixture_of_agents: Edifice.Meta.MixtureOfAgents,
+    rlhf_head: Edifice.Meta.RLHFHead,
     # Contrastive / Self-Supervised
     simclr: Edifice.Contrastive.SimCLR,
     byol: Edifice.Contrastive.BYOL,
@@ -178,9 +197,21 @@ defmodule Edifice do
   @spec list_families() :: %{atom() => [atom()]}
   def list_families do
     %{
-      feedforward: [:mlp, :kan, :tabnet],
+      transformer: [:decoder_only],
+      feedforward: [:mlp, :kan, :kat, :tabnet, :bitnet],
       convolutional: [:conv1d, :resnet, :densenet, :tcn, :mobilenet, :efficientnet],
-      recurrent: [:lstm, :gru, :xlstm, :min_gru, :min_lstm, :delta_net, :ttt, :titans, :reservoir],
+      recurrent: [
+        :lstm,
+        :gru,
+        :xlstm,
+        :mlstm,
+        :min_gru,
+        :min_lstm,
+        :delta_net,
+        :ttt,
+        :titans,
+        :reservoir
+      ],
       ssm: [
         :mamba,
         :mamba_ssd,
@@ -194,7 +225,8 @@ defmodule Edifice do
         :bimamba,
         :gated_ssm,
         :jamba,
-        :zamba
+        :zamba,
+        :striped_hyena
       ],
       attention: [
         :attention,
@@ -208,9 +240,14 @@ defmodule Edifice do
         :fnet,
         :linear_transformer,
         :nystromformer,
-        :performer
+        :performer,
+        :mega,
+        :based,
+        :infini_attention,
+        :conformer,
+        :ring_attention
       ],
-      vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer],
+      vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf],
       generative: [
         :diffusion,
         :ddim,
@@ -224,12 +261,23 @@ defmodule Edifice do
         :gan,
         :normalizing_flow
       ],
-      graph: [:gcn, :gat, :graph_sage, :gin, :pna, :graph_transformer, :schnet],
+      graph: [:gcn, :gat, :graph_sage, :gin, :gin_v2, :pna, :graph_transformer, :schnet],
       sets: [:deep_sets, :pointnet],
       energy: [:ebm, :hopfield, :neural_ode],
       probabilistic: [:bayesian, :mc_dropout, :evidential],
       memory: [:ntm, :memory_network],
-      meta: [:moe, :switch_moe, :soft_moe, :lora, :adapter, :hypernetwork, :capsule],
+      meta: [
+        :moe,
+        :switch_moe,
+        :soft_moe,
+        :lora,
+        :adapter,
+        :hypernetwork,
+        :capsule,
+        :mixture_of_depths,
+        :mixture_of_agents,
+        :rlhf_head
+      ],
       contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg],
       liquid: [:liquid],
       neuromorphic: [:snn, :ann2snn]

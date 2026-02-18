@@ -60,6 +60,10 @@ defmodule Edifice.Blocks.TransformerBlock do
     - `:hidden_size` - Hidden dimension (required)
     - `:ffn_type` - FFN variant: `:standard` or `:gated` (default: :standard)
     - `:ffn_expansion` - FFN expansion factor (default: 4)
+    - `:custom_ffn` - Custom FFN callback `(input, name) -> Axon.t()` that
+      replaces the standard FFN sublayer. When provided, `:ffn_type` and
+      `:ffn_expansion` are ignored. Used by KAT and other architectures
+      that need non-standard feed-forward networks.
     - `:norm` - Normalization type: `:layer_norm` or `:rms_norm` (default: :layer_norm)
     - `:norm_position` - Where to normalize: `:pre` or `:post` (default: :pre)
     - `:dropout` - Dropout rate (default: 0.0)
@@ -71,6 +75,7 @@ defmodule Edifice.Blocks.TransformerBlock do
     hidden_size = Keyword.fetch!(opts, :hidden_size)
     ffn_type = Keyword.get(opts, :ffn_type, :standard)
     ffn_expansion = Keyword.get(opts, :ffn_expansion, 4)
+    custom_ffn = Keyword.get(opts, :custom_ffn)
     dropout = Keyword.get(opts, :dropout, 0.0)
     name = Keyword.get(opts, :name, "transformer_block")
 
@@ -84,19 +89,23 @@ defmodule Edifice.Blocks.TransformerBlock do
     ffn_normed = apply_norm(after_attn, opts, "#{name}_ffn_norm")
 
     ffn_out =
-      case ffn_type do
-        :gated ->
-          FFN.gated_layer(ffn_normed,
-            hidden_size: hidden_size,
-            name: "#{name}_ffn"
-          )
+      if custom_ffn do
+        custom_ffn.(ffn_normed, "#{name}_ffn")
+      else
+        case ffn_type do
+          :gated ->
+            FFN.gated_layer(ffn_normed,
+              hidden_size: hidden_size,
+              name: "#{name}_ffn"
+            )
 
-        _standard ->
-          FFN.layer(ffn_normed,
-            hidden_size: hidden_size,
-            expansion_factor: ffn_expansion,
-            name: "#{name}_ffn"
-          )
+          _standard ->
+            FFN.layer(ffn_normed,
+              hidden_size: hidden_size,
+              expansion_factor: ffn_expansion,
+              name: "#{name}_ffn"
+            )
+        end
       end
 
     ffn_out = maybe_dropout(ffn_out, dropout, "#{name}_ffn_dropout")

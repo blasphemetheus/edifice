@@ -398,6 +398,7 @@ defmodule Edifice.Attention.MultiHead do
     - `:dropout` - Dropout rate (default: 0.1)
     - `:causal` - Use causal masking (default: true)
     - `:qk_layernorm` - Normalize Q and K before attention (stabilizes training, default: false)
+    - `:rope` - Apply Rotary Position Embedding to Q and K (default: false)
     - `:chunked` - Use chunked attention for lower memory (default: false)
     - `:memory_efficient` - Use memory-efficient attention with online softmax for true O(n) memory (default: false)
     - `:chunk_size` - Chunk size for chunked/memory-efficient attention (default: 32)
@@ -410,6 +411,7 @@ defmodule Edifice.Attention.MultiHead do
     dropout = Keyword.get(opts, :dropout, @default_dropout)
     causal = Keyword.get(opts, :causal, true)
     qk_layernorm = Keyword.get(opts, :qk_layernorm, false)
+    use_rope = Keyword.get(opts, :rope, false)
     chunked = Keyword.get(opts, :chunked, false)
     memory_efficient = Keyword.get(opts, :memory_efficient, false)
     chunk_size = Keyword.get(opts, :chunk_size, 32)
@@ -441,6 +443,15 @@ defmodule Edifice.Attention.MultiHead do
           {query, key} =
             if qk_layernorm do
               {qk_layer_norm(query), qk_layer_norm(key)}
+            else
+              {query, key}
+            end
+
+          # Apply RoPE if enabled: rotate Q and K per head
+          # Q, K are [batch, heads, seq, head_dim]
+          {query, key} =
+            if use_rope do
+              apply_rope_to_heads(query, key, seq_len, head_dim)
             else
               {query, key}
             end
@@ -946,6 +957,24 @@ defmodule Edifice.Attention.MultiHead do
     x
     |> Nx.transpose(axes: [0, 2, 1, 3])
     |> Nx.reshape({batch, seq_len, num_heads * head_dim})
+  end
+
+  # Apply RoPE to Q and K when they are in multi-head shape [batch, heads, seq, head_dim]
+  # Transposes to [batch*heads, seq, head_dim], applies RoPE, transposes back
+  defp apply_rope_to_heads(query, key, seq_len, head_dim) do
+    {batch, heads, _seq, _hd} = Nx.shape(query)
+
+    # Reshape to [batch*heads, seq, head_dim] for RoPE
+    q_flat = Nx.reshape(query, {batch * heads, seq_len, head_dim})
+    k_flat = Nx.reshape(key, {batch * heads, seq_len, head_dim})
+
+    # Apply rotary embeddings
+    {q_rotated, k_rotated} = Edifice.Blocks.RoPE.apply_rotary(q_flat, k_flat)
+
+    # Reshape back to [batch, heads, seq, head_dim]
+    q_out = Nx.reshape(q_rotated, {batch, heads, seq_len, head_dim})
+    k_out = Nx.reshape(k_rotated, {batch, heads, seq_len, head_dim})
+    {q_out, k_out}
   end
 
   # Multi-head scaled dot-product attention
