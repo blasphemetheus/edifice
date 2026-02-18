@@ -119,7 +119,28 @@ defmodule Edifice.SSM.Hybrid do
         window_size: 60
       )
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:attention_every, pos_integer()}
+          | {:chunk_size, pos_integer()}
+          | {:chunked_attention, boolean()}
+          | {:conv_size, pos_integer()}
+          | {:dropout, float()}
+          | {:embed_dim, pos_integer()}
+          | {:expand_factor, pos_integer()}
+          | {:head_dim, pos_integer()}
+          | {:hidden_size, pos_integer()}
+          | {:memory_efficient_attention, boolean()}
+          | {:num_heads, pos_integer()}
+          | {:num_layers, pos_integer()}
+          | {:pre_norm, boolean()}
+          | {:qk_layernorm, boolean()}
+          | {:seq_len, pos_integer()}
+          | {:state_size, pos_integer()}
+          | {:use_sliding_window, boolean()}
+          | {:window_size, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)

@@ -69,7 +69,14 @@ defmodule Edifice.Meta.LoRA do
 
   An Axon model: `[batch, input_size]` -> `[batch, output_size]`
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:alpha, float()}
+          | {:input_size, pos_integer()}
+          | {:output_size, pos_integer()}
+          | {:rank, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
     output_size = Keyword.fetch!(opts, :output_size)

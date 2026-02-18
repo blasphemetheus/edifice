@@ -82,7 +82,15 @@ defmodule Edifice.Memory.MemoryNetwork do
     An Axon model taking query `[batch, input_dim]` and memories
     `[batch, num_memories, input_dim]`, producing `[batch, output_dim]`.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:input_dim, pos_integer()}
+          | {:memory_dim, pos_integer()}
+          | {:num_hops, pos_integer()}
+          | {:num_memories, pos_integer()}
+          | {:output_dim, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_dim = Keyword.fetch!(opts, :input_dim)
     memory_dim = Keyword.get(opts, :memory_dim, @default_memory_dim)

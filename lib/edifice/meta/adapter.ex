@@ -61,7 +61,13 @@ defmodule Edifice.Meta.Adapter do
 
   An Axon model: `[batch, hidden_size]` -> `[batch, hidden_size]`
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:activation, atom()}
+          | {:bottleneck_size, pos_integer()}
+          | {:hidden_size, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     hidden_size = Keyword.fetch!(opts, :hidden_size)
     bottleneck_size = Keyword.get(opts, :bottleneck_size, @default_bottleneck_size)

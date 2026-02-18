@@ -93,7 +93,18 @@ defmodule Edifice.Sets.DeepSets do
   An Axon model. Input shape: `{batch, set_size, input_dim}`.
   Output shape: `{batch, output_dim}`.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:activation, atom()}
+          | {:aggregation, :sum | :mean | :max}
+          | {:dropout, float()}
+          | {:hidden_size, pos_integer()}
+          | {:input_dim, pos_integer()}
+          | {:output_dim, pos_integer()}
+          | {:phi_sizes, pos_integer()}
+          | {:rho_sizes, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_dim = Keyword.fetch!(opts, :input_dim)
     output_dim = Keyword.fetch!(opts, :output_dim)

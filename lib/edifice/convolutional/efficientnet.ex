@@ -91,7 +91,16 @@ defmodule Edifice.Convolutional.EfficientNet do
 
   An Axon model: `[batch, input_dim]` -> `[batch, last_dim or num_classes]`
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:base_dim, pos_integer()}
+          | {:depth_multiplier, pos_integer()}
+          | {:dropout, float()}
+          | {:input_dim, pos_integer()}
+          | {:num_classes, pos_integer() | nil}
+          | {:width_multiplier, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_dim = Keyword.fetch!(opts, :input_dim)
     base_dim = Keyword.get(opts, :base_dim, @default_base_dim)

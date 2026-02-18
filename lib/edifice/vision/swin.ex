@@ -133,7 +133,20 @@ defmodule Edifice.Vision.SwinTransformer do
     An Axon model. Without `:num_classes`, outputs `[batch, embed_dim * 2^(num_stages-1)]`.
     With `:num_classes`, outputs `[batch, num_classes]`.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:depths, [pos_integer()]}
+          | {:dropout, float()}
+          | {:embed_dim, pos_integer()}
+          | {:image_size, pos_integer()}
+          | {:in_channels, pos_integer()}
+          | {:mlp_ratio, float()}
+          | {:num_classes, pos_integer() | nil}
+          | {:num_heads, pos_integer()}
+          | {:patch_size, pos_integer()}
+          | {:window_size, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     image_size = Keyword.get(opts, :image_size, @default_image_size)
     patch_size = Keyword.get(opts, :patch_size, @default_patch_size)

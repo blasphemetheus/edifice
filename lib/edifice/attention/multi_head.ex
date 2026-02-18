@@ -688,7 +688,10 @@ defmodule Edifice.Attention.MultiHead do
   ## Returns
     Model that outputs [batch, hidden_size] from last position.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt :: {:num_heads, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     # Map hidden_size to head_dim if provided (for registry API consistency)
     opts =

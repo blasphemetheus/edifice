@@ -102,7 +102,10 @@ defmodule Edifice.Energy.EBM do
 
   An Axon model. Input: `{batch, input_size}`, Output: `{batch, 1}` (energy).
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt :: {:input_size, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
 

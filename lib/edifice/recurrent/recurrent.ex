@@ -96,7 +96,19 @@ defmodule Edifice.Recurrent do
   ## Returns
     An Axon model that processes sequences and outputs hidden representations.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:cell_type, cell_type()}
+          | {:dropout, float()}
+          | {:embed_dim, pos_integer()}
+          | {:hidden_size, pos_integer()}
+          | {:num_layers, pos_integer()}
+          | {:return_sequences, boolean()}
+          | {:seq_len, pos_integer()}
+          | {:truncate_bptt, pos_integer() | nil}
+          | {:window_size, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)

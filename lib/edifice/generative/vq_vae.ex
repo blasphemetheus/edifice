@@ -100,7 +100,10 @@ defmodule Edifice.Generative.VQVAE do
     - Encoder: `[batch, input_size]` -> `[batch, embedding_dim]`
     - Decoder: `[batch, embedding_dim]` -> `[batch, input_size]`
   """
-  @spec build(keyword()) :: {Axon.t(), Axon.t()}
+  @typedoc "Options for `build/1`."
+  @type build_opt :: {:input_size, pos_integer()}
+
+  @spec build([build_opt()]) :: {Axon.t(), Axon.t()}
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
 

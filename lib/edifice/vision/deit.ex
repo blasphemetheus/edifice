@@ -116,7 +116,20 @@ defmodule Edifice.Vision.DeiT do
     When only `:num_classes` is set, outputs `[batch, num_classes]`.
     Otherwise, outputs `[batch, embed_dim]` from the CLS token.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:depth, pos_integer()}
+          | {:dropout, float()}
+          | {:embed_dim, pos_integer()}
+          | {:image_size, pos_integer()}
+          | {:in_channels, pos_integer()}
+          | {:mlp_ratio, float()}
+          | {:num_classes, pos_integer() | nil}
+          | {:num_heads, pos_integer()}
+          | {:patch_size, pos_integer()}
+          | {:teacher_num_classes, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     image_size = Keyword.get(opts, :image_size, @default_image_size)
     patch_size = Keyword.get(opts, :patch_size, @default_patch_size)

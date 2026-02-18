@@ -126,7 +126,22 @@ defmodule Edifice.SSM.Zamba do
         attention_every: 3  # Shared attention applied 2x total
       )
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:attention_every, pos_integer()}
+          | {:conv_size, pos_integer()}
+          | {:dropout, float()}
+          | {:embed_dim, pos_integer()}
+          | {:expand_factor, pos_integer()}
+          | {:head_dim, pos_integer()}
+          | {:hidden_size, pos_integer()}
+          | {:num_heads, pos_integer()}
+          | {:num_layers, pos_integer()}
+          | {:seq_len, pos_integer()}
+          | {:state_size, pos_integer()}
+          | {:window_size, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     embed_dim = Keyword.fetch!(opts, :embed_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)

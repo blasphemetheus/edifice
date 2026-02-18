@@ -94,7 +94,16 @@ defmodule Edifice.Convolutional.TCN do
     An Axon model taking `[batch, seq_len, input_size]` and outputting
     `[batch, seq_len, last_channel_count]`.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:activation, atom()}
+          | {:channels, pos_integer()}
+          | {:dropout, float()}
+          | {:input_size, pos_integer()}
+          | {:kernel_size, pos_integer()}
+          | {:seq_len, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
     channels = Keyword.get(opts, :channels, @default_channels)

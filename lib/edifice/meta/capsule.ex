@@ -94,7 +94,18 @@ defmodule Edifice.Meta.Capsule do
     An Axon model producing capsule norms `[batch, num_digit_caps]`
     representing class probabilities.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:conv_channels, pos_integer()}
+          | {:conv_kernel, pos_integer()}
+          | {:digit_cap_dim, pos_integer()}
+          | {:input_shape, tuple()}
+          | {:num_digit_caps, pos_integer()}
+          | {:num_primary_caps, pos_integer()}
+          | {:primary_cap_dim, pos_integer()}
+          | {:routing_iterations, float()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_shape = Keyword.fetch!(opts, :input_shape)
     num_primary_caps = Keyword.get(opts, :num_primary_caps, @default_num_primary_caps)

@@ -73,7 +73,13 @@ defmodule Edifice.Contrastive.SimCLR do
   ## Returns
     An Axon model mapping inputs to projection embeddings.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:encoder_dim, pos_integer()}
+          | {:hidden_size, pos_integer()}
+          | {:projection_dim, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     encoder_dim = Keyword.fetch!(opts, :encoder_dim)
     projection_dim = Keyword.get(opts, :projection_dim, default_projection_dim())

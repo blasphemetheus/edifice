@@ -103,7 +103,14 @@ defmodule Edifice.Contrastive.BYOL do
   ## Returns
     `{online_model, target_model}` tuple of Axon models.
   """
-  @spec build(keyword()) :: {Axon.t(), Axon.t()}
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:encoder_dim, pos_integer()}
+          | {:projection_dim, pos_integer()}
+          | {:predictor_dim, pos_integer()}
+          | {:hidden_size, pos_integer()}
+
+  @spec build([build_opt()]) :: {Axon.t(), Axon.t()}
   def build(opts \\ []) do
     online = build_online(opts)
     target = build_target(opts)

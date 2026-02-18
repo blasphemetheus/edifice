@@ -86,7 +86,14 @@ defmodule Edifice.Energy.Hopfield do
   ## Returns
     An Axon model: `[batch, input_dim]` -> `[batch, pattern_dim]`
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:beta, float()}
+          | {:input_dim, pos_integer()}
+          | {:num_patterns, pos_integer()}
+          | {:pattern_dim, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_dim = Keyword.fetch!(opts, :input_dim)
     num_patterns = Keyword.get(opts, :num_patterns, @default_num_patterns)

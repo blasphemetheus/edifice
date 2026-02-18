@@ -101,7 +101,18 @@ defmodule Edifice.Convolutional.DenseNet do
 
     An Axon model outputting `[batch, num_classes]`.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:block_config, [pos_integer()]}
+          | {:bn_size, pos_integer()}
+          | {:compression, float()}
+          | {:dropout, float()}
+          | {:growth_rate, pos_integer()}
+          | {:initial_channels, pos_integer()}
+          | {:input_shape, tuple()}
+          | {:num_classes, pos_integer() | nil}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_shape = Keyword.fetch!(opts, :input_shape)
     num_classes = Keyword.get(opts, :num_classes, @default_num_classes)

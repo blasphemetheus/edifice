@@ -86,7 +86,18 @@ defmodule Edifice.Graph.SchNet do
   An Axon model with two inputs ("nodes" for atom features and "adjacency"
   for pairwise distances).
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:cutoff, float()}
+          | {:hidden_size, pos_integer()}
+          | {:input_dim, pos_integer()}
+          | {:num_classes, pos_integer() | nil}
+          | {:num_filters, pos_integer()}
+          | {:num_interactions, pos_integer()}
+          | {:num_rbf, pos_integer()}
+          | {:pool, atom()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_dim = Keyword.fetch!(opts, :input_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)

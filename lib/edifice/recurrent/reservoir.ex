@@ -64,7 +64,18 @@ defmodule Edifice.Recurrent.Reservoir do
     An Axon model that processes sequences through a fixed reservoir
     and trainable readout layer.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:input_scaling, float()}
+          | {:input_size, pos_integer()}
+          | {:leak_rate, float()}
+          | {:output_size, pos_integer()}
+          | {:reservoir_size, pos_integer()}
+          | {:seq_len, pos_integer()}
+          | {:sparsity, float()}
+          | {:spectral_radius, float()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
     reservoir_size = Keyword.get(opts, :reservoir_size, 500)

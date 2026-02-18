@@ -147,7 +147,15 @@ defmodule Edifice.Generative.FlowMatching do
   ## Returns
     An Axon model that predicts velocity given (x_t, t, obs).
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:action_dim, pos_integer()}
+          | {:action_horizon, pos_integer()}
+          | {:hidden_size, pos_integer()}
+          | {:num_layers, pos_integer()}
+          | {:obs_size, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     obs_size = Keyword.fetch!(opts, :obs_size)
     action_dim = Keyword.fetch!(opts, :action_dim)

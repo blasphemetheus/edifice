@@ -100,7 +100,16 @@ defmodule Edifice.Memory.NTM do
     An Axon model taking input `[batch, input_size]` and memory `[batch, N, M]`,
     producing output `[batch, output_size]`.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:controller_size, pos_integer()}
+          | {:input_size, pos_integer()}
+          | {:memory_dim, pos_integer()}
+          | {:memory_size, pos_integer()}
+          | {:num_heads, pos_integer()}
+          | {:output_size, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
     memory_size = Keyword.get(opts, :memory_size, @default_memory_size)

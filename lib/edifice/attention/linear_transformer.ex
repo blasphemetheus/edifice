@@ -95,7 +95,14 @@ defmodule Edifice.Attention.LinearTransformer do
 
     An Axon model that outputs [batch, hidden_size] from the last position.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:dropout, float()}
+          | {:hidden_size, pos_integer()}
+          | {:num_heads, pos_integer()}
+          | {:num_layers, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)

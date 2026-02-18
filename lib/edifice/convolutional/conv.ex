@@ -63,7 +63,17 @@ defmodule Edifice.Convolutional.Conv do
   # ============================================================================
 
   @doc "Alias for `build_conv1d/1`."
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:input_size, pos_integer()}
+          | {:channels, [pos_integer()]}
+          | {:kernel_sizes, pos_integer() | [pos_integer()]}
+          | {:activation, atom()}
+          | {:dropout, float()}
+          | {:pooling, atom() | nil}
+          | {:seq_len, pos_integer() | nil}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []), do: build_conv1d(opts)
 
   @doc """

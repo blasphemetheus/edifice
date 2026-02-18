@@ -111,7 +111,18 @@ defmodule Edifice.Contrastive.MAE do
   ## Returns
     `{encoder, decoder}` tuple of Axon models.
   """
-  @spec build(keyword()) :: {Axon.t(), Axon.t()}
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:input_dim, pos_integer()}
+          | {:embed_dim, pos_integer()}
+          | {:num_encoder_layers, pos_integer()}
+          | {:num_decoder_layers, pos_integer()}
+          | {:decoder_dim, pos_integer()}
+          | {:expand_factor, pos_integer()}
+          | {:num_patches, pos_integer() | nil}
+          | {:mask_ratio, float()}
+
+  @spec build([build_opt()]) :: {Axon.t(), Axon.t()}
   def build(opts \\ []) do
     encoder = build_encoder(opts)
     decoder = build_decoder(opts)

@@ -92,7 +92,14 @@ defmodule Edifice.Probabilistic.Bayesian do
     inference, use the mean weights (mu) directly by setting epsilon to zero
     in the params.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:activation, atom()}
+          | {:hidden_sizes, [pos_integer()]}
+          | {:input_size, pos_integer()}
+          | {:output_size, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
     hidden_sizes = Keyword.get(opts, :hidden_sizes, @default_hidden_sizes)

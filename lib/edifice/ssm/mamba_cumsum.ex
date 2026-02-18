@@ -29,7 +29,18 @@ defmodule Edifice.SSM.MambaCumsum do
 
   Same API as `Mamba.build/1`.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:embed_dim, pos_integer()}
+          | {:hidden_size, pos_integer()}
+          | {:state_size, pos_integer()}
+          | {:expand_factor, pos_integer()}
+          | {:conv_size, pos_integer()}
+          | {:num_layers, pos_integer()}
+          | {:dropout, float()}
+          | {:window_size, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     Common.build_model(opts, &build_mamba_block/2)
   end

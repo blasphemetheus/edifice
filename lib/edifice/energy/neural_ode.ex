@@ -75,7 +75,15 @@ defmodule Edifice.Energy.NeuralODE do
 
   An Axon model: `[batch, input_size]` -> `[batch, output_size]`
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:hidden_size, pos_integer()}
+          | {:input_size, pos_integer()}
+          | {:num_steps, pos_integer()}
+          | {:output_size, pos_integer()}
+          | {:step_size, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)

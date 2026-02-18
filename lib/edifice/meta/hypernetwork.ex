@@ -76,7 +76,15 @@ defmodule Edifice.Meta.Hypernetwork do
     An Axon model taking conditioning `[batch, conditioning_size]` and
     data `[batch, input_size]`, producing `[batch, last_output_dim]`.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:activation, atom()}
+          | {:conditioning_size, pos_integer()}
+          | {:hidden_sizes, [pos_integer()]}
+          | {:input_size, pos_integer()}
+          | {:target_layer_sizes, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     conditioning_size = Keyword.fetch!(opts, :conditioning_size)
     target_layer_sizes = Keyword.fetch!(opts, :target_layer_sizes)

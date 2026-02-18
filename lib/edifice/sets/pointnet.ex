@@ -112,7 +112,18 @@ defmodule Edifice.Sets.PointNet do
   An Axon model. Input shape: `{batch, num_points, input_dim}`.
   Output shape: `{batch, num_classes}`.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:activation, atom()}
+          | {:dropout, float()}
+          | {:global_dims, pos_integer()}
+          | {:hidden_dims, pos_integer()}
+          | {:input_dim, pos_integer()}
+          | {:num_classes, pos_integer() | nil}
+          | {:use_feature_t_net, boolean()}
+          | {:use_t_net, boolean()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_dim = Keyword.get(opts, :input_dim, 3)
     num_classes = Keyword.fetch!(opts, :num_classes)

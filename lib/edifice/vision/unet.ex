@@ -121,7 +121,17 @@ defmodule Edifice.Vision.UNet do
 
     An Axon model outputting `[batch, out_channels, image_size, image_size]`.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:base_features, pos_integer()}
+          | {:depth, pos_integer()}
+          | {:dropout, float()}
+          | {:image_size, pos_integer()}
+          | {:in_channels, pos_integer()}
+          | {:out_channels, pos_integer()}
+          | {:use_attention, boolean()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     in_channels = Keyword.get(opts, :in_channels, @default_in_channels)
     out_channels = Keyword.get(opts, :out_channels, @default_out_channels)

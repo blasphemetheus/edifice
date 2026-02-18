@@ -106,7 +106,15 @@ defmodule Edifice.Generative.LatentDiffusion do
 
     `{encoder, decoder, denoiser}` - Tuple of Axon models.
   """
-  @spec build(keyword()) :: {Axon.t(), Axon.t(), Axon.t()}
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:hidden_size, pos_integer()}
+          | {:input_size, pos_integer()}
+          | {:latent_size, pos_integer()}
+          | {:num_layers, pos_integer()}
+          | {:num_steps, pos_integer()}
+
+  @spec build([build_opt()]) :: {Axon.t(), Axon.t(), Axon.t()}
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
     latent_size = Keyword.get(opts, :latent_size, @default_latent_size)

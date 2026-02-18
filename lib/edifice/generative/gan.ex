@@ -53,7 +53,16 @@ defmodule Edifice.Generative.GAN do
   ## Returns
     Tuple of `{generator, discriminator}` Axon models.
   """
-  @spec build(keyword()) :: {Axon.t(), Axon.t()}
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:output_size, pos_integer()}
+          | {:latent_size, pos_integer()}
+          | {:generator_sizes, [pos_integer()]}
+          | {:discriminator_sizes, [pos_integer()]}
+          | {:activation, atom()}
+          | {:output_activation, atom()}
+
+  @spec build([build_opt()]) :: {Axon.t(), Axon.t()}
   def build(opts \\ []) do
     {build_generator(opts), build_discriminator(opts)}
   end

@@ -100,7 +100,18 @@ defmodule Edifice.Meta.MoE do
 
     An Axon model for the MoE layer.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:dropout, float()}
+          | {:expert_type, :ffn | :glu | :mamba}
+          | {:hidden_size, pos_integer()}
+          | {:input_size, pos_integer()}
+          | {:num_experts, pos_integer()}
+          | {:output_size, pos_integer()}
+          | {:routing, routing_strategy()}
+          | {:top_k, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
     hidden_size = Keyword.get(opts, :hidden_size, input_size * 4)

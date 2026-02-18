@@ -98,7 +98,14 @@ defmodule Edifice.Generative.NormalizingFlow do
     and generation, use the `forward/3`, `inverse/3`, and `log_probability/3`
     Nx functions directly.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:activation, atom()}
+          | {:hidden_sizes, [pos_integer()]}
+          | {:input_size, pos_integer()}
+          | {:num_flows, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
     num_flows = Keyword.get(opts, :num_flows, @default_num_flows)

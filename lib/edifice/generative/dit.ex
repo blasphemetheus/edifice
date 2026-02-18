@@ -102,7 +102,17 @@ defmodule Edifice.Generative.DiT do
 
     An Axon model that predicts noise given (noisy_input, timestep, [class]).
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:depth, pos_integer()}
+          | {:hidden_size, pos_integer()}
+          | {:input_dim, pos_integer()}
+          | {:mlp_ratio, float()}
+          | {:num_classes, pos_integer() | nil}
+          | {:num_heads, pos_integer()}
+          | {:num_steps, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_dim = Keyword.fetch!(opts, :input_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)

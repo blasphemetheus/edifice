@@ -85,7 +85,17 @@ defmodule Edifice.Graph.GAT do
   An Axon model with two inputs ("nodes" and "adjacency"). Output shape is
   `{batch, num_nodes, num_classes}` for node classification.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:activation, atom()}
+          | {:dropout, float()}
+          | {:hidden_size, pos_integer()}
+          | {:input_dim, pos_integer()}
+          | {:num_classes, pos_integer() | nil}
+          | {:num_heads, pos_integer()}
+          | {:num_layers, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_dim = Keyword.fetch!(opts, :input_dim)
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)

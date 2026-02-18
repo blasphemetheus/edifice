@@ -121,7 +121,18 @@ defmodule Edifice.Vision.ConvNeXt do
     An Axon model. Without `:num_classes`, outputs `[batch, dims[-1]]`.
     With `:num_classes`, outputs `[batch, num_classes]`.
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:depths, [pos_integer()]}
+          | {:dims, [pos_integer()]}
+          | {:dropout, float()}
+          | {:image_size, pos_integer()}
+          | {:in_channels, pos_integer()}
+          | {:layer_scale_init, float()}
+          | {:num_classes, pos_integer() | nil}
+          | {:patch_size, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     image_size = Keyword.get(opts, :image_size, @default_image_size)
     patch_size = Keyword.get(opts, :patch_size, @default_patch_size)

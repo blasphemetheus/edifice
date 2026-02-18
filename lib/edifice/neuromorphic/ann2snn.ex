@@ -83,7 +83,13 @@ defmodule Edifice.Neuromorphic.ANN2SNN do
 
   An Axon model (standard ANN): `[batch, input_size]` -> `[batch, output_size]`
   """
-  @spec build(keyword()) :: Axon.t()
+  @typedoc "Options for `build/1`."
+  @type build_opt ::
+          {:hidden_sizes, [pos_integer()]}
+          | {:input_size, pos_integer()}
+          | {:output_size, pos_integer()}
+
+  @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
     hidden_sizes = Keyword.get(opts, :hidden_sizes, @default_hidden_sizes)
