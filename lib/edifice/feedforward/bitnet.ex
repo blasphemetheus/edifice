@@ -208,7 +208,8 @@ defmodule Edifice.Feedforward.BitNet do
   defp bitlinear_impl(input, weight, bias, opts) do
     quantize = opts[:quantize] || :ternary
 
-    # Quantize weights
+    # Quantize weights (STE is implicit: Axon stores full-precision params
+    # and quantization in this callback is opaque to autograd)
     w_quant =
       case quantize do
         :binary ->

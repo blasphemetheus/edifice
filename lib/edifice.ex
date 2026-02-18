@@ -25,8 +25,8 @@ defmodule Edifice do
   | Feedforward | MLP, KAN, KAT, TabNet, BitNet |
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
   | Recurrent | LSTM, GRU, xLSTM, mLSTM, MinGRU, MinLSTM, DeltaNet, TTT, Titans, Reservoir (ESN) |
-  | State Space | Mamba, Mamba-2 (SSD), S4, S4D, S5, H3, Hyena, BiMamba, GatedSSM, StripedHyena |
-  | Attention | Multi-Head, GQA, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RWKV, GLA, HGRN, Griffin, Based, InfiniAttention, Conformer, Mega, RingAttention |
+  | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, BiMamba, GatedSSM, StripedHyena |
+  | Attention | Multi-Head, GQA, MLA, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RWKV, GLA, HGRN, Griffin, Based, InfiniAttention, Conformer, Mega, RingAttention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Normalizing Flow |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
@@ -36,7 +36,7 @@ defmodule Edifice do
   | Memory | NTM, Memory Networks |
   | Meta | MoE, Switch MoE, Soft MoE, LoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead |
   | Liquid | Liquid Neural Networks |
-  | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg |
+  | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA |
   | Neuromorphic | SNN, ANN2SNN |
   """
 
@@ -82,6 +82,7 @@ defmodule Edifice do
     jamba: Edifice.SSM.Hybrid,
     zamba: Edifice.SSM.Zamba,
     striped_hyena: Edifice.SSM.StripedHyena,
+    mamba3: Edifice.SSM.Mamba3,
     # Attention
     attention: Edifice.Attention.MultiHead,
     retnet: Edifice.Attention.RetNet,
@@ -100,6 +101,7 @@ defmodule Edifice do
     infini_attention: Edifice.Attention.InfiniAttention,
     conformer: Edifice.Attention.Conformer,
     ring_attention: Edifice.Attention.RingAttention,
+    mla: Edifice.Attention.MLA,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -162,6 +164,7 @@ defmodule Edifice do
     barlow_twins: Edifice.Contrastive.BarlowTwins,
     mae: Edifice.Contrastive.MAE,
     vicreg: Edifice.Contrastive.VICReg,
+    jepa: Edifice.Contrastive.JEPA,
     # Liquid
     liquid: Edifice.Liquid,
     # Neuromorphic
@@ -226,7 +229,8 @@ defmodule Edifice do
         :gated_ssm,
         :jamba,
         :zamba,
-        :striped_hyena
+        :striped_hyena,
+        :mamba3
       ],
       attention: [
         :attention,
@@ -245,7 +249,8 @@ defmodule Edifice do
         :based,
         :infini_attention,
         :conformer,
-        :ring_attention
+        :ring_attention,
+        :mla
       ],
       vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf],
       generative: [
@@ -278,7 +283,7 @@ defmodule Edifice do
         :mixture_of_agents,
         :rlhf_head
       ],
-      contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg],
+      contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg, :jepa],
       liquid: [:liquid],
       neuromorphic: [:snn, :ann2snn]
     }
@@ -319,6 +324,7 @@ defmodule Edifice do
     - `:byol` — `{online_network, target_network}`
     - `:barlow_twins` — `{backbone, projection_head}`
     - `:vicreg` — `{backbone, projection_head}`
+    - `:jepa` — `{context_encoder, predictor}`
     - `:mae` — `{encoder, decoder}`
   """
   @spec build(atom(), keyword()) :: Axon.t() | tuple()
