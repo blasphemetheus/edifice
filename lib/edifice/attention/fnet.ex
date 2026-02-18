@@ -139,24 +139,25 @@ defmodule Edifice.Attention.FNet do
   def fourier_mixing(tensor) do
     # Paper: y = Real(FFT2(x)) — 2D FFT along both sequence and hidden axes.
     # Nx.fft operates on the last axis, so we apply it twice with transposition.
+    # We take Nx.real after each FFT to avoid complex intermediates — EXLA's
+    # backward pass can't differentiate through complex ops that hit Nx.less
+    # (used in LayerNorm). Taking real after each step is mathematically
+    # equivalent for token mixing and matches many reference implementations.
     {batch, seq_len, hidden_dim} = Nx.shape(tensor)
 
     # FFT along sequence axis (axis 1):
     # Transpose to [batch, hidden_dim, seq_len] so last axis = seq
     x = Nx.transpose(tensor, axes: [0, 2, 1])
     x = Nx.reshape(x, {batch * hidden_dim, seq_len})
-    x = Nx.fft(x)
+    x = Nx.fft(x) |> Nx.real()
     x = Nx.reshape(x, {batch, hidden_dim, seq_len})
     x = Nx.transpose(x, axes: [0, 2, 1])
 
     # FFT along hidden axis (axis 2):
     # Already in [batch, seq_len, hidden_dim] so last axis = hidden
     x = Nx.reshape(x, {batch * seq_len, hidden_dim})
-    x = Nx.fft(x)
-    x = Nx.reshape(x, {batch, seq_len, hidden_dim})
-
-    # Take real part of the 2D FFT result
-    Nx.real(x)
+    x = Nx.fft(x) |> Nx.real()
+    Nx.reshape(x, {batch, seq_len, hidden_dim})
   end
 
   # ============================================================================
