@@ -338,16 +338,22 @@ defmodule Edifice.Attention.RWKV do
       fn x ->
         # x: [batch, seq_len, hidden_size]
         batch = Nx.axis_size(x, 0)
+        seq_len_actual = Nx.axis_size(x, 1)
         hidden = Nx.axis_size(x, 2)
 
-        # Pad with zeros at the start (for the first token)
-        zeros = Nx.broadcast(0.0, {batch, 1, hidden})
-
-        # Shift: concatenate zeros with all but last token
+        # Shift: prepend zeros, drop last token
+        # At seq_len=1, shifted is all zeros (no previous token)
         shifted =
-          Nx.concatenate([zeros, Nx.slice_along_axis(x, 0, Nx.axis_size(x, 1) - 1, axis: 1)],
-            axis: 1
-          )
+          if seq_len_actual > 1 do
+            zeros = Nx.broadcast(0.0, {batch, 1, hidden})
+
+            Nx.concatenate(
+              [zeros, Nx.slice_along_axis(x, 0, seq_len_actual - 1, axis: 1)],
+              axis: 1
+            )
+          else
+            Nx.broadcast(0.0, {batch, 1, hidden})
+          end
 
         # Concatenate current and shifted for mixing
         Nx.concatenate([x, shifted], axis: 2)

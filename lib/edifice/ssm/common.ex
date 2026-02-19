@@ -481,7 +481,7 @@ defmodule Edifice.SSM.Common do
 
     # Up-sweep: compute partial products/sums at each level
     {_a_reduced, b_reduced} =
-      Enum.reduce(0..(log_len - 1), {a, b}, fn level, {a_curr, b_curr} ->
+      Enum.reduce(0..(log_len - 1)//1, {a, b}, fn level, {a_curr, b_curr} ->
         stride = round(:math.pow(2, level))
 
         if stride >= seq_len do

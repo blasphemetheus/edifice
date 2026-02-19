@@ -102,7 +102,7 @@ defmodule Edifice.SSM.MambaHillisSteele do
     # Hillis-Steele: at each level, combine with element `stride` positions back
     # Unlike Blelloch, ALL elements participate at every level
     {_a_final, b_final} =
-      Enum.reduce(0..(log_len - 1), {a, b}, fn level, {a_curr, b_curr} ->
+      Enum.reduce(0..(log_len - 1)//1, {a, b}, fn level, {a_curr, b_curr} ->
         stride = round(:math.pow(2, level))
 
         if stride >= seq_len do
