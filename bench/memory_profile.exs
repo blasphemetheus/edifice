@@ -159,7 +159,7 @@ defmodule MemoryProfile do
     # GPU warmup
     IO.puts("Warming up GPU...")
     warmup_model = Edifice.build(:gated_ssm, @shared_opts)
-    {init_fn, predict_fn} = Axon.build(warmup_model)
+    {init_fn, _predict_fn} = Axon.build(warmup_model)
     template = %{"state_sequence" => Nx.template({@batch, @seq_len, @embed}, :f32)}
     _params = init_fn.(template, Axon.ModelState.empty())
     IO.puts("")
