@@ -16,11 +16,18 @@ defmodule Edifice.Recurrent.TTT do
   - **Equivalent to linear attention**: TTT-Linear is mathematically equivalent
     to linear attention with the delta rule when the inner model is linear
 
-  ## Simplified Implementation
+  ## Paper-Faithful Implementation
 
-  For Axon compatibility, we approximate the per-token gradient update with
-  a linear outer-product update rule. This captures the key insight (the hidden
-  state adapts to the input distribution) while remaining graph-compilable.
+  Follows the official TTT-Linear implementation (ttt-lm-pytorch) with these
+  key stability mechanisms:
+
+  1. **W_0 ~ N(0, 0.02)**: Small initialization keeps early predictions near zero,
+     preventing gradient explosion in the first steps.
+  2. **eta / head_dim scaling**: Inner learning rate is scaled by 1/d (d=inner_size),
+     keeping weight updates small. Without this, eta in [0,1] is ~64x too large.
+  3. **Inner LayerNorm**: Learnable LayerNorm on inner model predictions before
+     computing reconstruction error. Prevents prediction magnitudes from drifting.
+  4. **Output gating**: Sigmoid gate on output (like SwiGLU) for smoother gradients.
 
   ## Equations (TTT-Linear)
 
@@ -29,17 +36,18 @@ defmodule Edifice.Recurrent.TTT do
   q_t = W_q x_t                          # Query
   k_t = W_k x_t                          # Key
   v_t = W_v x_t                          # Value (reconstruction target)
-  eta_t = sigmoid(W_eta x_t)             # Learning rate gate
+  eta_t = sigmoid(W_eta x_t) / d         # Learning rate gate (scaled by 1/head_dim)
 
-  # Inner model forward: prediction = W_t @ k_t
-  pred_t = W_{t-1} @ k_t
+  # Inner model forward + LayerNorm
+  pred_t = LayerNorm(W_{t-1} @ k_t)
 
-  # Self-supervised loss gradient (MSE on reconstruction)
-  # grad_W = (pred_t - v_t) @ k_t^T
-  # W_t = W_{t-1} - eta_t * grad_W
+  # Self-supervised gradient update
+  error_t = pred_t - v_t
+  grad_W = error_t @ k_t^T
+  W_t = W_{t-1} - eta_t * grad_W
 
-  # Output using updated model
-  o_t = W_t @ q_t
+  # Gated output using updated model
+  o_t = W_t @ q_t * sigmoid(gate_t)
   ```
 
   ## Architecture
@@ -51,15 +59,15 @@ defmodule Edifice.Recurrent.TTT do
   [Input Projection] -> hidden_size
         |
         v
-  +----------------------------------+
-  |        TTT Layer                 |
-  |  Project to Q, K, V, eta         |
-  |  For each timestep:              |
-  |    pred = W @ k                  |
-  |    error = pred - v              |
-  |    W -= eta * error * k^T        |
-  |    output = W @ q                |
-  +----------------------------------+
+  +--------------------------------------+
+  |        TTT Layer                     |
+  |  Project to Q, K, V, eta, gate       |
+  |  For each timestep:                  |
+  |    pred = LayerNorm(W @ k)           |
+  |    error = pred - v                  |
+  |    W -= (eta/d) * error * k^T        |
+  |    output = (W @ q) * sigmoid(gate)  |
+  +--------------------------------------+
         | (repeat num_layers)
         v
   [Layer Norm] -> [Last Timestep]
@@ -120,7 +128,8 @@ defmodule Edifice.Recurrent.TTT do
       The `:mlp` variant applies SiLU activation to keys and queries before
       the inner model, making the hidden state a 2-layer MLP instead of
       a single linear layer.
-    - `:output_rms_norm` - Apply per-timestep RMS norm to output (default: false)
+    - `:output_gate` - Apply sigmoid output gate (default: true). Provides
+      smoother gradients by gating the TTT output before the residual.
 
   ## Returns
     An Axon model that processes sequences and outputs the last hidden state.
@@ -132,7 +141,7 @@ defmodule Edifice.Recurrent.TTT do
           | {:hidden_size, pos_integer()}
           | {:inner_size, pos_integer()}
           | {:num_layers, pos_integer()}
-          | {:output_rms_norm, boolean()}
+          | {:output_gate, boolean()}
           | {:seq_len, pos_integer()}
           | {:variant, :linear | :mlp}
           | {:window_size, pos_integer()}
@@ -160,7 +169,7 @@ defmodule Edifice.Recurrent.TTT do
         input
       end
 
-    output_rms_norm = Keyword.get(opts, :output_rms_norm, false)
+    output_gate = Keyword.get(opts, :output_gate, true)
     variant = Keyword.get(opts, :variant, :linear)
 
     # Stack TTT layers
@@ -172,7 +181,7 @@ defmodule Edifice.Recurrent.TTT do
             hidden_size,
             inner_size,
             "ttt_#{layer_idx}",
-            output_rms_norm,
+            output_gate,
             variant
           )
 
@@ -201,36 +210,58 @@ defmodule Edifice.Recurrent.TTT do
   # TTT Layer
   # ============================================================================
 
-  defp build_ttt_layer(input, hidden_size, inner_size, name, output_rms_norm, variant) do
+  defp build_ttt_layer(input, hidden_size, inner_size, name, output_gate, variant) do
     # Pre-norm for stability
     normed = Axon.layer_norm(input, name: "#{name}_norm")
 
     # Project to Q, K, V (inner_size), and eta (inner_size)
-    # Q and output projection use hidden_size, K/V/eta use inner_size
     q_proj = Axon.dense(normed, inner_size, name: "#{name}_q_proj")
     k_proj = Axon.dense(normed, inner_size, name: "#{name}_k_proj")
     v_proj = Axon.dense(normed, inner_size, name: "#{name}_v_proj")
     eta_proj = Axon.dense(normed, inner_size, name: "#{name}_eta_proj")
 
-    # Concatenate all projections
+    # Output gate projection (sigmoid gate for smoother gradients)
+    gate_proj =
+      if output_gate do
+        Axon.dense(normed, inner_size, name: "#{name}_gate_proj")
+      else
+        nil
+      end
+
+    # Concatenate projections: Q, K, V, eta, [gate]
+    cat_inputs =
+      if gate_proj do
+        [q_proj, k_proj, v_proj, eta_proj, gate_proj]
+      else
+        [q_proj, k_proj, v_proj, eta_proj]
+      end
+
     recurrence_input =
-      Axon.concatenate([q_proj, k_proj, v_proj, eta_proj],
-        axis: 2,
-        name: "#{name}_cat"
+      Axon.concatenate(cat_inputs, axis: 2, name: "#{name}_cat")
+
+    # Fix 1: W_0 ~ N(0, 0.02) per paper Section 4.1
+    # Small init keeps early predictions near zero, preventing gradient explosion
+    w0_param =
+      Axon.param("#{name}_w0", {inner_size, inner_size},
+        initializer: Axon.Initializers.normal(scale: 0.02)
       )
 
-    # Learnable W_0: initial inner model weights (standard random init per paper)
-    w0_param =
-      Axon.param("#{name}_w0", {inner_size, inner_size}, initializer: :glorot_uniform)
+    # Fix 3: Learnable LayerNorm on inner model predictions (before loss)
+    # Prevents prediction magnitudes from drifting as W accumulates updates
+    ln_gamma =
+      Axon.param("#{name}_inner_ln_gamma", {inner_size}, initializer: :ones)
 
-    # Apply TTT recurrence with learnable W_0
+    ln_beta =
+      Axon.param("#{name}_inner_ln_beta", {inner_size}, initializer: :zeros)
+
+    # Apply TTT recurrence with all stability params
     recurrence_output =
       Axon.layer(
-        &ttt_scan_impl/3,
-        [recurrence_input, w0_param],
+        &ttt_scan_impl/5,
+        [recurrence_input, w0_param, ln_gamma, ln_beta],
         name: "#{name}_recurrence",
         inner_size: inner_size,
-        output_rms_norm: output_rms_norm,
+        output_gate: output_gate,
         variant: variant,
         op_name: :ttt_scan
       )
@@ -242,27 +273,36 @@ defmodule Edifice.Recurrent.TTT do
     Axon.add(input, output, name: "#{name}_residual")
   end
 
-  # Wrapper for Axon.layer callback
-  defp ttt_scan_impl(combined, w0, opts) do
+  # Wrapper for Axon.layer callback — arity = num_inputs + 1 (for opts map)
+  defp ttt_scan_impl(combined, w0, ln_gamma, ln_beta, opts) do
     inner_size = opts[:inner_size]
-    output_rms_norm = opts[:output_rms_norm] || false
+    output_gate = opts[:output_gate] || false
     variant = opts[:variant] || :linear
-    ttt_scan(combined, w0, inner_size, output_rms_norm, variant)
+    ttt_scan(combined, w0, ln_gamma, ln_beta, inner_size, output_gate, variant)
   end
 
-  defp ttt_scan(combined, w0, inner_size, output_rms_norm, variant) do
-    # combined: [batch, seq_len, inner_size * 4]
+  defp ttt_scan(combined, w0, ln_gamma, ln_beta, inner_size, output_gate, variant) do
+    # combined: [batch, seq_len, inner_size * N] where N=4 (no gate) or 5 (with gate)
     batch_size = Nx.axis_size(combined, 0)
     seq_len = Nx.axis_size(combined, 1)
 
-    # Split into Q, K, V, eta
+    # Split into Q, K, V, eta, [gate]
     q_all = Nx.slice_along_axis(combined, 0, inner_size, axis: 2)
     k_all = Nx.slice_along_axis(combined, inner_size, inner_size, axis: 2)
     v_all = Nx.slice_along_axis(combined, inner_size * 2, inner_size, axis: 2)
     eta_pre = Nx.slice_along_axis(combined, inner_size * 3, inner_size, axis: 2)
 
-    # Learning rate gate
-    eta = Nx.sigmoid(eta_pre)
+    gate_all =
+      if output_gate do
+        Nx.slice_along_axis(combined, inner_size * 4, inner_size, axis: 2)
+      else
+        nil
+      end
+
+    # Fix 2: eta / inner_size scaling (CRITICAL for stability)
+    # Paper: eta = sigmoid(W_eta @ x) / head_dim
+    # Without this, the inner learning rate is ~64x too large
+    eta = Nx.divide(Nx.sigmoid(eta_pre), inner_size)
 
     # Initialize inner model weights from learnable W_0
     # w0: [inner_size, inner_size] -> broadcast to [batch, inner_size, inner_size]
@@ -276,17 +316,26 @@ defmodule Edifice.Recurrent.TTT do
         v_t = Nx.slice_along_axis(v_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         eta_t = Nx.slice_along_axis(eta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
+        gate_t =
+          if output_gate do
+            Nx.slice_along_axis(gate_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          else
+            nil
+          end
+
         # Inner model forward and update depend on variant
         {w_t, o_t} =
           case variant do
             :mlp ->
               # MLP variant: 2-layer inner model (k -> silu -> W @ k)
-              # First apply non-linearity, then linear
               k_act = Nx.multiply(k_t, Nx.sigmoid(k_t))
 
               pred = Nx.dot(w_prev, [2], [0], Nx.new_axis(k_act, 2), [1], [0])
               pred = Nx.squeeze(pred, axes: [2])
-              error = Nx.subtract(pred, v_t)
+
+              # Fix 3: LayerNorm on prediction before computing error
+              pred_normed = manual_layer_norm(pred, ln_gamma, ln_beta)
+              error = Nx.subtract(pred_normed, v_t)
 
               grad =
                 Nx.dot(
@@ -307,7 +356,10 @@ defmodule Edifice.Recurrent.TTT do
               # Linear variant (default): pred = W @ k
               pred = Nx.dot(w_prev, [2], [0], Nx.new_axis(k_t, 2), [1], [0])
               pred = Nx.squeeze(pred, axes: [2])
-              error = Nx.subtract(pred, v_t)
+
+              # Fix 3: LayerNorm on prediction before computing error
+              pred_normed = manual_layer_norm(pred, ln_gamma, ln_beta)
+              error = Nx.subtract(pred_normed, v_t)
 
               grad =
                 Nx.dot(
@@ -324,11 +376,10 @@ defmodule Edifice.Recurrent.TTT do
               {w_new, Nx.squeeze(out, axes: [2])}
           end
 
-        # Optional RMS normalization (not in paper, but can stabilize varying W scales)
+        # Fix 4: Output gating (sigmoid gate for smoother gradients)
         o_t =
-          if output_rms_norm do
-            rms = Nx.sqrt(Nx.add(Nx.mean(Nx.pow(o_t, 2), axes: [-1], keep_axes: true), 1.0e-6))
-            Nx.divide(o_t, rms)
+          if output_gate do
+            Nx.multiply(o_t, Nx.sigmoid(gate_t))
           else
             o_t
           end
@@ -337,6 +388,14 @@ defmodule Edifice.Recurrent.TTT do
       end)
 
     output_list |> Enum.reverse() |> Nx.stack(axis: 1)
+  end
+
+  # Manual LayerNorm for use inside the TTT scan (can't use Axon.layer_norm in raw Nx)
+  defp manual_layer_norm(x, gamma, beta) do
+    mean = Nx.mean(x, axes: [-1], keep_axes: true)
+    var = Nx.variance(x, axes: [-1], keep_axes: true)
+    normalized = Nx.divide(Nx.subtract(x, mean), Nx.sqrt(Nx.add(var, 1.0e-6)))
+    Nx.add(Nx.multiply(normalized, gamma), beta)
   end
 
   # ============================================================================
