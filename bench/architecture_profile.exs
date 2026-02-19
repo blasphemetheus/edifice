@@ -44,7 +44,7 @@ defmodule ArchProfile do
 
   def build_multihead do
     Edifice.Attention.MultiHead.build(
-      embed_size: @hidden,
+      embed_dim: @hidden,
       hidden_size: @hidden,
       num_heads: 4,
       head_dim: 16,
@@ -55,7 +55,7 @@ defmodule ArchProfile do
 
   def build_linear_transformer do
     Edifice.Attention.LinearTransformer.build(
-      embed_size: @hidden,
+      embed_dim: @hidden,
       hidden_size: @hidden,
       num_heads: 4,
       num_layers: 2,
@@ -65,7 +65,7 @@ defmodule ArchProfile do
 
   def build_mamba do
     Edifice.SSM.Mamba.build(
-      embed_size: @hidden,
+      embed_dim: @hidden,
       hidden_size: @hidden,
       state_size: 16,
       num_layers: 2,
@@ -75,7 +75,7 @@ defmodule ArchProfile do
 
   def build_s4 do
     Edifice.SSM.S4.build(
-      embed_size: @hidden,
+      embed_dim: @hidden,
       hidden_size: @hidden,
       state_size: 16,
       num_layers: 2,

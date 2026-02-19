@@ -56,9 +56,10 @@ defmodule ScalingProfile do
 
       results =
         for {name, builder} <- [
-              {"MultiHead", fn ->
+              {"MultiHead",
+               fn ->
                  Edifice.Attention.MultiHead.build(
-                   embed_size: @hidden,
+                   embed_dim: @hidden,
                    hidden_size: @hidden,
                    num_heads: 4,
                    head_dim: 16,
@@ -66,27 +67,30 @@ defmodule ScalingProfile do
                    window_size: seq_len
                  )
                end},
-              {"LinearTfm", fn ->
+              {"LinearTfm",
+               fn ->
                  Edifice.Attention.LinearTransformer.build(
-                   embed_size: @hidden,
+                   embed_dim: @hidden,
                    hidden_size: @hidden,
                    num_heads: 4,
                    num_layers: 2,
                    window_size: seq_len
                  )
                end},
-              {"Mamba", fn ->
+              {"Mamba",
+               fn ->
                  Edifice.SSM.Mamba.build(
-                   embed_size: @hidden,
+                   embed_dim: @hidden,
                    hidden_size: @hidden,
                    state_size: 16,
                    num_layers: 2,
                    window_size: seq_len
                  )
                end},
-              {"S4", fn ->
+              {"S4",
+               fn ->
                  Edifice.SSM.S4.build(
-                   embed_size: @hidden,
+                   embed_dim: @hidden,
                    hidden_size: @hidden,
                    state_size: 16,
                    num_layers: 2,
@@ -128,9 +132,7 @@ defmodule ScalingProfile do
     IO.puts("batch=#{@batch}, input_dim=8, hidden=[32,32]")
     IO.puts("-" |> String.duplicate(50))
 
-    IO.puts(
-      "  #{String.pad_trailing("nodes", 10)}#{String.pad_trailing("inference", 15)}compile"
-    )
+    IO.puts("  #{String.pad_trailing("nodes", 10)}#{String.pad_trailing("inference", 15)}compile")
 
     IO.puts("  " <> String.duplicate("-", 40))
 

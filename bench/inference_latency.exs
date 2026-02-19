@@ -16,6 +16,9 @@
 #   BENCH_BATCH    - Batch size (default: 1, real-time inference)
 #   BENCH_LAYERS   - Number of layers (default: 2)
 #   BENCH_TIME     - Benchee time per scenario in seconds (default: 5)
+#
+# Note: Benchee is a :dev dependency. Run with MIX_ENV=dev for Phase 3,
+# or it will fall back to manual timing.
 
 Nx.default_backend(EXLA.Backend)
 
@@ -41,7 +44,7 @@ defmodule InferenceLatency do
   # ── Architecture definitions ───────────────────────────────────
 
   @shared_opts [
-    embed_size: @embed,
+    embed_dim: @embed,
     hidden_size: @hidden,
     state_size: @state_size,
     num_layers: @num_layers,
@@ -293,13 +296,30 @@ defmodule InferenceLatency do
         {to_string(arch), fn -> predict_fn.(params, input_map) end}
       end)
 
-    Benchee.run(benchmarks,
-      warmup: 2,
-      time: @bench_time,
-      memory_time: 2,
-      print: [configuration: false],
-      formatters: [Benchee.Formatters.Console]
-    )
+    if Code.ensure_loaded?(Benchee) do
+      Benchee.run(benchmarks,
+        warmup: 2,
+        time: @bench_time,
+        memory_time: 2,
+        print: [configuration: false],
+        formatters: [Benchee.Formatters.Console]
+      )
+    else
+      IO.puts("  (Benchee not available — run with MIX_ENV=dev for statistical benchmarks)")
+      IO.puts("  Falling back to manual timing (100 iterations)...")
+      IO.puts("")
+
+      benchmarks
+      |> Enum.map(fn {name, fun} ->
+        {total_us, _} = :timer.tc(fn -> for _ <- 1..100, do: fun.() end)
+        avg_ms = total_us / 100 / 1_000
+        {name, avg_ms}
+      end)
+      |> Enum.sort_by(fn {_, ms} -> ms end)
+      |> Enum.each(fn {name, avg_ms} ->
+        IO.puts("  #{String.pad_trailing(name, 25)} #{fmt(avg_ms)} avg (100 iters)")
+      end)
+    end
 
     # Phase 4: Category summary
     IO.puts("")

@@ -61,7 +61,7 @@ defmodule FullSweep do
   end
 
   @sequence_opts [
-    embed_size: @embed,
+    embed_dim: @embed,
     hidden_size: @hidden,
     state_size: @state_size,
     num_layers: @num_layers,
@@ -100,8 +100,7 @@ defmodule FullSweep do
             "liquid"
         end
 
-      {arch, family,
-       fn -> Edifice.build(arch, @sequence_opts) end,
+      {arch, family, fn -> Edifice.build(arch, @sequence_opts) end,
        fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end}
     end
   end
@@ -116,44 +115,40 @@ defmodule FullSweep do
            output_size: @hidden,
            seq_len: @seq_len
          )
-       end,
-       fn -> %{"input" => rand({@batch, @seq_len, @embed})} end},
+       end, fn -> %{"input" => rand({@batch, @seq_len, @embed})} end},
       {:rwkv, "attention",
        fn ->
          Edifice.build(:rwkv,
-           embed_size: @embed,
+           embed_dim: @embed,
            hidden_size: @hidden,
            head_size: 8,
            num_layers: @num_layers,
            seq_len: @seq_len,
            dropout: 0.0
          )
-       end,
-       fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end},
+       end, fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end},
       {:switch_moe, "meta",
        fn ->
          Edifice.build(:switch_moe,
-           embed_size: @embed,
+           embed_dim: @embed,
            hidden_size: @hidden,
            num_layers: @num_layers,
            seq_len: @seq_len,
            num_experts: 2,
            dropout: 0.0
          )
-       end,
-       fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end},
+       end, fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end},
       {:soft_moe, "meta",
        fn ->
          Edifice.build(:soft_moe,
-           embed_size: @embed,
+           embed_dim: @embed,
            hidden_size: @hidden,
            num_layers: @num_layers,
            seq_len: @seq_len,
            num_experts: 2,
            dropout: 0.0
          )
-       end,
-       fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end}
+       end, fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end}
     ]
   end
 
@@ -182,8 +177,7 @@ defmodule FullSweep do
 
     simple =
       for arch <- [:vit, :deit, :mlp_mixer] do
-        {arch, "vision",
-         fn -> Edifice.build(arch, vision_opts) end,
+        {arch, "vision", fn -> Edifice.build(arch, vision_opts) end,
          fn -> %{"image" => rand({@batch, @in_channels, @image_size, @image_size})} end}
       end
 
@@ -201,8 +195,7 @@ defmodule FullSweep do
              window_size: 4,
              dropout: 0.0
            )
-         end,
-         fn -> %{"image" => rand({@batch, @in_channels, 32, 32})} end},
+         end, fn -> %{"image" => rand({@batch, @in_channels, 32, 32})} end},
         {:convnext, "vision",
          fn ->
            Edifice.build(:convnext,
@@ -213,8 +206,7 @@ defmodule FullSweep do
              depths: [1, 1],
              dropout: 0.0
            )
-         end,
-         fn -> %{"image" => rand({@batch, @in_channels, 32, 32})} end},
+         end, fn -> %{"image" => rand({@batch, @in_channels, 32, 32})} end},
         {:unet, "vision",
          fn ->
            Edifice.build(:unet,
@@ -225,8 +217,7 @@ defmodule FullSweep do
              depth: 2,
              dropout: 0.0
            )
-         end,
-         fn -> %{"image" => rand({@batch, @in_channels, @image_size, @image_size})} end}
+         end, fn -> %{"image" => rand({@batch, @in_channels, @image_size, @image_size})} end}
       ]
   end
 
@@ -279,11 +270,9 @@ defmodule FullSweep do
 
   defp energy_specs do
     [
-      {:ebm, "energy",
-       fn -> Edifice.build(:ebm, input_size: @embed) end,
+      {:ebm, "energy", fn -> Edifice.build(:ebm, input_size: @embed) end,
        fn -> %{"input" => rand({@batch, @embed})} end},
-      {:hopfield, "energy",
-       fn -> Edifice.build(:hopfield, input_dim: @embed) end,
+      {:hopfield, "energy", fn -> Edifice.build(:hopfield, input_dim: @embed) end,
        fn -> %{"input" => rand({@batch, @embed})} end},
       {:neural_ode, "energy",
        fn -> Edifice.build(:neural_ode, input_size: @embed, hidden_size: @hidden) end,
@@ -351,13 +340,11 @@ defmodule FullSweep do
            num_experts: 2,
            top_k: 1
          )
-       end,
-       fn -> %{"moe_input" => rand({@batch, @seq_len, @embed})} end},
+       end, fn -> %{"moe_input" => rand({@batch, @seq_len, @embed})} end},
       {:lora, "meta",
        fn -> Edifice.build(:lora, input_size: @embed, output_size: @hidden, rank: 4) end,
        fn -> %{"input" => rand({@batch, @embed})} end},
-      {:adapter, "meta",
-       fn -> Edifice.build(:adapter, hidden_size: @hidden) end,
+      {:adapter, "meta", fn -> Edifice.build(:adapter, hidden_size: @hidden) end,
        fn -> %{"input" => rand({@batch, @hidden})} end},
       {:hypernetwork, "meta",
        fn ->
@@ -384,8 +371,7 @@ defmodule FullSweep do
            num_digit_caps: @num_classes,
            digit_cap_dim: 4
          )
-       end,
-       fn -> %{"input" => rand({@batch, 28, 28, 1})} end}
+       end, fn -> %{"input" => rand({@batch, 28, 28, 1})} end}
     ]
   end
 
@@ -398,8 +384,7 @@ defmodule FullSweep do
            output_size: @num_classes,
            hidden_sizes: [@hidden]
          )
-       end,
-       fn -> %{"input" => rand({@batch, @embed})} end},
+       end, fn -> %{"input" => rand({@batch, @embed})} end},
       {:ann2snn, "neuromorphic",
        fn -> Edifice.build(:ann2snn, input_size: @embed, output_size: @num_classes) end,
        fn -> %{"input" => rand({@batch, @embed})} end}
@@ -416,8 +401,7 @@ defmodule FullSweep do
            block_sizes: [1, 1],
            initial_channels: 8
          )
-       end,
-       fn -> %{"input" => rand({@batch, @image_size, @image_size, @in_channels})} end},
+       end, fn -> %{"input" => rand({@batch, @image_size, @image_size, @in_channels})} end},
       {:densenet, "convolutional",
        fn ->
          Edifice.build(:densenet,
@@ -427,8 +411,7 @@ defmodule FullSweep do
            block_config: [2, 2],
            initial_channels: 16
          )
-       end,
-       fn -> %{"input" => rand({@batch, 32, 32, @in_channels})} end},
+       end, fn -> %{"input" => rand({@batch, 32, 32, @in_channels})} end},
       {:tcn, "convolutional",
        fn -> Edifice.build(:tcn, input_size: @embed, hidden_size: @hidden, num_layers: 2) end,
        fn -> %{"input" => rand({@batch, @seq_len, @embed})} end},
@@ -439,8 +422,7 @@ defmodule FullSweep do
            hidden_dim: @hidden,
            num_classes: @num_classes
          )
-       end,
-       fn -> %{"input" => rand({@batch, @embed})} end},
+       end, fn -> %{"input" => rand({@batch, @embed})} end},
       {:efficientnet, "convolutional",
        fn ->
          Edifice.build(:efficientnet,
@@ -450,8 +432,7 @@ defmodule FullSweep do
            depth_multiplier: 1.0,
            num_classes: @num_classes
          )
-       end,
-       fn -> %{"input" => rand({@batch, 64})} end}
+       end, fn -> %{"input" => rand({@batch, 64})} end}
     ]
   end
 
@@ -462,34 +443,29 @@ defmodule FullSweep do
        fn ->
          {enc, _dec} = Edifice.build(:vae, input_size: @embed, latent_size: @latent_size)
          enc
-       end,
-       fn -> %{"input" => rand({@batch, @embed})} end},
+       end, fn -> %{"input" => rand({@batch, @embed})} end},
       {:vae_decoder, "generative",
        fn ->
          {_enc, dec} = Edifice.build(:vae, input_size: @embed, latent_size: @latent_size)
          dec
-       end,
-       fn -> %{"latent" => rand({@batch, @latent_size})} end},
+       end, fn -> %{"latent" => rand({@batch, @latent_size})} end},
       # GAN
       {:gan_generator, "generative",
        fn ->
          {gen, _disc} = Edifice.build(:gan, output_size: @embed, latent_size: @latent_size)
          gen
-       end,
-       fn -> %{"noise" => rand({@batch, @latent_size})} end},
+       end, fn -> %{"noise" => rand({@batch, @latent_size})} end},
       {:gan_discriminator, "generative",
        fn ->
          {_gen, disc} = Edifice.build(:gan, output_size: @embed, latent_size: @latent_size)
          disc
-       end,
-       fn -> %{"data" => rand({@batch, @embed})} end},
+       end, fn -> %{"data" => rand({@batch, @embed})} end},
       # VQ-VAE encoder only
       {:vq_vae_encoder, "generative",
        fn ->
          {enc, _dec} = Edifice.build(:vq_vae, input_size: @embed, embedding_dim: @latent_size)
          enc
-       end,
-       fn -> %{"input" => rand({@batch, @embed})} end},
+       end, fn -> %{"input" => rand({@batch, @embed})} end},
       # Normalizing Flow
       {:normalizing_flow, "generative",
        fn -> Edifice.build(:normalizing_flow, input_size: @embed, num_flows: 2) end,
@@ -621,8 +597,7 @@ defmodule FullSweep do
             {:barlow_twins, [encoder_dim: @embed, projection_dim: @hidden]},
             {:vicreg, [encoder_dim: @embed, projection_dim: @hidden]}
           ] do
-        {arch, "contrastive",
-         fn -> Edifice.build(arch, opts) end,
+        {arch, "contrastive", fn -> Edifice.build(arch, opts) end,
          fn -> %{"features" => rand({@batch, @embed})} end}
       end
 
@@ -634,8 +609,7 @@ defmodule FullSweep do
              Edifice.build(:byol, encoder_dim: @embed, projection_dim: @hidden)
 
            online
-         end,
-         fn -> %{"features" => rand({@batch, @embed})} end},
+         end, fn -> %{"features" => rand({@batch, @embed})} end},
         {:mae_encoder, "contrastive",
          fn ->
            {enc, _dec} =
@@ -650,8 +624,7 @@ defmodule FullSweep do
              )
 
            enc
-         end,
-         fn -> %{"visible_patches" => rand({@batch, 4, @embed})} end}
+         end, fn -> %{"visible_patches" => rand({@batch, 4, @embed})} end}
       ]
   end
 
