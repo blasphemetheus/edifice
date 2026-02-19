@@ -482,10 +482,11 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   # ── Conv EXLA.Backend analytical gradient test ─────────────────
-  # Theory: setting Nx.default_backend(EXLA.Backend) may allow EXLA
-  # to handle the conv operations that runtime_fun dispatches, since
-  # the fallback would use EXLA.Backend instead of BinaryBackend.
-  # Tagged :exla_only so it only runs in GPU/EXLA environments.
+  # Tested: setting Nx.default_backend(EXLA.Backend) does NOT help.
+  # The gradient tracer creates expression tensors, predict_fn is treated
+  # as runtime_fun, and EXLA can't JIT-compile Axon.Layers.conv_impl
+  # with expression tensor arguments. Same root cause, different error:
+  # "cannot pass a tensor expression as argument to defn"
 
   @tag timeout: 120_000
   @tag :exla_only
