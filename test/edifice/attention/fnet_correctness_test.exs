@@ -26,25 +26,29 @@ defmodule Edifice.Attention.FNetCorrectnessTest do
   # ============================================================================
 
   describe "FFT mixing produces real-valued output" do
-    test "fourier_mixing output has no imaginary component" do
+    test "fourier_mixing_real output has no imaginary component" do
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @hidden_size})
 
-      output = FNet.fourier_mixing(input)
+      dft_seq = FNet.dft_real_matrix(@seq_len)
+      dft_hidden = FNet.dft_real_matrix(@hidden_size)
+      output = FNet.fourier_mixing_real(input, dft_seq, dft_hidden)
 
       # Output type should be real (f32), not complex
       assert Nx.type(output) == {:f, 32}
 
-      # Output should be finite (no NaN/Inf from FFT)
+      # Output should be finite (no NaN/Inf from DFT)
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
       assert Nx.all(Nx.is_infinity(output) |> Nx.logical_not()) |> Nx.to_number() == 1
     end
 
-    test "fourier_mixing preserves shape [batch, seq, hidden]" do
+    test "fourier_mixing_real preserves shape [batch, seq, hidden]" do
       key = Nx.Random.key(42)
       {input, _} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @hidden_size})
 
-      output = FNet.fourier_mixing(input)
+      dft_seq = FNet.dft_real_matrix(@seq_len)
+      dft_hidden = FNet.dft_real_matrix(@hidden_size)
+      output = FNet.fourier_mixing_real(input, dft_seq, dft_hidden)
 
       assert Nx.shape(output) == {@batch, @seq_len, @hidden_size}
     end

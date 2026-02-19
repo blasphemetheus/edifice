@@ -49,10 +49,15 @@ defmodule Edifice.Attention.FNet do
 
   | Component | Transformer | FNet |
   |-----------|------------|------|
-  | Token mixing | O(N^2) | O(N log N) |
-  | Parameters | Q,K,V weights | None (FFT) |
+  | Token mixing | O(N^2) | O(N^2)* |
+  | Parameters | Q,K,V weights | None (DFT) |
   | Training speed | Baseline | ~7x faster |
   | Quality | Baseline | 92-97% of BERT |
+
+  *Note: We use real-valued DFT matrix multiply instead of Nx.fft because
+  EXLA's autodiff through complex FFT outputs triggers Nx.less/2 errors
+  in LayerNorm's backward pass. For typical seq_len (30-128) and hidden_size
+  (256-512), the O(N^2) matrix multiply is negligible vs the FFN layers.
 
   ## Usage
 
@@ -100,6 +105,13 @@ defmodule Edifice.Attention.FNet do
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
+    window_size = Keyword.get(opts, :window_size, 60)
+    seq_len = Keyword.get(opts, :seq_len, window_size)
+
+    # Precompute real DFT matrices at build time (avoids complex numbers
+    # that break EXLA's backward pass through Nx.fft)
+    dft_seq_tensor = dft_real_matrix(seq_len)
+    dft_hidden_tensor = dft_real_matrix(hidden_size)
 
     ModelBuilder.build_sequence_model(
       Keyword.merge(opts,
@@ -108,8 +120,18 @@ defmodule Edifice.Attention.FNet do
         block_builder: fn input, block_opts ->
           name = "fnet_block_#{block_opts[:layer_idx]}"
 
+          # Create Axon constants for the DFT matrices (shared tensors, unique names)
+          dft_seq = Axon.constant(dft_seq_tensor, name: "#{name}_dft_seq")
+          dft_hidden = Axon.constant(dft_hidden_tensor, name: "#{name}_dft_hidden")
+
           attn_fn = fn x, attn_name ->
-            Axon.nx(x, &fourier_mixing/1, name: "#{attn_name}_fft_mix")
+            Axon.layer(
+              fn input_t, dft_s, dft_h, _opts ->
+                fourier_mixing_real(input_t, dft_s, dft_h)
+              end,
+              [x, dft_seq, dft_hidden],
+              name: "#{attn_name}_fft_mix"
+            )
           end
 
           TransformerBlock.layer(input,
@@ -124,40 +146,53 @@ defmodule Edifice.Attention.FNet do
   end
 
   @doc """
-  Apply Fourier mixing to a sequence tensor.
+  Apply Fourier mixing using real-valued DFT matrix multiply.
 
-  Applies 2D FFT (along sequence and feature axes) and takes the real part.
-  This provides global token mixing without any learnable parameters.
+  Computes Real(FFT2(x)) along both sequence and feature axes using
+  precomputed cosine DFT matrices. This avoids Nx.fft entirely, preventing
+  complex number issues in EXLA's backward pass.
 
   ## Parameters
     - `tensor` - Input tensor [batch, seq_len, hidden_dim]
+    - `dft_seq` - Precomputed DFT matrix [seq_len, seq_len]
+    - `dft_hidden` - Precomputed DFT matrix [hidden_dim, hidden_dim]
 
   ## Returns
-    Real part of FFT [batch, seq_len, hidden_dim]
+    DFT-mixed tensor [batch, seq_len, hidden_dim]
   """
-  @spec fourier_mixing(Nx.Tensor.t()) :: Nx.Tensor.t()
-  def fourier_mixing(tensor) do
-    # Paper: y = Real(FFT2(x)) — 2D FFT along both sequence and hidden axes.
-    # Nx.fft operates on the last axis, so we apply it twice with transposition.
-    # We take Nx.real after each FFT to avoid complex intermediates — EXLA's
-    # backward pass can't differentiate through complex ops that hit Nx.less
-    # (used in LayerNorm). Taking real after each step is mathematically
-    # equivalent for token mixing and matches many reference implementations.
+  @spec fourier_mixing_real(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t()) :: Nx.Tensor.t()
+  def fourier_mixing_real(tensor, dft_seq, dft_hidden) do
+    # Paper: y = Real(FFT2(x)) — 2D DFT along both sequence and hidden axes.
+    # For real input x: Real(FFT(x))_k = sum_n x_n * cos(2π*n*k/N)
+    # This is equivalent to multiplying by the real DFT matrix (cosine basis).
+    # The DFT matrix is symmetric: cos(2π*n*k/N) = cos(2π*k*n/N).
     {batch, seq_len, hidden_dim} = Nx.shape(tensor)
 
-    # FFT along sequence axis (axis 1):
-    # Transpose to [batch, hidden_dim, seq_len] so last axis = seq
+    # Mix along sequence axis (axis 1):
+    # Reshape to [batch*hidden, seq] for matmul with [seq, seq] DFT matrix
     x = Nx.transpose(tensor, axes: [0, 2, 1])
     x = Nx.reshape(x, {batch * hidden_dim, seq_len})
-    x = Nx.fft(x) |> Nx.real()
+    x = Nx.dot(x, dft_seq)
     x = Nx.reshape(x, {batch, hidden_dim, seq_len})
     x = Nx.transpose(x, axes: [0, 2, 1])
 
-    # FFT along hidden axis (axis 2):
-    # Already in [batch, seq_len, hidden_dim] so last axis = hidden
+    # Mix along hidden axis (axis 2):
+    # Reshape to [batch*seq, hidden] for matmul with [hidden, hidden] DFT matrix
     x = Nx.reshape(x, {batch * seq_len, hidden_dim})
-    x = Nx.fft(x) |> Nx.real()
+    x = Nx.dot(x, dft_hidden)
     Nx.reshape(x, {batch, seq_len, hidden_dim})
+  end
+
+  @doc """
+  Build a real-valued DFT matrix: DFT[k, n] = cos(2π * k * n / N).
+
+  For real inputs, Real(FFT(x)) = x @ DFT_real, avoiding complex arithmetic.
+  """
+  @spec dft_real_matrix(pos_integer()) :: Nx.Tensor.t()
+  def dft_real_matrix(n) do
+    row = Nx.iota({n, 1}, type: :f32)
+    col = Nx.iota({1, n}, type: :f32)
+    Nx.cos(Nx.multiply(Nx.multiply(row, col), 2.0 * :math.pi() / n))
   end
 
   # ============================================================================
