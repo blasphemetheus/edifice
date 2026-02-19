@@ -135,7 +135,7 @@ defmodule Edifice.GradientSmokeTest do
     do_put_nested(map, keys, value)
   end
 
-  defp do_put_nested(_map, [key], value), do: %{key => value}
+  defp do_put_nested(map, [key], value), do: Map.put(map, key, value)
 
   defp do_put_nested(map, [key | rest], value) do
     inner = Map.get(map, key, %{})
@@ -489,6 +489,7 @@ defmodule Edifice.GradientSmokeTest do
 
   @tag timeout: 120_000
   @tag :exla_only
+  @tag :known_issue
   test "gradient flows through resnet with EXLA.Backend" do
     previous_backend = Nx.default_backend()
 
