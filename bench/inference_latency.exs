@@ -174,22 +174,20 @@ defmodule InferenceLatency do
 
     all_archs = architectures()
 
-    # Phase 0: GPU/EXLA runtime warmup — force cuDNN, BFC allocator, etc.
-    # Without this, the first architecture absorbs all one-time init cost.
+    # Phase 0: GPU/EXLA runtime warmup — compile and run the first architecture
+    # once to absorb all one-time costs (cuDNN init, BFC allocator, EXLA JIT
+    # cache warmup). The first compile is then re-done in Phase 1 for fair timing.
     IO.puts("## Phase 0: GPU Runtime Warmup")
     IO.puts("-" |> String.duplicate(60))
 
+    {arch0, _, opts0} = hd(all_archs)
+
     {warmup_us, _} =
       :timer.tc(fn ->
-        warmup_model = Edifice.build(:mlp, input_size: 16, hidden_sizes: [16])
-        {init_fn, predict_fn} = Axon.build(warmup_model)
-        params = init_fn.(Nx.template({1, 16}, :f32), Axon.ModelState.empty())
-        input = %{"input" => rand({1, 16})}
-
-        for _ <- 1..10, do: predict_fn.(params, input)
+        compile_model(arch0, opts0)
       end)
 
-    IO.puts("  GPU runtime initialized in #{Float.round(warmup_us / 1_000, 0)} ms")
+    IO.puts("  Warmed up #{arch0} in #{Float.round(warmup_us / 1_000, 0)} ms (discarded)")
     IO.puts("")
 
     # Phase 1: Compile all models and report compilation time
