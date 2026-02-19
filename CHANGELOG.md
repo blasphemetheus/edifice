@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-02-19
+
+### Added
+
+- 113 registered architectures across 19 families (up from 92/16)
+- **Transformer**: Decoder-Only (GPT-style with GQA, RoPE, SwiGLU, RMSNorm)
+- **Feedforward**: KAT (Kolmogorov-Arnold Transformer), BitNet (ternary/binary weight quantization)
+- **SSM**: Mamba-3 (complex state dynamics, trapezoidal discretization, MIMO rank-r), StripedHyena (gated conv + Hyena hybrid)
+- **Attention**: Based (Taylor expansion linear attention), InfiniAttention (compressive memory + local attention), Conformer (conv + transformer for audio), Mega (EMA + single-head gated attention), RingAttention (chunked ring-distributed attention), MLA (Multi-Head Latent Attention with KV compression and decoupled RoPE), DiffTransformer (dual softmax noise-cancelling attention)
+- **Vision**: FocalNet (focal modulation), PoolFormer (pooling-based MetaFormer), NeRF (positional encoding + MLP for radiance fields)
+- **Graph**: GINv2 (GIN with edge features)
+- **Meta**: MixtureOfDepths (dynamic per-token compute allocation), MixtureOfAgents (multi-proposer + aggregator routing), RLHFHead (reward model and preference heads)
+- **Contrastive**: JEPA (Joint Embedding Predictive Architecture with context encoder + predictor)
+- **Blocks**: CausalMask (unified mask creation), DepthwiseConv (1D depthwise separable convolution)
+- `ARCHITECTURE_ROADMAP.md` tracking remaining architectures by priority tier
+
+### Enhanced
+
+- MultiHead and GQA attention: added `:rope` option for built-in RoPE integration
+- TTT (Test-Time Training): added `:variant` option for `:linear` and `:mlp` inner models
+- TransformerBlock: added `:custom_ffn` callback for non-standard feed-forward networks
+- xLSTM: added `:mlstm` registry alias (`Edifice.build(:mlstm, opts)`)
+- sLSTM: log-domain stabilization (m_t state), recurrent connections (R*h_{t-1}), proper normalization (max(|n_t|, 1))
+
+### Changed
+
+- Removed unnecessary `require Axon` from 104 modules (Axon has zero macros)
+- BitNet `bitlinear_impl` comment clarified: STE is implicit via Axon's param/callback architecture
+
+### Fixed
+
+- MessagePassing aggregate: added batch axes to `Nx.dot` for correct batched matrix multiplication
+- RetNet: corrected `recurrent_retention_step` batching
+- TTT: paper-faithful initialization for numerical stability
+- FNet: replaced `Nx.fft` with real DFT matrix multiply for compatibility
+- RWKV: fixed seq_len=1 compile failure
+
 ## [0.1.1] - 2026-02-14
 
 ### Fixed

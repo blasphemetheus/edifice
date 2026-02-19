@@ -257,79 +257,108 @@ defmodule Edifice.Recurrent.XLSTM do
   @doc """
   Build the sLSTM (Scalar LSTM) layer.
 
-  sLSTM equations:
-  - i_t = exp(W_i x_t + R_i h_{t-1} + b_i)     # Input gate (exponential)
-  - f_t = exp(W_f x_t + R_f h_{t-1} + b_f)     # Forget gate (exponential)
-  - z_t = tanh(W_z x_t + R_z h_{t-1} + b_z)    # Cell input
-  - o_t = sigmoid(W_o x_t + R_o h_{t-1} + b_o)  # Output gate (sigmoid)
-  - c_t = f_t * c_{t-1} + i_t * z_t             # Cell state
-  - n_t = f_t * n_{t-1} + i_t                   # Normalizer state
-  - h_t = o_t * (c_t / n_t)                     # Hidden state
+  sLSTM equations with log-domain stabilization:
+  - log_i_t = W_i x_t + R_i h_{t-1} + b_i
+  - log_f_t = W_f x_t + R_f h_{t-1} + b_f
+  - z_t = tanh(W_z x_t + R_z h_{t-1} + b_z)
+  - o_t = sigmoid(W_o x_t + R_o h_{t-1} + b_o)
 
-  The normalizer n_t prevents exponential overflow from accumulated gates.
+  Log-domain stabilization (prevents exponential overflow):
+  - m_t = max(log_f_t + m_{t-1}, log_i_t)
+  - i_t' = exp(log_i_t - m_t)
+  - f_t' = exp(log_f_t + m_{t-1} - m_t)
+  - c_t = f_t' * c_{t-1} + i_t' * z_t
+  - n_t = f_t' * n_{t-1} + i_t'
+  - h_t = o_t * (c_t / max(|n_t|, 1))
+
+  The recurrent connections R_i, R_f, R_z, R_o enable memory mixing.
   """
   @spec build_slstm_layer(Axon.t(), keyword()) :: Axon.t()
   def build_slstm_layer(input, opts \\ []) do
     hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
     name = Keyword.get(opts, :name, "slstm")
 
-    # Project input to gate dimensions
-    # We need: i, f, z, o gates (4 * hidden_size)
-    gates = Axon.dense(input, hidden_size * 4, name: "#{name}_gates_proj")
+    # Input projection: W*x + b for all 4 gates across all timesteps
+    input_gates = Axon.dense(input, hidden_size * 4, name: "#{name}_input_proj")
 
-    # Apply sLSTM recurrence
-    Axon.nx(
-      gates,
-      fn gate_tensor ->
-        slstm_forward(gate_tensor, hidden_size)
-      end,
-      name: "#{name}_recurrence"
+    # Recurrent weight: R matrix [hidden_size, 4*hidden_size]
+    # Projects h_{t-1} to gate contributions for i, f, z, o
+    recurrent_weight =
+      Axon.param("#{name}_recurrent_weight", {hidden_size, hidden_size * 4},
+        initializer: :glorot_uniform
+      )
+
+    # Apply sLSTM recurrence with recurrent connections and log-domain stabilization
+    Axon.layer(
+      &slstm_impl/3,
+      [input_gates, recurrent_weight],
+      name: "#{name}_recurrence",
+      hidden_size: hidden_size,
+      op_name: :slstm
     )
   end
 
-  defp slstm_forward(gates, hidden_size) do
-    # gates: [batch, seq_len, hidden_size * 4]
-    batch_size = Nx.axis_size(gates, 0)
-    seq_len = Nx.axis_size(gates, 1)
-
-    # Split into individual gates
-    i_pre = Nx.slice_along_axis(gates, 0, hidden_size, axis: 2)
-    f_pre = Nx.slice_along_axis(gates, hidden_size, hidden_size, axis: 2)
-    z_pre = Nx.slice_along_axis(gates, hidden_size * 2, hidden_size, axis: 2)
-    o_pre = Nx.slice_along_axis(gates, hidden_size * 3, hidden_size, axis: 2)
-
-    # Stabilized exponential gating
-    # To prevent overflow, we use: exp(x - max(x)) and track the max
-    # For simplicity, we clip the pre-activation values
-    max_gate_val = 20.0
-    i_pre_clipped = Nx.clip(i_pre, -max_gate_val, max_gate_val)
-    f_pre_clipped = Nx.clip(f_pre, -max_gate_val, max_gate_val)
+  # sLSTM with log-domain stabilization and recurrent connections
+  defp slstm_impl(input_gates, recurrent_weight, opts) do
+    hidden_size = opts[:hidden_size]
+    # input_gates: [batch, seq_len, hidden_size * 4] (W*x + b, precomputed)
+    # recurrent_weight: [hidden_size, hidden_size * 4]
+    batch_size = Nx.axis_size(input_gates, 0)
+    seq_len = Nx.axis_size(input_gates, 1)
 
     # Initialize states
-    c_init = Nx.broadcast(0.0, {batch_size, 1, hidden_size})
-    n_init = Nx.broadcast(1.0, {batch_size, 1, hidden_size})
+    type = Nx.type(input_gates)
+    h_prev = Nx.broadcast(Nx.tensor(0.0, type: type), {batch_size, hidden_size})
+    c_prev = Nx.broadcast(Nx.tensor(0.0, type: type), {batch_size, hidden_size})
+    n_prev = Nx.broadcast(Nx.tensor(1.0, type: type), {batch_size, hidden_size})
+    m_prev = Nx.broadcast(Nx.tensor(0.0, type: type), {batch_size, hidden_size})
 
-    # Sequential recurrence
+    # Sequential recurrence with log-domain stabilization
     {_, h_list} =
-      Enum.reduce(0..(seq_len - 1), {{c_init, n_init}, []}, fn t, {{c_prev, n_prev}, acc} ->
-        # Get gates at time t
-        i_t = Nx.slice_along_axis(i_pre_clipped, t, 1, axis: 1) |> Nx.exp()
-        f_t = Nx.slice_along_axis(f_pre_clipped, t, 1, axis: 1) |> Nx.exp()
-        z_t = Nx.slice_along_axis(z_pre, t, 1, axis: 1) |> Nx.tanh()
-        o_t = Nx.slice_along_axis(o_pre, t, 1, axis: 1) |> Nx.sigmoid()
+      Enum.reduce(
+        0..(seq_len - 1),
+        {{h_prev, c_prev, n_prev, m_prev}, []},
+        fn t, {{h_p, c_p, n_p, m_p}, acc} ->
+          # Input projection at time t: [batch, 4*hidden]
+          wx_t = Nx.slice_along_axis(input_gates, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        # Cell state update: c_t = f_t * c_{t-1} + i_t * z_t
-        c_t = Nx.add(Nx.multiply(f_t, c_prev), Nx.multiply(i_t, z_t))
+          # Recurrent projection: h_{t-1} @ R -> [batch, 4*hidden]
+          rh_t = Nx.dot(h_p, [1], recurrent_weight, [0])
 
-        # Normalizer update: n_t = f_t * n_{t-1} + i_t
-        n_t = Nx.add(Nx.multiply(f_t, n_prev), i_t)
+          # Combined gate pre-activations
+          gates_t = Nx.add(wx_t, rh_t)
 
-        # Hidden state: h_t = o_t * (c_t / n_t)
-        # Add epsilon to prevent division by zero
-        h_t = Nx.multiply(o_t, Nx.divide(c_t, Nx.add(n_t, gate_eps())))
+          # Split into individual gates
+          log_i_t = Nx.slice_along_axis(gates_t, 0, hidden_size, axis: 1)
+          log_f_t = Nx.slice_along_axis(gates_t, hidden_size, hidden_size, axis: 1)
+          z_t = Nx.slice_along_axis(gates_t, hidden_size * 2, hidden_size, axis: 1) |> Nx.tanh()
 
-        {{c_t, n_t}, [Nx.squeeze(h_t, axes: [1]) | acc]}
-      end)
+          o_t =
+            Nx.slice_along_axis(gates_t, hidden_size * 3, hidden_size, axis: 1) |> Nx.sigmoid()
+
+          # Log-domain stabilization
+          # m_t = max(log_f_t + m_{t-1}, log_i_t)
+          m_t = Nx.max(Nx.add(log_f_t, m_p), log_i_t)
+
+          # Stabilized gates
+          # i_t' = exp(log_i_t - m_t)
+          i_t = Nx.exp(Nx.subtract(log_i_t, m_t))
+          # f_t' = exp(log_f_t + m_{t-1} - m_t)
+          f_t = Nx.exp(Nx.subtract(Nx.add(log_f_t, m_p), m_t))
+
+          # Cell state update: c_t = f_t' * c_{t-1} + i_t' * z_t
+          c_t = Nx.add(Nx.multiply(f_t, c_p), Nx.multiply(i_t, z_t))
+
+          # Normalizer update: n_t = f_t' * n_{t-1} + i_t'
+          n_t = Nx.add(Nx.multiply(f_t, n_p), i_t)
+
+          # Hidden state: h_t = o_t * (c_t / max(|n_t|, 1))
+          safe_denom = Nx.max(Nx.abs(n_t), 1.0)
+          h_t = Nx.multiply(o_t, Nx.divide(c_t, safe_denom))
+
+          {{h_t, c_t, n_t, m_t}, [h_t | acc]}
+        end
+      )
 
     # Stack: [batch, seq_len, hidden_size]
     h_list

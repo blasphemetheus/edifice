@@ -26,7 +26,7 @@ defmodule Edifice do
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
   | Recurrent | LSTM, GRU, xLSTM, mLSTM, MinGRU, MinLSTM, DeltaNet, TTT, Titans, Reservoir (ESN) |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, BiMamba, GatedSSM, StripedHyena |
-  | Attention | Multi-Head, GQA, MLA, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RWKV, GLA, HGRN, Griffin, Based, InfiniAttention, Conformer, Mega, RingAttention |
+  | Attention | Multi-Head, GQA, MLA, DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RWKV, GLA, HGRN, Griffin, Based, InfiniAttention, Conformer, Mega, RingAttention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Normalizing Flow |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
@@ -102,6 +102,7 @@ defmodule Edifice do
     conformer: Edifice.Attention.Conformer,
     ring_attention: Edifice.Attention.RingAttention,
     mla: Edifice.Attention.MLA,
+    diff_transformer: Edifice.Attention.DiffTransformer,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -250,7 +251,8 @@ defmodule Edifice do
         :infini_attention,
         :conformer,
         :ring_attention,
-        :mla
+        :mla,
+        :diff_transformer
       ],
       vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf],
       generative: [
