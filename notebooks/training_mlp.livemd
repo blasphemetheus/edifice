@@ -1,8 +1,15 @@
 # Training an MLP with Edifice
 
 ```elixir
+edifice_dep =
+  if File.dir?(Path.expand("~/edifice")) do
+    {:edifice, path: Path.expand("~/edifice")}
+  else
+    {:edifice, "~> 0.2.0"}
+  end
+
 Mix.install([
-  {:edifice, "~> 0.1.1"},
+  edifice_dep,
   {:kino_vega_lite, "~> 0.1"},
   {:pythonx, "~> 0.4.2"},
   {:kino_pythonx, "~> 0.1.0"}

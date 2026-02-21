@@ -1,8 +1,15 @@
 # Edifice Architecture Zoo
 
 ```elixir
+edifice_dep =
+  if File.dir?(Path.expand("~/edifice")) do
+    {:edifice, path: Path.expand("~/edifice")}
+  else
+    {:edifice, "~> 0.2.0"}
+  end
+
 Mix.install([
-  {:edifice, "~> 0.2.0"},
+  edifice_dep,
   {:kino, "~> 0.14"}
 ])
 ```
