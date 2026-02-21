@@ -21,37 +21,36 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 COOKIE="edifice_livebook"
-NODE_NAME="edifice"
-HOST=$(hostname -s)
+NODE="edifice@127.0.0.1"
 
 case "${1:-all}" in
   node)
-    echo "Starting Edifice project node: ${NODE_NAME}@${HOST}"
-    exec iex --sname "$NODE_NAME" --cookie "$COOKIE" -S mix
+    echo "Starting Edifice project node: ${NODE}"
+    exec iex --name "$NODE" --cookie "$COOKIE" -S mix
     ;;
   livebook)
-    echo "Starting Livebook attached to ${NODE_NAME}@${HOST}"
+    echo "Starting Livebook attached to ${NODE}"
     exec env \
-      LIVEBOOK_DEFAULT_RUNTIME="attached:${NODE_NAME}@${HOST}:${COOKIE}" \
+      LIVEBOOK_DEFAULT_RUNTIME="attached:${NODE}:${COOKIE}" \
       livebook server --cookie "$COOKIE"
     ;;
   all)
     echo "Starting Edifice node in background..."
-    iex --sname "$NODE_NAME" --cookie "$COOKIE" -S mix &
+    iex --name "$NODE" --cookie "$COOKIE" -S mix &
     NODE_PID=$!
 
     # Wait for the node to be ready
     sleep 3
 
     echo ""
-    echo "Starting Livebook attached to ${NODE_NAME}@${HOST}"
+    echo "Starting Livebook attached to ${NODE}"
     echo "Press Ctrl+C to stop both."
     echo ""
 
     trap "kill $NODE_PID 2>/dev/null; wait $NODE_PID 2>/dev/null" EXIT
 
     env \
-      LIVEBOOK_DEFAULT_RUNTIME="attached:${NODE_NAME}@${HOST}:${COOKIE}" \
+      LIVEBOOK_DEFAULT_RUNTIME="attached:${NODE}:${COOKIE}" \
       livebook server --cookie "$COOKIE"
     ;;
   *)
