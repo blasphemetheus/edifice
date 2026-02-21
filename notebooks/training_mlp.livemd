@@ -1,12 +1,17 @@
 # Training an MLP with Edifice
 
-```elixir
-# GPU acceleration (optional but recommended):
-#
-#   Add {:exla, "~> 0.10"} below and uncomment Nx.global_default_backend
-#   for GPU acceleration. See the Architecture Zoo notebook for setup tips,
-#   including how to run Livebook attached to your project for Nix/CUDA.
+<!-- livebook:{"force_hierarchical_headings":true} -->
 
+## Setup
+
+**Choose one of the two cells below** depending on how you started Livebook.
+
+### Standalone (default)
+
+Use this if you started Livebook normally (`livebook server`).
+Uncomment the EXLA lines for GPU acceleration.
+
+```elixir
 edifice_dep =
   if File.dir?(Path.expand("~/edifice")) do
     {:edifice, path: Path.expand("~/edifice")}
@@ -24,6 +29,17 @@ Mix.install([
 
 # Nx.global_default_backend(EXLA.Backend)
 alias VegaLite, as: Vl
+```
+
+### Attached to project (recommended for Nix/CUDA)
+
+Use this if you started Livebook attached to your project node.
+See the Architecture Zoo notebook for full setup instructions.
+
+```elixir
+Nx.global_default_backend(EXLA.Backend)
+alias VegaLite, as: Vl
+IO.puts("Attached mode — using EXLA backend from project node")
 ```
 
 ## Introduction

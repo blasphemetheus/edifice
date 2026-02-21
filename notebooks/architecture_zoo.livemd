@@ -1,23 +1,17 @@
 # Edifice Architecture Zoo
 
-```elixir
-# GPU acceleration (optional but recommended):
-#
-#   If you have CUDA available, add {:exla, "~> 0.10"} to the list below
-#   and uncomment the Nx.global_default_backend line. This enables GPU
-#   acceleration and is required for some models (e.g. Mamba, S4).
-#
-#   If EXLA fails to load (missing CUDA libs), remove it — most models
-#   still work on CPU with BinaryBackend, and failures show gracefully.
-#
-#   For local development with Nix, the easiest option is to start Livebook
-#   attached to your project so it reuses the already-compiled EXLA:
-#
-#     cd ~/edifice
-#     iex --sname edifice --cookie secret -S mix
-#     # then in another terminal:
-#     livebook server --attached edifice@<hostname> --cookie secret
+<!-- livebook:{"force_hierarchical_headings":true} -->
 
+## Setup
+
+**Choose one of the two cells below** depending on how you started Livebook.
+
+### Standalone (default)
+
+Use this if you started Livebook normally (`livebook server`).
+Most models work on CPU. Uncomment the EXLA lines for GPU acceleration.
+
+```elixir
 edifice_dep =
   if File.dir?(Path.expand("~/edifice")) do
     {:edifice, path: Path.expand("~/edifice")}
@@ -32,6 +26,26 @@ Mix.install([
 ])
 
 # Nx.global_default_backend(EXLA.Backend)
+```
+
+### Attached to project (recommended for Nix/CUDA)
+
+Use this if you started Livebook attached to your project node:
+
+```shell
+# Terminal 1 (from nix-shell):
+iex --sname edifice --cookie secret -S mix
+
+# Terminal 2 (from nix-shell):
+livebook server --attached edifice@<hostname> --cookie secret
+```
+
+Skip the cell above and evaluate this one instead — all deps including
+EXLA with CUDA are already loaded.
+
+```elixir
+Nx.global_default_backend(EXLA.Backend)
+IO.puts("Attached mode — using EXLA backend from project node")
 ```
 
 ## Introduction
