@@ -320,10 +320,10 @@ defmodule FullSweep do
              image_size: @image_size,
              in_channels: @in_channels,
              patch_size: 4,
-             embed_dim: @hidden,
-             depths: [1, 1],
-             focal_levels: [2, 2],
-             dropout: 0.0
+             hidden_size: @hidden,
+             num_layers: 2,
+             focal_levels: 2,
+             focal_kernel: 3
            )
          end, fn -> %{"image" => rand({@batch, @in_channels, @image_size, @image_size})} end},
         {:poolformer, "vision",
