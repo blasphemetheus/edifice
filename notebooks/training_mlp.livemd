@@ -1,6 +1,12 @@
 # Training an MLP with Edifice
 
 ```elixir
+# GPU acceleration (optional but recommended):
+#
+#   Add {:exla, "~> 0.10"} below and uncomment Nx.global_default_backend
+#   for GPU acceleration. See the Architecture Zoo notebook for setup tips,
+#   including how to run Livebook attached to your project for Nix/CUDA.
+
 edifice_dep =
   if File.dir?(Path.expand("~/edifice")) do
     {:edifice, path: Path.expand("~/edifice")}
@@ -10,11 +16,13 @@ edifice_dep =
 
 Mix.install([
   edifice_dep,
+  # {:exla, "~> 0.10"},
   {:kino_vega_lite, "~> 0.1"},
   {:pythonx, "~> 0.4.2"},
   {:kino_pythonx, "~> 0.1.0"}
 ])
 
+# Nx.global_default_backend(EXLA.Backend)
 alias VegaLite, as: Vl
 ```
 

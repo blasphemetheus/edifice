@@ -1,6 +1,23 @@
 # Edifice Architecture Zoo
 
 ```elixir
+# GPU acceleration (optional but recommended):
+#
+#   If you have CUDA available, add {:exla, "~> 0.10"} to the list below
+#   and uncomment the Nx.global_default_backend line. This enables GPU
+#   acceleration and is required for some models (e.g. Mamba, S4).
+#
+#   If EXLA fails to load (missing CUDA libs), remove it — most models
+#   still work on CPU with BinaryBackend, and failures show gracefully.
+#
+#   For local development with Nix, the easiest option is to start Livebook
+#   attached to your project so it reuses the already-compiled EXLA:
+#
+#     cd ~/edifice
+#     iex --sname edifice --cookie secret -S mix
+#     # then in another terminal:
+#     livebook server --attached edifice@<hostname> --cookie secret
+
 edifice_dep =
   if File.dir?(Path.expand("~/edifice")) do
     {:edifice, path: Path.expand("~/edifice")}
@@ -10,8 +27,11 @@ edifice_dep =
 
 Mix.install([
   edifice_dep,
+  # {:exla, "~> 0.10"},
   {:kino, "~> 0.14"}
 ])
+
+# Nx.global_default_backend(EXLA.Backend)
 ```
 
 ## Introduction
@@ -91,6 +111,17 @@ defmodule Zoo do
   def fmt_params(n) when n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)}M"
   def fmt_params(n) when n >= 1_000, do: "#{Float.round(n / 1_000, 1)}K"
   def fmt_params(n), do: "#{n}"
+
+  def print_results(results, pad \\ 15) do
+    for r <- results do
+      case r.status do
+        :ok ->
+          IO.puts("  #{String.pad_trailing(to_string(r.name), pad)} output=#{inspect(r.output_shape)}  params=#{fmt_params(r.params)}")
+        :fail ->
+          IO.puts("  #{String.pad_trailing(to_string(r.name), pad)} FAIL: #{r.error}")
+      end
+    end
+  end
 end
 ```
 
@@ -118,15 +149,7 @@ rand = fn shape ->
   tensor
 end
 
-:ok
-```
-
-## SSM Family
-
-State-space models process sequences through learned state transitions.
-Representatives: Mamba (selective SSM), S4 (structured SSM), GatedSSM (gated variant).
-
-```elixir
+# Shared sequence model options (used by SSM, recurrent, attention families)
 seq_opts = [
   embed_dim: embed,
   hidden_size: hidden,
@@ -139,16 +162,24 @@ seq_opts = [
 ]
 
 seq_input = fn -> %{"state_sequence" => rand.({batch, seq_len, embed})} end
+flat_input = fn -> %{"input" => rand.({batch, embed})} end
 
+:ok
+```
+
+## SSM Family
+
+State-space models process sequences through learned state transitions.
+Representatives: Mamba (selective SSM), S4 (structured SSM), GatedSSM (gated variant).
+
+```elixir
 results = [
   Zoo.inspect_model(:mamba, fn -> Edifice.build(:mamba, seq_opts) end, seq_input),
   Zoo.inspect_model(:s4, fn -> Edifice.build(:s4, seq_opts) end, seq_input),
   Zoo.inspect_model(:gated_ssm, fn -> Edifice.build(:gated_ssm, seq_opts) end, seq_input)
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results)
 ```
 
 ## Recurrent Family
@@ -163,9 +194,7 @@ results = [
   Zoo.inspect_model(:min_gru, fn -> Edifice.build(:min_gru, seq_opts) end, seq_input)
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results)
 ```
 
 ## Attention Family
@@ -180,9 +209,7 @@ results = [
   Zoo.inspect_model(:performer, fn -> Edifice.build(:performer, seq_opts) end, seq_input)
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results)
 ```
 
 ## Transformer Family
@@ -205,7 +232,7 @@ result = Zoo.inspect_model(:decoder_only,
   seq_input
 )
 
-IO.puts("  #{result.name}  output=#{inspect(result.output_shape)}  params=#{Zoo.fmt_params(result.params)}")
+Zoo.print_results([result])
 ```
 
 ## Feedforward Family
@@ -228,9 +255,7 @@ results = [
   )
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results)
 ```
 
 ## Vision Family
@@ -270,9 +295,7 @@ results = [
   )
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results)
 ```
 
 ## Convolutional Family
@@ -296,9 +319,7 @@ results = [
   )
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results)
 ```
 
 ## Graph Family
@@ -323,9 +344,7 @@ results = [
   Zoo.inspect_model(:graph_transformer, fn -> Edifice.build(:graph_transformer, graph_opts) end, graph_input)
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 20)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results, 20)
 ```
 
 ## Sets Family
@@ -344,9 +363,7 @@ results = [
   )
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results)
 ```
 
 ## Energy Family
@@ -354,8 +371,6 @@ end
 Energy-based and dynamics models that learn scalar energy functions or ODEs.
 
 ```elixir
-flat_input = fn -> %{"input" => rand.({batch, embed})} end
-
 results = [
   Zoo.inspect_model(:ebm,
     fn -> Edifice.build(:ebm, input_size: embed) end, flat_input),
@@ -365,9 +380,7 @@ results = [
     fn -> Edifice.build(:neural_ode, input_size: embed, hidden_size: hidden) end, flat_input)
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results)
 ```
 
 ## Probabilistic Family
@@ -384,9 +397,7 @@ results = [
     fn -> Edifice.build(:evidential, input_size: embed, num_classes: num_classes) end, flat_input)
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results)
 ```
 
 ## Memory Family
@@ -417,9 +428,7 @@ results = [
   )
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 18)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results, 18)
 ```
 
 ## Meta Family
@@ -453,9 +462,7 @@ results = [
   )
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results)
 ```
 
 ## Generative Family
@@ -502,9 +509,7 @@ results = [
   )
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 20)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results, 20)
 ```
 
 ## Contrastive / Self-Supervised Family
@@ -530,9 +535,7 @@ results = [
   )
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results)
 ```
 
 ## Liquid Family
@@ -545,7 +548,7 @@ result = Zoo.inspect_model(:liquid,
   seq_input
 )
 
-IO.puts("  #{result.name}  output=#{inspect(result.output_shape)}  params=#{Zoo.fmt_params(result.params)}")
+Zoo.print_results([result])
 ```
 
 ## Neuromorphic Family
@@ -566,9 +569,7 @@ results = [
   )
 ]
 
-for r <- results do
-  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
-end
+Zoo.print_results(results)
 ```
 
 ## Summary
