@@ -33,7 +33,7 @@ alias VegaLite, as: Vl
 
 ### Attached to project (recommended for Nix/CUDA)
 
-Use this if you started Livebook attached to your project node.
+Use this if you started Livebook via `./scripts/livebook.sh`.
 See the Architecture Zoo notebook for full setup instructions.
 
 ```elixir

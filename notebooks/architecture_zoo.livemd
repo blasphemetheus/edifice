@@ -1,7 +1,5 @@
 # Edifice Architecture Zoo
 
-<!-- livebook:{"force_hierarchical_headings":true} -->
-
 ## Setup
 
 **Choose one of the two cells below** depending on how you started Livebook.
@@ -30,14 +28,16 @@ Mix.install([
 
 ### Attached to project (recommended for Nix/CUDA)
 
-Use this if you started Livebook attached to your project node:
+Use this if you started Livebook via `./scripts/livebook.sh`.
+This gives full access to EXLA with CUDA — no extra setup needed.
 
 ```shell
-# Terminal 1 (from nix-shell):
-iex --sname edifice --cookie secret -S mix
+# Easiest — run the helper script from nix-shell:
+./scripts/livebook.sh
 
-# Terminal 2 (from nix-shell):
-livebook server --attached edifice@<hostname> --cookie secret
+# Or manually in two terminals (from nix-shell):
+# Terminal 1:  ./scripts/livebook.sh node
+# Terminal 2:  ./scripts/livebook.sh livebook
 ```
 
 Skip the cell above and evaluate this one instead — all deps including
