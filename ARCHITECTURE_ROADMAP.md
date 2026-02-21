@@ -1,16 +1,15 @@
 # Edifice Architecture Roadmap
 
-Remaining architectures from the research survey, organized by priority tier.
-Check marks indicate completed implementations.
+113 architectures across 17 families implemented. Remaining targets from the research survey,
+organized by priority tier. Check marks indicate completed implementations.
 
 ## Tier 1 — High Impact (next release candidates)
 
 - [ ] **Mamba-4 / Hymba** — Hybrid Mamba + attention with learned routing (SSM.Hymba)
-- [ ] **RWKV-6/7** — Updated RWKV with improved token shift and time mixing (Attention.RWKVv6)
-- [ ] **Titans** — Memory-augmented recurrent with surprise-gated persistent memory
+- [ ] **RWKV-6/7 (full)** — Updated RWKV with improved token shift and time mixing (Attention.RWKVv6)
 - [ ] **DeltaNet v2** — Improved delta rule with gated memory (Recurrent.DeltaNetv2)
 - [ ] **xLSTM v2 (sLSTM)** — Scalar LSTM variant with exponential gating (Recurrent.SLSTM)
-- [ ] **Gated State Spaces (GSS)** — Gated diagonal SSM as attention alternative (SSM.GSS)
+- [ ] **Sparse Attention** — Block-sparse and sliding window patterns (Attention.SparseAttention)
 
 ## Tier 2 — Moderate Impact (architectural diversity)
 
@@ -19,20 +18,19 @@ Check marks indicate completed implementations.
 - [ ] **GLA v2** — Gated linear attention with improved forget gates (Attention.GLAv2)
 - [ ] **HGRN v2** — Hierarchical gated recurrent with multi-resolution (Attention.HGRNv2)
 - [ ] **FlashLinearAttention** — Hardware-efficient linear attention kernel (Attention.FlashLinear)
-- [ ] **Differential Transformer** — Attention with differential scores for noise cancellation (Attention.DiffTransformer)
 - [ ] **LoRA+/DoRA** — Enhanced parameter-efficient fine-tuning (Meta.DoRA)
 - [ ] **DiT v2** — Improved diffusion transformer conditioning (Generative.DiTv2)
+- [ ] **Byte Latent Transformer** — Byte-level processing with latent patching (Transformer.BLT)
 
 ## Tier 3 — Research / Exploratory
 
 - [ ] **Test-Time Compute** — Dynamic inference-time scaling strategies (Meta.TestTimeCompute)
 - [ ] **Mixture of Tokenizers** — Multi-granularity tokenization routing (Meta.MoT)
-- [ ] **Byte Latent Transformer** — Byte-level processing with latent patching (Transformer.BLT)
 - [ ] **Native Recurrence** — Hardware-native recurrent implementations (Recurrent.NativeRecurrence)
 - [ ] **Medusa / EAGLE** — Speculative decoding heads (Meta.SpeculativeHead)
 - [ ] **Distillation Head** — Knowledge distillation output head (Meta.DistillationHead)
 - [ ] **Quantization-Aware Training** — QAT utilities beyond BitNet (Meta.QAT)
-- [ ] **Sparse Attention** — Block-sparse and sliding window patterns (Attention.SparseAttention)
+- [ ] **State Space Transformer** — Deeper SSM-attention integration beyond interleaving (SSM.SSTransformer)
 
 ## Completed (v0.2.0)
 
@@ -56,10 +54,14 @@ Check marks indicate completed implementations.
 - [x] Mamba-3 — Complex states, trapezoidal discretization, MIMO (SSM.Mamba3)
 - [x] MLA — Multi-Head Latent Attention (Attention.MLA)
 - [x] JEPA — Joint Embedding Predictive Architecture (Contrastive.JEPA)
+- [x] Titans — Surprise-gated neural long-term memory (Recurrent.Titans)
+- [x] DiffTransformer — Noise-cancelling differential attention (Attention.DiffTransformer)
 
 ## Notes
 
 - Priority is based on relevance to ExPhil's Melee AI backbone selection
 - Tier 1 focuses on sequence modeling architectures competitive at 60fps inference
 - Each implementation follows the standard `Module.build(opts) :: Axon.t()` API
-- Target: ~130 architectures by v0.3.0
+- Current: 113 architectures across 17 families (v0.2.0)
+- Target: ~130 architectures by v0.3.0 (17 roadmap items remaining)
+- See [guides/architecture_taxonomy.md](guides/architecture_taxonomy.md) for comprehensive taxonomy with paper references, strengths/weaknesses, and adoption context
