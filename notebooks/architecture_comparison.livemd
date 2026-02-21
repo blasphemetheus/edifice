@@ -1,0 +1,345 @@
+# Architecture Comparison with Edifice
+
+```elixir
+Mix.install([
+  {:edifice, "~> 0.2.0"},
+  {:kino_vega_lite, "~> 0.1"},
+  {:kino, "~> 0.14"}
+])
+
+alias VegaLite, as: Vl
+```
+
+## Introduction
+
+Edifice's unified `Edifice.build(:name, opts)` API means swapping architectures
+is a one-line change while the entire training pipeline stays identical.
+
+This notebook puts that to the test: we train **8 architectures** from 5 different
+families on the same classification task, measure accuracy and training time,
+and rank them in a head-to-head comparison.
+
+**What you'll learn:**
+
+* How different architecture families compare on the same data
+* That backbone choice matters more than hyperparameter tuning for some problems
+* How Edifice makes systematic experimentation trivial
+
+## Generate Synthetic Data
+
+We use a harder classification problem than the MLP notebook: **5 classes**
+arranged in concentric rings and clusters. This tests whether architectures
+can learn non-linear decision boundaries.
+
+```elixir
+key = Nx.Random.key(42)
+n_per_class = 200
+num_classes = 5
+
+# Class 0-1: two concentric rings
+# Class 2-4: three offset clusters
+{all_points, all_labels, _key} =
+  Enum.reduce(0..(num_classes - 1), {[], [], key}, fn class, {pts, labs, k} ->
+    {noise, k} = Nx.Random.normal(k, shape: {n_per_class, 2})
+    {angles, k} = Nx.Random.uniform(k, shape: {n_per_class, 1})
+
+    points =
+      case class do
+        0 ->
+          # Inner ring
+          theta = Nx.multiply(angles, 2 * :math.pi())
+          r = Nx.add(1.0, Nx.multiply(Nx.squeeze(noise[[.., 0..0]]), 0.2))
+          x = Nx.multiply(r, Nx.cos(Nx.squeeze(theta)))
+          y = Nx.multiply(r, Nx.sin(Nx.squeeze(theta)))
+          Nx.stack([x, y], axis: 1)
+
+        1 ->
+          # Outer ring
+          theta = Nx.multiply(angles, 2 * :math.pi())
+          r = Nx.add(2.5, Nx.multiply(Nx.squeeze(noise[[.., 0..0]]), 0.25))
+          x = Nx.multiply(r, Nx.cos(Nx.squeeze(theta)))
+          y = Nx.multiply(r, Nx.sin(Nx.squeeze(theta)))
+          Nx.stack([x, y], axis: 1)
+
+        c ->
+          # Offset clusters at different positions
+          centers = [{-3.0, 2.5}, {3.0, 2.5}, {0.0, -3.5}]
+          {cx, cy} = Enum.at(centers, c - 2)
+          Nx.add(Nx.multiply(noise, 0.5), Nx.tensor([cx, cy]))
+      end
+
+    {pts ++ [points], labs ++ List.duplicate(class, n_per_class), k}
+  end)
+
+x_all = Nx.concatenate(all_points)
+y_all = Nx.tensor(all_labels)
+
+# Shuffle
+n_total = num_classes * n_per_class
+{shuffle_noise, _k} = Nx.Random.uniform(Nx.Random.key(99), shape: {n_total})
+shuffle_idx = Nx.argsort(shuffle_noise)
+x_all = Nx.take(x_all, shuffle_idx)
+y_all = Nx.take(y_all, shuffle_idx)
+
+# One-hot encode
+y_onehot =
+  Nx.equal(
+    Nx.new_axis(y_all, 1),
+    Nx.tensor([Enum.to_list(0..(num_classes - 1))])
+  )
+  |> Nx.as_type(:f32)
+
+# 80/20 split
+n_train = round(n_total * 0.8)
+train_x = x_all[0..(n_train - 1)]
+train_y = y_onehot[0..(n_train - 1)]
+test_x = x_all[n_train..-1//1]
+test_y = y_onehot[n_train..-1//1]
+test_labels = y_all[n_train..-1//1]
+
+batch_size = 32
+
+train_data =
+  Enum.zip(
+    Nx.to_batched(train_x, batch_size) |> Enum.to_list(),
+    Nx.to_batched(train_y, batch_size) |> Enum.to_list()
+  )
+
+"#{n_train} train / #{n_total - n_train} test, #{num_classes} classes, #{length(train_data)} batches"
+```
+
+```elixir
+chart_data =
+  Enum.zip_with(
+    [Nx.to_flat_list(x_all[[.., 0]]), Nx.to_flat_list(x_all[[.., 1]]), Nx.to_flat_list(y_all)],
+    fn [x, y, label] -> %{"x" => x, "y" => y, "class" => "Class #{trunc(label)}"} end
+  )
+
+Vl.new(width: 500, height: 400, title: "5-Class Dataset: Rings + Clusters")
+|> Vl.data_from_values(chart_data)
+|> Vl.mark(:circle, size: 30, opacity: 0.6)
+|> Vl.encode_field(:x, "x", type: :quantitative)
+|> Vl.encode_field(:y, "y", type: :quantitative)
+|> Vl.encode_field(:color, "class", type: :nominal)
+```
+
+## Define the Contenders
+
+We build 8 models from 5 families. Each produces a feature vector that we
+pipe through a shared classification head: `Dense(num_classes) -> Softmax`.
+
+```elixir
+contenders = [
+  # {name, family, build_fn}
+  {"MLP", "feedforward",
+    fn ->
+      Edifice.build(:mlp, input_size: 2, hidden_sizes: [64, 32], activation: :relu, dropout: 0.0)
+    end},
+  {"TabNet", "feedforward",
+    fn ->
+      Edifice.build(:tabnet, input_size: 2, hidden_size: 32, num_steps: 3)
+    end},
+  {"Bayesian", "probabilistic",
+    fn ->
+      Edifice.build(:bayesian, input_size: 2, output_size: 16, hidden_sizes: [64, 32])
+    end},
+  {"MCDropout", "probabilistic",
+    fn ->
+      Edifice.build(:mc_dropout, input_size: 2, output_size: 16, hidden_sizes: [64, 32])
+    end},
+  {"EBM", "energy",
+    fn ->
+      Edifice.build(:ebm, input_size: 2, hidden_sizes: [64, 32])
+    end},
+  {"Hopfield", "energy",
+    fn ->
+      Edifice.build(:hopfield, input_dim: 2, hidden_dim: 64)
+    end},
+  {"SNN", "neuromorphic",
+    fn ->
+      Edifice.build(:snn, input_size: 2, output_size: 16, hidden_sizes: [64, 32])
+    end},
+  {"ANN2SNN", "neuromorphic",
+    fn ->
+      Edifice.build(:ann2snn, input_size: 2, output_size: 16, hidden_sizes: [64, 32])
+    end}
+]
+
+IO.puts("#{length(contenders)} architectures from #{contenders |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> length()} families")
+```
+
+## Train All Architectures
+
+Same loss, optimizer, epochs, and data for every model. The only thing
+that changes is the backbone.
+
+```elixir
+epochs = 50
+lr = 1.0e-2
+
+results =
+  for {name, family, build_fn} <- contenders do
+    IO.puts("Training #{name}...")
+
+    model =
+      build_fn.()
+      |> Axon.dense(num_classes, name: "#{String.downcase(name)}_head")
+      |> Axon.activation(:softmax)
+
+    {train_us, trained_state} =
+      :timer.tc(fn ->
+        model
+        |> Axon.Loop.trainer(
+          :categorical_cross_entropy,
+          Polaris.Optimizers.adam(learning_rate: lr)
+        )
+        |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: epochs)
+      end)
+
+    {_init_fn, predict_fn} = Axon.build(model)
+    test_preds = predict_fn.(trained_state, test_x)
+
+    accuracy =
+      Nx.equal(Nx.argmax(test_preds, axis: 1), Nx.argmax(test_y, axis: 1))
+      |> Nx.mean()
+      |> Nx.to_number()
+
+    train_s = Float.round(train_us / 1_000_000, 1)
+    IO.puts("  -> #{Float.round(accuracy * 100, 1)}% accuracy in #{train_s}s\n")
+
+    %{
+      name: name,
+      family: family,
+      accuracy: accuracy,
+      train_s: train_s,
+      preds: test_preds,
+      model: model,
+      state: trained_state
+    }
+  end
+
+:done
+```
+
+## Results Table
+
+```elixir
+ranked = Enum.sort_by(results, & &1.accuracy, :desc)
+
+IO.puts("=" |> String.duplicate(65))
+IO.puts("  #{String.pad_trailing("Rank", 6)}#{String.pad_trailing("Architecture", 15)}#{String.pad_trailing("Family", 16)}#{String.pad_trailing("Accuracy", 12)}Time")
+IO.puts("  " <> String.duplicate("-", 60))
+
+ranked
+|> Enum.with_index(1)
+|> Enum.each(fn {r, rank} ->
+  acc_str = "#{Float.round(r.accuracy * 100, 1)}%"
+  IO.puts(
+    "  #{String.pad_trailing("##{rank}", 6)}" <>
+    "#{String.pad_trailing(r.name, 15)}" <>
+    "#{String.pad_trailing(r.family, 16)}" <>
+    "#{String.pad_trailing(acc_str, 12)}" <>
+    "#{r.train_s}s"
+  )
+end)
+
+IO.puts("=" |> String.duplicate(65))
+```
+
+## Accuracy Chart
+
+```elixir
+chart_data =
+  ranked
+  |> Enum.map(fn r ->
+    %{
+      "Architecture" => r.name,
+      "Accuracy" => Float.round(r.accuracy * 100, 1),
+      "Family" => r.family
+    }
+  end)
+
+Vl.new(width: 500, height: 300, title: "Test Accuracy by Architecture")
+|> Vl.data_from_values(chart_data)
+|> Vl.mark(:bar)
+|> Vl.encode_field(:x, "Architecture", type: :nominal, sort: "-y")
+|> Vl.encode_field(:y, "Accuracy", type: :quantitative, scale: %{domain: [0, 100]}, title: "Accuracy (%)")
+|> Vl.encode_field(:color, "Family", type: :nominal)
+```
+
+## Decision Boundaries (Top 4)
+
+Let's visualize how the top 4 models carve up the input space.
+
+```elixir
+resolution = 50
+
+grid_points =
+  for gx <- 0..(resolution - 1), gy <- 0..(resolution - 1) do
+    [-5.0 + 10.0 * gx / (resolution - 1), -5.0 + 10.0 * gy / (resolution - 1)]
+  end
+
+grid_tensor = Nx.tensor(grid_points)
+
+top4 = Enum.take(ranked, 4)
+
+boundary_charts =
+  for r <- top4 do
+    {_init_fn, predict_fn} = Axon.build(r.model)
+    grid_preds = predict_fn.(r.state, grid_tensor)
+    grid_classes = Nx.argmax(grid_preds, axis: 1) |> Nx.to_flat_list()
+
+    grid_data =
+      Enum.zip_with([grid_points, grid_classes], fn [[x, y], class] ->
+        %{"x" => x, "y" => y, "class" => "Class #{class}"}
+      end)
+
+    test_data =
+      Enum.zip_with(
+        [Nx.to_flat_list(test_x[[.., 0]]), Nx.to_flat_list(test_x[[.., 1]]), Nx.to_flat_list(test_labels)],
+        fn [x, y, l] -> %{"x" => x, "y" => y, "class" => "Class #{trunc(l)}"} end
+      )
+
+    acc_str = Float.round(r.accuracy * 100, 1)
+
+    Vl.new(width: 300, height: 250, title: "#{r.name} (#{acc_str}%)")
+    |> Vl.layers([
+      Vl.new()
+      |> Vl.data_from_values(grid_data)
+      |> Vl.mark(:square, size: 15, opacity: 0.25)
+      |> Vl.encode_field(:x, "x", type: :quantitative)
+      |> Vl.encode_field(:y, "y", type: :quantitative)
+      |> Vl.encode_field(:color, "class", type: :nominal, legend: nil),
+      Vl.new()
+      |> Vl.data_from_values(test_data)
+      |> Vl.mark(:circle, size: 25, stroke: "black", stroke_width: 0.5)
+      |> Vl.encode_field(:x, "x", type: :quantitative)
+      |> Vl.encode_field(:y, "y", type: :quantitative)
+      |> Vl.encode_field(:color, "class", type: :nominal, legend: nil)
+    ])
+  end
+
+Vl.new()
+|> Vl.concat(boundary_charts, :wrapping)
+```
+
+## Key Takeaways
+
+1. **Same API, different results**: Every model was built with `Edifice.build/2`,
+   trained with the same loop, and evaluated identically. The only variable
+   was the architecture name.
+
+2. **Architecture matters**: Different families have different inductive biases.
+   Some handle non-linear boundaries better than others.
+
+3. **Experimentation is cheap**: With Edifice's unified API, trying a new
+   architecture is a one-line change. You don't need to rewrite data pipelines
+   or training loops.
+
+## What's Next?
+
+* **Try sequence models**: Reshape data to `{batch, seq_len, features}` and
+  compare `:mamba`, `:gru`, `:retnet`, etc. See the Sequence Modeling notebook.
+* **Scale up**: Use `scidata` for MNIST/CIFAR-10 with vision models like `:vit`.
+* **Add EXLA**: `Nx.global_default_backend(EXLA.Backend)` for GPU acceleration.
+* **More architectures**: `Edifice.list_architectures()` has 111+ options.

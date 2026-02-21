@@ -1,0 +1,595 @@
+# Edifice Architecture Zoo
+
+```elixir
+Mix.install([
+  {:edifice, "~> 0.2.0"},
+  {:kino, "~> 0.14"}
+])
+```
+
+## Introduction
+
+Edifice ships with **111+ neural network architectures** across 17 families — from
+state-space models to graph neural networks to diffusion models. This notebook
+builds one representative from each family, inspects its shape, and counts its
+parameters. No training — just a tour of the zoo.
+
+Every model is built with the same API: `Edifice.build(:name, opts)`.
+
+```elixir
+families = Edifice.list_families()
+
+family_counts =
+  families
+  |> Enum.sort_by(fn {_k, v} -> -length(v) end)
+  |> Enum.map(fn {family, archs} ->
+    %{"Family" => Atom.to_string(family), "Count" => length(archs)}
+  end)
+
+total = Enum.sum(Enum.map(family_counts, & &1["Count"]))
+
+IO.puts("#{total} architectures across #{length(family_counts)} families\n")
+
+family_counts
+|> Enum.each(fn %{"Family" => f, "Count" => c} ->
+  IO.puts("  #{String.pad_trailing(f, 18)} #{c}")
+end)
+```
+
+## Helper: Build, Init, and Inspect
+
+This helper builds a model, initializes parameters with a template, runs one
+forward pass, and returns a summary map with shapes and parameter count.
+
+```elixir
+defmodule Zoo do
+  def inspect_model(name, build_fn, input_fn) do
+    try do
+      model = build_fn.()
+      input = input_fn.()
+
+      template =
+        Map.new(input, fn {k, v} -> {k, Nx.template(Nx.shape(v), Nx.type(v))} end)
+
+      {init_fn, predict_fn} = Axon.build(model)
+      params = init_fn.(template, Axon.ModelState.empty())
+
+      output = predict_fn.(params, input)
+
+      param_count =
+        params
+        |> Axon.ModelState.trainable_parameters()
+        |> Enum.reduce(0, fn {_name, tensor}, acc ->
+          acc + Nx.size(tensor)
+        end)
+
+      input_shapes =
+        Enum.map_join(input, ", ", fn {k, v} ->
+          "#{k}: #{inspect(Nx.shape(v))}"
+        end)
+
+      %{
+        name: name,
+        status: :ok,
+        input: input_shapes,
+        output_shape: Nx.shape(output),
+        params: param_count
+      }
+    rescue
+      e ->
+        %{name: name, status: :fail, error: Exception.message(e) |> String.slice(0, 80)}
+    end
+  end
+
+  def fmt_params(n) when n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)}M"
+  def fmt_params(n) when n >= 1_000, do: "#{Float.round(n / 1_000, 1)}K"
+  def fmt_params(n), do: "#{n}"
+end
+```
+
+## Shared Dimensions
+
+We use small dimensions so everything runs fast on CPU.
+
+```elixir
+# Shared small dims
+batch = 2
+embed = 32
+hidden = 16
+seq_len = 8
+num_classes = 4
+image_size = 16
+in_channels = 3
+num_nodes = 6
+node_dim = 16
+num_points = 12
+point_dim = 3
+latent_size = 8
+
+rand = fn shape ->
+  {tensor, _key} = Nx.Random.normal(Nx.Random.key(42), shape: shape)
+  tensor
+end
+
+:ok
+```
+
+## SSM Family
+
+State-space models process sequences through learned state transitions.
+Representatives: Mamba (selective SSM), S4 (structured SSM), GatedSSM (gated variant).
+
+```elixir
+seq_opts = [
+  embed_dim: embed,
+  hidden_size: hidden,
+  state_size: 8,
+  num_layers: 2,
+  seq_len: seq_len,
+  head_dim: 8,
+  num_heads: 2,
+  dropout: 0.0
+]
+
+seq_input = fn -> %{"state_sequence" => rand.({batch, seq_len, embed})} end
+
+results = [
+  Zoo.inspect_model(:mamba, fn -> Edifice.build(:mamba, seq_opts) end, seq_input),
+  Zoo.inspect_model(:s4, fn -> Edifice.build(:s4, seq_opts) end, seq_input),
+  Zoo.inspect_model(:gated_ssm, fn -> Edifice.build(:gated_ssm, seq_opts) end, seq_input)
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Recurrent Family
+
+Classic and modern recurrent networks with sequential state updates.
+
+```elixir
+results = [
+  Zoo.inspect_model(:lstm, fn -> Edifice.build(:lstm, seq_opts) end, seq_input),
+  Zoo.inspect_model(:gru, fn -> Edifice.build(:gru, seq_opts) end, seq_input),
+  Zoo.inspect_model(:xlstm, fn -> Edifice.build(:xlstm, seq_opts) end, seq_input),
+  Zoo.inspect_model(:min_gru, fn -> Edifice.build(:min_gru, seq_opts) end, seq_input)
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Attention Family
+
+Transformer-style attention and efficient variants.
+
+```elixir
+results = [
+  Zoo.inspect_model(:gqa, fn -> Edifice.build(:gqa, seq_opts) end, seq_input),
+  Zoo.inspect_model(:retnet, fn -> Edifice.build(:retnet, seq_opts) end, seq_input),
+  Zoo.inspect_model(:fnet, fn -> Edifice.build(:fnet, seq_opts) end, seq_input),
+  Zoo.inspect_model(:performer, fn -> Edifice.build(:performer, seq_opts) end, seq_input)
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Transformer Family
+
+Full decoder-only transformer with KV-cache support.
+
+```elixir
+result = Zoo.inspect_model(:decoder_only,
+  fn ->
+    Edifice.build(:decoder_only,
+      embed_dim: embed,
+      hidden_size: hidden,
+      num_heads: 2,
+      num_kv_heads: 1,
+      num_layers: 2,
+      seq_len: seq_len,
+      dropout: 0.0
+    )
+  end,
+  seq_input
+)
+
+IO.puts("  #{result.name}  output=#{inspect(result.output_shape)}  params=#{Zoo.fmt_params(result.params)}")
+```
+
+## Feedforward Family
+
+Non-sequential models for tabular and structured data.
+
+```elixir
+results = [
+  Zoo.inspect_model(:mlp,
+    fn -> Edifice.build(:mlp, input_size: embed, hidden_sizes: [hidden]) end,
+    fn -> %{"input" => rand.({batch, embed})} end
+  ),
+  Zoo.inspect_model(:tabnet,
+    fn -> Edifice.build(:tabnet, input_size: embed, output_size: num_classes) end,
+    fn -> %{"input" => rand.({batch, embed})} end
+  ),
+  Zoo.inspect_model(:kan,
+    fn -> Edifice.build(:kan, seq_opts) end,
+    seq_input
+  )
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Vision Family
+
+Image models from ViTs to U-Nets.
+
+```elixir
+image_input = fn -> %{"image" => rand.({batch, in_channels, image_size, image_size})} end
+
+results = [
+  Zoo.inspect_model(:vit,
+    fn ->
+      Edifice.build(:vit,
+        image_size: image_size, in_channels: in_channels,
+        patch_size: 4, embed_dim: hidden, depth: 1, num_heads: 2, dropout: 0.0
+      )
+    end,
+    image_input
+  ),
+  Zoo.inspect_model(:convnext,
+    fn ->
+      Edifice.build(:convnext,
+        image_size: 32, in_channels: in_channels, patch_size: 4,
+        dims: [hidden, hidden * 2], depths: [1, 1], dropout: 0.0
+      )
+    end,
+    fn -> %{"image" => rand.({batch, in_channels, 32, 32})} end
+  ),
+  Zoo.inspect_model(:unet,
+    fn ->
+      Edifice.build(:unet,
+        in_channels: in_channels, out_channels: 1, image_size: image_size,
+        base_features: 8, depth: 2, dropout: 0.0
+      )
+    end,
+    image_input
+  )
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Convolutional Family
+
+Traditional and modern convolutional architectures.
+
+```elixir
+results = [
+  Zoo.inspect_model(:resnet,
+    fn ->
+      Edifice.build(:resnet,
+        input_shape: {nil, image_size, image_size, in_channels},
+        num_classes: num_classes, block_sizes: [1, 1], initial_channels: 8
+      )
+    end,
+    fn -> %{"input" => rand.({batch, image_size, image_size, in_channels})} end
+  ),
+  Zoo.inspect_model(:tcn,
+    fn -> Edifice.build(:tcn, input_size: embed, hidden_size: hidden, num_layers: 2) end,
+    fn -> %{"input" => rand.({batch, seq_len, embed})} end
+  )
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Graph Family
+
+Graph neural networks that operate on nodes + adjacency matrices.
+
+```elixir
+graph_opts = [
+  input_dim: node_dim, hidden_dim: hidden, num_classes: num_classes,
+  num_layers: 2, num_heads: 2, dropout: 0.0
+]
+
+graph_input = fn ->
+  nodes = rand.({batch, num_nodes, node_dim})
+  adj = Nx.eye(num_nodes) |> Nx.broadcast({batch, num_nodes, num_nodes})
+  %{"nodes" => nodes, "adjacency" => adj}
+end
+
+results = [
+  Zoo.inspect_model(:gcn, fn -> Edifice.build(:gcn, graph_opts) end, graph_input),
+  Zoo.inspect_model(:gat, fn -> Edifice.build(:gat, graph_opts) end, graph_input),
+  Zoo.inspect_model(:graph_transformer, fn -> Edifice.build(:graph_transformer, graph_opts) end, graph_input)
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 20)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Sets Family
+
+Permutation-invariant models for point clouds and unordered sets.
+
+```elixir
+results = [
+  Zoo.inspect_model(:deep_sets,
+    fn -> Edifice.build(:deep_sets, input_dim: point_dim, output_dim: num_classes) end,
+    fn -> %{"input" => rand.({batch, num_points, point_dim})} end
+  ),
+  Zoo.inspect_model(:pointnet,
+    fn -> Edifice.build(:pointnet, num_classes: num_classes, input_dim: point_dim) end,
+    fn -> %{"input" => rand.({batch, num_points, point_dim})} end
+  )
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Energy Family
+
+Energy-based and dynamics models that learn scalar energy functions or ODEs.
+
+```elixir
+flat_input = fn -> %{"input" => rand.({batch, embed})} end
+
+results = [
+  Zoo.inspect_model(:ebm,
+    fn -> Edifice.build(:ebm, input_size: embed) end, flat_input),
+  Zoo.inspect_model(:hopfield,
+    fn -> Edifice.build(:hopfield, input_dim: embed) end, flat_input),
+  Zoo.inspect_model(:neural_ode,
+    fn -> Edifice.build(:neural_ode, input_size: embed, hidden_size: hidden) end, flat_input)
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Probabilistic Family
+
+Models that quantify prediction uncertainty.
+
+```elixir
+results = [
+  Zoo.inspect_model(:bayesian,
+    fn -> Edifice.build(:bayesian, input_size: embed, output_size: num_classes) end, flat_input),
+  Zoo.inspect_model(:mc_dropout,
+    fn -> Edifice.build(:mc_dropout, input_size: embed, output_size: num_classes) end, flat_input),
+  Zoo.inspect_model(:evidential,
+    fn -> Edifice.build(:evidential, input_size: embed, num_classes: num_classes) end, flat_input)
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Memory Family
+
+Models with external memory for reasoning and one-shot learning.
+
+```elixir
+num_memories = 4
+memory_dim = 8
+
+results = [
+  Zoo.inspect_model(:ntm,
+    fn ->
+      Edifice.build(:ntm,
+        input_size: embed, output_size: hidden,
+        memory_size: num_memories, memory_dim: memory_dim, num_heads: 1
+      )
+    end,
+    fn -> %{"input" => rand.({batch, embed}), "memory" => rand.({batch, num_memories, memory_dim})} end
+  ),
+  Zoo.inspect_model(:memory_network,
+    fn ->
+      Edifice.build(:memory_network,
+        input_dim: embed, output_dim: hidden, num_memories: num_memories
+      )
+    end,
+    fn -> %{"query" => rand.({batch, embed}), "memories" => rand.({batch, num_memories, embed})} end
+  )
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 18)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Meta Family
+
+Mixture-of-experts, adapters, and other meta-learning components.
+
+```elixir
+results = [
+  Zoo.inspect_model(:moe,
+    fn ->
+      Edifice.build(:moe,
+        input_size: embed, hidden_size: hidden * 4,
+        output_size: hidden, num_experts: 2, top_k: 1
+      )
+    end,
+    fn -> %{"moe_input" => rand.({batch, seq_len, embed})} end
+  ),
+  Zoo.inspect_model(:lora,
+    fn -> Edifice.build(:lora, input_size: embed, output_size: hidden, rank: 4) end,
+    fn -> %{"input" => rand.({batch, embed})} end
+  ),
+  Zoo.inspect_model(:capsule,
+    fn ->
+      Edifice.build(:capsule,
+        input_shape: {nil, 28, 28, 1}, conv_channels: 32, conv_kernel: 9,
+        num_primary_caps: 8, primary_cap_dim: 4,
+        num_digit_caps: num_classes, digit_cap_dim: 4
+      )
+    end,
+    fn -> %{"input" => rand.({batch, 28, 28, 1})} end
+  )
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Generative Family
+
+Models that generate new data: VAEs, GANs, diffusion, flow matching.
+
+```elixir
+action_dim = 4
+action_horizon = 4
+
+results = [
+  Zoo.inspect_model(:vae_encoder,
+    fn ->
+      {enc, _dec} = Edifice.build(:vae, input_size: embed, latent_size: latent_size)
+      enc
+    end,
+    fn -> %{"input" => rand.({batch, embed})} end
+  ),
+  Zoo.inspect_model(:gan_generator,
+    fn ->
+      {gen, _disc} = Edifice.build(:gan, output_size: embed, latent_size: latent_size)
+      gen
+    end,
+    fn -> %{"noise" => rand.({batch, latent_size})} end
+  ),
+  Zoo.inspect_model(:diffusion,
+    fn ->
+      Edifice.build(:diffusion,
+        obs_size: embed, action_dim: action_dim, action_horizon: action_horizon,
+        hidden_size: hidden, num_layers: 2, dropout: 0.0
+      )
+    end,
+    fn ->
+      %{
+        "noisy_actions" => rand.({batch, action_horizon, action_dim}),
+        "timestep" => rand.({batch}),
+        "observations" => rand.({batch, embed})
+      }
+    end
+  ),
+  Zoo.inspect_model(:normalizing_flow,
+    fn -> Edifice.build(:normalizing_flow, input_size: embed, num_flows: 2) end,
+    fn -> %{"input" => rand.({batch, embed})} end
+  )
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 20)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Contrastive / Self-Supervised Family
+
+Representation learning without labels.
+
+```elixir
+results = [
+  Zoo.inspect_model(:simclr,
+    fn -> Edifice.build(:simclr, encoder_dim: embed, projection_dim: hidden) end,
+    fn -> %{"features" => rand.({batch, embed})} end
+  ),
+  Zoo.inspect_model(:byol_online,
+    fn ->
+      {online, _target} = Edifice.build(:byol, encoder_dim: embed, projection_dim: hidden)
+      online
+    end,
+    fn -> %{"features" => rand.({batch, embed})} end
+  ),
+  Zoo.inspect_model(:vicreg,
+    fn -> Edifice.build(:vicreg, encoder_dim: embed, projection_dim: hidden) end,
+    fn -> %{"features" => rand.({batch, embed})} end
+  )
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Liquid Family
+
+Liquid neural networks with continuous-time dynamics.
+
+```elixir
+result = Zoo.inspect_model(:liquid,
+  fn -> Edifice.build(:liquid, seq_opts) end,
+  seq_input
+)
+
+IO.puts("  #{result.name}  output=#{inspect(result.output_shape)}  params=#{Zoo.fmt_params(result.params)}")
+```
+
+## Neuromorphic Family
+
+Spiking neural networks inspired by biological neurons.
+
+```elixir
+results = [
+  Zoo.inspect_model(:snn,
+    fn ->
+      Edifice.build(:snn, input_size: embed, output_size: num_classes, hidden_sizes: [hidden])
+    end,
+    fn -> %{"input" => rand.({batch, embed})} end
+  ),
+  Zoo.inspect_model(:ann2snn,
+    fn -> Edifice.build(:ann2snn, input_size: embed, output_size: num_classes) end,
+    fn -> %{"input" => rand.({batch, embed})} end
+  )
+]
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(to_string(r.name), 15)} output=#{inspect(r.output_shape)}  params=#{Zoo.fmt_params(r.params)}")
+end
+```
+
+## Summary
+
+All 17 families in one table:
+
+```elixir
+families = Edifice.list_families()
+
+summary =
+  for {family, archs} <- Enum.sort_by(families, fn {_k, v} -> -length(v) end) do
+    names = Enum.map_join(archs, ", ", &Atom.to_string/1)
+
+    names =
+      if String.length(names) > 60 do
+        String.slice(names, 0, 57) <> "..."
+      else
+        names
+      end
+
+    IO.puts(
+      "  #{String.pad_trailing(Atom.to_string(family), 16)} " <>
+      "#{String.pad_trailing(Integer.to_string(length(archs)), 4)} " <>
+      names
+    )
+  end
+
+total = families |> Map.values() |> List.flatten() |> length()
+IO.puts("\n  Total: #{total} architectures")
+IO.puts("\n  All accessible via: Edifice.build(:name, opts)")
+```
