@@ -169,6 +169,7 @@ mamba_model =
     state_size: 8,
     num_layers: 2,
     seq_len: seq_len,
+    window_size: seq_len,
     dropout: 0.0
   )
   |> Axon.dense(1, name: "mamba_output")
@@ -191,6 +192,7 @@ gru_model =
     hidden_size: 16,
     num_layers: 2,
     seq_len: seq_len,
+    window_size: seq_len,
     dropout: 0.0
   )
   |> Axon.dense(1, name: "gru_output")
@@ -214,6 +216,7 @@ gated_model =
     state_size: 8,
     num_layers: 2,
     seq_len: seq_len,
+    window_size: seq_len,
     dropout: 0.0
   )
   |> Axon.dense(1, name: "gated_output")

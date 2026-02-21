@@ -97,23 +97,20 @@ defmodule Zoo do
 
       output = predict_fn.(params, input)
 
-      param_count =
-        params
-        |> Axon.ModelState.trainable_parameters()
-        |> Enum.reduce(0, fn {_name, tensor}, acc ->
-          acc + Nx.size(tensor)
-        end)
+      param_count = count_params(params)
 
       input_shapes =
         Enum.map_join(input, ", ", fn {k, v} ->
           "#{k}: #{inspect(Nx.shape(v))}"
         end)
 
+      output_shape = get_shape(output)
+
       %{
         name: name,
         status: :ok,
         input: input_shapes,
-        output_shape: Nx.shape(output),
+        output_shape: output_shape,
         params: param_count
       }
     rescue
@@ -121,6 +118,30 @@ defmodule Zoo do
         %{name: name, status: :fail, error: Exception.message(e) |> String.slice(0, 80)}
     end
   end
+
+  def count_params(%Axon.ModelState{} = state) do
+    state
+    |> Axon.ModelState.trainable_parameters()
+    |> count_nested(0)
+  end
+
+  # Handle container outputs (e.g. VAE encoder returns %{mu: tensor, log_var: tensor})
+  def get_shape(%Nx.Tensor{} = t), do: Nx.shape(t)
+
+  def get_shape(map) when is_map(map) do
+    map |> Enum.map(fn {k, v} -> "#{k}: #{inspect(get_shape(v))}" end) |> Enum.join(", ")
+  end
+
+  def get_shape(tuple) when is_tuple(tuple), do: tuple |> Tuple.to_list() |> Enum.map(&get_shape/1)
+  def get_shape(other), do: other
+
+  defp count_nested(%Nx.Tensor{} = t, acc), do: acc + Nx.size(t)
+
+  defp count_nested(map, acc) when is_map(map) do
+    Enum.reduce(map, acc, fn {_k, v}, a -> count_nested(v, a) end)
+  end
+
+  defp count_nested(_other, acc), do: acc
 
   def fmt_params(n) when n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)}M"
   def fmt_params(n) when n >= 1_000, do: "#{Float.round(n / 1_000, 1)}K"
@@ -170,6 +191,7 @@ seq_opts = [
   state_size: 8,
   num_layers: 2,
   seq_len: seq_len,
+  window_size: seq_len,
   head_dim: 8,
   num_heads: 2,
   dropout: 0.0
