@@ -27,6 +27,10 @@ RELEASE_PLAN.md
 # Version manager
 .tool-versions
 
+# Nix
+.nix-mix/
+.nix-hex/
+
 # OS
 .DS_Store
 Thumbs.db
