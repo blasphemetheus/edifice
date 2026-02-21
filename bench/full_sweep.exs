@@ -795,6 +795,25 @@ defmodule FullSweep do
     IO.puts("=" |> String.duplicate(80))
     IO.puts("")
 
+    # Phase 0: GPU/EXLA runtime warmup — build, compile, and run a small model
+    # to absorb one-time costs (cuDNN init, BFC allocator, EXLA JIT cache warmup).
+    # This ensures the first real architecture gets a fair measurement.
+    IO.puts("## Phase 0: GPU Runtime Warmup")
+    IO.puts("-" |> String.duplicate(60))
+
+    {warmup_us, _} =
+      :timer.tc(fn ->
+        model = Edifice.build(:gated_ssm, @sequence_opts)
+        {init_fn, predict_fn} = Axon.build(model)
+        template = %{"state_sequence" => Nx.template({@batch, @seq_len, @embed}, :f32)}
+        params = init_fn.(template, Axon.ModelState.empty())
+        input = %{"state_sequence" => rand({@batch, @seq_len, @embed})}
+        for _ <- 1..@warmup_iters, do: predict_fn.(params, input)
+      end)
+
+    IO.puts("  Warmed up EXLA runtime in #{Float.round(warmup_us / 1_000, 0)} ms (discarded)")
+    IO.puts("")
+
     header =
       "  #{String.pad_trailing("Architecture", 28)}" <>
         "#{String.pad_trailing("Family", 15)}" <>
