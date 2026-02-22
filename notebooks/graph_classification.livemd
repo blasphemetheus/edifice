@@ -176,10 +176,16 @@ train_data =
 IO.puts("Ready: #{n_train} train / #{num_graphs - n_train} test graphs, #{length(train_data)} batches/epoch")
 ```
 
-## Visualize Feature Patterns
+## Visualize Example Graphs
 
-Let's see how the three classes differ. We show the mean feature value per
-node for one example graph from each class.
+Let's look at one example graph from each class. Nodes are arranged in a
+circle and edges show the random connectivity. Node color represents the
+**mean feature value** — this is what the GNN sees.
+
+Notice:
+- **Smooth**: Connected nodes have similar colors (correlated features)
+- **Noisy**: Colors are random with no pattern relative to edges
+- **Alternating**: Connected nodes tend to have opposite colors
 
 ```elixir
 # Pick one example from each class
@@ -195,7 +201,76 @@ examples =
 
 class_names = %{0 => "Smooth", 1 => "Noisy", 2 => "Alternating"}
 
-charts =
+# Lay out nodes in a circle
+node_positions =
+  Enum.map(0..(num_nodes - 1), fn i ->
+    angle = 2 * :math.pi() * i / num_nodes
+    {Float.round(:math.cos(angle), 3), Float.round(:math.sin(angle), 3)}
+  end)
+
+graph_charts =
+  Enum.map(examples, fn ex ->
+    adj_list = Nx.to_flat_list(Nx.reshape(ex["adj"], {num_nodes * num_nodes}))
+    node_means = ex["nodes"] |> Nx.mean(axes: [1]) |> Nx.to_flat_list()
+
+    # Build edge data from adjacency matrix (upper triangle only to avoid duplicates)
+    edge_data =
+      for i <- 0..(num_nodes - 1), j <- (i + 1)..(num_nodes - 1),
+          Enum.at(adj_list, i * num_nodes + j) > 0.5 do
+        {x1, y1} = Enum.at(node_positions, i)
+        {x2, y2} = Enum.at(node_positions, j)
+        %{"x" => x1, "y" => y1, "x2" => x2, "y2" => y2}
+      end
+
+    # Build node data with feature coloring
+    node_data =
+      Enum.with_index(node_positions, fn {x, y}, i ->
+        %{"x" => x, "y" => y, "node" => "N#{i}",
+          "feature" => Float.round(Enum.at(node_means, i), 2)}
+      end)
+
+    n_edges = length(edge_data)
+
+    Vl.new(width: 220, height: 220,
+      title: "#{class_names[ex["class"]]} (#{n_edges} edges)")
+    |> Vl.layers([
+      Vl.new()
+      |> Vl.data_from_values(edge_data)
+      |> Vl.mark(:rule, color: "#ccc", stroke_width: 1.5)
+      |> Vl.encode_field(:x, "x", type: :quantitative,
+        scale: %{domain: [-1.5, 1.5]}, axis: nil)
+      |> Vl.encode_field(:y, "y", type: :quantitative,
+        scale: %{domain: [-1.5, 1.5]}, axis: nil)
+      |> Vl.encode_field(:x2, "x2")
+      |> Vl.encode_field(:y2, "y2"),
+      Vl.new()
+      |> Vl.data_from_values(node_data)
+      |> Vl.mark(:circle, size: 350, stroke: "black", stroke_width: 1)
+      |> Vl.encode_field(:x, "x", type: :quantitative)
+      |> Vl.encode_field(:y, "y", type: :quantitative)
+      |> Vl.encode_field(:color, "feature", type: :quantitative,
+        scale: %{scheme: "redblue", domain_mid: 0},
+        legend: %{title: "Feature"}),
+      Vl.new()
+      |> Vl.data_from_values(node_data)
+      |> Vl.mark(:text, font_size: 10, font_weight: "bold", dy: 0)
+      |> Vl.encode_field(:x, "x", type: :quantitative)
+      |> Vl.encode_field(:y, "y", type: :quantitative)
+      |> Vl.encode_field(:text, "node", type: :nominal)
+    ])
+  end)
+
+Vl.new()
+|> Vl.concat(graph_charts, :horizontal)
+```
+
+## Feature Distribution per Class
+
+The bar charts below show per-node mean feature values for the same
+example graphs. This makes the class differences even clearer:
+
+```elixir
+feature_charts =
   Enum.map(examples, fn ex ->
     node_means =
       ex["nodes"]
@@ -214,7 +289,7 @@ charts =
   end)
 
 Vl.new()
-|> Vl.concat(charts, :horizontal)
+|> Vl.concat(feature_charts, :horizontal)
 ```
 
 ## Helper: Train and Evaluate a Graph Model
