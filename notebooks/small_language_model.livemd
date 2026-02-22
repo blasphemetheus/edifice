@@ -1,0 +1,616 @@
+# Small Language Model
+
+## Setup
+
+**Choose one of the two cells below** depending on how you started Livebook.
+
+### Standalone (default)
+
+Use this if you started Livebook normally (`livebook server`).
+Uncomment the EXLA lines for GPU acceleration.
+
+```elixir
+edifice_dep =
+  if File.dir?(Path.expand("~/edifice")) do
+    {:edifice, path: Path.expand("~/edifice")}
+  else
+    {:edifice, "~> 0.2.0"}
+  end
+
+Mix.install([
+  edifice_dep,
+  # {:exla, "~> 0.10"},
+  {:kino_vega_lite, "~> 0.1"},
+  {:kino, "~> 0.14"}
+])
+
+# Nx.global_default_backend(EXLA.Backend)
+alias VegaLite, as: Vl
+```
+
+### Attached to project (recommended for Nix/CUDA)
+
+Use this if you started Livebook via `./scripts/livebook.sh`.
+See the Architecture Zoo notebook for full setup instructions.
+
+```elixir
+Nx.global_default_backend(EXLA.Backend)
+alias VegaLite, as: Vl
+IO.puts("Attached mode — using EXLA backend from project node")
+```
+
+## Introduction
+
+This notebook builds a **character-level language model** from scratch using
+Edifice's `DecoderOnly` transformer — the same architecture family behind
+GPT, LLaMA, and other modern LLMs.
+
+**What you'll learn:**
+
+* Turning raw text into numbers (character-level tokenization)
+* How a decoder-only transformer predicts the next character
+* Training a language model with cross-entropy loss
+* Generating text with temperature sampling (greedy vs creative)
+* Swapping the transformer backbone for Mamba in one line
+
+We'll train on excerpts from two classic novels — Emily Bronte's
+*Wuthering Heights* (1847) and James Joyce's *Ulysses* (1922) — both
+in the public domain. The mix of gothic prose and modernist stream-of-consciousness
+gives the model interesting patterns to learn.
+
+## Text Corpus and Vocabulary
+
+We inline a few kilobytes of text directly in the notebook — enough to
+learn character-level patterns like common letter combinations, spacing,
+and punctuation without needing external files or downloads.
+
+```elixir
+# Excerpts from public domain novels
+
+wuthering_heights = """
+I have just returned from a visit to my landlord the solitary neighbour
+that I shall be troubled with. This is certainly a beautiful country.
+In all England I do not believe that I could have fixed on a situation
+so completely removed from the stir of society. A perfect misanthropist
+heaven and Mr Heathcliff and I are such a suitable pair to divide the
+desolation between us. A capital fellow. He little imagined how my
+heart warmed towards him when I beheld his black eyes withdraw so
+suspiciously under their brows as I rode up and when his fingers
+sheltered themselves with a jealous resolution still further in his
+waistcoat as I announced my name.
+
+Mr Heathcliff I said. A nod was the answer. Mr Lockwood your new
+tenant sir. I do myself the honour of calling as soon as possible
+after my arrival to express the hope that I have not inconvenienced
+you by my perseverance in soliciting the occupation of Thrushcross
+Grange. I heard yesterday you had some thoughts.
+
+Thrushcross Grange is my own sir she interrupted wincing. I should
+not allow anyone to inconvenience me if I could hinder it. Walk in.
+
+The walk in was uttered with closed teeth and expressed the sentiment
+Go to the deuce. Even the gate over which he leant manifested no
+sympathising movement to the words and I think that circumstance
+determined me to accept the invitation. I felt interested in a man
+who seemed more exaggeratedly reserved than myself.
+
+When he saw my horse breast the swollen beck that lay across our path
+he spoke quickly Go round with your beast. There was no other entrance
+than to obey. I dismounted and leading my horse made my way towards
+the dwelling. It was a strange sight at that hour. The front of the
+house showed a solid mass of shadow above the level of the ground.
+
+The narrow windows are deeply set in the wall and the corners defended
+with large jutting stones. Before passing the threshold I paused to
+admire a quantity of grotesque carving lavished over the front and
+especially about the principal door above which among a wilderness of
+crumbling griffins and shameless little boys I detected the date 1500
+and the name Hareton Earnshaw.
+
+I would have made a few comments and requested a short history of the
+place from the surly owner but his attitude at the door appeared to
+demand my speedy entrance or complete departure and I had no desire
+to aggravate his impatience previous to inspecting the penetralium.
+"""
+
+ulysses = """
+Stately plump Buck Mulligan came from the stairhead bearing a bowl of
+lather on which a mirror and a razor lay crossed. A yellow dressing
+gown ungirdled was sustained gently behind him on the mild morning
+air. He held the bowl aloft and intoned. He peered sideways up and
+gave a long slow whistle of call then paused awhile in rapt attention
+his even white teeth glistening here and there with gold points.
+
+Two strong shrill whistles answered through the calm. He turned
+abruptly his great searching eyes going up from the stairhead towards
+the sea. Come up Kinch. Come up you fearful jesuit. Solemnly he came
+forward and mounted the round gunrest. He faced about and blessed
+gravely thrice the tower the surrounding land and the awaking
+mountains. Then catching sight of the nickel shaving bowl he went
+over to it and peered down at the water. He shaved evenly and with
+care telling of his plans.
+
+For this you may thank the one who calls herself my mother. She
+wants me to wear black. I told her I would. Yes I will serve. A
+wandering voice said from the stairfoot. He walked on waiting to be
+spoken to following the path that turned along the wall towards the
+tower but she was waiting down in the sitting room.
+
+The sea was calm. A great sweet mother. The sea fresh and bright
+and beautiful and great sweet mother. He turned away from the sea.
+Woodshadows floated silently by through the morning peace from the
+stairhead seaward where he gazed. Silently moving in the calm water
+bearing its own green body above the grey stones gently rising past
+everything softly at last the shadows fell across the water.
+
+He could hear them in their room. He crossed to the bright side of
+the room. His body seemed to grow taller to reach the height of the
+doorway. A moment before he turned away walking down the path. He
+looked back across the water towards the tower. The deep blue sky
+stretched over the fields and the sea. Morning peace lay on everything.
+"""
+
+corpus = wuthering_heights <> "\n" <> ulysses
+
+IO.puts("Corpus size: #{String.length(corpus)} characters")
+IO.puts("Preview (first 200 chars):")
+IO.puts(String.slice(corpus, 0, 200) <> "...")
+```
+
+Now let's build the vocabulary — a mapping from each unique character to an
+integer ID, and back.
+
+```elixir
+# Build character vocabulary from the corpus
+chars = corpus |> String.graphemes() |> Enum.uniq() |> Enum.sort()
+vocab_size = length(chars)
+
+# Create bidirectional mappings
+char_to_id = chars |> Enum.with_index() |> Map.new()
+id_to_char = chars |> Enum.with_index() |> Map.new(fn {ch, i} -> {i, ch} end)
+
+IO.puts("Vocabulary size: #{vocab_size} unique characters")
+IO.puts("Characters: #{inspect(Enum.join(chars, ""))}")
+```
+
+Let's visualize how often each character appears:
+
+```elixir
+# Count character frequencies
+freq_data =
+  corpus
+  |> String.graphemes()
+  |> Enum.frequencies()
+  |> Enum.map(fn {char, count} ->
+    label = case char do
+      "\n" -> "\\n"
+      " " -> "SPC"
+      ch -> ch
+    end
+    %{"char" => label, "count" => count}
+  end)
+  |> Enum.sort_by(& &1["count"], :desc)
+
+Vl.new(width: 700, height: 300, title: "Character Frequency Distribution")
+|> Vl.data_from_values(freq_data)
+|> Vl.mark(:bar)
+|> Vl.encode_field(:x, "char", type: :nominal, sort: "-y", title: "Character")
+|> Vl.encode_field(:y, "count", type: :quantitative, title: "Count")
+|> Vl.encode_field(:color, "count", type: :quantitative, scale: %{scheme: "blues"}, legend: nil)
+```
+
+## Data Preparation
+
+We use a sliding window over the corpus: each input is `seq_len` characters,
+and the target is the **next character** (a classification over the vocabulary).
+
+Characters are one-hot encoded into vectors of size `vocab_size`, giving
+input shape `{batch, seq_len, vocab_size}`. The model's internal projection
+from `vocab_size` to `hidden_size` acts as a learned embedding.
+
+```elixir
+seq_len = 32
+
+# Convert entire corpus to integer IDs
+corpus_ids =
+  corpus
+  |> String.graphemes()
+  |> Enum.map(&Map.fetch!(char_to_id, &1))
+
+corpus_len = length(corpus_ids)
+n_windows = corpus_len - seq_len
+
+IO.puts("Sequence length: #{seq_len}")
+IO.puts("Total windows: #{n_windows}")
+
+# Build input/target pairs using vectorized indexing (no per-window loops)
+IO.puts("Building sliding windows...")
+corpus_tensor = Nx.tensor(corpus_ids, type: :s32)
+
+# Create all window indices at once: each row is [i, i+1, ..., i+seq_len-1]
+# This is a single Nx operation instead of ~2900 individual Nx.slice calls
+window_offsets = Nx.iota({1, seq_len})
+window_starts = Nx.iota({n_windows, 1})
+all_indices = Nx.add(window_starts, window_offsets)
+
+x_ids = Nx.take(corpus_tensor, Nx.reshape(all_indices, {:auto})) |> Nx.reshape({n_windows, seq_len})
+
+# Targets: the character right after each window
+y_ids = Nx.slice(corpus_tensor, [seq_len], [n_windows])
+
+IO.puts("x_ids shape: #{inspect(Nx.shape(x_ids))}  (windows x seq_len)")
+IO.puts("y_ids shape: #{inspect(Nx.shape(y_ids))}  (windows,)")
+
+# One-hot encode inputs: {n_windows, seq_len} -> {n_windows, seq_len, vocab_size}
+IO.puts("\nOne-hot encoding inputs (vocab_size=#{vocab_size})...")
+
+x_onehot =
+  x_ids
+  |> Nx.reshape({n_windows * seq_len, 1})
+  |> Nx.equal(Nx.iota({1, vocab_size}))
+  |> Nx.as_type(:f32)
+  |> Nx.reshape({n_windows, seq_len, vocab_size})
+
+IO.puts("x_onehot shape: #{inspect(Nx.shape(x_onehot))}  (batch, seq_len, vocab_size)")
+IO.puts("y_ids shape: #{inspect(Nx.shape(y_ids))}  (batch,) — integer class labels")
+```
+
+Now split into train/test sets and batch for training:
+
+```elixir
+# 90/10 train/test split
+n_train = round(n_windows * 0.9)
+batch_size = 64
+
+# One-hot encode targets for cross-entropy loss: {n_windows} -> {n_windows, vocab_size}
+y_onehot =
+  y_ids
+  |> Nx.reshape({n_windows, 1})
+  |> Nx.equal(Nx.iota({1, vocab_size}))
+  |> Nx.as_type(:f32)
+
+train_x = x_onehot[0..(n_train - 1)]
+train_y = y_onehot[0..(n_train - 1)]
+test_x = x_onehot[n_train..-1//1]
+test_y = y_onehot[n_train..-1//1]
+test_y_ids = y_ids[n_train..-1//1]
+
+# Batch training data
+train_data =
+  Enum.zip(
+    Nx.to_batched(train_x, batch_size) |> Enum.to_list(),
+    Nx.to_batched(train_y, batch_size) |> Enum.to_list()
+  )
+
+n_test = n_windows - n_train
+
+IO.puts("Train: #{n_train} windows, #{length(train_data)} batches")
+IO.puts("Test:  #{n_test} windows")
+IO.puts("Batch size: #{batch_size}")
+```
+
+## Build the Transformer
+
+We use Edifice's `DecoderOnly` architecture — a GPT-style transformer with
+modern techniques: Grouped Query Attention (GQA), Rotary Position Embeddings
+(RoPE), SwiGLU feed-forward, and RMSNorm.
+
+The model is intentionally small to train quickly on CPU:
+
+* `hidden_size: 64` — internal representation dimension
+* `num_layers: 2` — two transformer blocks
+* `num_heads: 4` with `num_kv_heads: 2` — grouped query attention
+* `embed_dim: vocab_size` — one-hot input, projected internally
+
+```elixir
+transformer_model =
+  Edifice.build(:decoder_only,
+    embed_dim: vocab_size,
+    hidden_size: 64,
+    num_heads: 4,
+    num_kv_heads: 2,
+    num_layers: 2,
+    window_size: seq_len,
+    dropout: 0.05
+  )
+  |> Axon.dense(vocab_size, name: "lm_head")
+
+IO.puts("Model built: DecoderOnly -> dense(#{vocab_size})")
+IO.puts("Input:  {batch, #{seq_len}, #{vocab_size}}")
+IO.puts("Output: {batch, #{vocab_size}} (logits over vocabulary)")
+```
+
+## Training
+
+We train with cross-entropy loss (categorical classification over the
+vocabulary) and Adam optimizer. The model learns to predict which character
+comes next given the preceding `seq_len` characters.
+
+```elixir
+defmodule LMTrainer do
+  @moduledoc "Helper for training and evaluating language models."
+
+  def train(model, train_data, opts \\ []) do
+    epochs = Keyword.get(opts, :epochs, 20)
+    lr = Keyword.get(opts, :lr, 3.0e-4)
+
+    loss_fn = &Axon.Losses.categorical_cross_entropy(&1, &2, from_logits: true, reduction: :mean)
+
+    model
+    |> Axon.Loop.trainer(
+      loss_fn,
+      Polaris.Optimizers.adam(learning_rate: lr),
+      log: 1
+    )
+    |> Axon.Loop.metric(:accuracy)
+    |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: epochs)
+  end
+
+  def evaluate(model, state, test_x, test_y, vocab_size) do
+    {_init_fn, predict_fn} = Axon.build(model)
+    logits = predict_fn.(state, test_x)
+
+    # Accuracy
+    preds = Nx.argmax(logits, axis: -1)
+    correct = Nx.equal(preds, test_y) |> Nx.mean() |> Nx.to_number()
+
+    # Cross-entropy loss
+    targets_onehot =
+      test_y
+      |> Nx.reshape({:auto, 1})
+      |> Nx.equal(Nx.iota({1, vocab_size}))
+      |> Nx.as_type(:f32)
+
+    loss =
+      logits
+      |> Axon.Activations.softmax()
+      |> Nx.max(1.0e-7)
+      |> Nx.log()
+      |> Nx.multiply(targets_onehot)
+      |> Nx.sum(axes: [-1])
+      |> Nx.negate()
+      |> Nx.mean()
+      |> Nx.to_number()
+
+    {loss, correct}
+  end
+end
+```
+
+```elixir
+IO.puts("Training transformer (10 epochs)...")
+IO.puts("  ~2-3 min/epoch on CPU, ~20s/epoch on GPU. Grab a coffee if on CPU.\n")
+
+transformer_state = LMTrainer.train(transformer_model, train_data, epochs: 10, lr: 3.0e-4)
+
+{transformer_loss, transformer_acc} =
+  LMTrainer.evaluate(transformer_model, transformer_state, test_x, test_y_ids, vocab_size)
+
+IO.puts("\n--- Transformer Results ---")
+IO.puts("Test loss:     #{Float.round(transformer_loss, 4)}")
+IO.puts("Test accuracy: #{Float.round(transformer_acc * 100, 1)}%")
+```
+
+## Text Generation
+
+Now the fun part — we feed the model a seed string and let it predict
+one character at a time, appending each prediction and sliding the window
+forward. This is **autoregressive generation**.
+
+**Temperature** controls randomness:
+
+* **Low (0.3)**: Conservative, repetitive but coherent
+* **Medium (0.8)**: Balanced creativity
+* **High (1.5)**: Wild and surprising, more errors
+
+```elixir
+defmodule TextGenerator do
+  @moduledoc "Autoregressive character-level text generation."
+
+  @doc "Generate `n_chars` of text given a seed string."
+  def generate(model, state, seed, n_chars, opts \\ []) do
+    temp = Keyword.get(opts, :temperature, 1.0)
+    char_to_id = Keyword.fetch!(opts, :char_to_id)
+    id_to_char = Keyword.fetch!(opts, :id_to_char)
+    vocab_size = Keyword.fetch!(opts, :vocab_size)
+    seq_len = Keyword.fetch!(opts, :seq_len)
+    key = Keyword.get(opts, :key, Nx.Random.key(42))
+
+    {_init_fn, predict_fn} = Axon.build(model)
+
+    # Convert seed to character IDs
+    seed_ids =
+      seed
+      |> String.graphemes()
+      |> Enum.map(&Map.fetch!(char_to_id, &1))
+
+    # Pad or truncate seed to seq_len
+    seed_ids =
+      if length(seed_ids) >= seq_len do
+        Enum.take(seed_ids, -seq_len)
+      else
+        # Pad with space character on the left
+        space_id = Map.fetch!(char_to_id, " ")
+        List.duplicate(space_id, seq_len - length(seed_ids)) ++ seed_ids
+      end
+
+    # Generate characters one at a time
+    {generated_ids, _key} =
+      Enum.reduce(1..n_chars, {seed_ids, key}, fn _i, {current_ids, rng} ->
+        # Take last seq_len characters
+        window = Enum.take(current_ids, -seq_len)
+
+        # One-hot encode: {1, seq_len, vocab_size}
+        input =
+          window
+          |> Nx.tensor(type: :s32)
+          |> Nx.reshape({seq_len, 1})
+          |> Nx.equal(Nx.iota({1, vocab_size}))
+          |> Nx.as_type(:f32)
+          |> Nx.reshape({1, seq_len, vocab_size})
+
+        # Get logits and apply temperature
+        logits = predict_fn.(state, input) |> Nx.reshape({vocab_size})
+
+        {next_id, rng} =
+          if temp <= 0.01 do
+            # Greedy (argmax)
+            {Nx.argmax(logits) |> Nx.to_number(), rng}
+          else
+            # Temperature sampling
+            scaled = Nx.divide(logits, temp)
+            probs = Axon.Activations.softmax(scaled)
+            {sample, rng} = Nx.Random.choice(rng, Nx.iota({vocab_size}), probs, samples: 1)
+            {Nx.to_number(sample[0]), rng}
+          end
+
+        {current_ids ++ [next_id], rng}
+      end)
+
+    # Convert back to text (skip the seed portion)
+    generated_ids
+    |> Enum.drop(length(seed_ids |> Enum.take(-seq_len)))
+    |> Enum.map(&Map.get(id_to_char, &1, "?"))
+    |> Enum.join()
+  end
+end
+```
+
+Let's generate text at different temperatures. Each character requires a
+full forward pass, so generating 200 characters x 4 temperatures takes
+a minute or two on CPU.
+
+```elixir
+seed = "the morning "
+gen_opts = [
+  char_to_id: char_to_id,
+  id_to_char: id_to_char,
+  vocab_size: vocab_size,
+  seq_len: seq_len
+]
+
+IO.puts("Seed: \"#{seed}\"\n")
+IO.puts(String.duplicate("=", 60))
+
+for {temp, label} <- [{0.0, "Greedy (T=0)"}, {0.5, "Conservative (T=0.5)"}, {0.8, "Balanced (T=0.8)"}, {1.2, "Creative (T=1.2)"}] do
+  text = TextGenerator.generate(
+    transformer_model, transformer_state, seed, 100,
+    [{:temperature, temp}, {:key, Nx.Random.key(round(temp * 100))} | gen_opts]
+  )
+
+  IO.puts("\n#{label}:")
+  IO.puts("  #{seed}#{text}")
+  IO.puts(String.duplicate("-", 60))
+end
+
+:ok
+```
+
+## Architecture Swap: Mamba
+
+One of Edifice's strengths is architecture-agnostic experimentation.
+Let's swap the transformer backbone for **Mamba** — a selective state-space
+model — and compare. Same data, same training loop, one-line model change.
+
+```elixir
+mamba_model =
+  Edifice.build(:mamba,
+    embed_dim: vocab_size,
+    hidden_size: 64,
+    state_size: 16,
+    num_layers: 2,
+    seq_len: seq_len,
+    window_size: seq_len,
+    dropout: 0.05
+  )
+  |> Axon.dense(vocab_size, name: "lm_head_mamba")
+
+IO.puts("Mamba model built — same input/output shapes as transformer")
+```
+
+```elixir
+IO.puts("Training Mamba (5 epochs)...")
+IO.puts("  Mamba's sequential scan is slower than attention on small GPUs.\n")
+
+mamba_state = LMTrainer.train(mamba_model, train_data, epochs: 5, lr: 3.0e-4)
+
+{mamba_loss, mamba_acc} =
+  LMTrainer.evaluate(mamba_model, mamba_state, test_x, test_y_ids, vocab_size)
+
+IO.puts("\n--- Mamba Results ---")
+IO.puts("Test loss:     #{Float.round(mamba_loss, 4)}")
+IO.puts("Test accuracy: #{Float.round(mamba_acc * 100, 1)}%")
+```
+
+```elixir
+# Compare the two architectures
+IO.puts(String.duplicate("=", 50))
+IO.puts("  Architecture    Test Loss   Accuracy")
+IO.puts("  " <> String.duplicate("-", 40))
+IO.puts("  Transformer     #{Float.round(transformer_loss, 4) |> to_string() |> String.pad_trailing(11)} #{Float.round(transformer_acc * 100, 1)}%")
+IO.puts("  Mamba           #{Float.round(mamba_loss, 4) |> to_string() |> String.pad_trailing(11)} #{Float.round(mamba_acc * 100, 1)}%")
+IO.puts(String.duplicate("=", 50))
+```
+
+Let's see what Mamba generates (another minute or two on CPU):
+
+```elixir
+IO.puts("Seed: \"#{seed}\"\n")
+IO.puts(String.duplicate("=", 60))
+
+for {temp, label} <- [{0.0, "Greedy (T=0)"}, {0.8, "Balanced (T=0.8)"}] do
+  IO.puts("\n#{label}:")
+
+  transformer_text = TextGenerator.generate(
+    transformer_model, transformer_state, seed, 100,
+    [{:temperature, temp}, {:key, Nx.Random.key(7)} | gen_opts]
+  )
+  IO.puts("  Transformer: #{seed}#{transformer_text}")
+
+  mamba_text = TextGenerator.generate(
+    mamba_model, mamba_state, seed, 100,
+    [{:temperature, temp}, {:key, Nx.Random.key(7)} | gen_opts]
+  )
+  IO.puts("  Mamba:       #{seed}#{mamba_text}")
+
+  IO.puts(String.duplicate("-", 60))
+end
+
+:ok
+```
+
+## What's Next?
+
+**Why the generated text looks like gibberish:** This model learns character-level
+patterns — common letter combinations, word-like structures, spacing — from just
+~4KB of text with a 32-character context window. That's enough to learn *local*
+patterns (letter frequencies, common bigrams like "th", "he", "in") but not
+sentence structure or meaning. For comparison, GPT-2 trained on 40GB of text
+with 1024-token context and 117M parameters.
+
+The hierarchy of what matters most for better text:
+
+1. **Data** (biggest impact): 4KB is tiny. Even 1-2MB of Project Gutenberg text
+   would produce recognizable English sentences. The model can only learn patterns
+   it sees enough examples of.
+2. **Tokenization**: Character-level is the hardest way to learn language — each
+   word is 4-8 separate predictions. BPE/SentencePiece tokenizers compress common
+   words to single tokens, giving the model much more context per position.
+3. **Sequence length**: 32 characters ≈ 5-6 words of context. Real models use
+   512-4096+ tokens. Short context means no sentence-level structure.
+4. **Model size**: Our ~50K parameters vs GPT-2's 117M. But without enough data,
+   a bigger model just memorizes faster — it doesn't generalize better.
+
+This notebook demonstrates the **mechanics** — tokenization, transformer
+architecture, autoregressive generation, architecture swapping — not
+production-quality text generation. To go further:
+
+* **More data**: Feed in full books via `File.read!/1` — 1-2MB is enough
+  for recognizable English with this architecture.
+* **Real tokenizer**: BPE/SentencePiece for much more efficient learning.
+* **Longer context**: `seq_len: 128` or `256` for sentence-level patterns.
+* **Bigger model**: `hidden_size: 128`, `num_layers: 4` with more data.
+* **Try more architectures**: Swap `:mamba` for `:retnet`, `:rwkv`, `:hyena`,
+  or any of Edifice's 30+ sequence models — same training loop.
+* **LoRA fine-tuning**: See the planned LoRA notebook for parameter-efficient
+  adaptation of pretrained models.
