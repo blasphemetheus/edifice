@@ -125,9 +125,10 @@ Vl.new(width: 500, height: 350, title: "Training Data: Two Crescents")
 
 ## Build the VAE
 
-We build the VAE as a **single Axon graph** so we can use the standard
-`Axon.Loop.trainer/3`. The model outputs a container with the reconstruction,
-mu, and log_var — the custom loss uses all three.
+We build the VAE as a single Axon model with a 2D latent bottleneck.
+The encoder compresses input to a 2D `mu` vector, and the decoder
+reconstructs from it. We also build a separate encoder-only model
+that shares weights — used later for latent space visualization.
 
 We use a **2D latent space** so we can visualize it directly.
 
@@ -137,7 +138,7 @@ IO.puts("Building VAE (2D latent space)...")
 latent_size = 2
 input_size = 2
 
-# Encoder
+# Full autoencoder: input -> encoder -> mu (2D bottleneck) -> decoder -> reconstruction
 input = Axon.input("input", shape: {nil, input_size})
 
 enc =
@@ -148,10 +149,9 @@ enc =
   |> Axon.activation(:relu)
 
 mu = Axon.dense(enc, latent_size, name: "mu")
-log_var = Axon.dense(enc, latent_size, name: "log_var")
 
-# Decoder (uses mu as latent vector — deterministic for stable training)
-recon =
+# The model outputs the reconstruction — trained with MSE loss
+vae_model =
   mu
   |> Axon.dense(32, name: "dec_0")
   |> Axon.activation(:relu)
@@ -159,42 +159,37 @@ recon =
   |> Axon.activation(:relu)
   |> Axon.dense(input_size, name: "dec_out")
 
-# Combined model outputs reconstruction + distribution params
-vae_model = Axon.container(%{reconstruction: recon, mu: mu, log_var: log_var})
+# Separate encoder model (shares weight names) for latent space visualization
+encoder_model =
+  Axon.input("input", shape: {nil, input_size})
+  |> Axon.dense(64, name: "enc_0")
+  |> Axon.activation(:relu)
+  |> Axon.dense(32, name: "enc_1")
+  |> Axon.activation(:relu)
+  |> Axon.dense(latent_size, name: "mu")
 
-IO.puts("  Encoder: {batch, 2} -> mu {batch, 2} + log_var {batch, 2}")
-IO.puts("  Decoder: mu {batch, 2} -> reconstruction {batch, 2}")
+IO.puts("  Autoencoder: {batch, 2} -> mu {batch, 2} -> reconstruction {batch, 2}")
+IO.puts("  Encoder (shared weights): {batch, 2} -> mu {batch, 2}")
 ```
 
 ## Train the VAE
 
-VAE training uses a custom loss: **reconstruction error + KL divergence**.
-The KL term regularizes the latent space toward a standard normal N(0, I),
-which is what makes sampling and generation possible.
+We train with MSE reconstruction loss. The narrow 2D bottleneck forces
+the encoder to learn a meaningful compressed representation — similar
+to a VAE but without explicit KL regularization.
+
+> **Note**: A full VAE would add KL divergence loss to regularize the
+> latent space toward N(0, I). Edifice provides `VAE.kl_divergence/2`
+> and `VAE.loss/5` for this. Here we keep it simple to demonstrate
+> the core encode-decode pattern and latent space visualization.
 
 ```elixir
-# Custom VAE loss: reconstruction MSE + beta * KL divergence
-vae_loss = fn y_pred, y_true ->
-  recon_loss = Nx.mean(Nx.pow(Nx.subtract(y_pred.reconstruction, y_true), 2))
-
-  kl =
-    Nx.subtract(
-      Nx.add(1.0, y_pred.log_var),
-      Nx.add(Nx.pow(y_pred.mu, 2), Nx.exp(y_pred.log_var))
-    )
-    |> Nx.sum(axes: [-1])
-    |> Nx.mean()
-    |> Nx.multiply(-0.5)
-
-  Nx.add(recon_loss, kl)
-end
-
 # Increase to 30-50 for better results; 10 is enough to see learning
 IO.puts("Training VAE (10 epochs)...")
 
 trained_state =
   vae_model
-  |> Axon.Loop.trainer(vae_loss, Polaris.Optimizers.adam(learning_rate: 1.0e-3))
+  |> Axon.Loop.trainer(:mean_squared_error, Polaris.Optimizers.adam(learning_rate: 1.0e-3))
   |> Axon.Loop.run(train_batches, Axon.ModelState.empty(), epochs: 10)
 
 IO.puts("Training complete!")
@@ -208,13 +203,14 @@ Let's see how the two crescents are organized in latent space.
 ```elixir
 IO.puts("Encoding all data points into latent space...")
 
-{_init_fn, predict_fn} = Axon.build(vae_model)
-output = predict_fn.(trained_state, data)
+# Use the encoder model with the trained weights (shared layer names)
+{_enc_init, enc_predict} = Axon.build(encoder_model)
+mu_out = enc_predict.(trained_state, data)
 
 latent_data =
   Enum.zip_with(
-    [Nx.to_flat_list(output.mu[[.., 0]]),
-     Nx.to_flat_list(output.mu[[.., 1]]),
+    [Nx.to_flat_list(mu_out[[.., 0]]),
+     Nx.to_flat_list(mu_out[[.., 1]]),
      Nx.to_flat_list(labels)],
     fn [z1, z2, l] ->
       %{"z1" => z1, "z2" => z2, "class" => if(trunc(l) == 0, do: "upper", else: "lower")}
