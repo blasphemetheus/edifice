@@ -1,7 +1,5 @@
 # Sequence Modeling with Edifice
 
-<!-- livebook:{"force_hierarchical_headings":true} -->
-
 ## Setup
 
 **Choose one of the two cells below** depending on how you started Livebook.
@@ -72,18 +70,23 @@ signal = Nx.add(Nx.sin(ts), Nx.multiply(Nx.sin(Nx.multiply(ts, 2.3)), 0.3))
 
 # Create overlapping windows: [input_seq] -> [next_value]
 windows = n_points - seq_len - 1
+IO.puts("Creating #{windows} overlapping windows (seq_len=#{seq_len})...")
 
+IO.puts("  Building input sequences...")
 x_data =
   for i <- 0..(windows - 1) do
     Nx.slice(signal, [i], [seq_len]) |> Nx.reshape({seq_len, 1})
   end
   |> Nx.stack()
+IO.puts("  Input shape: #{inspect(Nx.shape(x_data))}")
 
+IO.puts("  Building targets...")
 y_data =
   for i <- 0..(windows - 1) do
     Nx.slice(signal, [i + seq_len], [1])
   end
   |> Nx.stack()
+IO.puts("  Target shape: #{inspect(Nx.shape(y_data))}")
 
 # 80/20 split
 n_train = round(windows * 0.8)
@@ -96,13 +99,14 @@ test_y = y_data[n_train..-1//1]
 # Batch for training
 batch_size = 32
 
+IO.puts("  Batching training data...")
 train_data =
   Enum.zip(
     Nx.to_batched(train_x, batch_size) |> Enum.to_list(),
     Nx.to_batched(train_y, batch_size) |> Enum.to_list()
   )
 
-"#{n_train} train / #{windows - n_train} test windows, #{length(train_data)} batches/epoch"
+IO.puts("Ready: #{n_train} train / #{windows - n_train} test windows, #{length(train_data)} batches/epoch")
 ```
 
 Let's visualize the signal and the train/test split:
@@ -162,6 +166,7 @@ Mamba is a selective state-space model — it processes sequences through learne
 state transitions with input-dependent gating. Fast and parallelizable.
 
 ```elixir
+IO.puts("Building Mamba model...")
 mamba_model =
   Edifice.build(:mamba,
     embed_dim: 32,
@@ -174,6 +179,7 @@ mamba_model =
   )
   |> Axon.dense(1, name: "mamba_output")
 
+IO.puts("Training Mamba (30 epochs)...")
 {mamba_state, mamba_preds, mamba_mse} =
   SeqTrainer.train_and_eval(mamba_model, train_data, test_x, test_y, epochs: 30)
 
@@ -186,6 +192,7 @@ GRU is a gated recurrent unit — a simpler variant of LSTM that maintains a
 hidden state updated at each timestep. A well-established sequence baseline.
 
 ```elixir
+IO.puts("Building GRU model...")
 gru_model =
   Edifice.build(:gru,
     embed_dim: 32,
@@ -197,6 +204,7 @@ gru_model =
   )
   |> Axon.dense(1, name: "gru_output")
 
+IO.puts("Training GRU (30 epochs)...")
 {gru_state, gru_preds, gru_mse} =
   SeqTrainer.train_and_eval(gru_model, train_data, test_x, test_y, epochs: 30)
 
@@ -209,6 +217,7 @@ GatedSSM is a simpler gated state-space model — fewer parameters than Mamba
 but still captures sequential dynamics.
 
 ```elixir
+IO.puts("Building GatedSSM model...")
 gated_model =
   Edifice.build(:gated_ssm,
     embed_dim: 32,
@@ -221,6 +230,7 @@ gated_model =
   )
   |> Axon.dense(1, name: "gated_output")
 
+IO.puts("Training GatedSSM (30 epochs)...")
 {gated_state, gated_preds, gated_mse} =
   SeqTrainer.train_and_eval(gated_model, train_data, test_x, test_y, epochs: 30)
 
