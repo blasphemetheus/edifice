@@ -5,15 +5,16 @@ organized by priority tier. Check marks indicate completed implementations.
 
 ## Tier 1 — High Impact (next release candidates)
 
+<<<<<<< HEAD
 - [ ] **Mamba-4 / Hymba** — Hybrid Mamba + attention with learned routing (SSM.Hymba)
 - [ ] **RWKV-6/7 (full)** — Updated RWKV with improved token shift and time mixing (Attention.RWKVv6)
 - [ ] **DeltaNet v2** — Improved delta rule with gated memory (Recurrent.DeltaNetv2)
 - [ ] **xLSTM v2 (sLSTM)** — Scalar LSTM variant with exponential gating (Recurrent.SLSTM)
 - [ ] **Sparse Attention** — Block-sparse and sliding window patterns (Attention.SparseAttention)
+- [ ] **Hawk/RecurrentGemma** — Google's RG-LRU recurrent model (Recurrent.Hawk)
 
 ## Tier 2 — Moderate Impact (architectural diversity)
 
-- [ ] **Hawk / Griffin v2** — Improved gated linear recurrence variants (Attention.Griffinv2)
 - [ ] **RetNet v2** — Multi-scale retention with improved decay schedules (Attention.RetNetv2)
 - [ ] **GLA v2** — Gated linear attention with improved forget gates (Attention.GLAv2)
 - [ ] **HGRN v2** — Hierarchical gated recurrent with multi-resolution (Attention.HGRNv2)
@@ -21,6 +22,9 @@ organized by priority tier. Check marks indicate completed implementations.
 - [ ] **LoRA+/DoRA** — Enhanced parameter-efficient fine-tuning (Meta.DoRA)
 - [ ] **DiT v2** — Improved diffusion transformer conditioning (Generative.DiTv2)
 - [ ] **Byte Latent Transformer** — Byte-level processing with latent patching (Transformer.BLT)
+
+- [ ] **MEGALODON** — Mega-scale sequence model with chunked attention (Attention.Megalodon)
+- [ ] **Mixture of Experts v2** — Expert choice routing, shared expert slots (Meta.MoEv2)
 
 ## Tier 3 — Research / Exploratory
 

@@ -18,6 +18,7 @@ defmodule ScalingProfile do
   @iters String.to_integer(System.get_env("BENCH_ITERS", "20"))
 
   # Top backbone candidates from inference latency benchmark
+  # v0.1 originals + v0.2.0 additions
   @architectures [
     {:gated_ssm, :ssm},
     {:fnet, :attention},
@@ -30,7 +31,14 @@ defmodule ScalingProfile do
     {:mamba, :ssm},
     {:griffin, :attention},
     {:min_lstm, :recurrent},
-    {:lstm, :recurrent}
+    {:lstm, :recurrent},
+    # v0.2.0 additions
+    {:based, :attention},
+    {:mega, :attention},
+    {:mla, :attention},
+    {:striped_hyena, :ssm},
+    {:mamba3, :ssm},
+    {:mlstm, :recurrent}
   ]
 
   defp rand(shape) do

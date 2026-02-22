@@ -74,9 +74,15 @@ Edifice.list_families()
 |-------------|--------|-------------|
 | **MLP** | `Edifice.Feedforward.MLP` | Multi-layer perceptron with configurable hidden sizes |
 | **KAN** | `Edifice.Feedforward.KAN` | Kolmogorov-Arnold Networks, learnable activation functions |
+| **KAT** | `Edifice.Feedforward.KAT` | Kolmogorov-Arnold Transformer (KAN + attention) (learnable activations) |
 | **TabNet** | `Edifice.Feedforward.TabNet` | Attentive feature selection for tabular data |
-| **KAT** | `Edifice.Feedforward.KAT` | Attention + KAN feed-forward (learnable activations) |
 | **BitNet** | `Edifice.Feedforward.BitNet` | Ternary/binary weight quantization (1.58-bit) |
+
+### Transformer
+
+| Architecture | Module | Key Feature |
+|-------------|--------|-------------|
+| **Decoder-Only** | `Edifice.Transformer.DecoderOnly` | GPT-style with GQA, RoPE, SwiGLU, RMSNorm |
 
 ### State Space Models
 
@@ -203,6 +209,7 @@ Edifice.list_families()
 | **GraphSAGE** | `Edifice.Graph.GraphSAGE` | Inductive learning, neighborhood sampling |
 | **Graph Transformer** | `Edifice.Graph.GraphTransformer` | Full attention over nodes with edge features |
 | **PNA** | `Edifice.Graph.PNA` | Principal Neighbourhood Aggregation |
+| **GINv2** | `Edifice.Graph.GINv2` | GIN with edge features |
 | **SchNet** | `Edifice.Graph.SchNet` | Continuous-filter convolutions for molecules |
 | **DeepSets** | `Edifice.Sets.DeepSets` | Permutation-invariant set functions |
 | **GINv2** | `Edifice.Graph.GINv2` | Enhanced GIN with edge features |
@@ -253,6 +260,10 @@ Edifice.list_families()
 | **Cross Attention** | `Edifice.Blocks.CrossAttention` | Cross-attention between two sequences |
 | **Conv1D/2D** | `Edifice.Convolutional.Conv` | Configurable convolution blocks |
 | **FFN** | `Edifice.Blocks.FFN` | Standard and gated feed-forward networks |
+| **Transformer Block** | `Edifice.Blocks.TransformerBlock` | Pre-norm block with pluggable attention |
+| **Causal Mask** | `Edifice.Blocks.CausalMask` | Unified causal mask creation |
+| **Depthwise Conv** | `Edifice.Blocks.DepthwiseConv` | 1D depthwise separable convolution |
+| **Model Builder** | `Edifice.Blocks.ModelBuilder` | Sequence/vision model skeletons |
 | **Message Passing** | `Edifice.Graph.MessagePassing` | Generic MPNN framework, global pooling |
 
 ## Guides

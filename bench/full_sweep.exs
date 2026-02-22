@@ -74,9 +74,10 @@ defmodule FullSweep do
 
   @sequence_archs ~w(
     mamba mamba_ssd mamba_cumsum mamba_hillis_steele
-    s4 s4d s5 h3 hyena bimamba gated_ssm jamba zamba
-    lstm gru xlstm min_gru min_lstm delta_net ttt titans
+    s4 s4d s5 h3 hyena bimamba gated_ssm jamba zamba striped_hyena mamba3
+    lstm gru xlstm mlstm min_gru min_lstm delta_net ttt titans
     retnet gla hgrn griffin gqa fnet linear_transformer nystromformer performer
+    based mega mla
     kan liquid
   )a
 
@@ -84,13 +85,13 @@ defmodule FullSweep do
     for arch <- @sequence_archs do
       family =
         cond do
-          arch in ~w(mamba mamba_ssd mamba_cumsum mamba_hillis_steele s4 s4d s5 h3 hyena bimamba gated_ssm jamba zamba)a ->
+          arch in ~w(mamba mamba_ssd mamba_cumsum mamba_hillis_steele s4 s4d s5 h3 hyena bimamba gated_ssm jamba zamba striped_hyena mamba3)a ->
             "ssm"
 
-          arch in ~w(lstm gru xlstm min_gru min_lstm delta_net ttt titans)a ->
+          arch in ~w(lstm gru xlstm mlstm min_gru min_lstm delta_net ttt titans)a ->
             "recurrent"
 
-          arch in ~w(retnet gla hgrn griffin gqa fnet linear_transformer nystromformer performer)a ->
+          arch in ~w(retnet gla hgrn griffin gqa fnet linear_transformer nystromformer performer based mega mla)a ->
             "attention"
 
           arch == :kan ->
@@ -146,6 +147,101 @@ defmodule FullSweep do
            num_layers: @num_layers,
            seq_len: @seq_len,
            num_experts: 2,
+           dropout: 0.0
+         )
+       end, fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end},
+      # v0.2.0 architectures with non-standard options
+      {:decoder_only, "transformer",
+       fn ->
+         Edifice.build(:decoder_only,
+           embed_dim: @embed,
+           hidden_size: @hidden,
+           num_heads: 2,
+           num_kv_heads: 1,
+           num_layers: @num_layers,
+           seq_len: @seq_len,
+           dropout: 0.0
+         )
+       end, fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end},
+      {:conformer, "attention",
+       fn ->
+         Edifice.build(:conformer,
+           embed_dim: @embed,
+           hidden_size: @hidden,
+           num_heads: 2,
+           num_layers: @num_layers,
+           conv_kernel_size: 3,
+           seq_len: @seq_len,
+           dropout: 0.0
+         )
+       end, fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end},
+      {:infini_attention, "attention",
+       fn ->
+         Edifice.build(:infini_attention,
+           embed_dim: @embed,
+           hidden_size: @hidden,
+           num_heads: 2,
+           num_layers: @num_layers,
+           segment_size: 4,
+           seq_len: @seq_len,
+           dropout: 0.0
+         )
+       end, fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end},
+      {:ring_attention, "attention",
+       fn ->
+         Edifice.build(:ring_attention,
+           embed_dim: @embed,
+           hidden_size: @hidden,
+           num_heads: 2,
+           num_chunks: 2,
+           num_layers: @num_layers,
+           window_size: @seq_len,
+           dropout: 0.0
+         )
+       end, fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end},
+      {:kat, "feedforward",
+       fn ->
+         Edifice.build(:kat,
+           embed_dim: @embed,
+           hidden_size: @hidden,
+           num_heads: 2,
+           num_layers: @num_layers,
+           seq_len: @seq_len,
+           dropout: 0.0
+         )
+       end, fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end},
+      {:bitnet, "feedforward",
+       fn ->
+         Edifice.build(:bitnet,
+           embed_dim: @embed,
+           hidden_size: @hidden,
+           num_heads: 2,
+           num_layers: @num_layers,
+           seq_len: @seq_len,
+           dropout: 0.0
+         )
+       end, fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end},
+      {:mixture_of_depths, "meta",
+       fn ->
+         Edifice.build(:mixture_of_depths,
+           embed_dim: @embed,
+           hidden_size: @hidden,
+           num_heads: 2,
+           num_layers: @num_layers,
+           capacity_ratio: 0.5,
+           seq_len: @seq_len,
+           dropout: 0.0
+         )
+       end, fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end},
+      {:mixture_of_agents, "meta",
+       fn ->
+         Edifice.build(:mixture_of_agents,
+           embed_dim: @embed,
+           hidden_size: @hidden,
+           num_heads: 2,
+           num_proposers: 2,
+           num_layers: @num_layers,
+           seq_len: @seq_len,
            dropout: 0.0
          )
        end, fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end}
@@ -217,7 +313,33 @@ defmodule FullSweep do
              depth: 2,
              dropout: 0.0
            )
-         end, fn -> %{"image" => rand({@batch, @in_channels, @image_size, @image_size})} end}
+         end, fn -> %{"image" => rand({@batch, @in_channels, @image_size, @image_size})} end},
+        {:focalnet, "vision",
+         fn ->
+           Edifice.build(:focalnet,
+             image_size: @image_size,
+             in_channels: @in_channels,
+             patch_size: 4,
+             embed_dim: @hidden,
+             depths: [1, 1],
+             focal_levels: [2, 2],
+             dropout: 0.0
+           )
+         end, fn -> %{"image" => rand({@batch, @in_channels, @image_size, @image_size})} end},
+        {:poolformer, "vision",
+         fn ->
+           Edifice.build(:poolformer,
+             image_size: @image_size,
+             in_channels: @in_channels,
+             patch_size: 4,
+             embed_dim: @hidden,
+             depths: [1, 1],
+             dropout: 0.0
+           )
+         end, fn -> %{"image" => rand({@batch, @in_channels, @image_size, @image_size})} end},
+        {:nerf, "vision",
+         fn -> Edifice.build(:nerf, coord_dim: 3, hidden_size: @hidden, use_viewdir: false) end,
+         fn -> %{"coordinates" => rand({@batch, 3})} end}
       ]
   end
 
@@ -253,7 +375,22 @@ defmodule FullSweep do
              num_filters: @hidden,
              num_rbf: 10
            )
-         end, graph_input}
+         end, graph_input},
+        {:gin_v2, "graph",
+         fn ->
+           Edifice.build(:gin_v2,
+             input_dim: @node_dim,
+             edge_dim: 4,
+             hidden_dims: [@hidden],
+             num_classes: @num_classes
+           )
+         end,
+         fn ->
+           nodes = rand({@batch, @num_nodes, @node_dim})
+           adj = Nx.eye(@num_nodes) |> Nx.broadcast({@batch, @num_nodes, @num_nodes})
+           edges = rand({@batch, @num_nodes, @num_nodes, 4})
+           %{"nodes" => nodes, "adjacency" => adj, "edge_features" => edges}
+         end}
       ]
   end
 
@@ -371,7 +508,15 @@ defmodule FullSweep do
            num_digit_caps: @num_classes,
            digit_cap_dim: 4
          )
-       end, fn -> %{"input" => rand({@batch, 28, 28, 1})} end}
+       end, fn -> %{"input" => rand({@batch, 28, 28, 1})} end},
+      {:rlhf_head, "meta",
+       fn ->
+         Edifice.build(:rlhf_head,
+           input_size: @embed,
+           hidden_size: @hidden,
+           variant: :reward
+         )
+       end, fn -> %{"state_sequence" => rand({@batch, @seq_len, @embed})} end}
     ]
   end
 
@@ -624,7 +769,17 @@ defmodule FullSweep do
              )
 
            enc
-         end, fn -> %{"visible_patches" => rand({@batch, 4, @embed})} end}
+         end, fn -> %{"visible_patches" => rand({@batch, 4, @embed})} end},
+        {:jepa_encoder, "contrastive",
+         fn ->
+           {enc, _pred} =
+             Edifice.build(:jepa,
+               input_dim: @embed,
+               embed_dim: @hidden
+             )
+
+           enc
+         end, fn -> %{"features" => rand({@batch, @embed})} end}
       ]
   end
 
