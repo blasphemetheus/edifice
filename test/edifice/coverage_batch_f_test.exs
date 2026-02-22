@@ -386,9 +386,11 @@ defmodule Edifice.CoverageBatchFTest do
       assert Keyword.get(defaults, :dropout) == 0.1
     end
 
-    test "fourier_mixing produces correct shape" do
+    test "fourier_mixing_real produces correct shape" do
       tensor = Nx.broadcast(1.0, {@batch, @seq_len, @embed})
-      result = FNet.fourier_mixing(tensor)
+      dft_seq = FNet.dft_real_matrix(@seq_len)
+      dft_hidden = FNet.dft_real_matrix(@embed)
+      result = FNet.fourier_mixing_real(tensor, dft_seq, dft_hidden)
       assert Nx.shape(result) == {@batch, @seq_len, @embed}
       refute Nx.any(Nx.is_nan(result)) |> Nx.to_number() == 1
     end

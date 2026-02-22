@@ -1,7 +1,5 @@
 # Architecture Comparison with Edifice
 
-<!-- livebook:{"force_hierarchical_headings":true} -->
-
 ## Setup
 
 **Choose one of the two cells below** depending on how you started Livebook.

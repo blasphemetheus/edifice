@@ -49,6 +49,8 @@ defmodule Edifice.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 1.1", only: [:dev, :test]},
       {:benchee, "~> 1.0", only: :dev},
+      {:kino, "~> 0.14", only: :dev},
+      {:kino_vega_lite, "~> 0.1", only: :dev},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.22.0", only: :dev, runtime: false}
