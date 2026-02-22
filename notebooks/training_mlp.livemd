@@ -1,7 +1,5 @@
 # Training an MLP with Edifice
 
-<!-- livebook:{"force_hierarchical_headings":true} -->
-
 ## Setup
 
 **Choose one of the two cells below** depending on how you started Livebook.
@@ -72,6 +70,8 @@ n_per_class = 300
 # Three cluster centers forming a triangle
 centers = [[-1.5, -1.0], [1.5, -1.0], [0.0, 1.5]]
 
+IO.puts("Generating #{n_per_class * length(centers)} points across #{length(centers)} classes...")
+
 # Generate points with Gaussian noise (std=0.6) around each center
 {all_points, all_labels, _key} =
   Enum.reduce(Enum.with_index(centers), {[], [], key}, fn {[cx, cy], class}, {pts, labs, k} ->
@@ -82,6 +82,8 @@ centers = [[-1.5, -1.0], [1.5, -1.0], [0.0, 1.5]]
 
 x_all = Nx.concatenate(all_points)
 y_all = Nx.tensor(all_labels)
+
+IO.puts("Shuffling and encoding...")
 
 # Shuffle so classes aren't in order
 shuffle_idx = Nx.tensor(Enum.shuffle(0..899))
@@ -105,13 +107,14 @@ test_labels = y_all[n_train..-1//1]
 # Batch training data for the training loop
 batch_size = 32
 
+IO.puts("Batching training data...")
 train_data =
   Enum.zip(
     Nx.to_batched(train_x, batch_size) |> Enum.to_list(),
     Nx.to_batched(train_y, batch_size) |> Enum.to_list()
   )
 
-"#{n_train} train / #{Nx.axis_size(test_x, 0)} test samples, #{length(train_data)} batches/epoch"
+IO.puts("Ready: #{n_train} train / #{Nx.axis_size(test_x, 0)} test samples, #{length(train_data)} batches/epoch")
 ```
 
 Let's visualize the clusters to see what the model needs to learn:
@@ -175,6 +178,8 @@ Training in Elixir uses three composable pieces:
 `Axon.Loop.run/4` executes it, returning the trained parameters.
 
 ```elixir
+IO.puts("Training MLP (10 epochs)...")
+
 trained_state =
   model
   |> Axon.Loop.trainer(
@@ -182,9 +187,10 @@ trained_state =
     Polaris.Optimizers.adam(learning_rate: 1.0e-2)
   )
   |> Axon.Loop.metric(:accuracy)
-  |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: 50)
+  # Increase to 30-50 for lower loss; 10 is enough to see convergence
+  |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: 10)
 
-:training_complete
+IO.puts("Training complete!")
 ```
 
 ## Evaluate
@@ -273,11 +279,13 @@ data. Same training loop, different backbone:
 
 ```elixir
 # Swap the backbone: MLP → TabNet
+IO.puts("Building TabNet model...")
 tabnet_model =
   Edifice.build(:tabnet, input_size: 2, hidden_size: 16, num_steps: 3)
   |> Axon.dense(3, name: "output")
   |> Axon.activation(:softmax)
 
+IO.puts("Training TabNet (10 epochs)...")
 tabnet_state =
   tabnet_model
   |> Axon.Loop.trainer(
@@ -285,7 +293,8 @@ tabnet_state =
     Polaris.Optimizers.adam(learning_rate: 1.0e-2)
   )
   |> Axon.Loop.metric(:accuracy)
-  |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: 50)
+  # Increase to 30-50 for lower loss; 10 is enough to see convergence
+  |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: 10)
 
 # Evaluate TabNet
 {_init_fn, tabnet_predict} = Axon.build(tabnet_model)
