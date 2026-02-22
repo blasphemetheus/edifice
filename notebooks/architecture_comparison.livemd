@@ -298,8 +298,6 @@ Vl.new(width: 500, height: 300, title: "Test Accuracy by Architecture")
 
 ## Decision Boundaries (Top 4)
 
-Let's visualize how the top 4 models carve up the input space.
-
 ```elixir
 resolution = 50
 
@@ -331,7 +329,7 @@ boundary_charts =
 
     acc_str = Float.round(r.accuracy * 100, 1)
 
-    Vl.new(width: 300, height: 250, title: "#{r.name} (#{acc_str}%)")
+    Vl.new(width: 250, height: 220, title: "#{r.name} (#{acc_str}%)")
     |> Vl.layers([
       Vl.new()
       |> Vl.data_from_values(grid_data)
@@ -348,9 +346,20 @@ boundary_charts =
     ])
   end
 
+# Arrange as 2x2 grid
+[row1, row2] = Enum.chunk_every(boundary_charts, 2)
+
 Vl.new()
-|> Vl.concat(boundary_charts, :wrapping)
+|> Vl.concat(
+  [
+    Vl.new() |> Vl.concat(row1, :horizontal),
+    Vl.new() |> Vl.concat(row2, :horizontal)
+  ],
+  :vertical
+)
 ```
+
+Let's visualize how the top 4 models carve up the input space.
 
 ## Key Takeaways
 
