@@ -343,6 +343,19 @@ IO.puts("GIN test accuracy: #{Float.round(gin_acc * 100, 1)}%")
 
 ## Compare Results
 
+All three GNNs were trained on the same data with the same hyperparameters.
+The only difference is the **message passing mechanism** — how each model
+aggregates information from neighboring nodes.
+
+The task requires detecting feature-topology correlations:
+- **Smooth** graphs have similar features on connected nodes
+- **Noisy** graphs have random, uncorrelated features
+- **Alternating** graphs have opposite-sign features on connected nodes
+
+A model that can't look at neighbor relationships (e.g., a simple MLP on
+pooled features) would struggle. GNNs that better capture edge-level
+patterns should perform better.
+
 ```elixir
 results = [
   {"GCN", "spectral conv", gcn_acc},
@@ -370,6 +383,10 @@ end)
 IO.puts("=" |> String.duplicate(55))
 ```
 
+The bar chart below shows test accuracy for each architecture. Higher bars
+mean the model better distinguishes the three feature pattern classes. The
+color indicates the aggregation mechanism used.
+
 ```elixir
 chart_data =
   results
@@ -377,11 +394,11 @@ chart_data =
     %{"Model" => name, "Accuracy" => Float.round(acc * 100, 1), "Mechanism" => mechanism}
   end)
 
-Vl.new(width: 400, height: 250, title: "Graph Classification Accuracy")
+Vl.new(width: 400, height: 250, title: "Graph Classification: Detecting Feature-Topology Patterns")
 |> Vl.data_from_values(chart_data)
 |> Vl.mark(:bar)
 |> Vl.encode_field(:x, "Model", type: :nominal, sort: "-y")
-|> Vl.encode_field(:y, "Accuracy", type: :quantitative, scale: %{domain: [0, 100]}, title: "Accuracy (%)")
+|> Vl.encode_field(:y, "Accuracy", type: :quantitative, scale: %{domain: [0, 100]}, title: "Test Accuracy (%)")
 |> Vl.encode_field(:color, "Mechanism", type: :nominal)
 ```
 

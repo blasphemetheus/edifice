@@ -1,0 +1,369 @@
+# Generative Models with Edifice
+
+## Setup
+
+**Choose one of the two cells below** depending on how you started Livebook.
+
+### Standalone (default)
+
+Use this if you started Livebook normally (`livebook server`).
+Uncomment the EXLA lines for GPU acceleration.
+
+```elixir
+edifice_dep =
+  if File.dir?(Path.expand("~/edifice")) do
+    {:edifice, path: Path.expand("~/edifice")}
+  else
+    {:edifice, "~> 0.2.0"}
+  end
+
+Mix.install([
+  edifice_dep,
+  # {:exla, "~> 0.10"},
+  {:kino_vega_lite, "~> 0.1"},
+  {:kino, "~> 0.14"}
+])
+
+# Nx.global_default_backend(EXLA.Backend)
+alias VegaLite, as: Vl
+```
+
+### Attached to project (recommended for Nix/CUDA)
+
+Use this if you started Livebook via `./scripts/livebook.sh`.
+See the Architecture Zoo notebook for full setup instructions.
+
+```elixir
+Nx.global_default_backend(EXLA.Backend)
+alias VegaLite, as: Vl
+IO.puts("Attached mode — using EXLA backend from project node")
+```
+
+## Introduction
+
+Generative models learn to **produce new data** that resembles the training
+distribution. Unlike classifiers that map inputs to labels, generative models
+learn the underlying data distribution and can sample from it.
+
+This notebook trains a **Variational Autoencoder (VAE)** on 2D point clouds
+and visualizes how it learns to compress data into a latent space and
+reconstruct it.
+
+**What you'll learn:**
+
+* How VAEs encode data into a latent distribution (mu + log_var)
+* The reparameterization trick for differentiable sampling
+* Training with reconstruction loss + KL divergence
+* Visualizing the learned latent space
+* Generating new samples by decoding random latent points
+
+## Generate 2D Data
+
+We create a dataset of 2D points arranged in a crescent moon shape.
+The VAE must learn this non-trivial distribution.
+
+```elixir
+IO.puts("Generating crescent moon dataset...")
+
+n_points = 1500
+key = Nx.Random.key(42)
+
+# Upper crescent
+{angles_upper, key} = Nx.Random.uniform(key, shape: {n_points})
+angles_upper = Nx.multiply(angles_upper, :math.pi())
+{noise_u, key} = Nx.Random.normal(key, shape: {n_points, 2})
+
+upper_x = Nx.add(Nx.cos(angles_upper), Nx.multiply(noise_u[[.., 0]], 0.1))
+upper_y = Nx.add(Nx.sin(angles_upper), Nx.multiply(noise_u[[.., 1]], 0.1))
+upper = Nx.stack([upper_x, upper_y], axis: 1)
+
+# Lower crescent (shifted and flipped)
+{angles_lower, key} = Nx.Random.uniform(key, shape: {n_points})
+angles_lower = Nx.multiply(angles_lower, :math.pi())
+{noise_l, key} = Nx.Random.normal(key, shape: {n_points, 2})
+
+lower_x = Nx.add(Nx.subtract(1.0, Nx.cos(angles_lower)), Nx.multiply(noise_l[[.., 0]], 0.1))
+lower_y = Nx.subtract(Nx.subtract(0.0, Nx.sin(angles_lower)), Nx.add(0.5, Nx.multiply(noise_l[[.., 1]], 0.1)))
+lower = Nx.stack([lower_x, lower_y], axis: 1)
+
+data = Nx.concatenate([upper, lower])
+labels = Nx.concatenate([Nx.broadcast(0, {n_points}), Nx.broadcast(1, {n_points})])
+
+# Shuffle
+n_total = 2 * n_points
+{shuffle_noise, _key} = Nx.Random.uniform(Nx.Random.key(99), shape: {n_total})
+shuffle_idx = Nx.argsort(shuffle_noise)
+data = Nx.take(data, shuffle_idx)
+labels = Nx.take(labels, shuffle_idx)
+
+# Batch for training
+batch_size = 64
+IO.puts("  Batching #{n_total} points into batches of #{batch_size}...")
+
+train_batches =
+  Nx.to_batched(data, batch_size)
+  |> Enum.to_list()
+  |> Enum.map(fn batch -> {%{"input" => batch}, batch} end)
+
+IO.puts("Ready: #{n_total} points, #{length(train_batches)} batches/epoch")
+```
+
+```elixir
+chart_data =
+  Enum.zip_with(
+    [Nx.to_flat_list(data[[.., 0]]), Nx.to_flat_list(data[[.., 1]]), Nx.to_flat_list(labels)],
+    fn [x, y, l] -> %{"x" => x, "y" => y, "class" => if(trunc(l) == 0, do: "upper", else: "lower")} end
+  )
+
+Vl.new(width: 500, height: 350, title: "Training Data: Two Crescents")
+|> Vl.data_from_values(chart_data)
+|> Vl.mark(:circle, size: 15, opacity: 0.5)
+|> Vl.encode_field(:x, "x", type: :quantitative)
+|> Vl.encode_field(:y, "y", type: :quantitative)
+|> Vl.encode_field(:color, "class", type: :nominal)
+```
+
+## Build the VAE
+
+Edifice's VAE returns an `{encoder, decoder}` tuple. The encoder maps
+input to a distribution (mu, log_var), and the decoder reconstructs
+from latent samples.
+
+We use a **2D latent space** so we can visualize it directly.
+
+```elixir
+IO.puts("Building VAE (2D latent space)...")
+
+{encoder, decoder} =
+  Edifice.build(:vae,
+    input_size: 2,
+    latent_size: 2,
+    encoder_sizes: [64, 32],
+    decoder_sizes: [32, 64],
+    activation: :relu
+  )
+
+IO.puts("  Encoder: input {batch, 2} -> {mu: {batch, 2}, log_var: {batch, 2}}")
+IO.puts("  Decoder: latent {batch, 2} -> reconstruction {batch, 2}")
+```
+
+## Train the VAE
+
+VAE training uses a custom loss: **reconstruction error + KL divergence**.
+Edifice provides `VAE.reparameterize/3`, `VAE.kl_divergence/2`, and `VAE.loss/5`.
+
+We can't use `Axon.Loop.trainer/3` because the VAE has two separate
+models with reparameterization in between. Instead we write a manual
+training loop. We flatten both parameter sets into one map so we can
+compute gradients in a single pass.
+
+```elixir
+IO.puts("Initializing VAE parameters...")
+
+alias Edifice.Generative.VAE
+
+{enc_init_fn, enc_predict_fn} = Axon.build(encoder)
+{dec_init_fn, dec_predict_fn} = Axon.build(decoder)
+
+enc_params = enc_init_fn.(%{"input" => Nx.template({batch_size, 2}, :f32)}, Axon.ModelState.empty())
+dec_params = dec_init_fn.(%{"latent" => Nx.template({batch_size, 2}, :f32)}, Axon.ModelState.empty())
+
+# Merge both parameter sets into one map for joint optimization
+enc_data = Axon.ModelState.trainable_parameters(enc_params)
+dec_data = Axon.ModelState.trainable_parameters(dec_params)
+all_params = %{"enc" => enc_data, "dec" => dec_data}
+
+# Training hyperparams
+# Increase to 30-50 for better results; 10 is enough to see learning
+epochs = 10
+lr = 1.0e-3
+beta = 1.0
+
+IO.puts("Training VAE (#{epochs} epochs, beta=#{beta})...")
+
+loss_fn = fn params, x ->
+  ep = Axon.ModelState.new(params["enc"])
+  dp = Axon.ModelState.new(params["dec"])
+  encoded = enc_predict_fn.(ep, %{"input" => x})
+  # Use mean (no sampling) for stable training gradients
+  recon = dec_predict_fn.(dp, %{"latent" => encoded.mu})
+  recon_loss = Nx.mean(Nx.pow(Nx.subtract(recon, x), 2))
+  kl = VAE.kl_divergence(encoded.mu, encoded.log_var)
+  Nx.add(recon_loss, Nx.multiply(beta, kl))
+end
+
+# Simple SGD update helper
+apply_grads = fn params, grads, lr ->
+  Map.new(params, fn {k1, v1} ->
+    {k1, Map.new(v1, fn {k2, v2} ->
+      {k2, Map.new(v2, fn {k3, v3} ->
+        {k3, Nx.subtract(v3, Nx.multiply(lr, grads[k1][k2][k3]))}
+      end)}
+    end)}
+  end)
+end
+
+{final_params, loss_history} =
+  Enum.reduce(1..epochs, {all_params, []}, fn epoch, {params, losses} ->
+    {params, epoch_loss} =
+      Enum.reduce(train_batches, {params, 0.0}, fn {_input_map, x}, {params, batch_loss} ->
+        {loss_val, grads} = Nx.Defn.value_and_grad(fn p -> loss_fn.(p, x) end).(params)
+        new_params = apply_grads.(params, grads, lr)
+        {new_params, batch_loss + Nx.to_number(loss_val)}
+      end)
+
+    avg_loss = epoch_loss / length(train_batches)
+    IO.puts("  Epoch #{epoch}/#{epochs} — loss: #{Float.round(avg_loss, 4)}")
+    {params, losses ++ [avg_loss]}
+  end)
+
+# Reconstruct ModelState for inference
+final_enc_params = Axon.ModelState.new(final_params["enc"])
+final_dec_params = Axon.ModelState.new(final_params["dec"])
+
+IO.puts("Training complete!")
+```
+
+## Loss Curve
+
+```elixir
+loss_data =
+  loss_history
+  |> Enum.with_index(1)
+  |> Enum.map(fn {loss, epoch} -> %{"epoch" => epoch, "loss" => loss} end)
+
+Vl.new(width: 500, height: 250, title: "VAE Training Loss (Reconstruction + KL)")
+|> Vl.data_from_values(loss_data)
+|> Vl.mark(:line, point: true, stroke_width: 2)
+|> Vl.encode_field(:x, "epoch", type: :quantitative, title: "Epoch")
+|> Vl.encode_field(:y, "loss", type: :quantitative, title: "Loss")
+```
+
+## Visualize the Latent Space
+
+The encoder maps each data point to a 2D latent vector (mu).
+Let's see how the two crescents are organized in latent space.
+
+```elixir
+IO.puts("Encoding all data points into latent space...")
+
+encoded = enc_predict_fn.(final_enc_params, %{"input" => data})
+mu = encoded.mu
+
+latent_data =
+  Enum.zip_with(
+    [Nx.to_flat_list(mu[[.., 0]]), Nx.to_flat_list(mu[[.., 1]]), Nx.to_flat_list(labels)],
+    fn [z1, z2, l] ->
+      %{"z1" => z1, "z2" => z2, "class" => if(trunc(l) == 0, do: "upper", else: "lower")}
+    end
+  )
+
+Vl.new(width: 500, height: 350, title: "Latent Space (encoder mu)")
+|> Vl.data_from_values(latent_data)
+|> Vl.mark(:circle, size: 15, opacity: 0.5)
+|> Vl.encode_field(:x, "z1", type: :quantitative, title: "z₁")
+|> Vl.encode_field(:y, "z2", type: :quantitative, title: "z₂")
+|> Vl.encode_field(:color, "class", type: :nominal)
+```
+
+## Generate New Samples
+
+We sample random points from the latent space prior N(0, I) and decode
+them into new data points. If the VAE learned well, generated points
+should follow the crescent distribution.
+
+```elixir
+IO.puts("Generating new samples from latent space...")
+
+n_samples = 500
+{z_samples, _k} = Nx.Random.normal(Nx.Random.key(123), shape: {n_samples, 2})
+
+generated = dec_predict_fn.(final_dec_params, %{"latent" => z_samples})
+
+gen_data =
+  Enum.zip_with(
+    [Nx.to_flat_list(generated[[.., 0]]), Nx.to_flat_list(generated[[.., 1]])],
+    fn [x, y] -> %{"x" => x, "y" => y, "source" => "generated"} end
+  )
+
+real_data =
+  Enum.zip_with(
+    [Nx.to_flat_list(data[[.., 0]]), Nx.to_flat_list(data[[.., 1]])],
+    fn [x, y] -> %{"x" => x, "y" => y, "source" => "real"} end
+  )
+
+Vl.new(width: 500, height: 350, title: "Real vs Generated Samples")
+|> Vl.data_from_values(real_data ++ gen_data)
+|> Vl.mark(:circle, size: 15, opacity: 0.4)
+|> Vl.encode_field(:x, "x", type: :quantitative)
+|> Vl.encode_field(:y, "y", type: :quantitative)
+|> Vl.encode_field(:color, "source", type: :nominal)
+```
+
+## Decode a Grid of Latent Points
+
+By decoding a uniform grid across the latent space, we can see how
+the decoder maps different latent regions to data space.
+
+```elixir
+IO.puts("Decoding latent space grid...")
+
+grid_res = 20
+grid_range = Enum.map(0..(grid_res - 1), fn i -> -3.0 + 6.0 * i / (grid_res - 1) end)
+
+grid_z =
+  for z1 <- grid_range, z2 <- grid_range do
+    [z1, z2]
+  end
+
+grid_tensor = Nx.tensor(grid_z)
+decoded_grid = dec_predict_fn.(final_dec_params, %{"latent" => grid_tensor})
+
+grid_data =
+  Enum.zip_with(
+    [Nx.to_flat_list(decoded_grid[[.., 0]]),
+     Nx.to_flat_list(decoded_grid[[.., 1]]),
+     Enum.map(grid_z, fn [z1, _] -> z1 end),
+     Enum.map(grid_z, fn [_, z2] -> z2 end)],
+    fn [x, y, z1, z2] ->
+      %{"x" => x, "y" => y, "z1" => Float.round(z1, 1), "z2" => Float.round(z2, 1)}
+    end
+  )
+
+Vl.new(width: 500, height: 350, title: "Decoded Latent Grid (color = z₁ position)")
+|> Vl.data_from_values(grid_data)
+|> Vl.mark(:circle, size: 30, opacity: 0.6)
+|> Vl.encode_field(:x, "x", type: :quantitative, title: "Decoded x")
+|> Vl.encode_field(:y, "y", type: :quantitative, title: "Decoded y")
+|> Vl.encode_field(:color, "z1", type: :quantitative, scale: %{scheme: "viridis"}, title: "z₁")
+```
+
+## Key Takeaways
+
+1. **Encode → Sample → Decode**: The VAE learns a compressed latent
+   representation. The encoder outputs a *distribution* (mu, log_var),
+   not a single point — this is what makes generation possible.
+
+2. **KL divergence regularizes**: Without KL, the encoder would just
+   memorize inputs (autoencoder). KL pushes the latent distribution
+   toward N(0,I), ensuring the decoder can handle random samples.
+
+3. **2D latent space = direct visualization**: With latent_size=2,
+   we can literally plot where each data point lands in latent space
+   and see the decoder's mapping from latent to data space.
+
+4. **Beta controls the trade-off**: `beta=1.0` is standard ELBO.
+   Lower beta gives sharper reconstructions; higher beta gives a
+   smoother, more structured latent space (beta-VAE).
+
+## What's Next?
+
+* **Try higher-dimensional latent spaces**: `latent_size: 8` or `16` for
+  more capacity — you'll need dimensionality reduction (PCA/t-SNE) to
+  visualize the latent space.
+* **Normalizing Flow**: `Edifice.build(:normalizing_flow, ...)` gives
+  exact log-likelihood instead of the ELBO approximation.
+* **VQ-VAE**: Discrete latent codes via `Edifice.build(:vq_vae, ...)` —
+  often produces sharper results.
+* **Diffusion models**: See the Diffusion notebook for step-by-step
+  denoising with `Edifice.build(:dit, ...)`.
