@@ -183,9 +183,10 @@ circle and edges show the random connectivity. Node color represents the
 **mean feature value** — this is what the GNN sees.
 
 Notice:
-- **Smooth**: Connected nodes have similar colors (correlated features)
-- **Noisy**: Colors are random with no pattern relative to edges
-- **Alternating**: Connected nodes tend to have opposite colors
+
+* **Smooth**: Connected nodes have similar colors (correlated features)
+* **Noisy**: Colors are random with no pattern relative to edges
+* **Alternating**: Connected nodes tend to have opposite colors
 
 ```elixir
 # Pick one example from each class
@@ -215,7 +216,7 @@ graph_charts =
 
     # Build edge data from adjacency matrix (upper triangle only to avoid duplicates)
     edge_data =
-      for i <- 0..(num_nodes - 1), j <- (i + 1)..(num_nodes - 1),
+      for i <- 0..(num_nodes - 2), j <- (i + 1)..(num_nodes - 1),
           Enum.at(adj_list, i * num_nodes + j) > 0.5 do
         {x1, y1} = Enum.at(node_positions, i)
         {x2, y2} = Enum.at(node_positions, j)
@@ -423,9 +424,10 @@ The only difference is the **message passing mechanism** — how each model
 aggregates information from neighboring nodes.
 
 The task requires detecting feature-topology correlations:
-- **Smooth** graphs have similar features on connected nodes
-- **Noisy** graphs have random, uncorrelated features
-- **Alternating** graphs have opposite-sign features on connected nodes
+
+* **Smooth** graphs have similar features on connected nodes
+* **Noisy** graphs have random, uncorrelated features
+* **Alternating** graphs have opposite-sign features on connected nodes
 
 A model that can't look at neighbor relationships (e.g., a simple MLP on
 pooled features) would struggle. GNNs that better capture edge-level

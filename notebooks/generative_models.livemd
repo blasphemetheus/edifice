@@ -103,7 +103,7 @@ IO.puts("  Batching #{n_total} points into batches of #{batch_size}...")
 train_batches =
   Nx.to_batched(data, batch_size)
   |> Enum.to_list()
-  |> Enum.map(fn batch -> {%{"input" => batch}, batch} end)
+  |> Enum.map(fn batch -> {batch, batch} end)
 
 IO.puts("Ready: #{n_total} points, #{length(train_batches)} batches/epoch")
 ```
@@ -125,118 +125,79 @@ Vl.new(width: 500, height: 350, title: "Training Data: Two Crescents")
 
 ## Build the VAE
 
-Edifice's VAE returns an `{encoder, decoder}` tuple. The encoder maps
-input to a distribution (mu, log_var), and the decoder reconstructs
-from latent samples.
+We build the VAE as a **single Axon graph** so we can use the standard
+`Axon.Loop.trainer/3`. The model outputs a container with the reconstruction,
+mu, and log_var — the custom loss uses all three.
 
 We use a **2D latent space** so we can visualize it directly.
 
 ```elixir
 IO.puts("Building VAE (2D latent space)...")
 
-{encoder, decoder} =
-  Edifice.build(:vae,
-    input_size: 2,
-    latent_size: 2,
-    encoder_sizes: [64, 32],
-    decoder_sizes: [32, 64],
-    activation: :relu
-  )
+latent_size = 2
+input_size = 2
 
-IO.puts("  Encoder: input {batch, 2} -> {mu: {batch, 2}, log_var: {batch, 2}}")
-IO.puts("  Decoder: latent {batch, 2} -> reconstruction {batch, 2}")
+# Encoder
+input = Axon.input("input", shape: {nil, input_size})
+
+enc =
+  input
+  |> Axon.dense(64, name: "enc_0")
+  |> Axon.activation(:relu)
+  |> Axon.dense(32, name: "enc_1")
+  |> Axon.activation(:relu)
+
+mu = Axon.dense(enc, latent_size, name: "mu")
+log_var = Axon.dense(enc, latent_size, name: "log_var")
+
+# Decoder (uses mu as latent vector — deterministic for stable training)
+recon =
+  mu
+  |> Axon.dense(32, name: "dec_0")
+  |> Axon.activation(:relu)
+  |> Axon.dense(64, name: "dec_1")
+  |> Axon.activation(:relu)
+  |> Axon.dense(input_size, name: "dec_out")
+
+# Combined model outputs reconstruction + distribution params
+vae_model = Axon.container(%{reconstruction: recon, mu: mu, log_var: log_var})
+
+IO.puts("  Encoder: {batch, 2} -> mu {batch, 2} + log_var {batch, 2}")
+IO.puts("  Decoder: mu {batch, 2} -> reconstruction {batch, 2}")
 ```
 
 ## Train the VAE
 
 VAE training uses a custom loss: **reconstruction error + KL divergence**.
-Edifice provides `VAE.reparameterize/3`, `VAE.kl_divergence/2`, and `VAE.loss/5`.
-
-We can't use `Axon.Loop.trainer/3` because the VAE has two separate
-models with reparameterization in between. Instead we write a manual
-training loop. We flatten both parameter sets into one map so we can
-compute gradients in a single pass.
+The KL term regularizes the latent space toward a standard normal N(0, I),
+which is what makes sampling and generation possible.
 
 ```elixir
-IO.puts("Initializing VAE parameters...")
+# Custom VAE loss: reconstruction MSE + beta * KL divergence
+vae_loss = fn y_pred, y_true ->
+  recon_loss = Nx.mean(Nx.pow(Nx.subtract(y_pred.reconstruction, y_true), 2))
 
-alias Edifice.Generative.VAE
+  kl =
+    Nx.subtract(
+      Nx.add(1.0, y_pred.log_var),
+      Nx.add(Nx.pow(y_pred.mu, 2), Nx.exp(y_pred.log_var))
+    )
+    |> Nx.sum(axes: [-1])
+    |> Nx.mean()
+    |> Nx.multiply(-0.5)
 
-{enc_init_fn, enc_predict_fn} = Axon.build(encoder)
-{dec_init_fn, dec_predict_fn} = Axon.build(decoder)
+  Nx.add(recon_loss, kl)
+end
 
-enc_params = enc_init_fn.(%{"input" => Nx.template({batch_size, 2}, :f32)}, Axon.ModelState.empty())
-dec_params = dec_init_fn.(%{"latent" => Nx.template({batch_size, 2}, :f32)}, Axon.ModelState.empty())
-
-# Merge both parameter sets into one map for joint optimization
-enc_data = Axon.ModelState.trainable_parameters(enc_params)
-dec_data = Axon.ModelState.trainable_parameters(dec_params)
-all_params = %{"enc" => enc_data, "dec" => dec_data}
-
-# Training hyperparams
 # Increase to 30-50 for better results; 10 is enough to see learning
-epochs = 10
-lr = 1.0e-3
-beta = 1.0
+IO.puts("Training VAE (10 epochs)...")
 
-IO.puts("Training VAE (#{epochs} epochs, beta=#{beta})...")
-
-loss_fn = fn params, x ->
-  ep = Axon.ModelState.new(params["enc"])
-  dp = Axon.ModelState.new(params["dec"])
-  encoded = enc_predict_fn.(ep, %{"input" => x})
-  # Use mean (no sampling) for stable training gradients
-  recon = dec_predict_fn.(dp, %{"latent" => encoded.mu})
-  recon_loss = Nx.mean(Nx.pow(Nx.subtract(recon, x), 2))
-  kl = VAE.kl_divergence(encoded.mu, encoded.log_var)
-  Nx.add(recon_loss, Nx.multiply(beta, kl))
-end
-
-# Simple SGD update helper
-apply_grads = fn params, grads, lr ->
-  Map.new(params, fn {k1, v1} ->
-    {k1, Map.new(v1, fn {k2, v2} ->
-      {k2, Map.new(v2, fn {k3, v3} ->
-        {k3, Nx.subtract(v3, Nx.multiply(lr, grads[k1][k2][k3]))}
-      end)}
-    end)}
-  end)
-end
-
-{final_params, loss_history} =
-  Enum.reduce(1..epochs, {all_params, []}, fn epoch, {params, losses} ->
-    {params, epoch_loss} =
-      Enum.reduce(train_batches, {params, 0.0}, fn {_input_map, x}, {params, batch_loss} ->
-        {loss_val, grads} = Nx.Defn.value_and_grad(fn p -> loss_fn.(p, x) end).(params)
-        new_params = apply_grads.(params, grads, lr)
-        {new_params, batch_loss + Nx.to_number(loss_val)}
-      end)
-
-    avg_loss = epoch_loss / length(train_batches)
-    IO.puts("  Epoch #{epoch}/#{epochs} — loss: #{Float.round(avg_loss, 4)}")
-    {params, losses ++ [avg_loss]}
-  end)
-
-# Reconstruct ModelState for inference
-final_enc_params = Axon.ModelState.new(final_params["enc"])
-final_dec_params = Axon.ModelState.new(final_params["dec"])
+trained_state =
+  vae_model
+  |> Axon.Loop.trainer(vae_loss, Polaris.Optimizers.adam(learning_rate: 1.0e-3))
+  |> Axon.Loop.run(train_batches, Axon.ModelState.empty(), epochs: 10)
 
 IO.puts("Training complete!")
-```
-
-## Loss Curve
-
-```elixir
-loss_data =
-  loss_history
-  |> Enum.with_index(1)
-  |> Enum.map(fn {loss, epoch} -> %{"epoch" => epoch, "loss" => loss} end)
-
-Vl.new(width: 500, height: 250, title: "VAE Training Loss (Reconstruction + KL)")
-|> Vl.data_from_values(loss_data)
-|> Vl.mark(:line, point: true, stroke_width: 2)
-|> Vl.encode_field(:x, "epoch", type: :quantitative, title: "Epoch")
-|> Vl.encode_field(:y, "loss", type: :quantitative, title: "Loss")
 ```
 
 ## Visualize the Latent Space
@@ -247,12 +208,14 @@ Let's see how the two crescents are organized in latent space.
 ```elixir
 IO.puts("Encoding all data points into latent space...")
 
-encoded = enc_predict_fn.(final_enc_params, %{"input" => data})
-mu = encoded.mu
+{_init_fn, predict_fn} = Axon.build(vae_model)
+output = predict_fn.(trained_state, data)
 
 latent_data =
   Enum.zip_with(
-    [Nx.to_flat_list(mu[[.., 0]]), Nx.to_flat_list(mu[[.., 1]]), Nx.to_flat_list(labels)],
+    [Nx.to_flat_list(output.mu[[.., 0]]),
+     Nx.to_flat_list(output.mu[[.., 1]]),
+     Nx.to_flat_list(labels)],
     fn [z1, z2, l] ->
       %{"z1" => z1, "z2" => z2, "class" => if(trunc(l) == 0, do: "upper", else: "lower")}
     end
@@ -261,24 +224,42 @@ latent_data =
 Vl.new(width: 500, height: 350, title: "Latent Space (encoder mu)")
 |> Vl.data_from_values(latent_data)
 |> Vl.mark(:circle, size: 15, opacity: 0.5)
-|> Vl.encode_field(:x, "z1", type: :quantitative, title: "z₁")
-|> Vl.encode_field(:y, "z2", type: :quantitative, title: "z₂")
+|> Vl.encode_field(:x, "z1", type: :quantitative, title: "z1")
+|> Vl.encode_field(:y, "z2", type: :quantitative, title: "z2")
 |> Vl.encode_field(:color, "class", type: :nominal)
 ```
 
 ## Generate New Samples
 
-We sample random points from the latent space prior N(0, I) and decode
-them into new data points. If the VAE learned well, generated points
-should follow the crescent distribution.
+We build a standalone decoder that shares weights with the trained model,
+sample random points from the latent space prior N(0, I), and decode
+them into new data points.
 
 ```elixir
+IO.puts("Building standalone decoder for generation...")
+
+# Build a decoder model that matches the trained weights
+latent_input = Axon.input("latent", shape: {nil, latent_size})
+
+standalone_decoder =
+  latent_input
+  |> Axon.dense(32, name: "dec_0")
+  |> Axon.activation(:relu)
+  |> Axon.dense(64, name: "dec_1")
+  |> Axon.activation(:relu)
+  |> Axon.dense(input_size, name: "dec_out")
+
+{_dec_init, dec_predict_fn} = Axon.build(standalone_decoder)
+
+# The trained_state already has "dec_0", "dec_1", "dec_out" keys
+# which match the standalone decoder's layer names
+
 IO.puts("Generating new samples from latent space...")
 
 n_samples = 500
-{z_samples, _k} = Nx.Random.normal(Nx.Random.key(123), shape: {n_samples, 2})
+{z_samples, _k} = Nx.Random.normal(Nx.Random.key(123), shape: {n_samples, latent_size})
 
-generated = dec_predict_fn.(final_dec_params, %{"latent" => z_samples})
+generated = dec_predict_fn.(trained_state, %{"latent" => z_samples})
 
 gen_data =
   Enum.zip_with(
@@ -317,7 +298,7 @@ grid_z =
   end
 
 grid_tensor = Nx.tensor(grid_z)
-decoded_grid = dec_predict_fn.(final_dec_params, %{"latent" => grid_tensor})
+decoded_grid = dec_predict_fn.(trained_state, %{"latent" => grid_tensor})
 
 grid_data =
   Enum.zip_with(
@@ -330,12 +311,12 @@ grid_data =
     end
   )
 
-Vl.new(width: 500, height: 350, title: "Decoded Latent Grid (color = z₁ position)")
+Vl.new(width: 500, height: 350, title: "Decoded Latent Grid (color = z1 position)")
 |> Vl.data_from_values(grid_data)
 |> Vl.mark(:circle, size: 30, opacity: 0.6)
 |> Vl.encode_field(:x, "x", type: :quantitative, title: "Decoded x")
 |> Vl.encode_field(:y, "y", type: :quantitative, title: "Decoded y")
-|> Vl.encode_field(:color, "z1", type: :quantitative, scale: %{scheme: "viridis"}, title: "z₁")
+|> Vl.encode_field(:color, "z1", type: :quantitative, scale: %{scheme: "viridis"}, title: "z1")
 ```
 
 ## Key Takeaways
