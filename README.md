@@ -6,7 +6,7 @@
 
 A comprehensive ML architecture library for Elixir, built on [Nx](https://github.com/elixir-nx/nx) and [Axon](https://github.com/elixir-nx/axon).
 
-113 neural network architectures across 19 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons.
+113 neural network architectures across 17 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons.
 
 ## Why Edifice?
 
@@ -74,7 +74,7 @@ Edifice.list_families()
 |-------------|--------|-------------|
 | **MLP** | `Edifice.Feedforward.MLP` | Multi-layer perceptron with configurable hidden sizes |
 | **KAN** | `Edifice.Feedforward.KAN` | Kolmogorov-Arnold Networks, learnable activation functions |
-| **KAT** | `Edifice.Feedforward.KAT` | Kolmogorov-Arnold Transformer (KAN + attention) |
+| **KAT** | `Edifice.Feedforward.KAT` | Kolmogorov-Arnold Transformer (KAN + attention) (learnable activations) |
 | **TabNet** | `Edifice.Feedforward.TabNet` | Attentive feature selection for tabular data |
 | **BitNet** | `Edifice.Feedforward.BitNet` | Ternary/binary weight quantization (1.58-bit) |
 
@@ -101,8 +101,8 @@ Edifice.list_families()
 | **GatedSSM** | `Edifice.SSM.GatedSSM` | Gated temporal with gradient checkpointing |
 | **Jamba** | `Edifice.SSM.Hybrid` | Mamba + Attention hybrid (configurable ratio) |
 | **Zamba** | `Edifice.SSM.Zamba` | Mamba + single shared attention layer |
-| **StripedHyena** | `Edifice.SSM.StripedHyena` | Gated convolution + Hyena hybrid |
-| **Mamba-3** | `Edifice.SSM.Mamba3` | Complex states, trapezoidal discretization, MIMO rank-r |
+| **StripedHyena** | `Edifice.SSM.StripedHyena` | Interleaved Hyena long conv + gated conv |
+| **Mamba-3** | `Edifice.SSM.Mamba3` | Complex states, trapezoidal discretization, MIMO |
 
 ### Attention & Linear Attention
 
@@ -120,13 +120,13 @@ Edifice.list_families()
 | **GLA** | `Edifice.Attention.GLA` | Gated Linear Attention with data-dependent decay |
 | **HGRN-2** | `Edifice.Attention.HGRN` | Hierarchically gated linear RNN, state expansion |
 | **Griffin/Hawk** | `Edifice.Attention.Griffin` | RG-LRU + local attention (Griffin) or pure RG-LRU (Hawk) |
-| **Based** | `Edifice.Attention.Based` | Taylor expansion linear attention kernels |
-| **InfiniAttention** | `Edifice.Attention.InfiniAttention` | Compressive memory + local attention for infinite context |
-| **Conformer** | `Edifice.Attention.Conformer` | Conv + Transformer for audio/speech |
-| **Mega** | `Edifice.Attention.Mega` | Moving average equipped gated attention |
-| **RingAttention** | `Edifice.Attention.RingAttention` | Chunked attention with ring-distributed pattern |
-| **MLA** | `Edifice.Attention.MLA` | Multi-Head Latent Attention, KV compression + decoupled RoPE |
-| **DiffTransformer** | `Edifice.Attention.DiffTransformer` | Dual softmax subtraction for noise-cancelling attention |
+| **Diff Transformer** | `Edifice.Attention.DiffTransformer` | Noise-cancelling dual softmax subtraction |
+| **MLA** | `Edifice.Attention.MLA` | Multi-Head Latent Attention (DeepSeek KV compression) |
+| **Based** | `Edifice.Attention.Based` | Taylor expansion linear attention |
+| **Mega** | `Edifice.Attention.Mega` | Moving average + gated attention |
+| **InfiniAttention** | `Edifice.Attention.InfiniAttention` | Compressive memory for unbounded context |
+| **Conformer** | `Edifice.Attention.Conformer` | Conv-augmented transformer for audio/speech |
+| **Ring Attention** | `Edifice.Attention.RingAttention` | Distributed chunked attention for long sequences |
 
 ### Recurrent Networks
 
@@ -141,6 +141,12 @@ Edifice.list_families()
 | **Titans** | `Edifice.Recurrent.Titans` | Neural long-term memory, surprise-gated |
 | **Reservoir** | `Edifice.Recurrent.Reservoir` | Echo State Networks with fixed random reservoir |
 
+### Transformer
+
+| Architecture | Module | Key Feature |
+|-------------|--------|-------------|
+| **Decoder-Only** | `Edifice.Transformer.DecoderOnly` | GPT-style with GQA + RoPE + SwiGLU + RMSNorm |
+
 ### Vision
 
 | Architecture | Module | Key Feature |
@@ -151,9 +157,9 @@ Edifice.list_families()
 | **U-Net** | `Edifice.Vision.UNet` | Encoder-decoder with skip connections |
 | **ConvNeXt** | `Edifice.Vision.ConvNeXt` | Modernized ConvNet with transformer-inspired design |
 | **MLP-Mixer** | `Edifice.Vision.MLPMixer` | Pure MLP with token/channel mixing |
-| **FocalNet** | `Edifice.Vision.FocalNet` | Focal modulation networks |
-| **PoolFormer** | `Edifice.Vision.PoolFormer` | Pooling-based MetaFormer |
-| **NeRF** | `Edifice.Vision.NeRF` | Neural Radiance Field (positional encoding + MLP) |
+| **FocalNet** | `Edifice.Vision.FocalNet` | Focal modulation, hierarchical context |
+| **PoolFormer** | `Edifice.Vision.PoolFormer` | Average pooling token mixer (MetaFormer) |
+| **NeRF** | `Edifice.Vision.NeRF` | Neural radiance field, coordinate-to-color mapping |
 
 ### Convolutional
 
@@ -206,6 +212,7 @@ Edifice.list_families()
 | **GINv2** | `Edifice.Graph.GINv2` | GIN with edge features |
 | **SchNet** | `Edifice.Graph.SchNet` | Continuous-filter convolutions for molecules |
 | **DeepSets** | `Edifice.Sets.DeepSets` | Permutation-invariant set functions |
+| **GINv2** | `Edifice.Graph.GINv2` | Enhanced GIN with edge features |
 | **PointNet** | `Edifice.Sets.PointNet` | Point cloud processing with T-Net alignment |
 
 ### Energy, Probabilistic & Memory
@@ -233,8 +240,8 @@ Edifice.list_families()
 | **Hypernetwork** | `Edifice.Meta.Hypernetwork` | Networks that generate other networks' weights |
 | **Capsule** | `Edifice.Meta.Capsule` | Dynamic routing between capsules |
 | **MixtureOfDepths** | `Edifice.Meta.MixtureOfDepths` | Dynamic per-token compute allocation |
-| **MixtureOfAgents** | `Edifice.Meta.MixtureOfAgents` | Multi-proposer + aggregator routing |
-| **RLHFHead** | `Edifice.Meta.RLHFHead` | Reward model and preference heads |
+| **MixtureOfAgents** | `Edifice.Meta.MixtureOfAgents` | Multi-model proposer + aggregator |
+| **RLHF Head** | `Edifice.Meta.RLHFHead` | Reward model and DPO preference heads |
 | **Liquid NN** | `Edifice.Liquid` | Continuous-time ODE dynamics (LTC cells) |
 | **SNN** | `Edifice.Neuromorphic.SNN` | Leaky integrate-and-fire, surrogate gradients |
 | **ANN2SNN** | `Edifice.Neuromorphic.ANN2SNN` | Convert trained ANNs to spiking networks |
@@ -269,7 +276,11 @@ Start here if you're new to machine learning. These guides build from zero to fl
 2. **[Core Vocabulary](guides/core_vocabulary.md)** — Essential terminology used across all guides
 3. **[The Problem Landscape](guides/problem_landscape.md)** — Classification, generation, sequence modeling — which architectures solve which problems
 4. **[Reading Edifice](guides/reading_edifice.md)** — The build/init/predict pattern, Axon graphs, shapes, and runnable examples
-5. **[Learning Path](guides/learning_path.md)** — A guided tour through the 19 architecture families
+5. **[Learning Path](guides/learning_path.md)** — A guided tour through the 17 architecture families
+
+### Reference
+
+- **[Architecture Taxonomy](guides/architecture_taxonomy.md)** — Comprehensive catalog of all 113 architectures: descriptions, paper references, strengths/weaknesses, adoption context, and gap analysis
 
 ### Architecture Guides
 
