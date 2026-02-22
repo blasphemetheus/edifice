@@ -203,7 +203,8 @@ Same loss, optimizer, epochs, and data for every model. The only thing
 that changes is the backbone.
 
 ```elixir
-epochs = 50
+# Increase to 30-50 for better accuracy; 10 is enough to see differences
+epochs = 10
 lr = 1.0e-2
 
 results =

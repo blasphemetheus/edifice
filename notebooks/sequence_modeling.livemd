@@ -166,7 +166,6 @@ Mamba is a selective state-space model — it processes sequences through learne
 state transitions with input-dependent gating. Fast and parallelizable.
 
 ```elixir
-IO.puts("Building Mamba model...")
 mamba_model =
   Edifice.build(:mamba,
     embed_dim: 32,
@@ -179,9 +178,8 @@ mamba_model =
   )
   |> Axon.dense(1, name: "mamba_output")
 
-IO.puts("Training Mamba (30 epochs)...")
 {mamba_state, mamba_preds, mamba_mse} =
-  SeqTrainer.train_and_eval(mamba_model, train_data, test_x, test_y, epochs: 30)
+  SeqTrainer.train_and_eval(mamba_model, train_data, test_x, test_y, epochs: 3)
 
 IO.puts("Mamba test MSE: #{Float.round(mamba_mse, 6)}")
 ```
@@ -192,7 +190,6 @@ GRU is a gated recurrent unit — a simpler variant of LSTM that maintains a
 hidden state updated at each timestep. A well-established sequence baseline.
 
 ```elixir
-IO.puts("Building GRU model...")
 gru_model =
   Edifice.build(:gru,
     embed_dim: 32,
@@ -204,9 +201,8 @@ gru_model =
   )
   |> Axon.dense(1, name: "gru_output")
 
-IO.puts("Training GRU (30 epochs)...")
 {gru_state, gru_preds, gru_mse} =
-  SeqTrainer.train_and_eval(gru_model, train_data, test_x, test_y, epochs: 30)
+  SeqTrainer.train_and_eval(gru_model, train_data, test_x, test_y, epochs: 3)
 
 IO.puts("GRU test MSE: #{Float.round(gru_mse, 6)}")
 ```
@@ -217,7 +213,6 @@ GatedSSM is a simpler gated state-space model — fewer parameters than Mamba
 but still captures sequential dynamics.
 
 ```elixir
-IO.puts("Building GatedSSM model...")
 gated_model =
   Edifice.build(:gated_ssm,
     embed_dim: 32,
@@ -230,9 +225,8 @@ gated_model =
   )
   |> Axon.dense(1, name: "gated_output")
 
-IO.puts("Training GatedSSM (30 epochs)...")
 {gated_state, gated_preds, gated_mse} =
-  SeqTrainer.train_and_eval(gated_model, train_data, test_x, test_y, epochs: 30)
+  SeqTrainer.train_and_eval(gated_model, train_data, test_x, test_y, epochs: 3)
 
 IO.puts("GatedSSM test MSE: #{Float.round(gated_mse, 6)}")
 ```
