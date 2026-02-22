@@ -45,22 +45,37 @@ Generative models learn to **produce new data** that resembles the training
 distribution. Unlike classifiers that map inputs to labels, generative models
 learn the underlying data distribution and can sample from it.
 
-This notebook trains a **Variational Autoencoder (VAE)** on 2D point clouds
-and visualizes how it learns to compress data into a latent space and
-reconstruct it.
+This notebook trains a **Variational Autoencoder (VAE)** on 2D point clouds.
+A VAE works by learning two things simultaneously:
+
+1. An **encoder** that compresses each data point into a compact "latent code"
+2. A **decoder** that reconstructs data from latent codes
+
+The key insight of a VAE (versus a plain autoencoder) is that the encoder
+doesn't output a single point — it outputs a **probability distribution**
+(parameterized by mu and log_var). A special loss term called **KL divergence**
+pushes these distributions toward a known prior (standard normal). This means
+we can generate *new* data by sampling random points from that prior and
+decoding them.
 
 **What you'll learn:**
 
 * How VAEs encode data into a latent distribution (mu + log_var)
-* The reparameterization trick for differentiable sampling
 * Training with reconstruction loss + KL divergence
+* How the beta parameter controls the reconstruction vs regularization trade-off
 * Visualizing the learned latent space
 * Generating new samples by decoding random latent points
 
 ## Generate 2D Data
 
-We create a dataset of 2D points arranged in a crescent moon shape.
-The VAE must learn this non-trivial distribution.
+We create a dataset of 2D points arranged in two crescent moon shapes —
+one arching up, one arching down, offset so they interlock. This is a
+classic test for generative models because:
+
+* The data has **non-trivial structure** (curved, multi-modal)
+* It's **2D**, so we can visualize everything directly
+* A good generative model should produce new points that follow the
+  crescent shapes, not just fill in a blob
 
 ```elixir
 IO.puts("Generating crescent moon dataset...")
@@ -68,7 +83,7 @@ IO.puts("Generating crescent moon dataset...")
 n_points = 1500
 key = Nx.Random.key(42)
 
-# Upper crescent
+# Upper crescent: half-circle arc from 0 to pi, with Gaussian noise
 {angles_upper, key} = Nx.Random.uniform(key, shape: {n_points})
 angles_upper = Nx.multiply(angles_upper, :math.pi())
 {noise_u, key} = Nx.Random.normal(key, shape: {n_points, 2})
@@ -77,7 +92,7 @@ upper_x = Nx.add(Nx.cos(angles_upper), Nx.multiply(noise_u[[.., 0]], 0.1))
 upper_y = Nx.add(Nx.sin(angles_upper), Nx.multiply(noise_u[[.., 1]], 0.1))
 upper = Nx.stack([upper_x, upper_y], axis: 1)
 
-# Lower crescent (shifted and flipped)
+# Lower crescent: same arc, but shifted right and flipped downward
 {angles_lower, key} = Nx.Random.uniform(key, shape: {n_points})
 angles_lower = Nx.multiply(angles_lower, :math.pi())
 {noise_l, key} = Nx.Random.normal(key, shape: {n_points, 2})
@@ -89,14 +104,15 @@ lower = Nx.stack([lower_x, lower_y], axis: 1)
 data = Nx.concatenate([upper, lower])
 labels = Nx.concatenate([Nx.broadcast(0, {n_points}), Nx.broadcast(1, {n_points})])
 
-# Shuffle
+# Shuffle so the two classes are interleaved
 n_total = 2 * n_points
 {shuffle_noise, _key} = Nx.Random.uniform(Nx.Random.key(99), shape: {n_total})
 shuffle_idx = Nx.argsort(shuffle_noise)
 data = Nx.take(data, shuffle_idx)
 labels = Nx.take(labels, shuffle_idx)
 
-# Batch for training
+# Batch for training — each batch is {input, target} where input == target
+# (the VAE learns to reconstruct its own input)
 batch_size = 64
 IO.puts("  Batching #{n_total} points into batches of #{batch_size}...")
 
@@ -125,12 +141,28 @@ Vl.new(width: 500, height: 350, title: "Training Data: Two Crescents")
 
 ## Build the VAE
 
-We build the VAE as a single Axon model with a 2D latent bottleneck.
-The encoder compresses input to a 2D `mu` vector, and the decoder
-reconstructs from it. We also build a separate encoder-only model
-that shares weights — used later for latent space visualization.
+A VAE has three logical parts:
 
-We use a **2D latent space** so we can visualize it directly.
+1. **Encoder**: Takes input data and produces two vectors — **mu** (the mean)
+   and **log_var** (the log-variance). Together these define a Gaussian
+   distribution in latent space for each input point. Instead of compressing
+   to a single point, the encoder says "this input probably came from
+   *somewhere around here*" — that uncertainty is what enables generation.
+
+2. **Latent sampling**: In a full VAE, you'd sample z = mu + exp(0.5 * log_var) * epsilon
+   where epsilon ~ N(0, I). This "reparameterization trick" makes sampling
+   differentiable. Here we feed mu directly to the decoder for simplicity —
+   the KL loss still regularizes the distribution.
+
+3. **Decoder**: Takes a latent code and reconstructs the original input.
+   During generation, we skip the encoder entirely and feed random samples
+   from N(0, I) directly to the decoder.
+
+We use a **2D latent space** (latent_size=2) so we can plot it directly.
+With higher-dimensional latent spaces you'd need PCA or t-SNE to visualize.
+
+The model uses `Axon.container` to output a map with all three components
+(:reconstruction, :mu, :log_var) so the loss function can access each one.
 
 ```elixir
 IO.puts("Building VAE (2D latent space)...")
@@ -138,7 +170,9 @@ IO.puts("Building VAE (2D latent space)...")
 latent_size = 2
 input_size = 2
 
-# Full autoencoder: input -> encoder -> mu (2D bottleneck) -> decoder -> reconstruction
+# --- Encoder ---
+# Two dense layers compress the 2D input into a 32-dim hidden representation,
+# then two separate linear layers project to mu and log_var.
 input = Axon.input("input", shape: {nil, input_size})
 
 enc =
@@ -148,10 +182,15 @@ enc =
   |> Axon.dense(32, name: "enc_1")
   |> Axon.activation(:relu)
 
+# mu: the "center" of where this input maps in latent space
 mu = Axon.dense(enc, latent_size, name: "mu")
+# log_var: how "spread out" the encoding is (log of variance, not variance
+# itself, because log_var can be negative which is numerically easier to learn)
+log_var = Axon.dense(enc, latent_size, name: "log_var")
 
-# The model outputs the reconstruction — trained with MSE loss
-vae_model =
+# --- Decoder ---
+# Mirror of the encoder: takes a latent code and expands back to 2D
+recon =
   mu
   |> Axon.dense(32, name: "dec_0")
   |> Axon.activation(:relu)
@@ -159,7 +198,15 @@ vae_model =
   |> Axon.activation(:relu)
   |> Axon.dense(input_size, name: "dec_out")
 
-# Separate encoder model (shares weight names) for latent space visualization
+# --- Combined model ---
+# Axon.container bundles multiple outputs into a map so the loss function
+# can access reconstruction, mu, and log_var separately
+vae_model = Axon.container(%{reconstruction: recon, mu: mu, log_var: log_var})
+
+# --- Encoder-only model (for visualization later) ---
+# This is a separate Axon graph, but it uses the SAME layer names as the
+# encoder above. When we pass the trained weights to this model, Axon
+# matches by name, so it automatically uses the trained encoder weights.
 encoder_model =
   Axon.input("input", shape: {nil, input_size})
   |> Axon.dense(64, name: "enc_0")
@@ -168,42 +215,98 @@ encoder_model =
   |> Axon.activation(:relu)
   |> Axon.dense(latent_size, name: "mu")
 
-IO.puts("  Autoencoder: {batch, 2} -> mu {batch, 2} -> reconstruction {batch, 2}")
-IO.puts("  Encoder (shared weights): {batch, 2} -> mu {batch, 2}")
+IO.puts("  Encoder: {batch, 2} -> mu {batch, 2} + log_var {batch, 2}")
+IO.puts("  Decoder: mu {batch, 2} -> reconstruction {batch, 2}")
+IO.puts("  Output container: :reconstruction, :mu, :log_var")
 ```
 
 ## Train the VAE
 
-We train with MSE reconstruction loss. The narrow 2D bottleneck forces
-the encoder to learn a meaningful compressed representation — similar
-to a VAE but without explicit KL regularization.
+The VAE loss has two parts that pull in opposite directions:
 
-> **Note**: A full VAE would add KL divergence loss to regularize the
-> latent space toward N(0, I). Edifice provides `VAE.kl_divergence/2`
-> and `VAE.loss/5` for this. Here we keep it simple to demonstrate
-> the core encode-decode pattern and latent space visualization.
+1. **Reconstruction loss** (MSE): "Make the output match the input."
+   This encourages the encoder to preserve as much information as possible
+   and the decoder to faithfully reconstruct.
+
+2. **KL divergence**: "Keep the latent distribution close to N(0, I)."
+   This encourages the encoder to spread its codes near the origin with
+   unit variance, rather than memorizing each input as a far-flung point.
+
+Without KL, you'd just have a plain autoencoder — great reconstructions,
+but useless for generation because the latent space has no structure.
+Without reconstruction loss, the encoder would map everything to N(0, I)
+and the decoder would output the mean of the dataset.
+
+The **beta** parameter controls this trade-off:
+
+* `beta = 1.0` is the standard VAE (ELBO objective)
+* `beta < 1.0` prioritizes reconstruction — the latent space spreads out
+  more, giving the decoder room to learn fine details
+* `beta > 1.0` prioritizes regularization — smoother latent space but
+  blurrier reconstructions (beta-VAE)
+
+We use `beta = 0.5` — strong enough to regularize the latent space for
+generation, but not so strong that the KL term dominates before the decoder
+learns. If generated samples look too spread out, try more epochs or lower
+beta. If the latent space collapses to a single point, lower beta.
 
 ```elixir
-# Increase to 30-50 for better results; 10 is enough to see learning
-IO.puts("Training VAE (10 epochs)...")
+# Beta controls the KL vs reconstruction trade-off
+# Try 0.01 (almost autoencoder) to 1.0 (full VAE) and see how it changes!
+beta = 0.5
+epochs = 30
+
+# Custom VAE loss: MSE reconstruction + beta * KL divergence
+# IMPORTANT: Axon losses use (y_true, y_pred) argument order — targets first!
+vae_loss = fn y_true, y_pred ->
+  # Reconstruction: how close is the decoder output to the original input?
+  recon_loss = Nx.mean(Nx.pow(Nx.subtract(y_pred.reconstruction, y_true), 2))
+
+  # KL divergence: how far is q(z|x) from the prior p(z) = N(0, I)?
+  # Formula: KL = -0.5 * sum(1 + log_var - mu^2 - exp(log_var))
+  # When mu=0 and log_var=0 (i.e. variance=1), KL = 0 (matches the prior)
+  kl =
+    Nx.subtract(
+      Nx.add(1.0, y_pred.log_var),
+      Nx.add(Nx.pow(y_pred.mu, 2), Nx.exp(y_pred.log_var))
+    )
+    |> Nx.sum(axes: [-1])
+    |> Nx.mean()
+    |> Nx.multiply(-0.5)
+
+  Nx.add(recon_loss, Nx.multiply(beta, kl))
+end
+
+IO.puts("Training VAE (beta=#{beta}, #{epochs} epochs)...")
 
 trained_state =
   vae_model
-  |> Axon.Loop.trainer(:mean_squared_error, Polaris.Optimizers.adam(learning_rate: 1.0e-3))
-  |> Axon.Loop.run(train_batches, Axon.ModelState.empty(), epochs: 10)
+  |> Axon.Loop.trainer(vae_loss, Polaris.Optimizers.adam(learning_rate: 3.0e-3))
+  |> Axon.Loop.run(train_batches, Axon.ModelState.empty(), epochs: epochs)
 
 IO.puts("Training complete!")
 ```
 
 ## Visualize the Latent Space
 
-The encoder maps each data point to a 2D latent vector (mu).
-Let's see how the two crescents are organized in latent space.
+Now let's see what the encoder learned. We pass every data point through
+the encoder and plot its mu vector (the "center" of its latent distribution).
+
+**What to look for:**
+
+* The two crescent classes should form distinct clusters — the encoder
+  learned that upper and lower crescents are different
+* The points should be spread across the latent space, not collapsed
+  into a tiny dot (which would mean KL dominated too much)
+* With `beta=0.5`, you should see good separation with reasonable spread
 
 ```elixir
 IO.puts("Encoding all data points into latent space...")
 
-# Use the encoder model with the trained weights (shared layer names)
+# Use the encoder-only model with the trained weights.
+# Even though we trained vae_model (which has encoder + decoder layers),
+# encoder_model uses the same layer names ("enc_0", "enc_1", "mu"),
+# so Axon automatically loads the matching weights.
 {_enc_init, enc_predict} = Axon.build(encoder_model)
 mu_out = enc_predict.(trained_state, data)
 
@@ -227,14 +330,31 @@ Vl.new(width: 500, height: 350, title: "Latent Space (encoder mu)")
 
 ## Generate New Samples
 
-We build a standalone decoder that shares weights with the trained model,
-sample random points from the latent space prior N(0, I), and decode
-them into new data points.
+This is the payoff of training a VAE: **generating new data**.
+
+The idea is simple: during training, KL divergence pushed the encoder's
+latent distributions toward N(0, I). So the decoder has learned to turn
+points *near the origin* into crescent-shaped data. To generate, we:
+
+1. Sample random points from the latent space
+2. Feed them through the decoder
+3. Get new 2D points that should look like the training data
+
+In a perfectly trained VAE (beta=1.0, many epochs), you'd sample from
+pure N(0, I). In practice — especially with lower beta or fewer epochs —
+the encoder's latent distribution doesn't perfectly match N(0, I).
+So we sample from the **encoder's actual distribution**: we compute the
+mean and std of all encoded mu vectors and sample from that. This gives
+better results and shows what the encoder actually learned.
+
+We build a **standalone decoder** — a separate Axon graph that uses the
+same layer names ("dec_0", "dec_1", "dec_out") as the decoder inside the
+VAE. This lets us reuse the trained weights without needing the encoder.
 
 ```elixir
 IO.puts("Building standalone decoder for generation...")
 
-# Build a decoder model that matches the trained weights
+# Standalone decoder: same layer names as the decoder in vae_model
 latent_input = Axon.input("latent", shape: {nil, latent_size})
 
 standalone_decoder =
@@ -247,13 +367,19 @@ standalone_decoder =
 
 {_dec_init, dec_predict_fn} = Axon.build(standalone_decoder)
 
-# The trained_state already has "dec_0", "dec_1", "dec_out" keys
-# which match the standalone decoder's layer names
-
+# Sample from the encoder's actual latent distribution
+# (for a fully-converged VAE with beta=1.0, this would be close to N(0, I))
 IO.puts("Generating new samples from latent space...")
 
 n_samples = 500
-{z_samples, _k} = Nx.Random.normal(Nx.Random.key(123), shape: {n_samples, latent_size})
+latent_mean = Nx.mean(mu_out, axes: [0])
+latent_std = Nx.standard_deviation(mu_out, axes: [0])
+
+{z_noise, _k} = Nx.Random.normal(Nx.Random.key(123), shape: {n_samples, latent_size})
+z_samples = Nx.add(latent_mean, Nx.multiply(latent_std, z_noise))
+
+IO.puts("  Latent mean: #{inspect(Nx.to_flat_list(latent_mean))}")
+IO.puts("  Latent std:  #{inspect(Nx.to_flat_list(latent_std))}")
 
 generated = dec_predict_fn.(trained_state, %{"latent" => z_samples})
 
@@ -279,17 +405,42 @@ Vl.new(width: 500, height: 350, title: "Real vs Generated Samples")
 
 ## Decode a Grid of Latent Points
 
-By decoding a uniform grid across the latent space, we can see how
-the decoder maps different latent regions to data space.
+This visualization shows what the decoder has learned as a *function*.
+We create a uniform grid of points across the **encoder's actual latent
+range** (not a fixed [-3, 3]) and decode each one, then plot where it
+lands in data space.
+
+**What to look for:**
+
+* The grid should map to crescent-like shapes since we're sampling from
+  the region the encoder actually uses
+* The color gradient shows how the decoder maps latent space to data
+  space — a smooth gradient means nearby latent points produce nearby
+  data points (the decoder learned a smooth, continuous mapping)
+* With beta < 1.0, the encoder may use a small region of latent space,
+  so the grid is automatically scaled to that region using the encoder's
+  computed mean and std
 
 ```elixir
 IO.puts("Decoding latent space grid...")
 
+# Use the encoder's actual range (3 std devs around the mean)
+# instead of a fixed [-3, 3] which may be far outside the learned region
 grid_res = 20
-grid_range = Enum.map(0..(grid_res - 1), fn i -> -3.0 + 6.0 * i / (grid_res - 1) end)
+grid_half = 3.0  # number of std devs to cover
+
+grid_lo = Nx.to_flat_list(Nx.subtract(latent_mean, Nx.multiply(latent_std, grid_half)))
+grid_hi = Nx.to_flat_list(Nx.add(latent_mean, Nx.multiply(latent_std, grid_half)))
+
+grid_range_z1 = Enum.map(0..(grid_res - 1), fn i ->
+  Enum.at(grid_lo, 0) + (Enum.at(grid_hi, 0) - Enum.at(grid_lo, 0)) * i / (grid_res - 1)
+end)
+grid_range_z2 = Enum.map(0..(grid_res - 1), fn i ->
+  Enum.at(grid_lo, 1) + (Enum.at(grid_hi, 1) - Enum.at(grid_lo, 1)) * i / (grid_res - 1)
+end)
 
 grid_z =
-  for z1 <- grid_range, z2 <- grid_range do
+  for z1 <- grid_range_z1, z2 <- grid_range_z2 do
     [z1, z2]
   end
 
@@ -317,24 +468,34 @@ Vl.new(width: 500, height: 350, title: "Decoded Latent Grid (color = z1 position
 
 ## Key Takeaways
 
-1. **Encode → Sample → Decode**: The VAE learns a compressed latent
-   representation. The encoder outputs a *distribution* (mu, log_var),
-   not a single point — this is what makes generation possible.
+1. **Encode to a distribution, not a point**: The encoder outputs mu and
+   log_var — a full Gaussian distribution per input. This is the core
+   difference from a plain autoencoder and what enables generation.
 
-2. **KL divergence regularizes**: Without KL, the encoder would just
-   memorize inputs (autoencoder). KL pushes the latent distribution
-   toward N(0,I), ensuring the decoder can handle random samples.
+2. **KL divergence is the regularizer**: Without KL, the encoder memorizes
+   each input as an isolated point in latent space (useless for generation).
+   KL pushes the latent distributions toward N(0, I), ensuring the decoder
+   learns to handle the region around the origin — which is exactly where
+   we sample from during generation.
 
-3. **2D latent space = direct visualization**: With latent_size=2,
-   we can literally plot where each data point lands in latent space
-   and see the decoder's mapping from latent to data space.
+3. **Beta controls the trade-off**: With `beta=1.0` (standard VAE), KL
+   can dominate early in training, causing "posterior collapse" where
+   everything maps to the origin. Lower beta (like 0.1) lets the decoder
+   learn first. Higher beta gives a smoother latent space at the cost
+   of reconstruction quality (beta-VAE).
 
-4. **Beta controls the trade-off**: `beta=1.0` is standard ELBO.
-   Lower beta gives sharper reconstructions; higher beta gives a
-   smoother, more structured latent space (beta-VAE).
+4. **2D latent space = direct visualization**: With latent_size=2, we can
+   literally plot where each data point lands in latent space and see the
+   decoder's mapping from latent to data space. Real VAEs use much larger
+   latent spaces (64, 128, 256+) but need PCA/t-SNE to visualize.
 
 ## What's Next?
 
+* **Experiment with beta**: Try `beta = 0.01` (nearly autoencoder — sharp
+  but poor generation) vs `beta = 1.0` (full VAE — smooth latent space
+  but may need more epochs) to see the trade-off firsthand.
+* **More epochs**: Increase to 30-50 for cleaner crescent generation.
+  With more training, even `beta = 1.0` produces good results.
 * **Try higher-dimensional latent spaces**: `latent_size: 8` or `16` for
   more capacity — you'll need dimensionality reduction (PCA/t-SNE) to
   visualize the latent space.
