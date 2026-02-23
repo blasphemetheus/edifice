@@ -128,6 +128,7 @@ defmodule Edifice do
     kda: Edifice.Attention.KDA,
     gated_attention: Edifice.Attention.GatedAttention,
     ssmax: Edifice.Blocks.SSMax,
+    softpick: Edifice.Blocks.Softpick,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -325,7 +326,8 @@ defmodule Edifice do
         :flash_linear_attention,
         :kda,
         :gated_attention,
-        :ssmax
+        :ssmax,
+        :softpick
       ],
       vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :mamba_vision],
       generative: [
