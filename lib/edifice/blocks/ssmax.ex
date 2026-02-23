@@ -38,7 +38,6 @@ defmodule Edifice.Blocks.SSMax do
   """
 
   alias Edifice.Blocks.{ModelBuilder, TransformerBlock}
-  alias Edifice.Attention.MultiHead
 
   @default_hidden_size 256
   @default_num_heads 4
