@@ -21,7 +21,7 @@ defmodule Edifice do
 
   | Family | Architectures |
   |--------|--------------|
-  | Transformer | Decoder-Only (GPT-style), Multi-Token Prediction, Byte Latent Transformer |
+  | Transformer | Decoder-Only (GPT-style), Multi-Token Prediction, Byte Latent Transformer, Nemotron-H |
   | Feedforward | MLP, KAN, KAT, TabNet, BitNet |
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
   | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, Reservoir (ESN), Native Recurrence |
@@ -52,6 +52,7 @@ defmodule Edifice do
     decoder_only: Edifice.Transformer.DecoderOnly,
     multi_token_prediction: Edifice.Transformer.MultiTokenPrediction,
     byte_latent_transformer: Edifice.Transformer.ByteLatentTransformer,
+    nemotron_h: Edifice.Transformer.NemotronH,
     # Feedforward
     mlp: Edifice.Feedforward.MLP,
     kan: Edifice.Feedforward.KAN,
@@ -289,7 +290,7 @@ defmodule Edifice do
   @spec list_families() :: %{atom() => [atom()]}
   def list_families do
     %{
-      transformer: [:decoder_only, :multi_token_prediction, :byte_latent_transformer],
+      transformer: [:decoder_only, :multi_token_prediction, :byte_latent_transformer, :nemotron_h],
       feedforward: [:mlp, :kan, :kat, :tabnet, :bitnet],
       convolutional: [:conv1d, :resnet, :densenet, :tcn, :mobilenet, :efficientnet],
       recurrent: [
