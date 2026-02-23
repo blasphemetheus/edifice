@@ -194,6 +194,7 @@ defmodule Edifice do
     # Memory
     ntm: Edifice.Memory.NTM,
     memory_network: Edifice.Memory.MemoryNetwork,
+    engram: Edifice.Memory.Engram,
     # Meta
     moe: Edifice.Meta.MoE,
     switch_moe: Edifice.Meta.SwitchMoE,
@@ -374,7 +375,7 @@ defmodule Edifice do
       sets: [:deep_sets, :pointnet],
       energy: [:ebm, :hopfield, :neural_ode],
       probabilistic: [:bayesian, :mc_dropout, :evidential],
-      memory: [:ntm, :memory_network],
+      memory: [:ntm, :memory_network, :engram],
       meta: [
         :moe,
         :switch_moe,
