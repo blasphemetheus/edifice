@@ -1,0 +1,767 @@
+# Liquid Neural Networks
+
+## Setup
+
+**Choose one of the two cells below** depending on how you started Livebook.
+
+### Standalone (default)
+
+Use this if you started Livebook normally (`livebook server`).
+Uncomment the EXLA lines for GPU acceleration.
+
+```elixir
+edifice_dep =
+  if File.dir?(Path.expand("~/edifice")) do
+    {:edifice, path: Path.expand("~/edifice")}
+  else
+    {:edifice, "~> 0.2.0"}
+  end
+
+Mix.install([
+  edifice_dep,
+  # {:exla, "~> 0.10"},
+  {:kino_vega_lite, "~> 0.1"},
+  {:kino, "~> 0.14"}
+])
+
+# Nx.global_default_backend(EXLA.Backend)
+alias VegaLite, as: Vl
+```
+
+### Attached to project (recommended for Nix/CUDA)
+
+Use this if you started Livebook via `./scripts/livebook.sh`.
+See the Architecture Zoo notebook for full setup instructions.
+
+```elixir
+Nx.global_default_backend(EXLA.Backend)
+alias VegaLite, as: Vl
+IO.puts("Attached mode — using EXLA backend from project node")
+```
+
+## Introduction
+
+Most neural networks are like **fixed circuits** — once trained, every input
+follows the same rigid path through the same static weights. A liquid neural
+network is different. It's more like **water flowing through a pipe that
+reshapes itself** based on what's flowing through it.
+
+The key idea: instead of discrete state updates (like an LSTM or GRU), a
+liquid network models its hidden state as a **continuous dynamical system**
+governed by an ordinary differential equation (ODE):
+
+```
+dx/dt = (-x + f(x, input)) / tau
+```
+
+The state `x` doesn't jump from one value to the next — it *flows*
+continuously toward a target, with `tau` controlling how fast it gets
+there. This makes liquid networks naturally suited to data that arrives
+at irregular intervals or varies smoothly in time.
+
+Liquid Neural Networks were invented at MIT by **Ramin Hasani** et al.
+and published as "Liquid Time-constant Networks" at AAAI 2021. The
+research group later founded **Liquid AI**, which raised $250M from AMD
+to commercialize the technology.
+
+**What you'll learn:**
+
+* **Why continuous-time matters** — When discrete step-by-step processing
+  breaks down, and why ODEs are the natural fix
+* **The tau parameter** — How a learnable time constant controls whether
+  a neuron responds quickly (reacting to fast changes) or slowly
+  (smoothing over noise)
+* **ODE solvers** — How to numerically integrate the liquid ODE, and the
+  tradeoffs between speed and accuracy (Euler vs. RK4 vs. exact)
+* **Building a liquid network** — Using `Edifice.build(:liquid, ...)` to
+  create one, and what each parameter does
+* **When to use liquid vs. transformer/LSTM** — The practical tradeoffs
+  and the types of problems where liquid networks shine
+
+## Why Liquid?
+
+When would you reach for a liquid network instead of a transformer,
+LSTM, or Mamba? Here are the scenarios where liquid architectures have
+a genuine advantage:
+
+### 1. Irregular Time Series
+
+Most sequence models assume data arrives at **regular intervals** — one
+token per step, one frame per tick. But real-world sensor data doesn't
+work that way. A heart rate monitor might sample every 0.5 seconds,
+then every 2 seconds, then miss 10 seconds entirely. An event stream
+might fire 100 events in one second and zero in the next.
+
+A liquid network's continuous-time dynamics naturally handle this:
+the ODE integrates over whatever time interval the data provides.
+No resampling, no padding, no pretending irregular data is regular.
+
+### 2. Compact Models
+
+Liquid networks achieve surprisingly good temporal modeling with
+**far fewer parameters** than transformers or LSTMs. A 19-neuron
+liquid network famously learned to steer a self-driving car — a task
+that typically requires models with thousands of neurons.
+
+The efficiency comes from the ODE dynamics: each neuron is a
+continuous dynamical system with its own time constant, giving it
+richer behavior than a simple multiply-and-add neuron. One liquid
+neuron does the work of many static ones.
+
+### 3. Interpretability
+
+Each neuron in a liquid network has a **time constant tau** that you
+can inspect. Fast tau neurons respond to rapid changes (think: edge
+detection in a signal). Slow tau neurons integrate over time (think:
+trend detection). You can literally read the network's temporal
+attention by looking at the tau values.
+
+### 4. Smooth Continuous Signals
+
+Liquid networks excel at signals that vary smoothly in time — sensor
+readings, control signals, physical measurements. They struggle more
+with discrete, token-like sequences (text, categorical events) where
+the continuous-time assumption doesn't help.
+
+### Quick Comparison
+
+| Feature | Transformer | LSTM/GRU | Mamba | Liquid |
+|---------|:-----------:|:--------:|:-----:|:------:|
+| Irregular time series | Poor | Poor | Poor | **Excellent** |
+| Long-range dependencies | **Excellent** | Moderate | Good | Moderate |
+| Parameter efficiency | Low | Medium | Good | **Excellent** |
+| Interpretability | Low | Low | Low | **High** |
+| Discrete sequences (text) | **Excellent** | Good | **Excellent** | Moderate |
+| Continuous signals | Moderate | Good | Good | **Excellent** |
+| Training speed | Fast (parallel) | Slow (sequential) | Fast | Moderate |
+
+## Build a Liquid Network
+
+Let's build our first liquid network using Edifice. We'll start small
+and examine the structure.
+
+```elixir
+# Build a small liquid network
+# embed_dim: size of each input frame (e.g., 8 sensor readings per timestep)
+# hidden_size: internal state dimension (how much "memory" each layer has)
+# num_layers: how many LTC layers to stack (more = more processing power)
+# window_size: expected sequence length (how many timesteps to process)
+# solver: which ODE integration method to use
+
+liquid_model = Edifice.build(:liquid,
+  embed_dim: 8,        # 8 input features per timestep
+  hidden_size: 32,     # 32-dimensional hidden state
+  num_layers: 2,       # 2 LTC layers stacked
+  window_size: 30,     # 30 timesteps per sequence
+  dropout: 0.1,        # 10% dropout for regularization
+  solver: :exact       # analytical solution (fastest, most stable)
+)
+
+IO.puts("Liquid model built!")
+IO.puts("Input shape:  {batch, 30, 8}  — 30 timesteps, 8 features each")
+IO.puts("Output shape: {batch, 32}     — 32-dimensional hidden state from last timestep")
+IO.puts("")
+IO.puts("Parameters to know:")
+IO.puts("  embed_dim     — size of input features per timestep")
+IO.puts("  hidden_size   — width of the continuous state (each neuron in this space")
+IO.puts("                  has its own time constant tau)")
+IO.puts("  num_layers    — stacked LTC blocks (each applies the ODE independently)")
+IO.puts("  solver        — ODE integration method (:exact, :euler, :rk4, :dopri5)")
+IO.puts("  window_size   — expected sequence length")
+```
+
+### What to look for
+
+The model takes `{batch, 30, 8}` tensors (30 timesteps of 8 features)
+and outputs `{batch, 32}` (the hidden state at the final timestep).
+Unlike a transformer which gives you an output at every position, a
+liquid network naturally produces a **single summary vector** — the
+state the ODE has converged to after processing the whole sequence.
+
+Let's also build the FFN variant, which interleaves feed-forward
+networks between LTC layers for more expressive power:
+
+```elixir
+# The FFN variant adds SwiGLU feed-forward layers between LTC blocks.
+# Think of it as: LTC processes the temporal dynamics, FFN processes
+# the feature interactions. Similar to how transformers alternate
+# attention + FFN.
+
+liquid_ffn_model = Edifice.Liquid.build_with_ffn(
+  embed_dim: 8,
+  hidden_size: 32,
+  num_layers: 2,
+  window_size: 30,
+  dropout: 0.1,
+  solver: :exact
+)
+
+IO.puts("Liquid + FFN model built!")
+IO.puts("Same input/output shapes, but more parameters from the FFN layers.")
+IO.puts("Use this when you need more feature-processing power between")
+IO.puts("temporal integration steps.")
+```
+
+## The ODE Inside
+
+The heart of a liquid network is the ODE that governs each neuron's state:
+
+```
+dx/dt = (-x + f(x, input)) / tau
+```
+
+Let's break this down piece by piece:
+
+- **x** is the neuron's current state (a number that changes over time)
+- **f(x, input)** is the "target" — where the state wants to go, computed
+  by a small neural network from the current state and the input
+- **tau** is the **time constant** — how quickly the state moves toward
+  the target
+- **-x + f(x, input)** is the "error" — how far the state is from its target
+- Dividing by tau scales the speed of approach
+
+This is a **leaky integrator** — without input, the state decays exponentially
+toward zero. With input, it tracks the target f(x, input) with a lag
+controlled by tau.
+
+Let's visualize how tau affects the dynamics.
+
+### What to look for
+
+In the plot below, a **small tau** (like 0.5) means the neuron reacts almost
+instantly — it snaps to each new input value. A **large tau** (like 5.0) means
+the neuron is sluggish — it smooths over rapid changes, responding only to
+the overall trend. This is what makes liquid networks interpretable: you can
+inspect tau values to understand what timescale each neuron operates on.
+
+```elixir
+# Simulate the LTC ODE: dx/dt = (-x + activation) / tau
+# for different tau values, with a step-function input.
+#
+# The input jumps from 0 to 1 at t=5, then back to 0 at t=15.
+# Watch how different tau values respond to this step change.
+
+dt = 0.05
+t_max = 25.0
+steps = round(t_max / dt)
+times = for i <- 0..steps, do: i * dt
+
+# Step function input: 0 → 1 at t=5, 1 → 0 at t=15
+activation_fn = fn t ->
+  cond do
+    t >= 5.0 and t < 15.0 -> 1.0
+    true -> 0.0
+  end
+end
+
+# Simulate for different tau values using Euler integration
+# (We use plain Elixir here, not Nx, so we can easily plot each step)
+tau_values = [0.5, 1.0, 2.0, 5.0]
+
+sim_data =
+  Enum.flat_map(tau_values, fn tau ->
+    # Simulate the ODE: dx/dt = (-x + activation) / tau
+    {trajectory, _} =
+      Enum.map_reduce(times, 0.0, fn t, x ->
+        activation = activation_fn.(t)
+        # Euler step: x_new = x + dt * dx/dt
+        dx_dt = (-x + activation) / tau
+        x_new = x + dt * dx_dt
+        {%{"time" => t, "state" => x, "tau" => "tau=#{tau}", "input" => activation}, x_new}
+      end)
+
+    trajectory
+  end)
+
+# Add the input signal to the plot
+input_data =
+  Enum.map(times, fn t ->
+    %{"time" => t, "state" => activation_fn.(t), "tau" => "input signal", "input" => activation_fn.(t)}
+  end)
+
+all_data = input_data ++ sim_data
+
+Vl.new(width: 700, height: 400, title: "LTC Neuron Response to Step Input — Effect of Tau")
+|> Vl.data_from_values(all_data)
+|> Vl.mark(:line, stroke_width: 2)
+|> Vl.encode_field(:x, "time", type: :quantitative, title: "Time")
+|> Vl.encode_field(:y, "state", type: :quantitative, title: "Neuron State")
+|> Vl.encode_field(:color, "tau", type: :nominal, title: "")
+|> Vl.encode_field(:stroke_dash, "tau", type: :nominal)
+```
+
+### ODE Solvers: Speed vs. Accuracy
+
+The LTC equation has an **exact analytical solution** (because it's linear
+in x). But more complex ODEs — and real neural networks where f(x, input)
+is nonlinear — require numerical solvers. Edifice provides five:
+
+| Solver | How it works | Speed | When to use |
+|--------|-------------|-------|-------------|
+| `:exact` | Analytical formula: `x(t+dt) = f + (x - f) * exp(-dt/tau)` | Fastest | Default. Always stable. Works because the LTC ODE is linear in x. |
+| `:euler` | Take one step in the direction of dx/dt | Very fast | Quick prototyping. Can go unstable if dt/tau > 2. |
+| `:midpoint` | Evaluate dx/dt at the midpoint for better accuracy | Fast | Slightly more accurate than Euler, same stability limits. |
+| `:rk4` | Classic 4th-order Runge-Kutta — four evaluations per step | Medium | Good accuracy. The go-to for non-trivial ODEs. |
+| `:dopri5` | Dormand-Prince adaptive stepper — adjusts step size automatically | Slowest | Best accuracy. Useful when you don't know the right step size. |
+
+Let's compare them on a harder problem — a nonlinear oscillation — to see
+the accuracy difference.
+
+```elixir
+# Compare ODE solver accuracy on the LTC equation.
+# We use Nx here to match how Edifice actually computes things.
+#
+# Setup: a single neuron with tau=1.0, activation=1.0, starting at x=0.
+# The exact solution is: x(t) = 1 - exp(-t)
+# We'll compare each solver's answer at t=1.0.
+
+alias Edifice.Utils.ODESolver
+
+# Initial state and parameters
+x0 = Nx.tensor([0.0])
+activation = Nx.tensor([1.0])
+tau = Nx.tensor([1.0])
+
+# Exact analytical answer at t=1.0
+exact_answer = 1.0 - :math.exp(-1.0)
+
+# Test each solver (1 integration step, dt=1.0 — a large step to show differences)
+solvers = [:exact, :euler, :midpoint, :rk4, :dopri5]
+
+results =
+  Enum.map(solvers, fn solver ->
+    result = ODESolver.solve_ltc(x0, activation, tau, solver: solver, steps: 1)
+    value = Nx.to_number(result[0])
+    error = abs(value - exact_answer)
+
+    %{
+      "solver" => Atom.to_string(solver),
+      "result" => Float.round(value, 6),
+      "exact" => Float.round(exact_answer, 6),
+      "error" => Float.round(error, 8)
+    }
+  end)
+
+# Also test with more sub-steps for Euler (to show convergence)
+euler_steps = [1, 2, 5, 10, 50]
+
+step_data =
+  Enum.map(euler_steps, fn steps ->
+    result = ODESolver.solve_ltc(x0, activation, tau, solver: :euler, steps: steps)
+    value = Nx.to_number(result[0])
+    error = abs(value - exact_answer)
+    %{"steps" => steps, "error" => error, "solver" => "euler"}
+  end)
+
+IO.puts("ODE Solver Comparison (1 step, dt=1.0)")
+IO.puts("Exact answer: #{Float.round(exact_answer, 6)}")
+IO.puts(String.duplicate("-", 55))
+
+for r <- results do
+  IO.puts("  #{String.pad_trailing(r["solver"], 10)} → #{r["result"]}  (error: #{r["error"]})")
+end
+
+IO.puts("\nEuler convergence (more steps → better accuracy):")
+for s <- step_data do
+  IO.puts("  #{s["steps"]} steps → error: #{Float.round(s["error"], 8)}")
+end
+```
+
+### What to look for
+
+The **exact solver** should get the answer perfectly (or near-perfectly, up
+to floating point precision). Euler with 1 step will have visible error,
+but adding more sub-steps improves it. RK4 with 1 step is already very
+accurate. DOPRI5 adapts its step size to hit a target tolerance.
+
+**Practical advice:** Use `:exact` (the default) unless you're experimenting
+with solver effects. It's the fastest and most accurate for the LTC equation.
+Switch to `:rk4` or `:dopri5` if you modify the ODE to be nonlinear.
+
+## Time Series Task: Sine Wave Prediction
+
+Let's train a liquid network on a real task: predicting the next value in
+a **damped sine wave**. This is a classic benchmark for temporal models
+because it requires capturing both the oscillation frequency and the
+exponential decay — exactly the kind of smooth, continuous signal that
+liquid networks are designed for.
+
+We'll also train an LSTM and GRU on the same data for comparison.
+
+```elixir
+# Generate training data: damped sine waves with varying frequency and decay.
+#
+# Each sample is a damped sine: y(t) = exp(-decay * t) * sin(freq * t)
+# We generate many samples with random frequency and decay parameters,
+# so the model must learn the *general pattern* of damped oscillation,
+# not just one specific curve.
+
+IO.puts("Generating damped sine wave dataset...")
+
+n_samples = 500
+seq_len = 30        # 30 timesteps of input
+n_features = 1      # univariate time series
+
+# Generate samples with random parameters
+key = Nx.Random.key(42)
+
+{all_sequences, _key} =
+  Enum.map_reduce(1..n_samples, key, fn _i, rng ->
+    # Random frequency in [1.0, 4.0] and decay in [0.05, 0.3]
+    {freq_t, rng} = Nx.Random.uniform(rng, 1.0, 4.0)
+    {decay_t, rng} = Nx.Random.uniform(rng, 0.05, 0.3)
+    freq = Nx.to_number(freq_t)
+    decay = Nx.to_number(decay_t)
+
+    # Generate seq_len + 1 points (last one is the target)
+    points =
+      for t <- 0..seq_len do
+        time = t * 0.1
+        :math.exp(-decay * time) * :math.sin(freq * time)
+      end
+
+    # Input: first seq_len points, Target: last point
+    input = Enum.take(points, seq_len)
+    target = List.last(points)
+
+    {{input, target}, rng}
+  end)
+
+{inputs, targets} = Enum.unzip(all_sequences)
+
+# Convert to tensors
+# x shape: {n_samples, seq_len, 1} — univariate time series
+x_data =
+  inputs
+  |> Enum.map(fn seq -> Enum.map(seq, &[&1]) end)
+  |> Nx.tensor()
+
+# y shape: {n_samples, 1} — single prediction target
+y_data =
+  targets
+  |> Enum.map(&[&1])
+  |> Nx.tensor()
+
+# Train/test split (80/20)
+n_train = round(n_samples * 0.8)
+train_x = x_data[0..(n_train - 1)]
+train_y = y_data[0..(n_train - 1)]
+test_x = x_data[n_train..-1//1]
+test_y = y_data[n_train..-1//1]
+
+# Batch the training data
+batch_size = 32
+
+train_data =
+  Enum.zip(
+    Nx.to_batched(train_x, batch_size) |> Enum.to_list(),
+    Nx.to_batched(train_y, batch_size) |> Enum.to_list()
+  )
+
+IO.puts("Dataset ready!")
+IO.puts("  Train: #{n_train} samples, #{length(train_data)} batches")
+IO.puts("  Test:  #{n_samples - n_train} samples")
+IO.puts("  Input shape:  #{inspect(Nx.shape(train_x))}  (samples, timesteps, features)")
+IO.puts("  Target shape: #{inspect(Nx.shape(train_y))}  (samples, 1)")
+```
+
+Let's visualize a few examples to see what the model needs to learn.
+
+```elixir
+# Plot a few example sequences from the dataset.
+# The dot at the end of each line is the target value the model must predict.
+
+sample_indices = [0, 50, 100, 150]
+
+plot_data =
+  Enum.flat_map(sample_indices, fn idx ->
+    # Input sequence points
+    input_points =
+      for t <- 0..(seq_len - 1) do
+        val = x_data[idx][t][0] |> Nx.to_number()
+        %{"time" => t * 0.1, "value" => val, "sample" => "sample_#{idx}", "type" => "input"}
+      end
+
+    # Target point
+    target_val = y_data[idx][0] |> Nx.to_number()
+    target_point = %{"time" => seq_len * 0.1, "value" => target_val, "sample" => "sample_#{idx}", "type" => "target"}
+
+    input_points ++ [target_point]
+  end)
+
+line_data = Enum.filter(plot_data, &(&1["type"] == "input"))
+point_data = Enum.filter(plot_data, &(&1["type"] == "target"))
+
+line_layer =
+  Vl.new()
+  |> Vl.data_from_values(line_data)
+  |> Vl.mark(:line)
+  |> Vl.encode_field(:x, "time", type: :quantitative, title: "Time")
+  |> Vl.encode_field(:y, "value", type: :quantitative, title: "Amplitude")
+  |> Vl.encode_field(:color, "sample", type: :nominal, title: "")
+
+point_layer =
+  Vl.new()
+  |> Vl.data_from_values(point_data)
+  |> Vl.mark(:circle, size: 80)
+  |> Vl.encode_field(:x, "time", type: :quantitative)
+  |> Vl.encode_field(:y, "value", type: :quantitative)
+  |> Vl.encode_field(:color, "sample", type: :nominal)
+
+Vl.new(width: 700, height: 350, title: "Damped Sine Waves — Lines are Input, Dots are Prediction Targets")
+|> Vl.layers([line_layer, point_layer])
+```
+
+### Build Three Models
+
+Now we build three models on the same task: **Liquid**, **LSTM**, and **GRU**.
+All get the same hidden size and the same training setup — the only difference
+is the architecture.
+
+```elixir
+# Build all three models with comparable sizes.
+# Each takes {batch, 30, 1} input and outputs {batch, 1} prediction.
+
+hidden_size = 32
+
+# --- Liquid ---
+liquid = Edifice.build(:liquid,
+  embed_dim: n_features,
+  hidden_size: hidden_size,
+  num_layers: 2,
+  window_size: seq_len,
+  dropout: 0.05,
+  solver: :exact
+)
+|> Axon.dense(1, name: "liquid_head")
+
+# --- LSTM ---
+lstm = Edifice.build(:lstm,
+  embed_dim: n_features,
+  hidden_size: hidden_size,
+  num_layers: 2,
+  window_size: seq_len,
+  dropout: 0.05
+)
+|> Axon.dense(1, name: "lstm_head")
+
+# --- GRU ---
+gru = Edifice.build(:gru,
+  embed_dim: n_features,
+  hidden_size: hidden_size,
+  num_layers: 2,
+  window_size: seq_len,
+  dropout: 0.05
+)
+|> Axon.dense(1, name: "gru_head")
+
+IO.puts("Three models built:")
+IO.puts("  Liquid — 2-layer LTC with exact solver, hidden=#{hidden_size}")
+IO.puts("  LSTM   — 2-layer LSTM, hidden=#{hidden_size}")
+IO.puts("  GRU    — 2-layer GRU, hidden=#{hidden_size}")
+IO.puts("\nAll take {batch, #{seq_len}, #{n_features}} → {batch, 1}")
+```
+
+### Train All Three
+
+We use mean squared error (MSE) loss — appropriate for regression tasks where
+we're predicting a continuous value.
+
+```elixir
+# Training helper for regression (MSE loss)
+defmodule SineTrainer do
+  def train(model, train_data, opts \\ []) do
+    epochs = Keyword.get(opts, :epochs, 10)
+    lr = Keyword.get(opts, :lr, 1.0e-3)
+    label = Keyword.get(opts, :label, "model")
+
+    IO.puts("Training #{label}...")
+
+    model
+    |> Axon.Loop.trainer(
+      :mean_squared_error,
+      Polaris.Optimizers.adam(learning_rate: lr),
+      log: 1
+    )
+    |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: epochs)
+  end
+
+  def evaluate(model, state, test_x, test_y) do
+    {_init_fn, predict_fn} = Axon.build(model)
+    preds = predict_fn.(state, test_x)
+
+    mse =
+      Nx.subtract(preds, test_y)
+      |> Nx.pow(2)
+      |> Nx.mean()
+      |> Nx.to_number()
+
+    # Also compute MAE for interpretability
+    mae =
+      Nx.subtract(preds, test_y)
+      |> Nx.abs()
+      |> Nx.mean()
+      |> Nx.to_number()
+
+    {mse, mae, preds}
+  end
+end
+```
+
+```elixir
+# Train all three models — 10 epochs each.
+# On CPU this takes a few minutes total. Liquid may be slightly slower
+# because the ODE integration processes timesteps sequentially.
+
+IO.puts("=" |> String.duplicate(60))
+liquid_state = SineTrainer.train(liquid, train_data, epochs: 10, lr: 1.0e-3, label: "Liquid")
+IO.puts("")
+lstm_state = SineTrainer.train(lstm, train_data, epochs: 10, lr: 1.0e-3, label: "LSTM")
+IO.puts("")
+gru_state = SineTrainer.train(gru, train_data, epochs: 10, lr: 1.0e-3, label: "GRU")
+IO.puts("=" |> String.duplicate(60))
+
+# Evaluate on test set
+{liquid_mse, liquid_mae, liquid_preds} = SineTrainer.evaluate(liquid, liquid_state, test_x, test_y)
+{lstm_mse, lstm_mae, lstm_preds} = SineTrainer.evaluate(lstm, lstm_state, test_x, test_y)
+{gru_mse, gru_mae, gru_preds} = SineTrainer.evaluate(gru, gru_state, test_x, test_y)
+
+IO.puts("\n--- Test Results ---")
+IO.puts("  Model    MSE         MAE")
+IO.puts("  " <> String.duplicate("-", 35))
+IO.puts("  Liquid   #{Float.round(liquid_mse, 6) |> to_string() |> String.pad_trailing(11)} #{Float.round(liquid_mae, 6)}")
+IO.puts("  LSTM     #{Float.round(lstm_mse, 6) |> to_string() |> String.pad_trailing(11)} #{Float.round(lstm_mae, 6)}")
+IO.puts("  GRU      #{Float.round(gru_mse, 6) |> to_string() |> String.pad_trailing(11)} #{Float.round(gru_mae, 6)}")
+```
+
+### What to Look For
+
+On this **smooth, continuous signal** task (damped sine waves), the liquid
+network should perform competitively with or better than LSTM/GRU. The
+continuous-time ODE dynamics are a natural fit for signals that vary
+smoothly.
+
+Key things to notice:
+- **Liquid excels at smooth signals** — the ODE naturally models continuous
+  dynamics without discretization artifacts
+- **LSTM/GRU may train faster** — their discrete updates parallelize better
+  on GPUs
+- If liquid's error is higher, try increasing `integration_steps` to 2 or 3,
+  or switching to `:rk4` solver for more accurate dynamics
+
+Let's visualize predictions vs. ground truth.
+
+```elixir
+# Scatter plot: predicted vs actual for all three models.
+# Perfect predictions would fall on the diagonal line.
+
+n_test = Nx.axis_size(test_y, 0)
+
+scatter_data =
+  Enum.flat_map(0..(n_test - 1), fn i ->
+    actual = test_y[i][0] |> Nx.to_number()
+    [
+      %{"actual" => actual, "predicted" => liquid_preds[i][0] |> Nx.to_number(), "model" => "Liquid"},
+      %{"actual" => actual, "predicted" => lstm_preds[i][0] |> Nx.to_number(), "model" => "LSTM"},
+      %{"actual" => actual, "predicted" => gru_preds[i][0] |> Nx.to_number(), "model" => "GRU"}
+    ]
+  end)
+
+# Diagonal reference line
+diag_data = [
+  %{"actual" => -1.0, "predicted" => -1.0, "model" => "perfect"},
+  %{"actual" => 1.0, "predicted" => 1.0, "model" => "perfect"}
+]
+
+scatter_layer =
+  Vl.new()
+  |> Vl.data_from_values(scatter_data)
+  |> Vl.mark(:circle, opacity: 0.5, size: 40)
+  |> Vl.encode_field(:x, "actual", type: :quantitative, title: "Actual Value")
+  |> Vl.encode_field(:y, "predicted", type: :quantitative, title: "Predicted Value")
+  |> Vl.encode_field(:color, "model", type: :nominal, title: "")
+
+diag_layer =
+  Vl.new()
+  |> Vl.data_from_values(diag_data)
+  |> Vl.mark(:line, stroke_dash: [4, 4], color: "gray")
+  |> Vl.encode_field(:x, "actual", type: :quantitative)
+  |> Vl.encode_field(:y, "predicted", type: :quantitative)
+
+Vl.new(width: 500, height: 500, title: "Predicted vs. Actual — Closer to Diagonal = Better")
+|> Vl.layers([diag_layer, scatter_layer])
+```
+
+## Experiment Suggestions
+
+Now that you have a working liquid network, here are experiments to deepen
+your understanding:
+
+### 1. Try Different Solvers
+
+Change the `solver:` option and compare results. The `:exact` solver is
+analytical and perfect for the linear LTC equation. But try `:euler` with
+different `integration_steps:` values to see how numerical accuracy affects
+learning:
+
+```elixir
+# Experiment: How does solver choice affect training?
+# Try uncommenting different lines and re-running the training cell.
+#
+# solver: :exact                    # Analytical — fastest, most accurate
+# solver: :euler, integration_steps: 1   # Crude — fast but may be inaccurate
+# solver: :euler, integration_steps: 5   # Better — more sub-steps
+# solver: :rk4                     # Good general-purpose solver
+# solver: :dopri5                  # Adaptive — best accuracy, slowest
+
+IO.puts("Experiment ideas:")
+IO.puts("1. Change solver to :euler and see if accuracy drops")
+IO.puts("2. Add integration_steps: 5 to euler and see if it recovers")
+IO.puts("3. Try :rk4 — it should match :exact closely")
+IO.puts("4. Try :dopri5 — adaptive stepping, most accurate for nonlinear ODEs")
+```
+
+### 2. Vary the Hidden Size
+
+Liquid networks are known for working with very small hidden sizes. Try
+`hidden_size: 8` or even `hidden_size: 4` and see how accuracy compares
+to LSTM/GRU at the same size. The ODE dynamics give each neuron more
+expressiveness, so liquid networks often need fewer neurons.
+
+### 3. Try `build_with_ffn` vs `build`
+
+The FFN variant adds SwiGLU feed-forward layers between LTC blocks. This
+helps when the task requires complex feature transformations in addition
+to temporal modeling. Try replacing `Edifice.build(:liquid, ...)` with
+`Edifice.Liquid.build_with_ffn(...)` using the same options.
+
+### 4. Irregular Sampling
+
+The real superpower of liquid networks is handling **irregular time series**.
+Try modifying the data generation to use non-uniform time steps — random
+intervals between samples. LSTM/GRU will struggle because they assume
+uniform spacing; the liquid network's ODE naturally handles variable dt.
+
+### 5. Longer Sequences
+
+Increase `window_size` to 60 or 120 and generate longer sequences. Watch
+how the different architectures handle longer-range dependencies. Liquid
+networks may struggle with very long sequences (the ODE state can "forget"
+early inputs), while LSTM's explicit gates are designed for long-range memory.
+
+## What's Next?
+
+- **Architecture Zoo notebook** — Compare liquid networks against 10+ other
+  architectures on the same task
+- **Sequence Modeling notebook** — Deeper dive into temporal modeling with
+  Mamba, RetNet, and other sequence models
+- **The research doc** (`notebooks/research/architecture_landscape.md`) —
+  Where liquid networks fit in the broader ML landscape, and what Edifice
+  should build next
+
+### Further Reading
+
+- **Paper:** "Liquid Time-constant Networks" — Hasani et al., AAAI 2021
+- **Paper:** "Closed-form Continuous-time Neural Networks" — Hasani et al., Nature Machine Intelligence 2022
+- **Company:** [Liquid AI](https://liquid.ai) — MIT spin-off commercializing LNN technology
+- **Edifice source:** `lib/edifice/liquid/liquid.ex` — Full implementation with 5 ODE solvers
