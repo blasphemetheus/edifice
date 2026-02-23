@@ -26,9 +26,9 @@ defmodule Edifice do
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
   | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, Reservoir (ESN), Native Recurrence |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
-  | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN |
+  | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision |
-  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, SoFlow, Normalizing Flow |
+  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, SoFlow, Normalizing Flow, Transfusion |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
   | Sets | DeepSets, PointNet |
   | Energy | EBM, Hopfield, Neural ODE |
@@ -131,6 +131,7 @@ defmodule Edifice do
     softpick: Edifice.Blocks.Softpick,
     rnope_swa: Edifice.Attention.RNoPESWA,
     yarn: Edifice.Attention.YARN,
+    nsa: Edifice.Attention.NSA,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -167,6 +168,7 @@ defmodule Edifice do
     linear_dit: Edifice.Generative.LinearDiT,
     sana: Edifice.Generative.LinearDiT,
     sit: Edifice.Generative.SiT,
+    transfusion: Edifice.Generative.Transfusion,
     # Graph
     gcn: Edifice.Graph.GCN,
     gat: Edifice.Graph.GAT,
@@ -176,6 +178,7 @@ defmodule Edifice do
     graph_transformer: Edifice.Graph.GraphTransformer,
     schnet: Edifice.Graph.SchNet,
     gin_v2: Edifice.Graph.GINv2,
+    egnn: Edifice.Graph.EGNN,
     # Sets
     deep_sets: Edifice.Sets.DeepSets,
     pointnet: Edifice.Sets.PointNet,
@@ -339,7 +342,8 @@ defmodule Edifice do
         :ssmax,
         :softpick,
         :rnope_swa,
-        :yarn
+        :yarn,
+        :nsa
       ],
       vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :mamba_vision, :dino_v2, :metaformer, :caformer, :efficient_vit],
       generative: [
@@ -360,9 +364,10 @@ defmodule Edifice do
         :var,
         :linear_dit,
         :sana,
-        :sit
+        :sit,
+        :transfusion
       ],
-      graph: [:gcn, :gat, :graph_sage, :gin, :gin_v2, :pna, :graph_transformer, :schnet],
+      graph: [:gcn, :gat, :graph_sage, :gin, :gin_v2, :pna, :graph_transformer, :schnet, :egnn],
       sets: [:deep_sets, :pointnet],
       energy: [:ebm, :hopfield, :neural_ode],
       probabilistic: [:bayesian, :mc_dropout, :evidential],
