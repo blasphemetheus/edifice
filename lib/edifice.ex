@@ -143,6 +143,8 @@ defmodule Edifice do
     nerf: Edifice.Vision.NeRF,
     mamba_vision: Edifice.Vision.MambaVision,
     dino_v2: Edifice.Vision.DINOv2,
+    metaformer: Edifice.Vision.MetaFormer,
+    caformer: {Edifice.Vision.MetaFormer, [variant: :caformer]},
     # Multimodal
     multimodal_mlp_fusion: Edifice.Multimodal.Fusion,
     # Generative
@@ -338,7 +340,7 @@ defmodule Edifice do
         :rnope_swa,
         :yarn
       ],
-      vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :mamba_vision, :dino_v2],
+      vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :mamba_vision, :dino_v2, :metaformer, :caformer],
       generative: [
         :diffusion,
         :ddim,
