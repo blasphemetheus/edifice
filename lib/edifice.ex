@@ -163,6 +163,7 @@ defmodule Edifice do
     var: Edifice.Generative.VAR,
     linear_dit: Edifice.Generative.LinearDiT,
     sana: Edifice.Generative.LinearDiT,
+    sit: Edifice.Generative.SiT,
     # Graph
     gcn: Edifice.Graph.GCN,
     gat: Edifice.Graph.GAT,
@@ -355,7 +356,8 @@ defmodule Edifice do
         :soflow,
         :var,
         :linear_dit,
-        :sana
+        :sana,
+        :sit
       ],
       graph: [:gcn, :gat, :graph_sage, :gin, :gin_v2, :pna, :graph_transformer, :schnet],
       sets: [:deep_sets, :pointnet],
