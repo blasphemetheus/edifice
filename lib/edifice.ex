@@ -169,6 +169,7 @@ defmodule Edifice do
     sana: Edifice.Generative.LinearDiT,
     sit: Edifice.Generative.SiT,
     transfusion: Edifice.Generative.Transfusion,
+    mar: Edifice.Generative.MAR,
     # Graph
     gcn: Edifice.Graph.GCN,
     gat: Edifice.Graph.GAT,
@@ -365,7 +366,8 @@ defmodule Edifice do
         :linear_dit,
         :sana,
         :sit,
-        :transfusion
+        :transfusion,
+        :mar
       ],
       graph: [:gcn, :gat, :graph_sage, :gin, :gin_v2, :pna, :graph_transformer, :schnet, :egnn],
       sets: [:deep_sets, :pointnet],
