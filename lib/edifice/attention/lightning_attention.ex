@@ -135,8 +135,14 @@ defmodule Edifice.Attention.LightningAttention do
     )
   end
 
-  # Build the lightning attention sublayer for a single block
-  defp build_lightning_attention(input, opts) do
+  @doc """
+  Build the lightning attention sublayer.
+
+  This creates the core attention mechanism with both intra-block (softmax)
+  and inter-block (linear) attention pathways.
+  """
+  @spec build_lightning_attention(Axon.t(), keyword()) :: Axon.t()
+  def build_lightning_attention(input, opts) do
     hidden_size = Keyword.fetch!(opts, :hidden_size)
     num_heads = Keyword.fetch!(opts, :num_heads)
     head_dim = Keyword.fetch!(opts, :head_dim)

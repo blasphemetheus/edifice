@@ -62,4 +62,41 @@ defmodule Edifice.Attention.LightningAttentionTest do
       assert LightningAttention.output_size([]) == 256
     end
   end
+
+  describe "integration with decoder_only" do
+    test "decoder_only with lightning attention builds" do
+      model = Edifice.Transformer.DecoderOnly.build(
+        embed_dim: @embed_dim,
+        hidden_size: @hidden_size,
+        num_heads: 4,
+        num_layers: 2,
+        attention_type: :lightning,
+        block_size: @block_size,
+        window_size: @seq_len,
+        dropout: 0.0
+      )
+
+      assert %Axon{} = model
+    end
+
+    test "decoder_only with lightning attention produces correct output" do
+      model = Edifice.Transformer.DecoderOnly.build(
+        embed_dim: @embed_dim,
+        hidden_size: @hidden_size,
+        num_heads: 4,
+        num_layers: 2,
+        attention_type: :lightning,
+        block_size: @block_size,
+        window_size: @seq_len,
+        dropout: 0.0
+      )
+
+      {init_fn, predict_fn} = Axon.build(model, mode: :inference)
+      params = init_fn.(template(), Axon.ModelState.empty())
+      output = predict_fn.(params, %{"state_sequence" => random_input()})
+
+      assert Nx.shape(output) == {@batch, @hidden_size}
+      assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
+    end
+  end
 end

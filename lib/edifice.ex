@@ -26,7 +26,7 @@ defmodule Edifice do
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
   | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, Reservoir (ESN), Native Recurrence |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
-  | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA |
+  | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, Dual Chunk Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, SoFlow, Normalizing Flow, Transfusion, CogVideoX, TRELLIS |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
@@ -44,7 +44,7 @@ defmodule Edifice do
   | Neuromorphic | SNN, ANN2SNN |
   | Inference | Medusa |
   | Robotics | ACT |
-  | Audio | SoundStorm |
+  | Audio | SoundStorm, EnCodec, VALL-E |
   """
 
   @architecture_registry %{
@@ -242,6 +242,8 @@ defmodule Edifice do
     policy_value: Edifice.RL.PolicyValue,
     # Lightning Attention
     lightning_attention: Edifice.Attention.LightningAttention,
+    # Dual Chunk Attention
+    dual_chunk_attention: Edifice.Attention.DualChunk,
     # Liquid
     liquid: Edifice.Liquid,
     # Scientific
@@ -254,7 +256,9 @@ defmodule Edifice do
     # Robotics
     act: Edifice.Robotics.ACT,
     # Audio
-    soundstorm: Edifice.Audio.SoundStorm
+    soundstorm: Edifice.Audio.SoundStorm,
+    encodec: Edifice.Audio.EnCodec,
+    valle: Edifice.Audio.VALLE
   }
 
   @doc """
@@ -360,7 +364,8 @@ defmodule Edifice do
         :rnope_swa,
         :yarn,
         :nsa,
-        :tmrope
+        :tmrope,
+        :dual_chunk_attention
       ],
       vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :gaussian_splat, :mamba_vision, :dino_v2, :metaformer, :caformer, :efficient_vit],
       generative: [
@@ -426,7 +431,7 @@ defmodule Edifice do
       neuromorphic: [:snn, :ann2snn],
       inference: [:medusa],
       robotics: [:act],
-      audio: [:soundstorm]
+      audio: [:soundstorm, :encodec, :valle]
     }
   end
 
