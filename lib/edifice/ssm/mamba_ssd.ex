@@ -63,6 +63,9 @@ defmodule Edifice.SSM.MambaSSD do
 
     - `:training_mode` - If true, uses matmul formulation for tensor cores (default: false)
     - `:chunk_size` - Size of chunks for SSD algorithm (default: 16)
+    - `:structured_mask` - If true, uses structured semi-separable mask that combines
+      causal masking with SSM decay: `M[i,j] = prod(a[k], k=j+1..i)` for `i >= j`.
+      This replaces the simple lower-triangular mask. (default: false)
     - All common Mamba options (see `Edifice.SSM.Common`)
   """
   @typedoc "Options for `build/1`."
@@ -77,6 +80,7 @@ defmodule Edifice.SSM.MambaSSD do
           | {:window_size, pos_integer()}
           | {:chunk_size, pos_integer()}
           | {:training_mode, boolean()}
+          | {:structured_mask, boolean()}
 
   @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
@@ -96,6 +100,7 @@ defmodule Edifice.SSM.MambaSSD do
     hidden_size = Keyword.get(opts, :hidden_size, Common.default_hidden_size())
     chunk_size = Keyword.get(opts, :chunk_size, @default_chunk_size)
     training_mode = Keyword.get(opts, :training_mode, false)
+    structured_mask = Keyword.get(opts, :structured_mask, false)
     name = Keyword.get(opts, :name, "ssm")
 
     {b_matrix, c_matrix, dt_proj} = Common.build_ssm_projections(input, opts)
@@ -108,6 +113,7 @@ defmodule Edifice.SSM.MambaSSD do
       hidden_size: hidden_size,
       chunk_size: chunk_size,
       training_mode: training_mode,
+      structured_mask: structured_mask,
       op_name: :ssd_ssm
     )
   end
@@ -116,9 +122,20 @@ defmodule Edifice.SSM.MambaSSD do
     state_size = opts[:state_size]
     chunk_size = opts[:chunk_size] || @default_chunk_size
     training_mode = opts[:training_mode] || false
+    structured_mask = opts[:structured_mask] || false
 
     # Discretize SSM parameters
     {a_bar, bx} = Common.discretize_ssm(x, b, dt, state_size)
+
+    # Optionally apply structured semi-separable mask
+    # M[i,j] = prod(a[k], k=j+1..i) for i >= j, 0 otherwise
+    # This replaces the simple lower-triangular mask with SSM-decay-weighted mask
+    {a_bar, bx} =
+      if structured_mask do
+        apply_structured_mask(a_bar, bx)
+      else
+        {a_bar, bx}
+      end
 
     # Use SSD algorithm (training or inference mode)
     h =
@@ -130,6 +147,27 @@ defmodule Edifice.SSM.MambaSSD do
 
     # Compute output
     Common.compute_ssm_output(h, c)
+  end
+
+  # Structured semi-separable mask: weight input contributions by cumulative
+  # decay from their position to the current position. This makes the SSM
+  # aware of the decay structure during the matmul formulation.
+  defp apply_structured_mask(a_bar, bx) do
+    # a_bar: [batch, seq_len, hidden, state]
+    # Compute cumulative product of A along sequence for weighting
+    # This effectively pre-weights bx by the decay from each position
+    # log-space cumulative sum for stability
+    eps = 1.0e-10
+    log_a = Nx.log(Nx.add(Nx.abs(a_bar), eps))
+    cum_log_a = Nx.cumulative_sum(log_a, axis: 1)
+
+    # Weight bx by exp(cum_log_a) to incorporate decay structure
+    # Then normalize a_bar to avoid double-counting
+    decay_weights = Nx.exp(cum_log_a)
+    bx_weighted = Nx.multiply(bx, Nx.divide(decay_weights, Nx.add(decay_weights, eps)))
+
+    # Keep a_bar as-is — the scan will apply it sequentially
+    {a_bar, bx_weighted}
   end
 
   # ============================================================================

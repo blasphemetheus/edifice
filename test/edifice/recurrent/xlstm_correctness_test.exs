@@ -123,8 +123,8 @@ defmodule Edifice.Recurrent.XLSTMCorrectnessTest do
         init_fn.(Nx.template({@batch, @seq_len, @embed_dim}, :f32), Axon.ModelState.empty())
 
       param_keys = Map.keys(params.data)
-      gate_keys = Enum.filter(param_keys, &String.contains?(&1, "gates_proj"))
-      assert gate_keys != []
+      gate_keys = Enum.filter(param_keys, &String.contains?(&1, "input_proj"))
+      assert gate_keys != [], "Expected sLSTM input_proj layer in params, got: #{inspect(param_keys)}"
 
       gate_params = params.data[hd(gate_keys)]
       kernel = gate_params["kernel"]

@@ -78,7 +78,15 @@ defmodule Edifice.RegistrySweepTest do
     :nystromformer,
     :performer,
     :kan,
-    :liquid
+    :liquid,
+    :slstm,
+    :hawk,
+    :gss,
+    :xlstm_v2,
+    :hyena_v2,
+    :retnet_v2,
+    :hymba,
+    :megalodon
   ]
 
   @sequence_opts [
@@ -622,6 +630,48 @@ defmodule Edifice.RegistrySweepTest do
     end
   end
 
+  describe "moe_v2 (meta)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        opts = [
+          input_size: @embed,
+          hidden_size: @hidden * 4,
+          output_size: @hidden,
+          num_shared_experts: 1,
+          num_routed_experts: 2,
+          tokens_per_expert: 2,
+          dropout: 0.0
+        ]
+
+        model = Edifice.build(:moe_v2, opts)
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"moe_input" => input})
+        output = predict_fn.(params, %{"moe_input" => input})
+
+        assert_finite!(output, "moe_v2 batch=#{batch}")
+        assert {^batch, @seq_len, _out} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "dora (meta)" do
+    for batch <- @batches do
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+        model = Edifice.build(:dora, input_size: @embed, output_size: @hidden, rank: 4)
+        input = random_tensor({batch, @embed})
+        {predict_fn, params} = build_and_init(model, %{"input" => input})
+        output = predict_fn.(params, %{"input" => input})
+
+        assert_finite!(output, "dora batch=#{batch}")
+        assert {^batch, @hidden} = Nx.shape(output)
+      end
+    end
+  end
+
   describe "adapter (meta)" do
     for batch <- @batches do
       test "batch=#{batch} produces correct shape" do
@@ -1030,6 +1080,34 @@ defmodule Edifice.RegistrySweepTest do
         {predict_fn, params} = build_and_init(model, input_map)
         output = predict_fn.(params, input_map)
         assert_finite!(output, "dit batch=#{batch}")
+        assert {^batch, _dim} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "dit_v2 (generative-simple)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape with finite values" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:dit_v2,
+            input_dim: @embed,
+            hidden_size: @hidden,
+            depth: 1,
+            num_heads: 2,
+            dropout: 0.0
+          )
+
+        input_map = %{
+          "noisy_input" => random_tensor({batch, @embed}),
+          "timestep" => random_tensor({batch})
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "dit_v2 batch=#{batch}")
         assert {^batch, _dim} = Nx.shape(output)
       end
     end

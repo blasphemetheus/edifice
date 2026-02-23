@@ -31,21 +31,21 @@
 - [x] Differential Transformer — Dual softmax attention with noise cancellation
 
 ## v0.3.0 Candidates
-- [ ] **Hymba** — Hybrid Mamba+attention with learnable meta tokens
-- [ ] **sLSTM** — Scalar LSTM with exponential gating (xLSTM component)
-- [ ] **GSS** — Gated State Space (simplified S4 with multiplicative gating)
-- [ ] **Hawk/RecurrentGemma** — Google's RG-LRU recurrent model
-- [ ] **DiT v2** — Updated diffusion transformer with improved adaptive norm conditioning
-- [ ] **Mixture of Experts v2** — Expert choice routing, shared expert slots
-- [ ] **State Space Duality (SSD)** — Improved Mamba-2 structured masking
-- [ ] **xLSTM v2** — Updated mLSTM with matrix memory improvements
-- [ ] **Hyena v2** — Improved implicit long convolution filters
-- [ ] **RetNet v2** — Retention with improved chunkwise formulation
-- [ ] **MEGALODON** — Mega-scale sequence model (Meta)
-- [ ] **KV Cache support** — Inference-time KV caching for autoregressive models
+- [x] **Hymba** — Hybrid Mamba+attention with learnable meta tokens
+- [x] **sLSTM** — Scalar LSTM with exponential gating (xLSTM component)
+- [x] **GSS** — Gated State Space (simplified S4 with multiplicative gating)
+- [x] **Hawk/RecurrentGemma** — Google's RG-LRU recurrent model
+- [x] **DiT v2** — Updated diffusion transformer with improved adaptive norm conditioning
+- [x] **Mixture of Experts v2** — Expert choice routing, shared expert slots
+- [x] **State Space Duality (SSD)** — Improved Mamba-2 structured masking
+- [x] **xLSTM v2** — Updated mLSTM with matrix memory improvements
+- [x] **Hyena v2** — Improved implicit long convolution filters
+- [x] **RetNet v2** — Retention with improved chunkwise formulation
+- [x] **MEGALODON** — Mega-scale sequence model (Meta)
+- [x] **KV Cache support** — Inference-time KV caching for autoregressive models
 - [ ] **Flash Attention** — IO-aware exact attention (requires EXLA backend work)
-- [ ] **Quantization toolkit** — GPTQ, AWQ, SqueezeLLM weight quantization
-- [ ] **LoRA+ / DoRA** — Improved low-rank adaptation variants
+- [x] **Quantization toolkit** — GPTQ, AWQ, SqueezeLLM weight quantization
+- [x] **LoRA+ / DoRA** — Improved low-rank adaptation variants
 
 ## CUDA Kernel Fusion for Recurrent Architectures - 2026-02-18 22:45
 

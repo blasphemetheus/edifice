@@ -24,17 +24,17 @@ defmodule Edifice do
   | Transformer | Decoder-Only (GPT-style) |
   | Feedforward | MLP, KAN, KAT, TabNet, BitNet |
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
-  | Recurrent | LSTM, GRU, xLSTM, mLSTM, MinGRU, MinLSTM, DeltaNet, TTT, Titans, Reservoir (ESN) |
-  | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, BiMamba, GatedSSM, StripedHyena |
-  | Attention | Multi-Head, GQA, MLA, DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RWKV, GLA, HGRN, Griffin, Based, InfiniAttention, Conformer, Mega, RingAttention |
+  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, TTT, Titans, Reservoir (ESN) |
+  | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba |
+  | Attention | Multi-Head, GQA, MLA, DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, HGRN, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF |
-  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Normalizing Flow |
+  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, Latent Diffusion, Consistency, Score SDE, Flow Matching, Normalizing Flow |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
   | Sets | DeepSets, PointNet |
   | Energy | EBM, Hopfield, Neural ODE |
   | Probabilistic | Bayesian, MC Dropout, Evidential |
   | Memory | NTM, Memory Networks |
-  | Meta | MoE, Switch MoE, Soft MoE, LoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead |
+  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead |
   | Liquid | Liquid Neural Networks |
   | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA |
   | Neuromorphic | SNN, ANN2SNN |
@@ -67,6 +67,8 @@ defmodule Edifice do
     ttt: Edifice.Recurrent.TTT,
     titans: Edifice.Recurrent.Titans,
     reservoir: Edifice.Recurrent.Reservoir,
+    slstm: Edifice.Recurrent.SLSTM,
+    xlstm_v2: Edifice.Recurrent.XLSTMv2,
     # SSM
     mamba: Edifice.SSM.Mamba,
     mamba_ssd: Edifice.SSM.MambaSSD,
@@ -83,6 +85,9 @@ defmodule Edifice do
     zamba: Edifice.SSM.Zamba,
     striped_hyena: Edifice.SSM.StripedHyena,
     mamba3: Edifice.SSM.Mamba3,
+    gss: Edifice.SSM.GSS,
+    hyena_v2: Edifice.SSM.HyenaV2,
+    hymba: Edifice.SSM.Hymba,
     # Attention
     attention: Edifice.Attention.MultiHead,
     retnet: Edifice.Attention.RetNet,
@@ -103,6 +108,9 @@ defmodule Edifice do
     ring_attention: Edifice.Attention.RingAttention,
     mla: Edifice.Attention.MLA,
     diff_transformer: Edifice.Attention.DiffTransformer,
+    hawk: Edifice.Attention.Hawk,
+    retnet_v2: Edifice.Attention.RetNetV2,
+    megalodon: Edifice.Attention.Megalodon,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -117,6 +125,7 @@ defmodule Edifice do
     diffusion: Edifice.Generative.Diffusion,
     ddim: Edifice.Generative.DDIM,
     dit: Edifice.Generative.DiT,
+    dit_v2: Edifice.Generative.DiTv2,
     latent_diffusion: Edifice.Generative.LatentDiffusion,
     consistency_model: Edifice.Generative.ConsistencyModel,
     score_sde: Edifice.Generative.ScoreSDE,
@@ -159,6 +168,8 @@ defmodule Edifice do
     mixture_of_depths: Edifice.Meta.MixtureOfDepths,
     mixture_of_agents: Edifice.Meta.MixtureOfAgents,
     rlhf_head: Edifice.Meta.RLHFHead,
+    moe_v2: Edifice.Meta.MoEv2,
+    dora: Edifice.Meta.DoRA,
     # Contrastive / Self-Supervised
     simclr: Edifice.Contrastive.SimCLR,
     byol: Edifice.Contrastive.BYOL,
@@ -214,7 +225,9 @@ defmodule Edifice do
         :delta_net,
         :ttt,
         :titans,
-        :reservoir
+        :reservoir,
+        :slstm,
+        :xlstm_v2
       ],
       ssm: [
         :mamba,
@@ -231,7 +244,10 @@ defmodule Edifice do
         :jamba,
         :zamba,
         :striped_hyena,
-        :mamba3
+        :mamba3,
+        :gss,
+        :hyena_v2,
+        :hymba
       ],
       attention: [
         :attention,
@@ -252,13 +268,17 @@ defmodule Edifice do
         :conformer,
         :ring_attention,
         :mla,
-        :diff_transformer
+        :diff_transformer,
+        :hawk,
+        :retnet_v2,
+        :megalodon
       ],
       vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf],
       generative: [
         :diffusion,
         :ddim,
         :dit,
+        :dit_v2,
         :latent_diffusion,
         :consistency_model,
         :score_sde,
@@ -283,7 +303,9 @@ defmodule Edifice do
         :capsule,
         :mixture_of_depths,
         :mixture_of_agents,
-        :rlhf_head
+        :rlhf_head,
+        :moe_v2,
+        :dora
       ],
       contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg, :jepa],
       liquid: [:liquid],
