@@ -24,8 +24,8 @@ defmodule Edifice do
   | Transformer | Decoder-Only (GPT-style), Multi-Token Prediction, Byte Latent Transformer |
   | Feedforward | MLP, KAN, KAT, TabNet, BitNet |
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
-  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, TTT, Titans, Reservoir (ESN) |
-  | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba |
+  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, TTT, Titans, Reservoir (ESN), Native Recurrence |
+  | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
   | Attention | Multi-Head, GQA, MLA, DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, Latent Diffusion, Consistency, Score SDE, Flow Matching, Normalizing Flow |
@@ -34,7 +34,7 @@ defmodule Edifice do
   | Energy | EBM, Hopfield, Neural ODE |
   | Probabilistic | Bayesian, MC Dropout, Evidential |
   | Memory | NTM, Memory Networks |
-  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding |
+  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, Distillation Head, QAT |
   | Liquid | Liquid Neural Networks |
   | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA, Temporal JEPA |
   | Interpretability | Sparse Autoencoder, Transcoder |
@@ -74,6 +74,7 @@ defmodule Edifice do
     reservoir: Edifice.Recurrent.Reservoir,
     slstm: Edifice.Recurrent.SLSTM,
     xlstm_v2: Edifice.Recurrent.XLSTMv2,
+    native_recurrence: Edifice.Recurrent.NativeRecurrence,
     # SSM
     mamba: Edifice.SSM.Mamba,
     mamba_ssd: Edifice.SSM.MambaSSD,
@@ -93,6 +94,7 @@ defmodule Edifice do
     gss: Edifice.SSM.GSS,
     hyena_v2: Edifice.SSM.HyenaV2,
     hymba: Edifice.SSM.Hymba,
+    ss_transformer: Edifice.SSM.SSTransformer,
     # Attention
     attention: Edifice.Attention.MultiHead,
     retnet: Edifice.Attention.RetNet,
@@ -179,6 +181,11 @@ defmodule Edifice do
     moe_v2: Edifice.Meta.MoEv2,
     dora: Edifice.Meta.DoRA,
     speculative_decoding: Edifice.Meta.SpeculativeDecoding,
+    test_time_compute: Edifice.Meta.TestTimeCompute,
+    mixture_of_tokenizers: Edifice.Meta.MixtureOfTokenizers,
+    speculative_head: Edifice.Meta.SpeculativeHead,
+    distillation_head: Edifice.Meta.DistillationHead,
+    qat: Edifice.Meta.QAT,
     # Contrastive / Self-Supervised
     simclr: Edifice.Contrastive.SimCLR,
     byol: Edifice.Contrastive.BYOL,
@@ -246,7 +253,8 @@ defmodule Edifice do
         :titans,
         :reservoir,
         :slstm,
-        :xlstm_v2
+        :xlstm_v2,
+        :native_recurrence
       ],
       ssm: [
         :mamba,
@@ -266,7 +274,8 @@ defmodule Edifice do
         :mamba3,
         :gss,
         :hyena_v2,
-        :hymba
+        :hymba,
+        :ss_transformer
       ],
       attention: [
         :attention,
@@ -329,7 +338,12 @@ defmodule Edifice do
         :rlhf_head,
         :moe_v2,
         :dora,
-        :speculative_decoding
+        :speculative_decoding,
+        :test_time_compute,
+        :mixture_of_tokenizers,
+        :speculative_head,
+        :distillation_head,
+        :qat
       ],
       contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg, :jepa, :temporal_jepa],
       interpretability: [:sparse_autoencoder, :transcoder],
@@ -382,6 +396,8 @@ defmodule Edifice do
     - `:byte_latent_transformer` — `{encoder, latent_transformer, decoder}`
     - `:speculative_decoding` — `{draft_model, verifier_model}`
     - `:multi_token_prediction` — `Axon.container(%{pred_1: ..., pred_N: ...})`
+    - `:test_time_compute` — `Axon.container(%{backbone: ..., scores: ...})`
+    - `:speculative_head` — `Axon.container(%{pred_1: ..., pred_N: ...})`
   """
   @spec build(atom(), keyword()) :: Axon.t() | tuple()
   def build(name, opts \\ []) do
