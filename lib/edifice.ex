@@ -129,6 +129,7 @@ defmodule Edifice do
     gated_attention: Edifice.Attention.GatedAttention,
     ssmax: Edifice.Blocks.SSMax,
     softpick: Edifice.Blocks.Softpick,
+    rnope_swa: Edifice.Attention.RNoPESWA,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -195,6 +196,7 @@ defmodule Edifice do
     mixture_of_agents: Edifice.Meta.MixtureOfAgents,
     rlhf_head: Edifice.Meta.RLHFHead,
     dpo: Edifice.Meta.DPO,
+    grpo: Edifice.Meta.GRPO,
     moe_v2: Edifice.Meta.MoEv2,
     dora: Edifice.Meta.DoRA,
     speculative_decoding: Edifice.Meta.SpeculativeDecoding,
@@ -329,7 +331,8 @@ defmodule Edifice do
         :kda,
         :gated_attention,
         :ssmax,
-        :softpick
+        :softpick,
+        :rnope_swa
       ],
       vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :mamba_vision],
       generative: [
@@ -368,6 +371,7 @@ defmodule Edifice do
         :mixture_of_agents,
         :rlhf_head,
         :dpo,
+        :grpo,
         :moe_v2,
         :dora,
         :speculative_decoding,
