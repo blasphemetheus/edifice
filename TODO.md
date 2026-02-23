@@ -47,6 +47,28 @@
 - [x] **Quantization toolkit** — GPTQ, AWQ, SqueezeLLM weight quantization
 - [x] **LoRA+ / DoRA** — Improved low-rank adaptation variants
 
+## 🔍 Opus Review Pass — AI-Generated Architecture Implementations
+
+All architectures added since Tier 1 (2026-02) were implemented by Claude Code (sonnet).
+**Bradley to review with Opus for correctness, math accuracy, and idiomatic Elixir.**
+
+Priority review targets (most complex / most novel):
+- `lib/edifice/attention/nsa.ex` — NSA three-path sparse attention (complex)
+- `lib/edifice/generative/transfusion.ex` — mixed AR+diffusion mask logic
+- `lib/edifice/generative/var.ex` — next-scale VQ tokenizer
+- `lib/edifice/scientific/fno.ex` — spectral convolution via FFT
+- `lib/edifice/graph/egnn.ex` — equivariant coord update equations
+- `lib/edifice/memory/engram.ex` — LSH hash routing
+- `lib/edifice/attention/yarn.ex` — RoPE frequency band interpolation
+- `lib/edifice/meta/moe_v2.ex` — bias-based load balancing
+
+Suggested process:
+1. Open each file + the reference paper
+2. Ask Opus: "Verify this Elixir implementation matches the paper's equations. Flag any math errors, missing features, or non-idiomatic patterns."
+3. Commit verified files with `verified: true` in @moduledoc metadata
+
+---
+
 ## CUDA Kernel Fusion for Recurrent Architectures - 2026-02-18 22:45
 
 - **Explore fused RNN kernels for LSTM/GRU/minGRU/minLSTM** - Plan what's needed to make recurrent architectures competitive on GPU inference latency. **Problem:** Axon unrolls each recurrence timestep as separate EXLA kernel launches, causing 70-600ms latency for seq_len=32 vs 14ms for gated_ssm. TensorFlow/PyTorch use cuDNN's fused `cudnnRNNForward` kernel which handles all timesteps in one GPU call. **Files:** `bench/inference_latency.exs`, `lib/edifice/recurrent/lstm.ex`, `lib/edifice/recurrent/gru.ex`, `lib/edifice/recurrent/min_gru.ex`, `lib/edifice/recurrent/min_lstm.ex`. **Solution:** Investigate four approaches: (1) cuDNN fused RNN integration via EXLA/XLA custom calls, (2) custom CUDA kernels for fused LSTM cells callable from Nx, (3) XLA's built-in RNN fusion passes and whether EXLA exposes them, (4) step-by-step inference with explicit state passing (seq_len=1 per frame) which sidesteps unrolling entirely. Reference: slippi-ai achieves real-time LSTM inference via TensorFlow's cuDNN integration. Benchmark data in `tmp/bench_results/`.
