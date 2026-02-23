@@ -2,6 +2,8 @@ defmodule Edifice.Meta.MoEv2 do
   @moduledoc """
   MoE v2: Expert Choice Routing + Shared Experts + Aux-Loss-Free Load Balancing.
 
+  <!-- verified: true, date: 2026-02-23 -->
+
   Implements three key improvements to the Mixture of Experts architecture:
   expert choice routing (Zhou et al., 2022), shared expert slots (DeepSeekMoE),
   and aux-loss-free load balancing via trainable bias (DeepSeek-V3).

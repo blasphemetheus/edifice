@@ -2,6 +2,8 @@ defmodule Edifice.Vision.GaussianSplat do
   @moduledoc """
   3D Gaussian Splatting for real-time radiance field rendering.
 
+  <!-- verified: true, date: 2026-02-23 -->
+
   Represents 3D scenes as collections of Gaussian primitives that can be
   differentiably rendered from arbitrary viewpoints. Achieves 100x faster
   rendering than NeRF while maintaining or improving quality.

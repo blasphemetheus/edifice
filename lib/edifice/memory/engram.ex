@@ -2,6 +2,8 @@ defmodule Edifice.Memory.Engram do
   @moduledoc """
   Engram: O(1) Hash-Based Associative Memory via Locality-Sensitive Hashing.
 
+  <!-- verified: true, date: 2026-02-23 -->
+
   Engram implements a fast key-value memory that stores and retrieves values
   in amortised O(1) time using Locality-Sensitive Hashing (LSH). Multiple
   independent hash tables reduce collision probability, and exponential

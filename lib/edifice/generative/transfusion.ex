@@ -2,6 +2,8 @@ defmodule Edifice.Generative.Transfusion do
   @moduledoc """
   Transfusion: Unified Autoregressive Text + Diffusion Image Generation.
 
+  <!-- verified: true, date: 2026-02-23 -->
+
   A single transformer model that jointly handles discrete text tokens
   (autoregressive next-token prediction) and continuous image patches
   (denoising diffusion) in one shared backbone.

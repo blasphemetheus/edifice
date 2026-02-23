@@ -2,6 +2,8 @@ defmodule Edifice.Attention.NSA do
   @moduledoc """
   NSA: Native Sparse Attention (DeepSeek-V3/V4).
 
+  <!-- verified: true, date: 2026-02-23 -->
+
   Hardware-aligned three-path sparse attention mechanism that achieves
   efficient long-context attention by combining global context, fine-grained
   retrieval, and local attention in parallel paths.

@@ -2,6 +2,8 @@ defmodule Edifice.Attention.YARN do
   @moduledoc """
   YaRN: Yet another RoPE extensioN for context window extension.
 
+  <!-- verified: true, date: 2026-02-23 -->
+
   YaRN modifies RoPE frequency bands to handle longer sequences than the model
   was originally trained on. It achieves this by scaling different frequency
   components based on their wavelength relative to the original context length.

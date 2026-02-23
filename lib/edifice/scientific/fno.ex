@@ -2,6 +2,8 @@ defmodule Edifice.Scientific.FNO do
   @moduledoc """
   FNO: Fourier Neural Operator.
 
+  <!-- verified: true, date: 2026-02-23 -->
+
   Implements the Fourier Neural Operator from "Fourier Neural Operator for
   Parametric Partial Differential Equations" (Li et al., ICLR 2021). FNO
   learns operators mapping between infinite-dimensional function spaces via

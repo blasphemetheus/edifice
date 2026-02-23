@@ -2,6 +2,8 @@ defmodule Edifice.Graph.EGNN do
   @moduledoc """
   E(n) Equivariant Graph Neural Network.
 
+  <!-- verified: true, date: 2026-02-23 -->
+
   EGNN processes graphs with 3D (or n-D) coordinates while preserving Euclidean
   symmetries: rotation, translation, and reflection. This makes it ideal for
   molecular simulations, protein structure prediction, and physical systems
