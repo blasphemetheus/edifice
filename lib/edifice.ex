@@ -28,7 +28,7 @@ defmodule Edifice do
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
   | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision |
-  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, SoFlow, Normalizing Flow, Transfusion |
+  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, SoFlow, Normalizing Flow, Transfusion, CogVideoX, TRELLIS |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
   | Sets | DeepSets, PointNet |
   | Energy | EBM, Hopfield, Neural ODE |
@@ -42,6 +42,9 @@ defmodule Edifice do
   | Multimodal | MLP Projection Fusion, Cross-Attention Fusion, Perceiver Resampler |
   | RL | PolicyValue |
   | Neuromorphic | SNN, ANN2SNN |
+  | Inference | Medusa |
+  | Robotics | ACT |
+  | Audio | SoundStorm |
   """
 
   @architecture_registry %{
@@ -143,6 +146,7 @@ defmodule Edifice do
     focalnet: Edifice.Vision.FocalNet,
     poolformer: Edifice.Vision.PoolFormer,
     nerf: Edifice.Vision.NeRF,
+    gaussian_splat: Edifice.Vision.GaussianSplat,
     mamba_vision: Edifice.Vision.MambaVision,
     dino_v2: Edifice.Vision.DINOv2,
     metaformer: Edifice.Vision.MetaFormer,
@@ -171,6 +175,8 @@ defmodule Edifice do
     sit: Edifice.Generative.SiT,
     transfusion: Edifice.Generative.Transfusion,
     mar: Edifice.Generative.MAR,
+    cogvideox: Edifice.Generative.CogVideoX,
+    trellis: Edifice.Generative.TRELLIS,
     # Graph
     gcn: Edifice.Graph.GCN,
     gat: Edifice.Graph.GAT,
@@ -242,7 +248,13 @@ defmodule Edifice do
     fno: Edifice.Scientific.FNO,
     # Neuromorphic
     snn: Edifice.Neuromorphic.SNN,
-    ann2snn: Edifice.Neuromorphic.ANN2SNN
+    ann2snn: Edifice.Neuromorphic.ANN2SNN,
+    # Inference
+    medusa: Edifice.Inference.Medusa,
+    # Robotics
+    act: Edifice.Robotics.ACT,
+    # Audio
+    soundstorm: Edifice.Audio.SoundStorm
   }
 
   @doc """
@@ -350,7 +362,7 @@ defmodule Edifice do
         :nsa,
         :tmrope
       ],
-      vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :mamba_vision, :dino_v2, :metaformer, :caformer, :efficient_vit],
+      vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :gaussian_splat, :mamba_vision, :dino_v2, :metaformer, :caformer, :efficient_vit],
       generative: [
         :diffusion,
         :ddim,
@@ -371,7 +383,9 @@ defmodule Edifice do
         :sana,
         :sit,
         :transfusion,
-        :mar
+        :mar,
+        :cogvideox,
+        :trellis
       ],
       graph: [:gcn, :gat, :graph_sage, :gin, :gin_v2, :pna, :graph_transformer, :schnet, :egnn],
       sets: [:deep_sets, :pointnet],
@@ -409,7 +423,10 @@ defmodule Edifice do
       rl: [:policy_value],
       liquid: [:liquid],
       scientific: [:fno],
-      neuromorphic: [:snn, :ann2snn]
+      neuromorphic: [:snn, :ann2snn],
+      inference: [:medusa],
+      robotics: [:act],
+      audio: [:soundstorm]
     }
   end
 
@@ -457,6 +474,8 @@ defmodule Edifice do
     - `:multi_token_prediction` — `Axon.container(%{pred_1: ..., pred_N: ...})`
     - `:test_time_compute` — `Axon.container(%{backbone: ..., scores: ...})`
     - `:speculative_head` — `Axon.container(%{pred_1: ..., pred_N: ...})`
+    - `:act` — `{encoder, decoder}`
+    - `:medusa` — `Axon.container(%{head_1: ..., head_K: ...})`
   """
   @spec build(atom(), keyword()) :: Axon.t() | tuple()
   def build(name, opts \\ []) do
