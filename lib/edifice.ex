@@ -211,6 +211,7 @@ defmodule Edifice do
     vicreg: Edifice.Contrastive.VICReg,
     jepa: Edifice.Contrastive.JEPA,
     temporal_jepa: Edifice.Contrastive.TemporalJEPA,
+    siglip: Edifice.Contrastive.SigLIP,
     # Interpretability
     sparse_autoencoder: Edifice.Interpretability.SparseAutoencoder,
     transcoder: Edifice.Interpretability.Transcoder,
@@ -377,7 +378,7 @@ defmodule Edifice do
         :qat,
         :hybrid_builder
       ],
-      contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg, :jepa, :temporal_jepa],
+      contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg, :jepa, :temporal_jepa, :siglip],
       interpretability: [:sparse_autoencoder, :transcoder],
       world_model: [:world_model],
       multimodal: [:multimodal_mlp_fusion],
