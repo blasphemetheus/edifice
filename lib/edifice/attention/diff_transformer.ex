@@ -1,6 +1,6 @@
 defmodule Edifice.Attention.DiffTransformer do
   @moduledoc """
-  Differential Transformer: noise-cancelling attention via dual softmax subtraction.
+  Differential Transformer V2: simplified noise-cancelling attention.
 
   Instead of a single softmax attention map per head, the Differential Transformer
   computes two independent attention maps and subtracts them. Shared noise patterns
@@ -18,18 +18,13 @@ defmodule Edifice.Attention.DiffTransformer do
   DiffAttn = (A1 - lambda * A2) @ V
   ```
 
-  The learnable `lambda` controls how aggressively noise is cancelled:
-  - `lambda ~ 0`: standard attention (A1 dominates)
-  - `lambda ~ 1`: full differential (cancels all shared noise)
+  Where `lambda` is a simple learnable scalar (initialized to layer-dependent value).
 
-  ## Lambda Parameterization
+  ## V2 Simplifications
 
-  ```
-  lambda = exp(lambda_q1 . lambda_k1) - exp(lambda_q2 . lambda_k2) + lambda_init
-  ```
-
-  Where `lambda_q1/q2/k1/k2` are learned vectors per layer and
-  `lambda_init = 0.8 - 0.6 * exp(-0.3 * (layer_idx - 1))`.
+  - Lambda is now a single learnable scalar per layer (vs 4-vector parameterization)
+  - Removed per-head GroupNorm/SubLayerNorm
+  - Uses simple RMSNorm before output projection
 
   ## Architecture
 
@@ -46,7 +41,7 @@ defmodule Edifice.Attention.DiffTransformer do
   |     A1 = softmax(Q1K1^T/s)          |
   |     A2 = softmax(Q2K2^T/s)          |
   |     out = (A1 - lambda*A2) @ V      |
-  |     SubLayerNorm per head            |
+  |     RMSNorm                          |
   |   -> Residual                        |
   |   LayerNorm -> FFN -> Residual       |
   +--------------------------------------+
@@ -55,11 +50,6 @@ defmodule Edifice.Attention.DiffTransformer do
         |
   Last timestep -> [batch, hidden_size]
   ```
-
-  ## Complexity
-
-  Same as standard transformer — the overhead is just 2x attention score
-  computation per head, which is trivial compared to the V projection.
 
   ## Usage
 
@@ -73,6 +63,7 @@ defmodule Edifice.Attention.DiffTransformer do
   ## References
 
   - "Differential Transformer" (Ye et al., Microsoft Research, 2024)
+  - "Differential Transformer V2" (2025) - simplified parameterization
   """
 
   alias Edifice.Blocks.{ModelBuilder, TransformerBlock}
@@ -93,7 +84,7 @@ defmodule Edifice.Attention.DiffTransformer do
           | {:window_size, pos_integer()}
 
   @doc """
-  Build a Differential Transformer model.
+  Build a Differential Transformer V2 model.
 
   ## Options
 
@@ -147,10 +138,11 @@ defmodule Edifice.Attention.DiffTransformer do
   end
 
   @doc """
-  Build the differential attention layer.
+  Build the differential attention layer (V2 simplified).
 
   Projects to Q, K, V, splits Q/K into two halves, computes dual
-  softmax attention maps and subtracts them, then applies sub-layer norm.
+  softmax attention maps and subtracts them with learnable lambda scalar,
+  then applies RMSNorm.
   """
   @spec build_diff_attention(Axon.t(), keyword()) :: Axon.t()
   def build_diff_attention(input, opts) do
@@ -167,53 +159,34 @@ defmodule Edifice.Attention.DiffTransformer do
     k_proj = Axon.dense(input, hidden_size * 2, name: "#{name}_k_proj")
     v_proj = Axon.dense(input, hidden_size, name: "#{name}_v_proj")
 
-    # Lambda parameters: 4 learned vectors of size head_dim
-    lambda_q1 =
-      Axon.param("#{name}_lambda_q1", {head_dim}, initializer: :zeros)
+    # V2: Simple learnable lambda scalar (initialized to layer-dependent value)
+    lambda_param =
+      Axon.param("#{name}_lambda", {},
+        initializer: fn _, _ -> Nx.tensor(lambda_init) end
+      )
 
-    lambda_k1 =
-      Axon.param("#{name}_lambda_k1", {head_dim}, initializer: :zeros)
-
-    lambda_q2 =
-      Axon.param("#{name}_lambda_q2", {head_dim}, initializer: :zeros)
-
-    lambda_k2 =
-      Axon.param("#{name}_lambda_k2", {head_dim}, initializer: :zeros)
-
-    # Sub-layer norm parameters (per-head RMS norm)
-    sublayer_norm_weight =
-      Axon.param("#{name}_sublayer_norm", {head_dim}, initializer: :ones)
+    # RMSNorm scale parameter
+    rms_scale = Axon.param("#{name}_rms_scale", {hidden_size}, initializer: :ones)
 
     output =
       Axon.layer(
-        &diff_attention_impl/9,
-        [
-          q_proj,
-          k_proj,
-          v_proj,
-          lambda_q1,
-          lambda_k1,
-          lambda_q2,
-          lambda_k2,
-          sublayer_norm_weight
-        ],
+        &diff_attention_impl/6,
+        [q_proj, k_proj, v_proj, lambda_param, rms_scale],
         name: "#{name}_compute",
         num_heads: num_heads,
         head_dim: head_dim,
-        lambda_init: lambda_init,
         op_name: :diff_attention
       )
 
     Axon.dense(output, hidden_size, name: "#{name}_out_proj")
   end
 
-  # Differential attention implementation
+  # V2 Differential attention implementation - simplified
   # Q: [batch, seq, 2*hidden], K: [batch, seq, 2*hidden], V: [batch, seq, hidden]
-  # lambda_*: [head_dim], sublayer_norm: [head_dim]
-  defp diff_attention_impl(q, k, v, lq1, lk1, lq2, lk2, sublayer_norm, opts) do
+  # lambda: scalar, rms_scale: [hidden]
+  defp diff_attention_impl(q, k, v, lambda, rms_scale, opts) do
     num_heads = opts[:num_heads]
     head_dim = opts[:head_dim]
-    lambda_init = opts[:lambda_init]
 
     {batch, seq_len, _} = Nx.shape(q)
 
@@ -233,11 +206,11 @@ defmodule Edifice.Attention.DiffTransformer do
     v = Nx.reshape(v, {batch, seq_len, num_heads, head_dim})
     v = Nx.transpose(v, axes: [0, 2, 1, 3])
 
-    # Scale factor: sqrt(head_dim) since Q1/K1 each have head_dim features
+    # Scale factor: sqrt(head_dim)
     scale = Nx.sqrt(head_dim) |> Nx.as_type(Nx.type(q))
 
     # Compute two attention maps
-    # A1 = softmax(Q1 @ K1^T / sqrt(d/2))
+    # A1 = softmax(Q1 @ K1^T / sqrt(d))
     scores1 = Nx.dot(q1, [3], [0, 1], k1, [3], [0, 1])
     scores1 = Nx.divide(scores1, scale)
 
@@ -255,34 +228,25 @@ defmodule Edifice.Attention.DiffTransformer do
     scores1 = Nx.select(causal_mask, scores1, Nx.broadcast(-1.0e9, Nx.shape(scores1)))
     attn1 = FusedOps.fused_softmax(scores1)
 
-    # A2 = softmax(Q2 @ K2^T / sqrt(d/2))
+    # A2 = softmax(Q2 @ K2^T / sqrt(d))
     scores2 = Nx.dot(q2, [3], [0, 1], k2, [3], [0, 1])
     scores2 = Nx.divide(scores2, scale)
     scores2 = Nx.select(causal_mask, scores2, Nx.broadcast(-1.0e9, Nx.shape(scores2)))
     attn2 = FusedOps.fused_softmax(scores2)
 
-    # Compute lambda = exp(lq1 . lk1) - exp(lq2 . lk2) + lambda_init
-    # lq1, lk1 are [half_head_dim] — dot product gives a scalar
-    lambda_term1 = Nx.exp(Nx.dot(lq1, lk1))
-    lambda_term2 = Nx.exp(Nx.dot(lq2, lk2))
-    lambda = Nx.subtract(Nx.add(lambda_term1, lambda_init), lambda_term2)
-
+    # V2: Lambda is now a simple learnable scalar
     # Differential attention: (A1 - lambda * A2) @ V
     diff_attn = Nx.subtract(attn1, Nx.multiply(lambda, attn2))
     output = Nx.dot(diff_attn, [3], [0, 1], v, [2], [0, 1])
 
-    # Sub-layer RMSNorm per head: normalize across head_dim, scale by learned weight
-    # output: [batch, heads, seq, head_dim]
-    rms = Nx.sqrt(Nx.mean(Nx.multiply(output, output), axes: [-1], keep_axes: true))
-    output = Nx.divide(output, Nx.add(rms, 1.0e-6))
-
-    # Apply learned scale and (1 - lambda_init) scaling
-    output = Nx.multiply(output, sublayer_norm)
-    output = Nx.multiply(output, 1.0 - lambda_init)
-
     # Reshape back: [batch, heads, seq, head_dim] -> [batch, seq, hidden]
     output = Nx.transpose(output, axes: [0, 2, 1, 3])
-    Nx.reshape(output, {batch, seq_len, num_heads * head_dim})
+    output = Nx.reshape(output, {batch, seq_len, num_heads * head_dim})
+
+    # V2: Simple RMSNorm (no per-head GroupNorm)
+    rms = Nx.sqrt(Nx.mean(Nx.multiply(output, output), axes: [-1], keep_axes: true))
+    output = Nx.divide(output, Nx.add(rms, 1.0e-6))
+    Nx.multiply(output, rms_scale)
   end
 
   @doc """
