@@ -155,7 +155,7 @@ defmodule Edifice.Vision.GaussianSplat do
     view_matrix = Axon.input("view_matrix", shape: {nil, 4, 4})
     proj_matrix = Axon.input("proj_matrix", shape: {nil, 4, 4})
     image_height = Axon.input("image_height", shape: {nil})
-    image_width = Axon.input("image_width", shape: {nil})
+    _image_width = Axon.input("image_width", shape: {nil})
 
     # Learnable Gaussian parameters
     positions =
@@ -167,7 +167,7 @@ defmodule Edifice.Vision.GaussianSplat do
     # Rotations as quaternions [w, x, y, z]
     rotations =
       Axon.param("#{name}_rotations", fn _ -> {num_gaussians, 4} end,
-        initializer: fn shape, type, key ->
+        initializer: fn shape, type, _key ->
           # Initialize to identity quaternion [1, 0, 0, 0]
           zeros = Nx.broadcast(0.0, shape) |> Nx.as_type(type)
           Nx.put_slice(zeros, [0, 0], Nx.broadcast(1.0, {elem(shape, 0), 1}) |> Nx.as_type(type))
@@ -271,7 +271,7 @@ defmodule Edifice.Vision.GaussianSplat do
       proj_matrix: proj_matrix
     }
 
-    render_impl(gaussians, camera, {height, width}, sh_degree)
+    render(gaussians, camera, {height, width}, sh_degree: sh_degree)
   end
 
   # ============================================================================
@@ -493,10 +493,9 @@ defmodule Edifice.Vision.GaussianSplat do
     Nx.stack([row0, row1, row2], axis: 2)
   end
 
-  defnp project_covariance(covs_3d, view, proj, pos_view) do
+  defnp project_covariance(covs_3d, _view, _proj, pos_view) do
     # Simplified 2D covariance projection
     # Extract upper-left 2x2 and scale by depth
-    num_gaussians = Nx.axis_size(covs_3d, 0)
 
     # Get z (depth) for scaling
     z = Nx.abs(pos_view[[.., 2]]) |> Nx.add(1.0e-6)
@@ -712,7 +711,7 @@ defmodule Edifice.Vision.GaussianSplat do
          gaussians,
          gradients,
          clone_threshold,
-         split_threshold,
+         _split_threshold,
          prune_threshold,
          scale_threshold
        ) do
@@ -734,11 +733,11 @@ defmodule Edifice.Vision.GaussianSplat do
     large_scale = Nx.greater_equal(scale_mag, scale_threshold)
     low_opacity = Nx.less(opacities, prune_threshold)
 
-    # Clone mask: high gradient AND small scale
-    clone_mask = Nx.logical_and(high_grad, small_scale)
+    # Clone mask: high gradient AND small scale (for future clone implementation)
+    _clone_mask = Nx.logical_and(high_grad, small_scale)
 
-    # Split mask: high gradient AND large scale
-    split_mask = Nx.logical_and(high_grad, large_scale)
+    # Split mask: high gradient AND large scale (for future split implementation)
+    _split_mask = Nx.logical_and(high_grad, large_scale)
 
     # Keep mask: NOT low opacity
     keep_mask = Nx.logical_not(low_opacity)
