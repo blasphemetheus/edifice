@@ -133,6 +133,17 @@ defmodule Edifice.Attention.GQA do
 
   Projects Q into num_heads groups and K/V into num_kv_heads groups,
   repeats K/V to match Q head count, then applies scaled dot-product attention.
+
+  ## Options
+
+    - `:hidden_size` - Hidden dimension
+    - `:num_heads` - Number of query heads
+    - `:num_kv_heads` - Number of key/value heads
+    - `:rope` - Apply standard RoPE (default: false)
+    - `:yarn` - Apply YaRN context extension (default: false)
+    - `:yarn_scale` - YaRN scale factor (default: 8)
+    - `:yarn_original_max_position` - Original context length (default: 2048)
+    - `:name` - Layer name prefix
   """
   @spec build_gqa_attention(Axon.t(), keyword()) :: Axon.t()
   def build_gqa_attention(input, opts) do
@@ -153,6 +164,9 @@ defmodule Edifice.Attention.GQA do
     v_proj = Axon.dense(input, kv_dim, name: "#{name}_v_proj")
 
     use_rope = Keyword.get(opts, :rope, false)
+    use_yarn = Keyword.get(opts, :yarn, false)
+    yarn_scale = Keyword.get(opts, :yarn_scale, 8)
+    yarn_original_max_position = Keyword.get(opts, :yarn_original_max_position, 2048)
 
     # Apply GQA attention
     output =
@@ -164,6 +178,9 @@ defmodule Edifice.Attention.GQA do
         num_kv_heads: num_kv_heads,
         head_dim: head_dim,
         rope: use_rope,
+        yarn: use_yarn,
+        yarn_scale: yarn_scale,
+        yarn_original_max_position: yarn_original_max_position,
         op_name: :gqa_attention
       )
 
@@ -177,6 +194,9 @@ defmodule Edifice.Attention.GQA do
     num_kv_heads = opts[:num_kv_heads]
     head_dim = opts[:head_dim]
     use_rope = opts[:rope] || false
+    use_yarn = opts[:yarn] || false
+    yarn_scale = opts[:yarn_scale] || 8
+    yarn_original_max_position = opts[:yarn_original_max_position] || 2048
 
     batch = Nx.axis_size(q, 0)
     seq_len = Nx.axis_size(q, 1)
@@ -201,20 +221,37 @@ defmodule Edifice.Attention.GQA do
       |> Nx.reshape({batch, seq_len, num_kv_heads, head_dim})
       |> Nx.transpose(axes: [0, 2, 1, 3])
 
-    # Apply RoPE to Q and K before repeating K for groups
+    # Apply RoPE or YaRN to Q and K before repeating K for groups
     {q, k} =
-      if use_rope do
-        # Flatten heads into batch for RoPE: [batch*heads, seq, head_dim]
-        q_flat = Nx.reshape(q, {batch * num_heads, seq_len, head_dim})
-        k_flat = Nx.reshape(k, {batch * num_kv_heads, seq_len, head_dim})
+      cond do
+        use_yarn ->
+          # Flatten heads into batch for YARN: [batch*heads, seq, head_dim]
+          q_flat = Nx.reshape(q, {batch * num_heads, seq_len, head_dim})
+          k_flat = Nx.reshape(k, {batch * num_kv_heads, seq_len, head_dim})
 
-        {q_rot, k_rot} = Edifice.Blocks.RoPE.apply_rotary(q_flat, k_flat)
+          {q_rot, k_rot} =
+            Edifice.Attention.YARN.apply_yarn(q_flat, k_flat,
+              scale: yarn_scale,
+              original_max_position: yarn_original_max_position
+            )
 
-        q_out = Nx.reshape(q_rot, {batch, num_heads, seq_len, head_dim})
-        k_out = Nx.reshape(k_rot, {batch, num_kv_heads, seq_len, head_dim})
-        {q_out, k_out}
-      else
-        {q, k}
+          q_out = Nx.reshape(q_rot, {batch, num_heads, seq_len, head_dim})
+          k_out = Nx.reshape(k_rot, {batch, num_kv_heads, seq_len, head_dim})
+          {q_out, k_out}
+
+        use_rope ->
+          # Flatten heads into batch for RoPE: [batch*heads, seq, head_dim]
+          q_flat = Nx.reshape(q, {batch * num_heads, seq_len, head_dim})
+          k_flat = Nx.reshape(k, {batch * num_kv_heads, seq_len, head_dim})
+
+          {q_rot, k_rot} = Edifice.Blocks.RoPE.apply_rotary(q_flat, k_flat)
+
+          q_out = Nx.reshape(q_rot, {batch, num_heads, seq_len, head_dim})
+          k_out = Nx.reshape(k_rot, {batch, num_kv_heads, seq_len, head_dim})
+          {q_out, k_out}
+
+        true ->
+          {q, k}
       end
 
     # Repeat K, V for each group of Q heads
