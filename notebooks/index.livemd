@@ -14,6 +14,13 @@ is self-contained — pick any one and start exploring.
 
 ### Getting Started
 
+* **[Edifice: A Guided Tour](demo_for_dad.livemd)** — A comprehensive
+  walkthrough of Edifice for newcomers. Covers classification, tabular data
+  (TabNet with feature importance), uncertainty estimation (MC Dropout), time
+  series forecasting (Mamba vs GRU), the architecture zoo, decision boundary
+  comparison, and generative models (VAE). Heavy on charts and plain-English
+  explanations — no ML background required.
+
 * **[Architecture Zoo](architecture_zoo.livemd)** — Tour of Edifice's 111+
   architectures. Build MLPs, transformers, Mamba, Hopfield networks, and more
   with the unified `Edifice.build(:name, opts)` API. No training — just see
