@@ -220,6 +220,8 @@ defmodule Edifice do
     lightning_attention: Edifice.Attention.LightningAttention,
     # Liquid
     liquid: Edifice.Liquid,
+    # Scientific
+    fno: Edifice.Scientific.FNO,
     # Neuromorphic
     snn: Edifice.Neuromorphic.SNN,
     ann2snn: Edifice.Neuromorphic.ANN2SNN
@@ -377,6 +379,7 @@ defmodule Edifice do
       multimodal: [:multimodal_mlp_fusion],
       rl: [:policy_value],
       liquid: [:liquid],
+      scientific: [:fno],
       neuromorphic: [:snn, :ann2snn]
     }
   end
