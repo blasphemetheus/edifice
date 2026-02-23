@@ -132,6 +132,7 @@ defmodule Edifice do
     rnope_swa: Edifice.Attention.RNoPESWA,
     yarn: Edifice.Attention.YARN,
     nsa: Edifice.Attention.NSA,
+    tmrope: Edifice.Attention.TMRoPE,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -346,7 +347,8 @@ defmodule Edifice do
         :softpick,
         :rnope_swa,
         :yarn,
-        :nsa
+        :nsa,
+        :tmrope
       ],
       vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :mamba_vision, :dino_v2, :metaformer, :caformer, :efficient_vit],
       generative: [
