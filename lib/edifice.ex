@@ -34,7 +34,7 @@ defmodule Edifice do
   | Energy | EBM, Hopfield, Neural ODE |
   | Probabilistic | Bayesian, MC Dropout, Evidential |
   | Memory | NTM, Memory Networks |
-  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, Distillation Head, QAT |
+  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, Distillation Head, QAT, Hybrid Builder |
   | Liquid | Liquid Neural Networks |
   | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA, Temporal JEPA |
   | Interpretability | Sparse Autoencoder, Transcoder |
@@ -98,6 +98,7 @@ defmodule Edifice do
     hyena_v2: Edifice.SSM.HyenaV2,
     hymba: Edifice.SSM.Hymba,
     ss_transformer: Edifice.SSM.SSTransformer,
+    hybrid_builder: Edifice.Meta.HybridBuilder,
     # Attention
     attention: Edifice.Attention.MultiHead,
     retnet: Edifice.Attention.RetNet,
@@ -125,6 +126,7 @@ defmodule Edifice do
     hgrn_v2: Edifice.Attention.HGRNv2,
     flash_linear_attention: Edifice.Attention.FlashLinearAttention,
     kda: Edifice.Attention.KDA,
+    gated_attention: Edifice.Attention.GatedAttention,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -153,6 +155,7 @@ defmodule Edifice do
     normalizing_flow: Edifice.Generative.NormalizingFlow,
     mmdit: Edifice.Generative.MMDiT,
     soflow: Edifice.Generative.SoFlow,
+    var: Edifice.Generative.VAR,
     # Graph
     gcn: Edifice.Graph.GCN,
     gat: Edifice.Graph.GAT,
@@ -315,7 +318,8 @@ defmodule Edifice do
         :gla_v2,
         :hgrn_v2,
         :flash_linear_attention,
-        :kda
+        :kda,
+        :gated_attention
       ],
       vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :mamba_vision],
       generative: [
@@ -332,7 +336,8 @@ defmodule Edifice do
         :gan,
         :normalizing_flow,
         :mmdit,
-        :soflow
+        :soflow,
+        :var
       ],
       graph: [:gcn, :gat, :graph_sage, :gin, :gin_v2, :pna, :graph_transformer, :schnet],
       sets: [:deep_sets, :pointnet],
@@ -357,7 +362,8 @@ defmodule Edifice do
         :mixture_of_tokenizers,
         :speculative_head,
         :distillation_head,
-        :qat
+        :qat,
+        :hybrid_builder
       ],
       contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg, :jepa, :temporal_jepa],
       interpretability: [:sparse_autoencoder, :transcoder],
