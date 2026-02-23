@@ -328,9 +328,9 @@ defmodule Edifice.Scientific.FNO do
     # x_ft: [batch, modes, channels, 2]
     # w_real, w_imag: [modes, channels, channels]
 
-    batch = Nx.axis_size(x_ft, 0)
-    modes_actual = Nx.axis_size(x_ft, 1)
-    channels = Nx.axis_size(x_ft, 2)
+    _batch = Nx.axis_size(x_ft, 0)
+    _modes_actual = Nx.axis_size(x_ft, 1)
+    _channels = Nx.axis_size(x_ft, 2)
 
     # Extract real and imaginary parts of input
     x_real = Nx.squeeze(Nx.slice_along_axis(x_ft, 0, 1, axis: 3), axes: [3])
