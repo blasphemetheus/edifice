@@ -41,28 +41,57 @@ IO.puts("Attached mode — using EXLA backend from project node")
 
 ## Introduction
 
-This notebook builds a **character-level language model** from scratch using
-Edifice's `DecoderOnly` transformer — the same architecture family behind
-GPT, LLaMA, and other modern LLMs.
+Have you ever wondered how ChatGPT, Claude, or other AI chatbots generate
+text? At their core, they all work the same way: **predict the next word
+(or character) given everything that came before it.** That's it. The magic
+is in doing this prediction really, really well.
+
+This notebook builds a tiny version of that system from scratch. We'll
+create a **character-level language model** — a program that reads text one
+letter at a time and learns to predict what letter comes next. It's like
+teaching a computer to play a never-ending game of "guess the next letter."
+
+We'll use Edifice's `DecoderOnly` transformer, which is a simplified version
+of the same architecture family that powers GPT, LLaMA, and Claude. Don't
+worry if those names don't mean anything yet — by the end of this notebook,
+you'll understand what's inside them.
 
 **What you'll learn:**
 
-* Turning raw text into numbers (character-level tokenization)
-* How a decoder-only transformer predicts the next character
-* Training a language model with cross-entropy loss
-* Generating text with temperature sampling (greedy vs creative)
-* Swapping the transformer backbone for Mamba in one line
+* **Tokenization** — How computers turn text (which they can't directly
+  understand) into numbers (which they can). We'll do this at the character
+  level: each letter, space, and punctuation mark gets its own number.
+* **The transformer architecture** — The type of neural network that
+  revolutionized AI. You'll build one and see how it processes sequences
+  of characters to make predictions.
+* **Training a language model** — How the model learns from examples by
+  comparing its predictions to the real answers and gradually improving.
+  We use a technique called *cross-entropy loss* to measure how wrong
+  the model's guesses are.
+* **Text generation** — How to use a trained model to write new text,
+  character by character. You'll experiment with *temperature*, a knob
+  that controls whether the model plays it safe or takes creative risks.
+* **Architecture swapping** — How Edifice lets you swap the entire
+  "brain" of the model (from a transformer to a completely different
+  architecture called Mamba) in a single line of code.
 
 We'll train on excerpts from two classic novels — Emily Bronte's
 *Wuthering Heights* (1847) and James Joyce's *Ulysses* (1922) — both
-in the public domain. The mix of gothic prose and modernist stream-of-consciousness
-gives the model interesting patterns to learn.
+in the public domain. Bronte's gothic prose and Joyce's modernist
+stream-of-consciousness give the model two very different writing styles
+to learn from.
 
 ## Text Corpus and Vocabulary
 
-We inline a few kilobytes of text directly in the notebook — enough to
-learn character-level patterns like common letter combinations, spacing,
-and punctuation without needing external files or downloads.
+A **corpus** is just a fancy word for "the collection of text we're going to
+learn from." In real-world AI, the corpus might be billions of web pages.
+Here, we use a few kilobytes of text pasted directly into the notebook — tiny
+by AI standards, but enough to see the learning process in action.
+
+The model will learn patterns like: after the letter "t", the letter "h" is
+very likely (as in "the", "that", "this"). After a period, a space and a
+capital letter usually follow. These are **character-level patterns** — the
+building blocks of language.
 
 ```elixir
 # Excerpts from public domain novels
@@ -157,8 +186,12 @@ IO.puts("Preview (first 200 chars):")
 IO.puts(String.slice(corpus, 0, 200) <> "...")
 ```
 
-Now let's build the vocabulary — a mapping from each unique character to an
-integer ID, and back.
+Now let's build the **vocabulary**. Neural networks can only work with numbers,
+not letters, so we need a way to convert between the two. We assign every
+unique character in our text a number (its **ID**). For example, `"a"` might
+become `0`, `"b"` becomes `1`, a space becomes `2`, and so on. We also build
+the reverse mapping so we can turn the model's numeric predictions back into
+readable text.
 
 ```elixir
 # Build character vocabulary from the corpus
@@ -173,7 +206,10 @@ IO.puts("Vocabulary size: #{vocab_size} unique characters")
 IO.puts("Characters: #{inspect(Enum.join(chars, ""))}")
 ```
 
-Let's visualize how often each character appears:
+Let's visualize how often each character appears. This is called a **frequency
+distribution** — it shows which characters the model will see most often during
+training. Spaces and common letters like "e", "t", "a" will dominate. Rare
+characters are harder for the model to learn because it sees fewer examples.
 
 ```elixir
 # Count character frequencies
@@ -201,12 +237,55 @@ Vl.new(width: 700, height: 300, title: "Character Frequency Distribution")
 
 ## Data Preparation
 
-We use a sliding window over the corpus: each input is `seq_len` characters,
-and the target is the **next character** (a classification over the vocabulary).
+Now we need to turn our raw text into training examples the model can learn
+from. The idea is simple: show the model a sequence of characters, and ask
+it to predict what comes next.
 
-Characters are one-hot encoded into vectors of size `vocab_size`, giving
-input shape `{batch, seq_len, vocab_size}`. The model's internal projection
-from `vocab_size` to `hidden_size` acts as a learned embedding.
+Imagine sliding a window across the text. If our window is 32 characters wide
+and we're looking at `"the stir of society. A perfect mi"`, the model's job is
+to predict the next character: `"s"` (from "misanthropist"). We slide the window
+forward by one character and repeat — thousands of times across the whole text.
+Each slide creates one training example.
+
+**One-hot encoding** is how we represent each character as numbers the model
+can process. You might wonder: we already gave each character a numeric ID
+(like `a=0`, `b=1`, `c=2`) — why not just feed those numbers to the model?
+
+The problem is that plain numbers imply a relationship that doesn't exist.
+If `a=0`, `b=1`, and `z=25`, the model would think "a" and "b" are very
+similar (only 1 apart) while "a" and "z" are very different (25 apart). But
+in language, "a" and "z" aren't any more or less related than "a" and "b" —
+they're just *different characters*.
+
+One-hot encoding fixes this. Instead of a single number, each character becomes
+a **vector** (a list of numbers) that's all zeros except for a single `1` at
+the position corresponding to that character's ID. Here's what it looks like
+with a tiny 5-character vocabulary:
+
+```
+Vocabulary: [a, b, c, d, e]
+
+"a" → [1, 0, 0, 0, 0]    ← the 1 is at position 0
+"b" → [0, 1, 0, 0, 0]    ← the 1 is at position 1
+"c" → [0, 0, 1, 0, 0]    ← the 1 is at position 2
+"e" → [0, 0, 0, 0, 1]    ← the 1 is at position 4
+```
+
+Now every character is exactly the same "distance" from every other character
+— they're all equally different. The model starts with no assumptions about
+which characters are related and learns those relationships during training
+(for example, it might learn that vowels behave similarly to each other).
+
+The name "one-hot" comes from hardware terminology — exactly **one** element
+is "hot" (set to 1), everything else is "cold" (set to 0).
+
+In our case, the vocabulary has ~50 characters, so each character becomes a
+vector of ~50 numbers. Yes, this is much larger than a single ID number, but
+it gives the model a much better starting point for learning.
+
+The final input shape is `{batch, seq_len, vocab_size}` — that's a 3D block
+of numbers where `batch` is how many examples we process at once, `seq_len`
+is the window width, and `vocab_size` is the one-hot vector length.
 
 ```elixir
 seq_len = 32
@@ -255,7 +334,15 @@ IO.puts("x_onehot shape: #{inspect(Nx.shape(x_onehot))}  (batch, seq_len, vocab_
 IO.puts("y_ids shape: #{inspect(Nx.shape(y_ids))}  (batch,) — integer class labels")
 ```
 
-Now split into train/test sets and batch for training:
+Now we split the data into **training** and **test** sets. This is a fundamental
+practice in machine learning: we train the model on 90% of the data, then check
+how well it does on the remaining 10% it has never seen. If the model performs
+well on the test set, it has learned *general* patterns rather than just memorizing
+the training data.
+
+We also group examples into **batches** of 64. Instead of showing the model one
+example at a time (slow), we show it 64 examples simultaneously (fast). Modern
+hardware like GPUs is designed to process many examples in parallel.
 
 ```elixir
 # 90/10 train/test split
@@ -291,16 +378,41 @@ IO.puts("Batch size: #{batch_size}")
 
 ## Build the Transformer
 
-We use Edifice's `DecoderOnly` architecture — a GPT-style transformer with
-modern techniques: Grouped Query Attention (GQA), Rotary Position Embeddings
-(RoPE), SwiGLU feed-forward, and RMSNorm.
+Time to build the actual neural network. We use a **decoder-only transformer**,
+which is the architecture behind GPT, LLaMA, and most modern language models.
+Let's break down what that means:
 
-The model is intentionally small to train quickly on CPU:
+A **transformer** is a type of neural network specifically designed to process
+sequences (like text). Its key innovation is **attention** — the ability to
+look at all positions in the input simultaneously and decide which parts are
+most relevant to the current prediction. Unlike older approaches that read
+text strictly left-to-right, attention lets the model connect distant parts
+of the input (e.g., linking a pronoun back to the noun it refers to).
 
-* `hidden_size: 64` — internal representation dimension
-* `num_layers: 2` — two transformer blocks
-* `num_heads: 4` with `num_kv_heads: 2` — grouped query attention
-* `embed_dim: vocab_size` — one-hot input, projected internally
+**"Decoder-only"** means the model is designed for generation: given a sequence,
+predict what comes next. (The alternative, "encoder-decoder", is used for tasks
+like translation where you have a full input and need to produce a full output.)
+
+Inside our transformer, several modern techniques work together:
+
+* **Grouped Query Attention (GQA)** — A more memory-efficient version of the
+  standard attention mechanism. Instead of giving every "reader" (attention head)
+  its own copy of the input summary, groups of readers share summaries.
+* **Rotary Position Embeddings (RoPE)** — Tells the model *where* each character
+  is in the sequence. Without this, the model couldn't tell "abc" from "cab".
+* **SwiGLU** — The type of "thinking layer" between attention steps. It's the part
+  where the model actually transforms what it learned from attention into useful
+  representations. (SwiGLU is a specific activation function that works better
+  than simpler alternatives like ReLU.)
+* **RMSNorm** — Keeps the numbers flowing through the network in a reasonable
+  range, preventing the model from becoming numerically unstable during training.
+
+Our model is intentionally tiny so it trains in minutes, not hours:
+
+* `hidden_size: 64` — The model thinks in 64-dimensional space (GPT-3 uses 12,288)
+* `num_layers: 2` — Two transformer blocks stacked (GPT-3 has 96)
+* `num_heads: 4` with `num_kv_heads: 2` — 4 attention readers sharing 2 key/value pairs
+* `embed_dim: vocab_size` — The one-hot character vectors are projected down to `hidden_size` internally
 
 ```elixir
 transformer_model =
@@ -322,9 +434,31 @@ IO.puts("Output: {batch, #{vocab_size}} (logits over vocabulary)")
 
 ## Training
 
-We train with cross-entropy loss (categorical classification over the
-vocabulary) and Adam optimizer. The model learns to predict which character
-comes next given the preceding `seq_len` characters.
+Training is how the model learns. Here's the cycle, repeated thousands of times:
+
+1. **Forward pass**: Feed a batch of character sequences into the model. It
+   outputs a probability distribution over the vocabulary — essentially saying
+   "I think there's a 30% chance the next character is 'e', 15% chance it's
+   't', 2% chance it's 'z'..." for each example in the batch.
+
+2. **Compute loss**: Compare the model's predictions to the actual answers using
+   **cross-entropy loss**. This is a way of measuring "how surprised was the
+   model by the correct answer?" If the model gave 90% probability to the right
+   character, the loss is low. If it only gave 1%, the loss is high. Lower loss
+   = better predictions.
+
+3. **Backward pass**: Calculate how each weight (number) in the model contributed
+   to the error. This uses calculus (specifically, the chain rule) and is called
+   **backpropagation**.
+
+4. **Update weights**: Nudge each weight slightly in the direction that would
+   reduce the loss. The **Adam optimizer** is the algorithm that decides exactly
+   how much to nudge — it's smarter than a simple "move a fixed amount" because
+   it adapts the step size based on each weight's history.
+
+One full pass through all the training data is called an **epoch**. We train
+for 10 epochs, meaning the model sees every example 10 times. With each epoch,
+it should get a little better at predicting the next character.
 
 ```elixir
 defmodule LMTrainer do
@@ -393,15 +527,40 @@ IO.puts("Test accuracy: #{Float.round(transformer_acc * 100, 1)}%")
 
 ## Text Generation
 
-Now the fun part — we feed the model a seed string and let it predict
-one character at a time, appending each prediction and sliding the window
-forward. This is **autoregressive generation**.
+Now the fun part — making the model write! The process is called
+**autoregressive generation**, and it works like this:
 
-**Temperature** controls randomness:
+1. Start with a **seed** — a short piece of text like `"the morning "`.
+2. Feed the seed into the model. It outputs probabilities for every character
+   in the vocabulary (e.g., "60% chance the next character is 'p', 10% 'l'...").
+3. Pick a character from those probabilities (more on *how* in a moment).
+4. Append that character to the text.
+5. Slide the window forward by one and repeat from step 2.
 
-* **Low (0.3)**: Conservative, repetitive but coherent
-* **Medium (0.8)**: Balanced creativity
-* **High (1.5)**: Wild and surprising, more errors
+Each new character is influenced by all the characters before it (up to the
+window size). The model is literally writing one letter at a time, just like
+autocomplete on your phone but at the character level.
+
+**Temperature** is the knob that controls how the model picks from its
+probability distribution. Think of it like a confidence dial:
+
+* **Temperature = 0 (greedy)**: Always pick the single most likely character.
+  This is the most predictable — the model always makes its "safest" guess.
+  It often leads to repetitive loops because the model keeps making the same
+  safe choices.
+* **Temperature = 0.5 (conservative)**: Mostly pick likely characters, but
+  occasionally take a small risk. More varied than greedy, still fairly coherent.
+* **Temperature = 0.8 (balanced)**: A good middle ground. The model is willing
+  to explore less obvious choices, leading to more interesting (but sometimes
+  messier) output.
+* **Temperature = 1.2 (creative)**: The model spreads its bets more evenly
+  across characters. You get surprising combinations, invented word-like
+  structures, and more chaos. Fun to read, but less "correct."
+
+Mathematically, temperature divides the model's raw output scores (called
+**logits**) before converting them to probabilities. Dividing by a small number
+makes the highest-scoring option even more dominant; dividing by a large number
+flattens the differences out.
 
 ```elixir
 defmodule TextGenerator do
@@ -476,9 +635,10 @@ defmodule TextGenerator do
 end
 ```
 
-Let's generate text at different temperatures. Each character requires a
-full forward pass, so generating 200 characters x 4 temperatures takes
-a minute or two on CPU.
+Let's generate text at different temperatures and see the difference in practice.
+Each character requires a full forward pass through the entire model, so generating
+100 characters at 4 different temperatures takes a minute or two on CPU. Watch how
+the output changes from repetitive (low temperature) to chaotic (high temperature).
 
 ```elixir
 seed = "the morning "
@@ -508,9 +668,22 @@ end
 
 ## Architecture Swap: Mamba
 
-One of Edifice's strengths is architecture-agnostic experimentation.
-Let's swap the transformer backbone for **Mamba** — a selective state-space
-model — and compare. Same data, same training loop, one-line model change.
+So far we've used a **transformer** — but it's not the only game in town.
+**Mamba** is a completely different type of neural network called a
+**state-space model (SSM)**. While transformers use attention (looking at
+all positions at once), Mamba processes the sequence more like reading a
+book page by page — maintaining a compressed "memory" (called **state**)
+that it updates as it reads each new character.
+
+The tradeoff: transformers are better at connecting distant parts of a
+sequence (because attention can look everywhere at once), but Mamba is
+more efficient on very long sequences (because its memory is a fixed size
+no matter how long the input gets).
+
+One of Edifice's strengths is making architecture swaps trivial. We change
+exactly one thing — `:decoder_only` becomes `:mamba` — and keep everything
+else identical: same data, same training loop, same evaluation. This lets
+us do a fair comparison.
 
 ```elixir
 mamba_model =
@@ -552,7 +725,8 @@ IO.puts("  Mamba           #{Float.round(mamba_loss, 4) |> to_string() |> String
 IO.puts(String.duplicate("=", 50))
 ```
 
-Let's see what Mamba generates (another minute or two on CPU):
+Let's see what Mamba generates and compare it side-by-side with the transformer.
+Do you notice any differences in style or quality? (Another minute or two on CPU.)
 
 ```elixir
 IO.puts("Seed: \"#{seed}\"\n")
@@ -581,36 +755,68 @@ end
 
 ## What's Next?
 
-**Why the generated text looks like gibberish:** This model learns character-level
-patterns — common letter combinations, word-like structures, spacing — from just
-~4KB of text with a 32-character context window. That's enough to learn *local*
-patterns (letter frequencies, common bigrams like "th", "he", "in") but not
-sentence structure or meaning. For comparison, GPT-2 trained on 40GB of text
-with 1024-token context and 117M parameters.
+### Why does the generated text look like gibberish?
 
-The hierarchy of what matters most for better text:
+Don't be disappointed if the output looks like nonsense! This is completely
+expected, and understanding *why* is just as educational as the model itself.
 
-1. **Data** (biggest impact): 4KB is tiny. Even 1-2MB of Project Gutenberg text
-   would produce recognizable English sentences. The model can only learn patterns
-   it sees enough examples of.
-2. **Tokenization**: Character-level is the hardest way to learn language — each
-   word is 4-8 separate predictions. BPE/SentencePiece tokenizers compress common
-   words to single tokens, giving the model much more context per position.
-3. **Sequence length**: 32 characters ≈ 5-6 words of context. Real models use
-   512-4096+ tokens. Short context means no sentence-level structure.
-4. **Model size**: Our ~50K parameters vs GPT-2's 117M. But without enough data,
-   a bigger model just memorizes faster — it doesn't generalize better.
+Our model is learning **character-level patterns** — things like "after 't',
+'h' is common" and "spaces usually come after periods." These are real
+statistical patterns in English, and if you look carefully at the output,
+you'll likely see fragments that look almost like real words. That's the
+model learning!
 
-This notebook demonstrates the **mechanics** — tokenization, transformer
-architecture, autoregressive generation, architecture swapping — not
-production-quality text generation. To go further:
+But it can't learn grammar, meaning, or even complete words reliably.
+Here's why, ranked by importance:
 
-* **More data**: Feed in full books via `File.read!/1` — 1-2MB is enough
-  for recognizable English with this architecture.
-* **Real tokenizer**: BPE/SentencePiece for much more efficient learning.
-* **Longer context**: `seq_len: 128` or `256` for sentence-level patterns.
-* **Bigger model**: `hidden_size: 128`, `num_layers: 4` with more data.
-* **Try more architectures**: Swap `:mamba` for `:retnet`, `:rwkv`, `:hyena`,
-  or any of Edifice's 30+ sequence models — same training loop.
-* **LoRA fine-tuning**: See the planned LoRA notebook for parameter-efficient
-  adaptation of pretrained models.
+1. **Data size** (biggest factor): Our corpus is ~4KB — roughly one page of
+   text. That's like trying to learn English from a single paragraph. The model
+   can only learn patterns it sees enough examples of. Real language models
+   train on gigabytes or terabytes of text. Even 1-2MB of text (a single novel)
+   would produce noticeably more English-like output with this same architecture.
+
+2. **Tokenization granularity**: We're predicting one *character* at a time.
+   The word "the" requires three correct predictions in a row. Real models
+   use **subword tokenizers** (like BPE or SentencePiece) that compress common
+   words into single tokens — so "the" is one prediction, not three. This
+   gives the model much more effective context per position.
+
+3. **Context window**: Our window is 32 characters — about 5-6 words. The
+   model literally cannot "see" anything further back than that. It's like
+   trying to write a sentence when you can only remember the last five words.
+   Production models use context windows of 512 to 128,000+ tokens.
+
+4. **Model size**: Our model has roughly 50,000 learnable parameters (the
+   numbers it adjusts during training). GPT-2 has 117 million. GPT-4 is
+   rumored to have over a trillion. But here's an important insight: a bigger
+   model without more data just memorizes faster — it doesn't truly learn
+   better. Data and model size need to grow together.
+
+### The point of this notebook
+
+This notebook teaches the **mechanics** — how text becomes numbers, how a
+transformer processes sequences, how training works, and how generation
+happens. These are the exact same steps used in production AI systems, just
+at a much smaller scale. Everything here scales up: more data, bigger model,
+better tokenizer, longer context, and you get increasingly coherent text
+all the way up to ChatGPT-level fluency.
+
+### Ideas for going further
+
+* **More data**: Load a full book with `File.read!/1` — even one novel
+  (~500KB) makes a dramatic difference. Project Gutenberg has thousands
+  of free books.
+* **Better tokenization**: Move from characters to subword tokens (BPE or
+  SentencePiece). This is the single biggest quality improvement for the
+  effort involved.
+* **Longer context**: Try `seq_len: 128` or `256` to capture sentence-level
+  structure and longer-range dependencies.
+* **Bigger model**: `hidden_size: 128`, `num_layers: 4` — but only with
+  more data to match. More parameters + same tiny corpus = memorization.
+* **Try more architectures**: Replace `:mamba` with `:retnet`, `:rwkv`,
+  `:hyena`, `:xlstm`, or any of Edifice's 30+ sequence models — the
+  training loop stays identical.
+* **LoRA fine-tuning**: See the planned LoRA notebook for how to adapt
+  a pretrained model to a new task by only training a tiny fraction of
+  its weights — a technique that makes modern AI practical on consumer
+  hardware.
