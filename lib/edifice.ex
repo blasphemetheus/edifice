@@ -43,7 +43,7 @@ defmodule Edifice do
   | RL | PolicyValue |
   | Neuromorphic | SNN, ANN2SNN |
   | Inference | Medusa |
-  | Robotics | ACT |
+  | Robotics | ACT, OpenVLA |
   | Audio | SoundStorm, EnCodec, VALL-E |
   """
 
@@ -256,6 +256,7 @@ defmodule Edifice do
     medusa: Edifice.Inference.Medusa,
     # Robotics
     act: Edifice.Robotics.ACT,
+    openvla: Edifice.Robotics.OpenVLA,
     # Audio
     soundstorm: Edifice.Audio.SoundStorm,
     encodec: Edifice.Audio.EnCodec,
@@ -431,7 +432,7 @@ defmodule Edifice do
       scientific: [:fno],
       neuromorphic: [:snn, :ann2snn],
       inference: [:medusa],
-      robotics: [:act],
+      robotics: [:act, :openvla],
       audio: [:soundstorm, :encodec, :valle]
     }
   end
