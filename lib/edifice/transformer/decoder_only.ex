@@ -63,6 +63,7 @@ defmodule Edifice.Transformer.DecoderOnly do
           | {:num_kv_heads, pos_integer()}
           | {:num_layers, pos_integer()}
           | {:use_rope, boolean()}
+          | {:interleave_rope, boolean()}
           | {:dropout, float()}
           | {:window_size, pos_integer()}
 
@@ -77,6 +78,9 @@ defmodule Edifice.Transformer.DecoderOnly do
     - `:num_kv_heads` - Number of key/value heads for GQA (default: 2)
     - `:num_layers` - Number of decoder blocks (default: 4)
     - `:use_rope` - Apply Rotary Position Embeddings (default: true)
+    - `:interleave_rope` - When true, odd layers (1,3,5) use RoPE and even layers (2,4,6)
+      use NoPE (content-only attention). Overrides `:use_rope` on a per-layer basis.
+      This is the iRoPE pattern from Gemini 2.0. (default: false)
     - `:dropout` - Dropout rate (default: 0.1)
     - `:window_size` - Expected sequence length for JIT optimization (default: 60)
 
@@ -91,6 +95,7 @@ defmodule Edifice.Transformer.DecoderOnly do
     num_kv_heads = Keyword.get(opts, :num_kv_heads, @default_num_kv_heads)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     use_rope = Keyword.get(opts, :use_rope, true)
+    interleave_rope = Keyword.get(opts, :interleave_rope, false)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
 
     ModelBuilder.build_sequence_model(
@@ -98,14 +103,23 @@ defmodule Edifice.Transformer.DecoderOnly do
         hidden_size: hidden_size,
         num_layers: num_layers,
         block_builder: fn input, block_opts ->
-          name = "decoder_block_#{block_opts[:layer_idx]}"
+          layer_idx = block_opts[:layer_idx]
+          name = "decoder_block_#{layer_idx}"
+
+          # iRoPE: odd layers get RoPE, even layers get NoPE (content-only)
+          apply_rope =
+            if interleave_rope do
+              rem(layer_idx, 2) == 1
+            else
+              use_rope
+            end
 
           attn_fn = fn x, attn_name ->
             GQA.build_gqa_attention(x,
               hidden_size: hidden_size,
               num_heads: num_heads,
               num_kv_heads: num_kv_heads,
-              rope: use_rope,
+              rope: apply_rope,
               name: attn_name
             )
           end

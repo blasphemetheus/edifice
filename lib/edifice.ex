@@ -26,7 +26,7 @@ defmodule Edifice do
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
   | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, TTT, Titans, Reservoir (ESN) |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba |
-  | Attention | Multi-Head, GQA, MLA, DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, HGRN, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention |
+  | Attention | Multi-Head, GQA, MLA, DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, HGRN, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, Latent Diffusion, Consistency, Score SDE, Flow Matching, Normalizing Flow |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
@@ -36,7 +36,10 @@ defmodule Edifice do
   | Memory | NTM, Memory Networks |
   | Meta | MoE, MoE v2, Switch MoE, Soft MoE, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead |
   | Liquid | Liquid Neural Networks |
-  | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA |
+  | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA, Temporal JEPA |
+  | Interpretability | Sparse Autoencoder, Transcoder |
+  | World Model | World Model |
+  | RL | PolicyValue |
   | Neuromorphic | SNN, ANN2SNN |
   """
 
@@ -177,6 +180,16 @@ defmodule Edifice do
     mae: Edifice.Contrastive.MAE,
     vicreg: Edifice.Contrastive.VICReg,
     jepa: Edifice.Contrastive.JEPA,
+    temporal_jepa: Edifice.Contrastive.TemporalJEPA,
+    # Interpretability
+    sparse_autoencoder: Edifice.Interpretability.SparseAutoencoder,
+    transcoder: Edifice.Interpretability.Transcoder,
+    # World Model
+    world_model: Edifice.WorldModel.WorldModel,
+    # RL
+    policy_value: Edifice.RL.PolicyValue,
+    # Lightning Attention
+    lightning_attention: Edifice.Attention.LightningAttention,
     # Liquid
     liquid: Edifice.Liquid,
     # Neuromorphic
@@ -271,7 +284,8 @@ defmodule Edifice do
         :diff_transformer,
         :hawk,
         :retnet_v2,
-        :megalodon
+        :megalodon,
+        :lightning_attention
       ],
       vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf],
       generative: [
@@ -307,7 +321,10 @@ defmodule Edifice do
         :moe_v2,
         :dora
       ],
-      contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg, :jepa],
+      contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg, :jepa, :temporal_jepa],
+      interpretability: [:sparse_autoencoder, :transcoder],
+      world_model: [:world_model],
+      rl: [:policy_value],
       liquid: [:liquid],
       neuromorphic: [:snn, :ann2snn]
     }
@@ -349,7 +366,9 @@ defmodule Edifice do
     - `:barlow_twins` — `{backbone, projection_head}`
     - `:vicreg` — `{backbone, projection_head}`
     - `:jepa` — `{context_encoder, predictor}`
+    - `:temporal_jepa` — `{context_encoder, predictor}`
     - `:mae` — `{encoder, decoder}`
+    - `:world_model` — `{encoder, dynamics, reward_head}` (or 4-tuple with decoder)
   """
   @spec build(atom(), keyword()) :: Axon.t() | tuple()
   def build(name, opts \\ []) do
