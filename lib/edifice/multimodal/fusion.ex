@@ -75,6 +75,21 @@ defmodule Edifice.Multimodal.Fusion do
   @default_num_visual_tokens 196
 
   # ============================================================================
+  # Registry-Compatible Build Function
+  # ============================================================================
+
+  @doc """
+  Build a multimodal fusion model (MLP projection).
+
+  This is the registry-compatible entry point that delegates to `build_mlp_projection/1`.
+
+  ## Options
+  See `build_mlp_projection/1` for available options.
+  """
+  @spec build(keyword()) :: Axon.t()
+  def build(opts \\ []), do: build_mlp_projection(opts)
+
+  # ============================================================================
   # MLP Projection Fusion (LLaVA-style)
   # ============================================================================
 
