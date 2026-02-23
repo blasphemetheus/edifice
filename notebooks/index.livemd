@@ -1,0 +1,56 @@
+# Edifice Notebook Index
+
+## Overview
+
+These Livebook notebooks demonstrate [Edifice](https://github.com/blasphemetheus/edifice)'s
+neural network architectures through interactive, runnable examples. Each notebook
+is self-contained — pick any one and start exploring.
+
+**Setup**: Each notebook has two setup cells — use "Standalone" for a normal
+`livebook server`, or "Attached to project" if you launched via `./scripts/livebook.sh`
+(recommended for GPU/CUDA).
+
+## Notebooks
+
+### Getting Started
+
+* **[Architecture Zoo](architecture_zoo.livemd)** — Tour of Edifice's 111+
+  architectures. Build MLPs, transformers, Mamba, Hopfield networks, and more
+  with the unified `Edifice.build(:name, opts)` API. No training — just see
+  what each architecture looks like and what shapes it produces.
+
+* **[Training an MLP](training_mlp.livemd)** — Your first end-to-end training
+  loop. Train an MLP and TabNet on a 3-class classification task using
+  `Axon.Loop.trainer`. Covers data generation, training, and evaluation.
+
+### Sequence and Language
+
+* **[Sequence Modeling](sequence_modeling.livemd)** — Compare Mamba, GRU, and
+  GatedSSM on sine wave prediction. Shows how different sequence architectures
+  handle temporal patterns, with overlay plots of predictions vs ground truth.
+
+* **[Small Language Model](small_language_model.livemd)** — Build a character-level
+  language model from scratch. Trains a GPT-style DecoderOnly transformer and
+  Mamba on novel excerpts, with autoregressive text generation at different
+  temperatures. Includes architecture swap comparison.
+
+### Graphs and Structure
+
+* **[Graph Classification](graph_classification.livemd)** — Compare GCN, GAT, and
+  GIN on synthetic graph classification. Demonstrates how different graph neural
+  networks learn from node features and graph topology, with structure
+  visualizations and accuracy comparison.
+
+### Generative Models
+
+* **[Generative Models (VAE)](generative_models.livemd)** — Train a Variational
+  Autoencoder on 2D crescent moon data. Covers the VAE loss (reconstruction +
+  KL divergence), the beta trade-off, latent space visualization, and generating
+  new samples by decoding random latent points.
+
+### Comparison and Benchmarking
+
+* **[Architecture Comparison](architecture_comparison.livemd)** — Head-to-head
+  comparison of 8 architectures (MLP, TabNet, Bayesian, MCDropout, EBM, Hopfield,
+  SNN, ANN2SNN) on 2D classification. Includes accuracy table, timing comparison,
+  and decision boundary visualizations.
