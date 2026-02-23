@@ -145,6 +145,7 @@ defmodule Edifice do
     dino_v2: Edifice.Vision.DINOv2,
     metaformer: Edifice.Vision.MetaFormer,
     caformer: {Edifice.Vision.MetaFormer, [variant: :caformer]},
+    efficient_vit: Edifice.Vision.EfficientViT,
     # Multimodal
     multimodal_mlp_fusion: Edifice.Multimodal.Fusion,
     # Generative
@@ -340,7 +341,7 @@ defmodule Edifice do
         :rnope_swa,
         :yarn
       ],
-      vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :mamba_vision, :dino_v2, :metaformer, :caformer],
+      vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :mamba_vision, :dino_v2, :metaformer, :caformer, :efficient_vit],
       generative: [
         :diffusion,
         :ddim,
