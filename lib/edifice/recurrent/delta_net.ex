@@ -169,6 +169,27 @@ defmodule Edifice.Recurrent.DeltaNet do
     )
   end
 
+  @doc """
+  Build a single DeltaNet block that can be used as a backbone layer
+  in hybrid architectures.
+
+  Takes input of shape [batch, seq_len, hidden_size] and returns the same shape.
+  Includes pre-norm and residual connection.
+
+  ## Options
+    - `:hidden_size` - Hidden dimension (default: 256)
+    - `:num_heads` - Number of heads (default: 4)
+    - `:name` - Layer name prefix (default: "delta_net_block")
+  """
+  @spec build_block(Axon.t(), keyword()) :: Axon.t()
+  def build_block(input, opts \\ []) do
+    hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
+    num_heads = Keyword.get(opts, :num_heads, default_num_heads())
+    name = Keyword.get(opts, :name, "delta_net_block")
+
+    build_delta_net_layer(input, hidden_size, num_heads, name)
+  end
+
   # ============================================================================
   # DeltaNet Layer
   # ============================================================================

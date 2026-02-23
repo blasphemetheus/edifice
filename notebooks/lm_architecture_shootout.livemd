@@ -1,0 +1,865 @@
+# LM Architecture Shootout
+
+## Setup
+
+**Choose one of the two cells below** depending on how you started Livebook.
+
+### Standalone (default)
+
+Use this if you started Livebook normally (`livebook server`).
+Uncomment the EXLA lines for GPU acceleration.
+
+```elixir
+edifice_dep =
+  if File.dir?(Path.expand("~/edifice")) do
+    {:edifice, path: Path.expand("~/edifice")}
+  else
+    {:edifice, "~> 0.2.0"}
+  end
+
+Mix.install([
+  edifice_dep,
+  # {:exla, "~> 0.10"},
+  {:kino_vega_lite, "~> 0.1"},
+  {:kino, "~> 0.14"}
+])
+
+# Nx.global_default_backend(EXLA.Backend)
+alias VegaLite, as: Vl
+```
+
+### Attached to project (recommended for Nix/CUDA)
+
+Use this if you started Livebook via `./scripts/livebook.sh`.
+See the Architecture Zoo notebook for full setup instructions.
+
+```elixir
+Nx.global_default_backend(EXLA.Backend)
+alias VegaLite, as: Vl
+IO.puts("Attached mode — using EXLA backend from project node")
+```
+
+## Introduction
+
+Every language model — from the tiny one in this notebook to the largest
+commercial chatbots — works the same way at its core: **predict the next
+token given everything that came before it.** The differences are all in
+*how* that prediction is computed. A transformer uses attention to look at
+every previous position simultaneously. A state-space model maintains a
+compressed memory that it updates as it reads. A recurrent network passes
+a hidden state forward step by step.
+
+This notebook puts **8 architectures from 4 different families** through
+the same gauntlet: same corpus, same tokenization, same hyperparameters,
+same training loop. The only variable is the architecture itself. This
+lets us make a fair comparison and see how different mathematical
+mechanisms affect learning speed, final quality, and generation style.
+
+**What you'll learn:**
+
+* How different architecture families (transformer, SSM, recurrent,
+  hybrid, linear attention) approach the same prediction task
+* How to measure language model quality with **perplexity** — the
+  standard metric that tells you "how surprised is the model?"
+* That architecture choice matters even at tiny scale — some designs
+  learn faster, some achieve lower loss, some generate more coherent text
+* How Edifice makes architecture swaps trivial — change one atom and
+  the entire model changes while everything else stays identical
+
+**The 8 contenders:**
+
+| Family      | Architecture | Key Mechanism                    |
+| ----------- | ------------ | -------------------------------- |
+| Transformer | Decoder-Only | Multi-head self-attention        |
+| SSM         | Mamba        | Selective state space            |
+| SSM         | S4           | Structured state space           |
+| Recurrent   | GRU          | Gated recurrence                 |
+| Recurrent   | xLSTM        | Extended LSTM with matrix memory |
+| Recurrent   | MinGRU       | Minimal gating                   |
+| Hybrid      | Griffin      | RG-LRU + local attention         |
+| Linear Attn | RWKV         | Linear attention (WKV kernel)    |
+
+## Text Corpus and Vocabulary
+
+We use excerpts from two classic novels — Lewis Carroll's *Alice in
+Wonderland* (1865) and Emily Bronte's *Wuthering Heights* (1847) — both
+firmly in the public domain. Carroll's playful, whimsical prose and
+Bronte's gothic atmospheric style give the models two distinct registers
+to learn from.
+
+```elixir
+# Excerpts from public domain novels
+
+alice = """
+Alice was beginning to get very tired of sitting by her sister on the
+bank and of having nothing to do. Once or twice she had peeped into the
+book her sister was reading but it had no pictures or conversations in
+it and what is the use of a book thought Alice without pictures or
+conversations. So she was considering in her own mind as well as she
+could for the hot day made her feel very sleepy and stupid whether the
+pleasure of making a daisy chain would be worth the trouble of getting
+up and picking the daisies when suddenly a White Rabbit with pink eyes
+ran close by her.
+
+There was nothing so very remarkable in that nor did Alice think it so
+very much out of the way to hear the Rabbit say to itself Oh dear Oh
+dear I shall be late. When she thought it over afterwards it occurred to
+her that she ought to have wondered at this but at the time it all
+seemed quite natural. But when the Rabbit actually took a watch out of
+its waistcoat pocket and looked at it and then hurried on Alice started
+to her feet for it flashed across her mind that she had never before
+seen a rabbit with either a waistcoat pocket or a watch to take out of
+it and burning with curiosity she ran across the field after it and
+fortunately was just in time to see it pop down a large rabbit hole
+under the hedge. In another moment down went Alice after it never once
+considering how in the world she was to get out again.
+
+The rabbit hole went straight on like a tunnel for some way and then
+dipped suddenly down so suddenly that Alice had not a moment to think
+about stopping herself before she found herself falling down a very
+deep well. Either the well was very deep or she fell very slowly for
+she had plenty of time as she went down to look about her and to
+wonder what was going to happen next.
+
+First she tried to look down and make out what she was coming to but it
+was too dark to see anything. Then she looked at the sides of the well
+and noticed that they were filled with cupboards and book shelves. Here
+and there she saw maps and pictures hung upon pegs. She took down a jar
+from one of the shelves as she passed. It was labelled Orange Marmalade
+but to her great disappointment it was empty. She did not like to drop
+the jar for fear of someone underneath so she managed to put it into
+one of the cupboards as she fell past it.
+
+Down down down. Would the fall never come to an end. I wonder how many
+miles I have fallen by this time she said aloud. I must be getting
+somewhere near the centre of the earth. Let me see that would be about
+four thousand miles down I think. Yes that is about the right distance
+but then I wonder what latitude or longitude I have got to. Alice had
+no idea what latitude was or longitude either but thought they were
+nice grand words to say.
+
+Presently she began again. I wonder if I shall fall right through the
+earth. How funny it will be to come out among the people that walk with
+their heads downward. The Antipathies I think. She was rather glad
+there was no one listening this time as it did not sound at all the
+right word. But I shall have to ask them what the name of the country
+is you know. Please Ma am is this New Zealand or Australia. And she
+tried to curtsey as she spoke.
+"""
+
+wuthering_heights = """
+I have just returned from a visit to my landlord the solitary neighbour
+that I shall be troubled with. This is certainly a beautiful country.
+In all England I do not believe that I could have fixed on a situation
+so completely removed from the stir of society. A perfect misanthropist
+heaven and Mr Heathcliff and I are such a suitable pair to divide the
+desolation between us. A capital fellow. He little imagined how my
+heart warmed towards him when I beheld his black eyes withdraw so
+suspiciously under their brows as I rode up and when his fingers
+sheltered themselves with a jealous resolution still further in his
+waistcoat as I announced my name.
+
+Mr Heathcliff I said. A nod was the answer. Mr Lockwood your new
+tenant sir. I do myself the honour of calling as soon as possible
+after my arrival to express the hope that I have not inconvenienced
+you by my perseverance in soliciting the occupation of Thrushcross
+Grange. I heard yesterday you had some thoughts.
+
+Thrushcross Grange is my own sir she interrupted wincing. I should
+not allow anyone to inconvenience me if I could hinder it. Walk in.
+
+The walk in was uttered with closed teeth and expressed the sentiment
+to leave at once. Even the gate over which he leant manifested no
+sympathising movement to the words and I think that circumstance
+determined me to accept the invitation. I felt interested in a man
+who seemed more exaggeratedly reserved than myself.
+
+When he saw my horse breast the swollen beck that lay across our path
+he spoke quickly. Go round with your beast. There was no other entrance
+than to obey. I dismounted and leading my horse made my way towards
+the dwelling. It was a strange sight at that hour. The front of the
+house showed a solid mass of shadow above the level of the ground.
+
+The narrow windows are deeply set in the wall and the corners defended
+with large jutting stones. Before passing the threshold I paused to
+admire a quantity of grotesque carving lavished over the front and
+especially about the principal door above which among a wilderness of
+crumbling griffins and shameless little boys I detected the date 1500
+and the name Hareton Earnshaw.
+
+I would have made a few comments and requested a short history of the
+place from the surly owner but his attitude at the door appeared to
+demand my speedy entrance or complete departure and I had no desire
+to aggravate his impatience previous to inspecting the penetralium.
+"""
+
+corpus = alice <> "\n" <> wuthering_heights
+
+IO.puts("Corpus size: #{String.length(corpus)} characters")
+IO.puts("Preview (first 200 chars):")
+IO.puts(String.slice(corpus, 0, 200) <> "...")
+```
+
+Now we build the **vocabulary** — a mapping from every unique character in
+our text to a numeric ID and back. Neural networks only understand numbers,
+so this translation layer is essential.
+
+```elixir
+# Build character vocabulary from the corpus
+chars = corpus |> String.graphemes() |> Enum.uniq() |> Enum.sort()
+vocab_size = length(chars)
+
+# Create bidirectional mappings: character <-> integer ID
+char_to_id = chars |> Enum.with_index() |> Map.new()
+id_to_char = chars |> Enum.with_index() |> Map.new(fn {ch, i} -> {i, ch} end)
+
+IO.puts("Vocabulary size: #{vocab_size} unique characters")
+IO.puts("Characters: #{inspect(Enum.join(chars, ""))}")
+```
+
+```elixir
+# Count character frequencies — which characters will the model see most?
+freq_data =
+  corpus
+  |> String.graphemes()
+  |> Enum.frequencies()
+  |> Enum.map(fn {char, count} ->
+    label = case char do
+      "\n" -> "\\n"
+      " " -> "SPC"
+      ch -> ch
+    end
+    %{"char" => label, "count" => count}
+  end)
+  |> Enum.sort_by(& &1["count"], :desc)
+
+Vl.new(width: 700, height: 300, title: "Character Frequency Distribution")
+|> Vl.data_from_values(freq_data)
+|> Vl.mark(:bar)
+|> Vl.encode_field(:x, "char", type: :nominal, sort: "-y", title: "Character")
+|> Vl.encode_field(:y, "count", type: :quantitative, title: "Count")
+|> Vl.encode_field(:color, "count", type: :quantitative, scale: %{scheme: "blues"}, legend: nil)
+```
+
+## Data Preparation
+
+We turn raw text into training examples using a **sliding window**. Given a
+window of 32 characters, the model must predict character 33. Slide the window
+forward by one character and repeat — thousands of times across the corpus.
+
+Each character is **one-hot encoded**: converted into a vector of zeros with a
+single 1 at the position matching that character's ID. This prevents the model
+from assuming numeric relationships between characters (e.g., that 'a'=0 and
+'b'=1 means they're "close together").
+
+```elixir
+seq_len = 32
+
+# Convert entire corpus to integer IDs
+corpus_ids =
+  corpus
+  |> String.graphemes()
+  |> Enum.map(&Map.fetch!(char_to_id, &1))
+
+corpus_len = length(corpus_ids)
+n_windows = corpus_len - seq_len
+
+IO.puts("Sequence length: #{seq_len}")
+IO.puts("Total windows: #{n_windows}")
+
+# Build input/target pairs using vectorized indexing (no per-window loops)
+IO.puts("Building sliding windows...")
+corpus_tensor = Nx.tensor(corpus_ids, type: :s32)
+
+# Create all window indices at once: each row is [i, i+1, ..., i+seq_len-1]
+window_offsets = Nx.iota({1, seq_len})
+window_starts = Nx.iota({n_windows, 1})
+all_indices = Nx.add(window_starts, window_offsets)
+
+x_ids = Nx.take(corpus_tensor, Nx.reshape(all_indices, {:auto})) |> Nx.reshape({n_windows, seq_len})
+
+# Targets: the character right after each window
+y_ids = Nx.slice(corpus_tensor, [seq_len], [n_windows])
+
+IO.puts("x_ids shape: #{inspect(Nx.shape(x_ids))}  (windows x seq_len)")
+IO.puts("y_ids shape: #{inspect(Nx.shape(y_ids))}  (windows,)")
+
+# One-hot encode inputs: {n_windows, seq_len} -> {n_windows, seq_len, vocab_size}
+IO.puts("\nOne-hot encoding inputs (vocab_size=#{vocab_size})...")
+
+x_onehot =
+  x_ids
+  |> Nx.reshape({n_windows * seq_len, 1})
+  |> Nx.equal(Nx.iota({1, vocab_size}))
+  |> Nx.as_type(:f32)
+  |> Nx.reshape({n_windows, seq_len, vocab_size})
+
+IO.puts("x_onehot shape: #{inspect(Nx.shape(x_onehot))}  (batch, seq_len, vocab_size)")
+IO.puts("y_ids shape: #{inspect(Nx.shape(y_ids))}  (batch,) — integer class labels")
+```
+
+Now we split into **training** (90%) and **test** (10%) sets, and batch the
+training data for efficient GPU processing.
+
+```elixir
+# 90/10 train/test split
+n_train = round(n_windows * 0.9)
+batch_size = 64
+
+# One-hot encode targets for cross-entropy loss
+y_onehot =
+  y_ids
+  |> Nx.reshape({n_windows, 1})
+  |> Nx.equal(Nx.iota({1, vocab_size}))
+  |> Nx.as_type(:f32)
+
+train_x = x_onehot[0..(n_train - 1)]
+train_y = y_onehot[0..(n_train - 1)]
+test_x = x_onehot[n_train..-1//1]
+test_y = y_onehot[n_train..-1//1]
+test_y_ids = y_ids[n_train..-1//1]
+
+# Batch training data
+train_data =
+  Enum.zip(
+    Nx.to_batched(train_x, batch_size) |> Enum.to_list(),
+    Nx.to_batched(train_y, batch_size) |> Enum.to_list()
+  )
+
+n_test = n_windows - n_train
+
+IO.puts("Train: #{n_train} windows, #{length(train_data)} batches")
+IO.puts("Test:  #{n_test} windows")
+IO.puts("Batch size: #{batch_size}")
+```
+
+## Shared Training Infrastructure
+
+Every model uses the **exact same** training and evaluation code. The only
+thing that changes is the Axon model graph passed in. This is the key to a
+fair comparison — no architecture gets special treatment.
+
+**LMTrainer** handles training with per-epoch loss tracking and wall-clock
+timing. **TextGenerator** does autoregressive character generation with
+temperature sampling.
+
+```elixir
+defmodule LMTrainer do
+  @moduledoc "Shared training and evaluation for all language models."
+
+  @doc """
+  Train a model and collect per-epoch metrics.
+
+  Returns `%{state: model_state, losses: [float], time_s: float, name: string}`.
+  The `losses` list has one entry per epoch — the mean training loss for that epoch.
+  """
+  def train(model, train_data, opts \\ []) do
+    epochs = Keyword.get(opts, :epochs, 10)
+    lr = Keyword.get(opts, :lr, 3.0e-4)
+    name = Keyword.get(opts, :name, "model")
+
+    # Cross-entropy loss: targets first (&1), predictions second (&2)
+    loss_fn = &Axon.Losses.categorical_cross_entropy(&1, &2,
+      from_logits: true, reduction: :mean)
+
+    # Collect per-epoch losses via process dictionary
+    Process.put(:epoch_losses, [])
+
+    start_time = System.monotonic_time(:millisecond)
+
+    state =
+      model
+      |> Axon.Loop.trainer(loss_fn,
+        Polaris.Optimizers.adam(learning_rate: lr), log: 0)
+      |> Axon.Loop.handle_event(:epoch_completed, fn loop_state ->
+        # Extract epoch loss from loop metrics
+        loss_val = Nx.to_number(loop_state.metrics["loss"])
+        epoch_num = length(Process.get(:epoch_losses)) + 1
+        Process.put(:epoch_losses, Process.get(:epoch_losses) ++ [loss_val])
+        IO.puts("  #{name} epoch #{epoch_num}/#{epochs} — loss: #{Float.round(loss_val, 4)}")
+        {:continue, loop_state}
+      end)
+      |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: epochs)
+
+    elapsed_ms = System.monotonic_time(:millisecond) - start_time
+    losses = Process.get(:epoch_losses)
+    Process.delete(:epoch_losses)
+
+    %{state: state, losses: losses, time_s: elapsed_ms / 1000, name: name}
+  end
+
+  @doc """
+  Evaluate a model on test data.
+
+  Returns `{loss, accuracy, perplexity}` where perplexity = e^loss.
+  Lower perplexity = better predictions. A perplexity of N roughly means
+  "the model is as confused as if it were choosing randomly among N options."
+  """
+  def evaluate(model, state, test_x, test_y_ids, vocab_size) do
+    {_init_fn, predict_fn} = Axon.build(model)
+    logits = predict_fn.(state, test_x)
+
+    # Accuracy: how often does argmax(prediction) match the true character?
+    preds = Nx.argmax(logits, axis: -1)
+    accuracy = Nx.equal(preds, test_y_ids) |> Nx.mean() |> Nx.to_number()
+
+    # Cross-entropy loss (manual computation on test set)
+    targets_onehot =
+      test_y_ids
+      |> Nx.reshape({:auto, 1})
+      |> Nx.equal(Nx.iota({1, vocab_size}))
+      |> Nx.as_type(:f32)
+
+    loss =
+      logits
+      |> Axon.Activations.softmax()
+      |> Nx.max(1.0e-7)
+      |> Nx.log()
+      |> Nx.multiply(targets_onehot)
+      |> Nx.sum(axes: [-1])
+      |> Nx.negate()
+      |> Nx.mean()
+      |> Nx.to_number()
+
+    # Perplexity: the standard LM metric. exp(cross_entropy_loss).
+    perplexity = :math.exp(loss)
+
+    {loss, accuracy, perplexity}
+  end
+end
+```
+
+```elixir
+defmodule TextGenerator do
+  @moduledoc "Autoregressive character-level text generation."
+
+  @doc """
+  Generate `n_chars` of text given a seed string.
+
+  Temperature controls randomness:
+  - 0.0 (greedy): always pick the most likely character — repetitive but "safe"
+  - 0.5: mostly likely characters with occasional surprises
+  - 0.8: good balance of coherence and variety
+  - 1.2: creative/chaotic — more unexpected character choices
+  """
+  def generate(model, state, seed, n_chars, opts \\ []) do
+    temp = Keyword.get(opts, :temperature, 0.8)
+    char_to_id = Keyword.fetch!(opts, :char_to_id)
+    id_to_char = Keyword.fetch!(opts, :id_to_char)
+    vocab_size = Keyword.fetch!(opts, :vocab_size)
+    seq_len = Keyword.fetch!(opts, :seq_len)
+    key = Keyword.get(opts, :key, Nx.Random.key(42))
+
+    {_init_fn, predict_fn} = Axon.build(model)
+
+    # Convert seed to character IDs, pad or truncate to seq_len
+    seed_ids =
+      seed
+      |> String.graphemes()
+      |> Enum.map(&Map.fetch!(char_to_id, &1))
+
+    seed_ids =
+      if length(seed_ids) >= seq_len do
+        Enum.take(seed_ids, -seq_len)
+      else
+        space_id = Map.fetch!(char_to_id, " ")
+        List.duplicate(space_id, seq_len - length(seed_ids)) ++ seed_ids
+      end
+
+    # Generate one character at a time
+    {generated_ids, _key} =
+      Enum.reduce(1..n_chars, {seed_ids, key}, fn _i, {current_ids, rng} ->
+        window = Enum.take(current_ids, -seq_len)
+
+        # One-hot encode the window: {1, seq_len, vocab_size}
+        input =
+          window
+          |> Nx.tensor(type: :s32)
+          |> Nx.reshape({seq_len, 1})
+          |> Nx.equal(Nx.iota({1, vocab_size}))
+          |> Nx.as_type(:f32)
+          |> Nx.reshape({1, seq_len, vocab_size})
+
+        logits = predict_fn.(state, input) |> Nx.reshape({vocab_size})
+
+        {next_id, rng} =
+          if temp <= 0.01 do
+            {Nx.argmax(logits) |> Nx.to_number(), rng}
+          else
+            scaled = Nx.divide(logits, temp)
+            probs = Axon.Activations.softmax(scaled)
+            {sample, rng} = Nx.Random.choice(rng, Nx.iota({vocab_size}), probs, samples: 1)
+            {Nx.to_number(sample[0]), rng}
+          end
+
+        {current_ids ++ [next_id], rng}
+      end)
+
+    generated_ids
+    |> Enum.drop(length(seed_ids |> Enum.take(-seq_len)))
+    |> Enum.map(&Map.get(id_to_char, &1, "?"))
+    |> Enum.join()
+  end
+end
+```
+
+## Build All 8 Models
+
+Now the exciting part — we build all 8 architectures with **identical
+hyperparameters**. Every model gets the same hidden size (64), number of
+layers (2), embedding dimension, sequence length, and dropout rate. The
+only thing that differs is the internal mechanism: how each architecture
+processes the sequence of characters to make its prediction.
+
+**What to look for**: Notice that we change just one atom (`:decoder_only`,
+`:mamba`, `:gru`, etc.) and Edifice builds a completely different neural
+network. The output head (`Axon.dense(vocab_size)`) is always the same —
+it converts the model's internal representation into a probability
+distribution over characters.
+
+```elixir
+# Shared hyperparameters — identical for every architecture.
+# This is what makes the comparison fair: only the architecture varies.
+shared_opts = [
+  embed_dim: vocab_size,
+  hidden_size: 64,
+  num_layers: 2,
+  seq_len: seq_len,
+  window_size: seq_len,
+  dropout: 0.05
+]
+
+# {architecture_atom, display_name, architecture_specific_options}
+architecture_specs = [
+  # Transformer family — the dominant paradigm since 2017
+  {:decoder_only, "Decoder-Only", [num_heads: 4, num_kv_heads: 2]},
+
+  # SSM family — sub-quadratic alternatives to attention
+  {:mamba, "Mamba", [state_size: 16]},
+  {:s4, "S4", [state_size: 16]},
+
+  # Recurrent family — the OG sequence processors
+  {:gru, "GRU", []},
+  {:xlstm, "xLSTM", []},
+  {:min_gru, "MinGRU", []},
+
+  # Hybrid — combines recurrence with local attention
+  {:griffin, "Griffin", [num_heads: 4]},
+
+  # Linear attention — attention without quadratic cost
+  {:rwkv, "RWKV", [num_heads: 4]}
+]
+
+# Build all models — each gets the shared options plus its own extras,
+# and a dense output head that maps hidden_size -> vocab_size logits
+models =
+  Enum.map(architecture_specs, fn {arch, label, extra_opts} ->
+    opts = Keyword.merge(shared_opts, extra_opts)
+
+    model =
+      Edifice.build(arch, opts)
+      |> Axon.dense(vocab_size, name: "lm_head_#{arch}")
+
+    IO.puts("Built #{String.pad_trailing(label, 14)} (#{arch})")
+    {arch, label, model}
+  end)
+
+IO.puts("\n#{length(models)} models ready — all share hidden_size=64, num_layers=2")
+IO.puts("Each model: input {batch, #{seq_len}, #{vocab_size}} -> output {batch, #{vocab_size}}")
+```
+
+## Train All Models
+
+We train all 8 models sequentially with the same data, optimizer (Adam),
+learning rate (3e-4), and number of epochs (10). Training all 8 should take
+roughly 5-15 minutes on GPU, longer on CPU.
+
+**What to look for**: Watch the per-epoch loss values as they print. Some
+architectures will drop loss quickly in early epochs (fast learners), while
+others start slow but may catch up later. Some may plateau early.
+
+```elixir
+epochs = 10
+
+IO.puts("Training #{length(models)} architectures, #{epochs} epochs each...")
+IO.puts("This may take 5-15 minutes on GPU, longer on CPU.\n")
+
+# Train each model and collect results
+results =
+  Enum.map(models, fn {arch, label, model} ->
+    IO.puts("\n#{String.duplicate("=", 50)}")
+    IO.puts("Training #{label} (#{arch})")
+    IO.puts(String.duplicate("-", 50))
+
+    result = LMTrainer.train(model, train_data,
+      epochs: epochs,
+      lr: 3.0e-4,
+      name: label
+    )
+
+    IO.puts("  Finished in #{Float.round(result.time_s, 1)}s")
+
+    {arch, label, model, result}
+  end)
+
+IO.puts("\n#{String.duplicate("=", 50)}")
+IO.puts("All #{length(results)} models trained!")
+```
+
+## Results — Training Loss Curves
+
+This chart overlays the training loss for all 8 architectures across epochs.
+It's the most informative single visualization in the notebook.
+
+**What to look for:**
+
+* **Steep initial drop** = the architecture learns basic character patterns quickly
+* **Lower final loss** = better at predicting the next character overall
+* **Smooth curves** = stable training; jagged curves suggest the architecture
+  struggles with the optimizer settings
+* **Convergence speed** = how many epochs until the curve flattens out
+
+```elixir
+# Build loss curve data for all architectures
+loss_curve_data =
+  Enum.flat_map(results, fn {_arch, label, _model, result} ->
+    result.losses
+    |> Enum.with_index(1)
+    |> Enum.map(fn {loss, epoch} ->
+      %{"Architecture" => label, "Epoch" => epoch, "Loss" => loss}
+    end)
+  end)
+
+Vl.new(width: 700, height: 400, title: "Training Loss Curves — All Architectures")
+|> Vl.data_from_values(loss_curve_data)
+|> Vl.mark(:line, point: true)
+|> Vl.encode_field(:x, "Epoch", type: :quantitative, title: "Epoch")
+|> Vl.encode_field(:y, "Loss", type: :quantitative, title: "Training Loss (Cross-Entropy)")
+|> Vl.encode_field(:color, "Architecture", type: :nominal)
+|> Vl.encode_field(:stroke_dash, "Architecture", type: :nominal)
+```
+
+## Results — Final Metrics
+
+Now we evaluate every model on the held-out test set. The key metrics:
+
+* **Test Loss** (cross-entropy): lower = better predictions
+* **Accuracy**: what fraction of next-character predictions are exactly right
+* **Perplexity** (`e^loss`): "how many characters is the model effectively
+  choosing between?" A perplexity of 30 means it's as uncertain as a uniform
+  choice among 30 characters. Our vocab has ~50 characters, so random guessing
+  would give perplexity ~50. Anything below that means the model has learned
+  something.
+* **Training Time**: wall-clock seconds for all epochs
+
+```elixir
+# Evaluate all models on the test set
+metrics =
+  Enum.map(results, fn {arch, label, model, result} ->
+    {loss, accuracy, perplexity} =
+      LMTrainer.evaluate(model, result.state, test_x, test_y_ids, vocab_size)
+
+    %{
+      arch: arch,
+      label: label,
+      test_loss: loss,
+      accuracy: accuracy,
+      perplexity: perplexity,
+      train_time_s: result.time_s,
+      final_train_loss: List.last(result.losses) || 0.0,
+      losses: result.losses
+    }
+  end)
+
+# Print a formatted comparison table
+IO.puts(String.duplicate("=", 78))
+
+IO.puts(
+  String.pad_trailing("  Architecture", 18) <>
+    String.pad_trailing("Test Loss", 12) <>
+    String.pad_trailing("Accuracy", 12) <>
+    String.pad_trailing("Perplexity", 13) <>
+    "Train Time"
+)
+
+IO.puts("  " <> String.duplicate("-", 72))
+
+Enum.each(metrics, fn m ->
+  IO.puts(
+    String.pad_trailing("  #{m.label}", 18) <>
+      String.pad_trailing("#{Float.round(m.test_loss, 4)}", 12) <>
+      String.pad_trailing("#{Float.round(m.accuracy * 100, 1)}%", 12) <>
+      String.pad_trailing("#{Float.round(m.perplexity, 1)}", 13) <>
+      "#{Float.round(m.train_time_s, 1)}s"
+  )
+end)
+
+IO.puts(String.duplicate("=", 78))
+
+# Highlight the winner
+best = Enum.min_by(metrics, & &1.perplexity)
+fastest = Enum.min_by(metrics, & &1.train_time_s)
+
+IO.puts("\nLowest perplexity: #{best.label} (#{Float.round(best.perplexity, 1)})")
+IO.puts("Fastest training:  #{fastest.label} (#{Float.round(fastest.train_time_s, 1)}s)")
+```
+
+**What to look for**: Is the lowest-perplexity model also the fastest to train?
+Usually not — there's a quality vs speed tradeoff. Transformers often achieve
+good quality but can be slower; simple recurrent models train fast but may not
+reach the same final quality.
+
+```elixir
+# Perplexity comparison — lower is better
+perplexity_data =
+  Enum.map(metrics, fn m ->
+    %{"Architecture" => m.label, "Perplexity" => Float.round(m.perplexity, 1)}
+  end)
+
+Vl.new(width: 600, height: 300, title: "Test Perplexity by Architecture (lower is better)")
+|> Vl.data_from_values(perplexity_data)
+|> Vl.mark(:bar)
+|> Vl.encode_field(:x, "Architecture", type: :nominal, sort: %{field: "Perplexity"})
+|> Vl.encode_field(:y, "Perplexity", type: :quantitative)
+|> Vl.encode_field(:color, "Architecture", type: :nominal, legend: nil)
+```
+
+```elixir
+# Training time comparison
+time_data =
+  Enum.map(metrics, fn m ->
+    %{"Architecture" => m.label, "Time (s)" => Float.round(m.train_time_s, 1)}
+  end)
+
+Vl.new(width: 600, height: 300, title: "Training Time by Architecture (seconds)")
+|> Vl.data_from_values(time_data)
+|> Vl.mark(:bar)
+|> Vl.encode_field(:x, "Architecture", type: :nominal, sort: %{field: "Time (s)"})
+|> Vl.encode_field(:y, "Time (s)", type: :quantitative)
+|> Vl.encode_field(:color, "Architecture", type: :nominal, legend: nil)
+```
+
+## Text Generation Comparison
+
+The ultimate test — can these models write? We give each architecture the same
+seed phrases and let them generate 80 characters at temperature 0.8 (a good
+balance of coherence and variety).
+
+**What to look for:**
+
+* Do any models produce recognizable English words or word fragments?
+* Does any model get stuck in repetitive loops (a sign of mode collapse)?
+* Are some outputs more "structured" (spaces in the right places, vowel/consonant
+  patterns) even if the words aren't real?
+* Remember: with ~5KB of training data and 10 epochs, even gibberish with
+  English-like patterns is a sign of learning!
+
+```elixir
+seeds = ["the morning ", "She was ", "I have no "]
+
+gen_opts = [
+  char_to_id: char_to_id,
+  id_to_char: id_to_char,
+  vocab_size: vocab_size,
+  seq_len: seq_len,
+  temperature: 0.8
+]
+
+IO.puts("Generating text from all #{length(results)} architectures...")
+IO.puts("Temperature: 0.8 | Length: 80 characters\n")
+
+Enum.each(seeds, fn seed ->
+  IO.puts(String.duplicate("=", 70))
+  IO.puts("Seed: \"#{seed}\"")
+  IO.puts(String.duplicate("-", 70))
+
+  Enum.each(results, fn {_arch, label, model, result} ->
+    text =
+      TextGenerator.generate(model, result.state, seed, 80,
+        [{:key, Nx.Random.key(42)} | gen_opts]
+      )
+
+    IO.puts("  #{String.pad_trailing(label, 14)} #{seed}#{text}")
+  end)
+
+  IO.puts("")
+end)
+
+IO.puts(String.duplicate("=", 70))
+:ok
+```
+
+## Analysis and Takeaways
+
+### What do these results mean?
+
+The comparison reveals fundamental differences in how architectures process
+sequences, even at this tiny scale:
+
+**Learning speed** (loss curve shape): Some architectures drop loss quickly
+in early epochs because their inductive bias matches the task well. Recurrent
+models like GRU often learn simple sequential patterns fast. Transformers may
+start slower but can capture more complex dependencies.
+
+**Final quality** (perplexity): Lower perplexity means the model has learned
+better character-level statistics. At this scale, differences may be small —
+all architectures are data-starved with only ~5KB of text. The ranking can
+change dramatically with more data.
+
+**Training efficiency** (wall-clock time): Simple architectures (GRU, MinGRU)
+tend to be fastest because they have fewer operations per step. Transformers
+have quadratic attention cost (though it barely matters at seq_len=32).
+SSMs like Mamba do more work per step than GRUs but less than transformers.
+
+**Generation quality**: With this little data, don't expect coherent English.
+Look for subtler signs of learning — proper spacing patterns, common letter
+combinations (th, er, ing), and the overall "feel" of the output. Some
+architectures may produce more structured output than others.
+
+### When to use which family
+
+| Family                  | Strengths                                          | Best For                                   |
+| ----------------------- | -------------------------------------------------- | ------------------------------------------ |
+| Transformer             | Best quality at scale, parallel training           | Production LLMs, when quality is paramount |
+| SSM (Mamba, S4)         | Sub-quadratic in sequence length                   | Very long sequences, streaming             |
+| Recurrent (GRU, xLSTM)  | Simple, fast, low memory                           | Real-time applications, edge devices       |
+| Hybrid (Griffin)        | Combines recurrent efficiency with local attention | Balance of quality and efficiency          |
+| Linear Attention (RWKV) | Constant memory, parallelizable                    | Long context with bounded resources        |
+
+### Important caveat
+
+This is a tiny-scale comparison (~5KB corpus, 64-dim models, 10 epochs). At
+production scale (billions of tokens, thousands of hidden dimensions, thousands
+of epochs), the rankings can shift significantly. Transformers dominate at
+large scale partly because attention becomes more powerful with more data and
+larger models. SSMs and hybrids are competitive and closing the gap rapidly.
+
+## Experiment Suggestions
+
+Try these modifications to deepen your understanding:
+
+* **More data**: Replace the hardcoded corpus with `File.read!("path/to/book.txt")`.
+  Even one full novel (~500KB) from Project Gutenberg makes a dramatic
+  difference. Try: does the architecture ranking change with more data?
+
+* **Different hidden sizes**: Change `hidden_size` to 32 or 128. Smaller models
+  train faster but may underfit. Larger models can memorize more but need more
+  data. Does the relative ranking of architectures change?
+
+* **More epochs**: Try 30 or 50 epochs. Some architectures may be slow starters
+  that eventually overtake fast learners. Do the loss curves cross?
+
+* **Different learning rates**: Try 1e-3 (faster, riskier) or 1e-4 (slower,
+  more stable). Some architectures are more sensitive to learning rate than
+  others.
+
+* **Different corpus**: Try Elixir source code, poetry, or a foreign language.
+  Do some architectures handle different text structures better?
+
+* **Add more architectures**: Edifice has 30+ sequence-capable architectures.
+  Try adding `:retnet`, `:hawk`, `:gla`, `:hgrn`, `:hyena`, `:liquid`, or
+  `:delta_net` to the `architecture_specs` list — the training code stays
+  identical.
+
+* **Longer context**: Try `seq_len: 64` or `128`. Does attention-based
+  architectures benefit more from longer context than recurrent ones?

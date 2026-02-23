@@ -41,6 +41,12 @@ is self-contained — pick any one and start exploring.
   Mamba on novel excerpts, with autoregressive text generation at different
   temperatures. Includes architecture swap comparison.
 
+* **[LM Architecture Shootout](lm_architecture_shootout.livemd)** — Head-to-head
+  comparison of 8 architectures (Decoder-Only, Mamba, S4, GRU, xLSTM, MinGRU,
+  Griffin, RWKV) on next-character prediction. Same corpus, same hyperparameters,
+  same training loop — only the architecture changes. Includes loss curves,
+  perplexity comparison, training time benchmarks, and text generation samples.
+
 ### Graphs and Structure
 
 * **[Graph Classification](graph_classification.livemd)** — Compare GCN, GAT, and

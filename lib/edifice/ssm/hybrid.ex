@@ -1,10 +1,23 @@
 defmodule Edifice.SSM.Hybrid do
   @moduledoc """
-  Jamba: Hybrid Mamba+Attention architecture for efficient sequence modeling.
+  Configurable Hybrid Backbone+Attention architecture for efficient sequence modeling.
 
-  Named after AI21's Jamba architecture, this module combines Mamba's O(L)
-  efficiency for local context with attention's ability to capture long-range
-  dependencies.
+  Originally based on AI21's Jamba architecture, this module interleaves a
+  configurable backbone (Mamba by default) with periodic attention layers.
+  The backbone handles local/sequential context efficiently, while attention
+  captures long-range dependencies.
+
+  ## Supported Backbones
+
+  | Backbone | Module | Key Mechanism |
+  |----------|--------|---------------|
+  | `:mamba` (default) | GatedSSM | Selective state space model |
+  | `:gru` | Axon.gru | Gated recurrent unit |
+  | `:rwkv` | RWKV | Linear attention (WKV) |
+  | `:delta_net` | DeltaNet | Delta rule linear attention |
+  | `:gated_delta_net` | GatedDeltaNet | Gated delta rule |
+  | `:griffin_lru` | Griffin RG-LRU | Real-gated linear recurrent unit |
+  | `:custom` | User-provided | Any `(Axon.t(), keyword()) -> Axon.t()` |
 
   ## Architecture Pattern
 
@@ -13,15 +26,15 @@ defmodule Edifice.SSM.Hybrid do
         │
         ▼
   ┌─────────────────────────────────────┐
-  │  Mamba Block 1                       │
+  │  Backbone Block 1                    │
   ├─────────────────────────────────────┤
-  │  Mamba Block 2                       │
+  │  Backbone Block 2                    │
   ├─────────────────────────────────────┤
-  │  Mamba Block 3                       │
+  │  Backbone Block 3                    │
   ├─────────────────────────────────────┤
   │  Attention Block (every N layers)   │  <- Long-range dependencies
   ├─────────────────────────────────────┤
-  │  Mamba Block 4                       │
+  │  Backbone Block 4                    │
   ├─────────────────────────────────────┤
   │  ...                                 │
   └─────────────────────────────────────┘
@@ -32,14 +45,14 @@ defmodule Edifice.SSM.Hybrid do
 
   ## Key Advantages
 
-  1. **Efficiency**: Most layers are O(L) Mamba blocks
+  1. **Efficiency**: Most layers are O(L) backbone blocks
   2. **Long-range**: Periodic attention captures distant dependencies
-  3. **Real-time**: Attention at configurable intervals for reaction-time modeling
-  4. **Memory**: Far less than pure attention, slightly more than pure Mamba
+  3. **Flexible**: Swap backbone without changing the hybrid structure
+  4. **Memory**: Far less than pure attention, slightly more than pure backbone
 
   ## Usage
 
-      # Default hybrid (3 Mamba : 1 Attention ratio)
+      # Default hybrid (Mamba backbone, 3:1 ratio)
       model = Hybrid.build(
         embed_dim: 256,
         hidden_size: 256,
@@ -47,16 +60,28 @@ defmodule Edifice.SSM.Hybrid do
         attention_every: 4
       )
 
-      # More attention for complex dependencies
+      # GRU backbone (classic RNN + attention)
       model = Hybrid.build(
         embed_dim: 256,
         num_layers: 6,
-        attention_every: 2  # Alternating Mamba/Attention
+        backbone: :gru,
+        attention_every: 3
+      )
+
+      # Gated DeltaNet backbone (linear attention + full attention)
+      model = Hybrid.build(
+        embed_dim: 256,
+        num_layers: 6,
+        backbone: :gated_delta_net,
+        attention_every: 3
       )
   """
 
   alias Edifice.Attention.MultiHead, as: Attention
   alias Edifice.SSM.GatedSSM
+  alias Edifice.Recurrent.DeltaNet
+  alias Edifice.Recurrent.GatedDeltaNet
+  alias Edifice.Attention.RWKV
 
   # Default hyperparameters
   @default_hidden_size 256
@@ -76,7 +101,7 @@ defmodule Edifice.SSM.Hybrid do
   @default_qk_layernorm true
 
   @doc """
-  Build a hybrid Mamba+Attention model.
+  Build a hybrid backbone+attention model.
 
   ## Options
 
@@ -85,8 +110,12 @@ defmodule Edifice.SSM.Hybrid do
     - `:hidden_size` - Internal hidden dimension (default: 256)
     - `:num_layers` - Total number of layers (default: 6)
     - `:attention_every` - Insert attention every N layers (default: 3)
+    - `:backbone` - Backbone type for non-attention layers (default: `:mamba`).
+      Supported: `:mamba`, `:gru`, `:rwkv`, `:delta_net`, `:gated_delta_net`,
+      `:griffin_lru`, or a `{module, function}` tuple for custom backbones.
+      Custom functions must accept `(input :: Axon.t(), opts :: keyword()) :: Axon.t()`.
 
-  **Mamba-specific:**
+  **Mamba-specific (when backbone: :mamba):**
     - `:state_size` - SSM state dimension (default: 16)
     - `:expand_factor` - Mamba expansion factor (default: 2)
     - `:conv_size` - Causal conv kernel size (default: 4)
@@ -107,19 +136,28 @@ defmodule Edifice.SSM.Hybrid do
 
     An Axon model that outputs [batch, hidden_size] from the last position.
 
-  ## Example
+  ## Examples
 
+      # Mamba backbone (default, Jamba-style)
       model = Hybrid.build(
         embed_dim: 256,
         hidden_size: 256,
         num_layers: 6,
-        attention_every: 3,  # 4 Mamba + 2 Attention layers
-        window_size: 60
+        attention_every: 3
+      )
+
+      # GRU backbone
+      model = Hybrid.build(
+        embed_dim: 256,
+        num_layers: 6,
+        backbone: :gru,
+        attention_every: 3
       )
   """
   @typedoc "Options for `build/1`."
   @type build_opt ::
           {:attention_every, pos_integer()}
+          | {:backbone, atom() | {module(), atom()}}
           | {:chunk_size, pos_integer()}
           | {:chunked_attention, boolean()}
           | {:conv_size, pos_integer()}
@@ -144,11 +182,12 @@ defmodule Edifice.SSM.Hybrid do
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     attention_every = Keyword.get(opts, :attention_every, @default_attention_every)
+    backbone = Keyword.get(opts, :backbone, :mamba)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
     window_size = Keyword.get(opts, :window_size, @default_window_size)
     seq_len = Keyword.get(opts, :seq_len, window_size)
 
-    # Mamba options
+    # Backbone-specific options (Mamba defaults, also used by some other backbones)
     state_size = Keyword.get(opts, :state_size, @default_state_size)
     expand_factor = Keyword.get(opts, :expand_factor, @default_expand_factor)
     conv_size = Keyword.get(opts, :conv_size, @default_conv_size)
@@ -192,6 +231,17 @@ defmodule Edifice.SSM.Hybrid do
     # Add positional encoding (important for attention layers to know positions)
     x = Attention.add_positional_encoding(x, name: "pos_encoding")
 
+    # Backbone-specific options passed to each backbone layer
+    backbone_opts = [
+      hidden_size: hidden_size,
+      state_size: state_size,
+      expand_factor: expand_factor,
+      conv_size: conv_size,
+      dropout: dropout,
+      pre_norm: pre_norm,
+      num_heads: num_heads
+    ]
+
     # Build interleaved layers
     x =
       Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
@@ -217,16 +267,11 @@ defmodule Edifice.SSM.Hybrid do
             name: "layer_#{layer_idx}_attn"
           )
         else
-          # Mamba layer
-          build_mamba_layer(
+          # Backbone layer (configurable)
+          build_backbone_layer(
             acc,
-            hidden_size: hidden_size,
-            state_size: state_size,
-            expand_factor: expand_factor,
-            conv_size: conv_size,
-            dropout: dropout,
-            pre_norm: pre_norm,
-            name: "layer_#{layer_idx}_mamba"
+            backbone,
+            Keyword.put(backbone_opts, :name, "layer_#{layer_idx}_backbone")
           )
         end
       end)
@@ -245,6 +290,140 @@ defmodule Edifice.SSM.Hybrid do
       end,
       name: "last_timestep"
     )
+  end
+
+  @doc """
+  Build a backbone layer based on the configured backbone type.
+
+  Dispatches to the appropriate block builder. All backbone types follow
+  the same contract: `(Axon.t(), keyword()) -> Axon.t()`, taking
+  [batch, seq, hidden] input and returning the same shape with a residual connection.
+
+  ## Supported Backbones
+
+    - `:mamba` - GatedSSM Mamba block (default)
+    - `:gru` - GRU recurrent layer
+    - `:rwkv` - RWKV linear attention block
+    - `:delta_net` - DeltaNet delta rule block
+    - `:gated_delta_net` - Gated DeltaNet block
+    - `:griffin_lru` - Griffin RG-LRU block
+    - `{module, function}` - Custom backbone; called as `module.function(input, opts)`
+  """
+  @spec build_backbone_layer(Axon.t(), atom() | {module(), atom()}, keyword()) :: Axon.t()
+  def build_backbone_layer(input, backbone, opts)
+
+  def build_backbone_layer(input, :mamba, opts), do: build_mamba_layer(input, opts)
+  def build_backbone_layer(input, :gru, opts), do: build_gru_layer(input, opts)
+  def build_backbone_layer(input, :rwkv, opts), do: build_rwkv_layer(input, opts)
+  def build_backbone_layer(input, :delta_net, opts), do: build_delta_net_layer(input, opts)
+  def build_backbone_layer(input, :gated_delta_net, opts), do: build_gated_delta_net_layer(input, opts)
+
+  def build_backbone_layer(input, :griffin_lru, opts) do
+    # Griffin's RG-LRU is available via Edifice.Attention.Griffin.build_griffin_block
+    Edifice.Attention.Griffin.build_griffin_block(input, opts)
+  end
+
+  def build_backbone_layer(input, {module, function}, opts) do
+    apply(module, function, [input, opts])
+  end
+
+  # ============================================================================
+  # Backbone Layer Builders
+  # ============================================================================
+
+  @doc """
+  Build a GRU backbone layer with pre-norm and residual connection.
+
+  Wraps Axon.gru in the same pre-norm + residual pattern as Mamba layers.
+  """
+  @spec build_gru_layer(Axon.t(), keyword()) :: Axon.t()
+  def build_gru_layer(input, opts) do
+    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
+    dropout = Keyword.get(opts, :dropout, @default_dropout)
+    pre_norm = Keyword.get(opts, :pre_norm, @default_pre_norm)
+    name = Keyword.get(opts, :name, "gru_layer")
+
+    normalized_input =
+      if pre_norm do
+        Axon.layer_norm(input, name: "#{name}_pre_norm")
+      else
+        input
+      end
+
+    # Axon.gru returns {output_seq, hidden_state} — we only need the sequence
+    {output_seq, _hidden} =
+      Axon.gru(normalized_input, hidden_size,
+        name: "#{name}_gru",
+        recurrent_initializer: :glorot_uniform
+      )
+
+    block =
+      if dropout > 0 do
+        Axon.dropout(output_seq, rate: dropout, name: "#{name}_dropout")
+      else
+        output_seq
+      end
+
+    residual = Axon.add(input, block, name: "#{name}_residual")
+
+    if pre_norm do
+      residual
+    else
+      Axon.layer_norm(residual, name: "#{name}_post_norm")
+    end
+  end
+
+  @doc """
+  Build an RWKV backbone layer with pre-norm and residual connection.
+  """
+  @spec build_rwkv_layer(Axon.t(), keyword()) :: Axon.t()
+  def build_rwkv_layer(input, opts) do
+    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
+    dropout = Keyword.get(opts, :dropout, @default_dropout)
+    pre_norm = Keyword.get(opts, :pre_norm, @default_pre_norm)
+    name = Keyword.get(opts, :name, "rwkv_layer")
+
+    normalized_input =
+      if pre_norm do
+        Axon.layer_norm(input, name: "#{name}_pre_norm")
+      else
+        input
+      end
+
+    block = RWKV.build_rwkv_block(normalized_input, Keyword.merge(opts, name: name, hidden_size: hidden_size))
+
+    block =
+      if dropout > 0 do
+        Axon.dropout(block, rate: dropout, name: "#{name}_dropout")
+      else
+        block
+      end
+
+    residual = Axon.add(input, block, name: "#{name}_residual")
+
+    if pre_norm do
+      residual
+    else
+      Axon.layer_norm(residual, name: "#{name}_post_norm")
+    end
+  end
+
+  @doc """
+  Build a DeltaNet backbone layer. Delegates to `DeltaNet.build_block/2`
+  which includes pre-norm and residual connection.
+  """
+  @spec build_delta_net_layer(Axon.t(), keyword()) :: Axon.t()
+  def build_delta_net_layer(input, opts) do
+    DeltaNet.build_block(input, opts)
+  end
+
+  @doc """
+  Build a Gated DeltaNet backbone layer with pre-norm and residual connection.
+  """
+  @spec build_gated_delta_net_layer(Axon.t(), keyword()) :: Axon.t()
+  def build_gated_delta_net_layer(input, opts) do
+    name = Keyword.get(opts, :name, "gated_delta_net_layer")
+    GatedDeltaNet.build_block(input, Keyword.put(opts, :name, name))
   end
 
   @doc """
@@ -542,18 +721,28 @@ defmodule Edifice.SSM.Hybrid do
 
   Returns a list describing each layer type for debugging/visualization.
 
-  ## Example
+  ## Examples
 
       iex> Hybrid.layer_pattern(num_layers: 6, attention_every: 3)
       [:mamba, :mamba, :attention, :mamba, :mamba, :attention]
+
+      iex> Hybrid.layer_pattern(num_layers: 6, attention_every: 3, backbone: :gru)
+      [:gru, :gru, :attention, :gru, :gru, :attention]
   """
   @spec layer_pattern(keyword()) :: [atom()]
   def layer_pattern(opts \\ []) do
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     attention_every = Keyword.get(opts, :attention_every, @default_attention_every)
+    backbone = Keyword.get(opts, :backbone, :mamba)
+
+    backbone_name =
+      case backbone do
+        {_mod, _fun} -> :custom
+        atom -> atom
+      end
 
     Enum.map(1..num_layers, fn idx ->
-      if rem(idx, attention_every) == 0, do: :attention, else: :mamba
+      if rem(idx, attention_every) == 0, do: :attention, else: backbone_name
     end)
   end
 end

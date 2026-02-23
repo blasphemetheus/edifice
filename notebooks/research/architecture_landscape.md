@@ -574,6 +574,135 @@ Longer-term additions that open new frontiers but require significant investment
 
 ---
 
+## 10. 2026 Update: Revised Priorities
+
+> Updated 2026-02-23 based on late-2025 / early-2026 research trends.
+
+The landscape has shifted significantly since the original tiers were written. Several Tier 1/2 items have been completed, and new architectures have emerged as production-critical.
+
+### Completed Since Original Tiers
+
+| Original Item | Tier | Status |
+|---------------|:----:|--------|
+| Lightning Attention | 1 | Done — `:lightning_attention` |
+| Transcoders/SAE Module | 1 | Done — `:sparse_autoencoder`, `:transcoder` |
+| V-JEPA / Temporal JEPA | 1 | Done — `:temporal_jepa` |
+| Multi-token prediction | 2 | Done — `:multi_token_prediction` |
+| Speculative decoding | 2 | Done — `:speculative_decoding` |
+
+### Still Open From Original Tiers
+
+| Original Item | Tier | Status |
+|---------------|:----:|--------|
+| iRoPE | 1 | **Not done** — still high-value, used by Llama 4 |
+| Aux-loss-free MoE | 1 | **Not done** — DeepSeek-V3's bias routing |
+| YARN context extension | 2 | **Not done** |
+| GGUF export | 2 | **Not done** — high effort |
+| RL environments | 3 | **Not done** |
+| Agent swarm patterns | 3 | **Not done** |
+| Multimodal fusion | 3 | **Not done** |
+| TMRoPE | 3 | **Not done** |
+
+### New Tier 1: High Impact (2026)
+
+These reflect the biggest shifts in production architectures since the original tiers.
+
+#### Gated DeltaNet
+
+| | |
+|---|---|
+| **What** | Linear attention with data-dependent gating on the delta rule. Replaces 75% of attention layers in production models. |
+| **Adopted by** | Qwen3-Next (80B MoE), Kimi Linear (Moonshot AI) |
+| **Difficulty** | Medium — extends existing `:delta_net` with gating mechanism |
+| **Builds on** | `:delta_net`, `:gla` (conceptual ancestor) |
+| **Why Tier 1** | The hottest linear attention mechanism of 2025-2026. Two major labs adopted it for production models. |
+
+#### iRoPE (Interleaved RoPE) — carried from original Tier 1
+
+| | |
+|---|---|
+| **What** | Apply RoPE to alternating transformer layers, NoPE (content-only) for others |
+| **Difficulty** | Low — add `interleave_rope: true` option to `:decoder_only` |
+| **Why Tier 1** | Trivial change, proven by Llama 4 for long-context generalization |
+
+#### Aux-loss-free MoE Routing — carried from original Tier 1
+
+| | |
+|---|---|
+| **What** | Replace auxiliary load-balancing loss with dynamic bias tensor in `:moe_v2` |
+| **Difficulty** | Low — add bias tensor, update based on utilization running average |
+| **Why Tier 1** | Standard practice for frontier MoE models |
+
+#### RWKV-7 Update (Generalized Delta Rule)
+
+| | |
+|---|---|
+| **What** | Update `:rwkv` to v7 "Goose" with generalized delta rule and vector-valued gating |
+| **Paper** | "Eagle and Finch" / RWKV-7 (March 2025) |
+| **Difficulty** | Medium — significant architecture changes to gating and state update |
+| **Why Tier 1** | RWKV-7 comprehensively surpasses Transformers on efficiency. Most active open-source non-transformer LLM project. |
+
+#### Configurable Hybrid Builder
+
+| | |
+|---|---|
+| **What** | Builder that lets users set SSM/attention ratio (e.g., 90% Mamba + 10% attention) |
+| **Pattern** | Nemotron-H (92% Mamba-2 + 8% attention), Qwen3-Next (75% DeltaNet + 25% attention) |
+| **Difficulty** | Medium — generalize `:jamba`/`:zamba` pattern with configurable layer schedule |
+| **Builds on** | `:jamba`, `:zamba`, any SSM + any attention module |
+| **Why Tier 1** | The 90/10 hybrid is THE dominant production pattern of 2025-2026. |
+
+### New Tier 2: Medium Impact (2026)
+
+| Addition | Difficulty | Why |
+|----------|-----------|-----|
+| **TTT-E2E** | Medium | End-to-end test-time training — mutates 25% of MLP layers at inference for long context. Extends existing `:ttt`. |
+| **MMDiT** | Medium | Multimodal Diffusion Transformer — joint text-image attention blocks. Standard for FLUX.1, SD3, Sora. |
+| **YARN** | Low | Carried from original Tier 2. Still the standard context extension method. |
+| **SoFlow** | Low-Med | Combined flow matching + consistency loss for one-step generation. Extends `:flow_matching` + `:consistency_model`. |
+
+### New Tier 3: Exploratory (2026)
+
+| Addition | Difficulty | Why |
+|----------|-----------|-----|
+| **Multimodal fusion layers** | High | Biggest architectural gap. Cross-attention between `:vit` and `:decoder_only`. |
+| **RL environment integration** | High | Carried from original Tier 3. |
+| **MambaVision** | Medium | Hybrid Mamba-Transformer backbone designed specifically for vision. |
+| **KDA (Kimi Delta Attention)** | Medium | Channel-wise gating variant of Gated DeltaNet from Moonshot AI. |
+
+### Notebook / Documentation Gaps
+
+Edifice has 113+ architectures but only ~11 notebooks. Highest-value additions:
+
+| Gap | Architectures Uncovered | Priority |
+|-----|------------------------|----------|
+| **Vision** | 9 (ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF) | High |
+| **Attention deep-dive** | 24 attention variants, zero dedicated visualization | High |
+| **Contrastive/self-supervised** | 7 (SimCLR, BYOL, BarlowTwins, MAE, VICReg, JEPA, Temporal JEPA) | High |
+| **RNN evolution** | 12 recurrent architectures, only basic LSTM/GRU covered | Medium |
+| **Diffusion from scratch** | Existing notebook covers VAE, not diffusion training | Medium |
+| **MoE routing visualization** | 4 MoE variants, zero visualization of expert routing | Medium |
+| **Memory networks** | 2 (NTM, Memory Network), zero coverage | Low |
+| **Interpretability** | 2 (SAE, Transcoder), zero coverage | Low |
+| **World Models / RL** | 2 (WorldModel, PolicyValue), zero coverage | Low |
+
+### Research Trend Summary (Early 2026)
+
+| Trend | Heat | Signal |
+|-------|------|--------|
+| Hybrid SSM+Attention (90/10) | Very Hot | Nemotron-H, Jamba 1.5, Qwen3-Next in production |
+| Gated DeltaNet / linear attention | Very Hot | Adopted by Qwen3-Next, Kimi Linear |
+| Test-time compute / reasoning | Very Hot | o1/o3, DeepSeek-R1, TTT-E2E |
+| MoE (DeepSeek-style) | Hot | Standard for all frontier models |
+| Rectified Flow + DiT | Hot | Replaced UNet+DDPM for image generation |
+| BitNet 1.58-bit | Hot | Microsoft strategic initiative, CPU inference |
+| RWKV-7 | Hot | Best open-source non-transformer lineage |
+| xLSTM at scale | Hot | 7B model competitive, industrial deployment |
+| Native multimodality | Hot | GPT-5, unified AR+Diffusion |
+| SAE / interpretability | Uncertain | DeepMind published negative results, pivoting to pragmatic methods |
+
+---
+
 ## Appendix: Edifice Architecture Inventory
 
 For reference, here is every architecture currently in Edifice, grouped by family.

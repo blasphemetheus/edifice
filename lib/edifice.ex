@@ -24,7 +24,7 @@ defmodule Edifice do
   | Transformer | Decoder-Only (GPT-style), Multi-Token Prediction, Byte Latent Transformer |
   | Feedforward | MLP, KAN, KAT, TabNet, BitNet |
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
-  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, TTT, Titans, Reservoir (ESN), Native Recurrence |
+  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, Titans, Reservoir (ESN), Native Recurrence |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
   | Attention | Multi-Head, GQA, MLA, DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF |
@@ -69,6 +69,7 @@ defmodule Edifice do
     min_gru: Edifice.Recurrent.MinGRU,
     min_lstm: Edifice.Recurrent.MinLSTM,
     delta_net: Edifice.Recurrent.DeltaNet,
+    gated_delta_net: Edifice.Recurrent.GatedDeltaNet,
     ttt: Edifice.Recurrent.TTT,
     titans: Edifice.Recurrent.Titans,
     reservoir: Edifice.Recurrent.Reservoir,
@@ -249,6 +250,7 @@ defmodule Edifice do
         :min_gru,
         :min_lstm,
         :delta_net,
+        :gated_delta_net,
         :ttt,
         :titans,
         :reservoir,
