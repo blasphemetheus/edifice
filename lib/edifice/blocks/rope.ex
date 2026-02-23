@@ -38,11 +38,21 @@ defmodule Edifice.Blocks.RoPE do
   Build precomputed frequency table for RoPE.
 
   Returns cosine and sine tables of shape [max_seq_len, dim/2].
+
+  ## Options
+
+    - `:base` - RoPE base frequency (default: 10000.0)
+    - `:scaling_type` - `:none` (default) or `:yarn` for YaRN context extension
+    - `:target_length` - Target context length for YaRN scaling (required when `:yarn`)
+    - `:original_length` - Original trained context length (default: 4096)
+    - `:beta_fast` - YaRN high-frequency boundary (default: 32.0)
+    - `:beta_slow` - YaRN low-frequency boundary (default: 1.0)
   """
   @spec precompute_freqs(pos_integer(), pos_integer(), keyword()) ::
           {Nx.Tensor.t(), Nx.Tensor.t()}
   def precompute_freqs(dim, max_seq_len, opts \\ []) do
     base = Keyword.get(opts, :base, @default_base)
+    scaling_type = Keyword.get(opts, :scaling_type, :none)
 
     half_dim = div(dim, 2)
     # theta_i = base^(-2i/dim)
@@ -53,6 +63,12 @@ defmodule Edifice.Blocks.RoPE do
       )
       |> Nx.as_type(:f32)
 
+    freqs =
+      case scaling_type do
+        :none -> freqs
+        :yarn -> yarn_scale_freqs(freqs, dim, opts)
+      end
+
     # positions: [0, 1, ..., max_seq_len-1]
     positions = Nx.iota({max_seq_len}, type: :f32)
 
@@ -60,6 +76,61 @@ defmodule Edifice.Blocks.RoPE do
     angles = Nx.outer(positions, freqs)
 
     {Nx.cos(angles), Nx.sin(angles)}
+  end
+
+  @doc """
+  Apply YaRN (Yet another RoPE extensioN) frequency scaling.
+
+  YaRN scales RoPE frequency bands differently based on wavelength:
+  - **High-frequency** (local position info): left unchanged
+  - **Low-frequency** (global position): scaled down by `scale = target / original`
+  - **Middle bands**: linear interpolation between the two
+
+  The boundaries between regions are determined by `beta_fast` and `beta_slow`.
+
+  ## Options
+
+    - `:target_length` - Target context length (required)
+    - `:original_length` - Original trained context length (default: 4096)
+    - `:beta_fast` - High-frequency boundary (default: 32.0)
+    - `:beta_slow` - Low-frequency boundary (default: 1.0)
+
+  ## References
+
+  - "YaRN: Efficient Context Window Extension of Large Language Models"
+    (Peng et al., 2023) — https://arxiv.org/abs/2309.00071
+  """
+  @spec yarn_scale_freqs(Nx.Tensor.t(), pos_integer(), keyword()) :: Nx.Tensor.t()
+  def yarn_scale_freqs(freqs, _dim, opts) do
+    target_length = Keyword.fetch!(opts, :target_length)
+    original_length = Keyword.get(opts, :original_length, 4096)
+    beta_fast = Keyword.get(opts, :beta_fast, 32.0)
+    beta_slow = Keyword.get(opts, :beta_slow, 1.0)
+
+    scale = target_length / original_length
+
+    # Wavelength for each frequency band: lambda_i = 2*pi / freq_i
+    # A frequency is "high" when its wavelength < beta_fast * original_length / dim
+    # and "low" when its wavelength > beta_slow * original_length / dim
+    low_freq_wavelen = original_length / beta_slow
+    high_freq_wavelen = original_length / beta_fast
+
+    wavelengths = Nx.divide(2 * :math.pi(), freqs)
+
+    # For each band: determine scaling factor
+    # high-freq (short wavelength): factor = 1.0 (unchanged)
+    # low-freq (long wavelength): factor = 1/scale (NTK scaling)
+    # middle: linear interpolation
+    ramp =
+      Nx.subtract(wavelengths, high_freq_wavelen)
+      |> Nx.divide(low_freq_wavelen - high_freq_wavelen)
+      |> Nx.clip(0.0, 1.0)
+
+    # factor: 1.0 for high-freq, 1/scale for low-freq, interpolated in between
+    inv_scale = 1.0 / scale
+    factor = Nx.add(Nx.multiply(ramp, inv_scale), Nx.multiply(Nx.subtract(1.0, ramp), 1.0))
+
+    Nx.multiply(freqs, factor)
   end
 
   @doc """

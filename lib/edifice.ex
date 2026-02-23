@@ -21,12 +21,12 @@ defmodule Edifice do
 
   | Family | Architectures |
   |--------|--------------|
-  | Transformer | Decoder-Only (GPT-style) |
+  | Transformer | Decoder-Only (GPT-style), Multi-Token Prediction, Byte Latent Transformer |
   | Feedforward | MLP, KAN, KAT, TabNet, BitNet |
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
   | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, TTT, Titans, Reservoir (ESN) |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba |
-  | Attention | Multi-Head, GQA, MLA, DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, HGRN, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention |
+  | Attention | Multi-Head, GQA, MLA, DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, Latent Diffusion, Consistency, Score SDE, Flow Matching, Normalizing Flow |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
@@ -34,7 +34,7 @@ defmodule Edifice do
   | Energy | EBM, Hopfield, Neural ODE |
   | Probabilistic | Bayesian, MC Dropout, Evidential |
   | Memory | NTM, Memory Networks |
-  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead |
+  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding |
   | Liquid | Liquid Neural Networks |
   | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA, Temporal JEPA |
   | Interpretability | Sparse Autoencoder, Transcoder |
@@ -46,6 +46,8 @@ defmodule Edifice do
   @architecture_registry %{
     # Transformer
     decoder_only: Edifice.Transformer.DecoderOnly,
+    multi_token_prediction: Edifice.Transformer.MultiTokenPrediction,
+    byte_latent_transformer: Edifice.Transformer.ByteLatentTransformer,
     # Feedforward
     mlp: Edifice.Feedforward.MLP,
     kan: Edifice.Feedforward.KAN,
@@ -114,6 +116,9 @@ defmodule Edifice do
     hawk: Edifice.Attention.Hawk,
     retnet_v2: Edifice.Attention.RetNetV2,
     megalodon: Edifice.Attention.Megalodon,
+    gla_v2: Edifice.Attention.GLAv2,
+    hgrn_v2: Edifice.Attention.HGRNv2,
+    flash_linear_attention: Edifice.Attention.FlashLinearAttention,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -173,6 +178,7 @@ defmodule Edifice do
     rlhf_head: Edifice.Meta.RLHFHead,
     moe_v2: Edifice.Meta.MoEv2,
     dora: Edifice.Meta.DoRA,
+    speculative_decoding: Edifice.Meta.SpeculativeDecoding,
     # Contrastive / Self-Supervised
     simclr: Edifice.Contrastive.SimCLR,
     byol: Edifice.Contrastive.BYOL,
@@ -225,7 +231,7 @@ defmodule Edifice do
   @spec list_families() :: %{atom() => [atom()]}
   def list_families do
     %{
-      transformer: [:decoder_only],
+      transformer: [:decoder_only, :multi_token_prediction, :byte_latent_transformer],
       feedforward: [:mlp, :kan, :kat, :tabnet, :bitnet],
       convolutional: [:conv1d, :resnet, :densenet, :tcn, :mobilenet, :efficientnet],
       recurrent: [
@@ -285,7 +291,10 @@ defmodule Edifice do
         :hawk,
         :retnet_v2,
         :megalodon,
-        :lightning_attention
+        :lightning_attention,
+        :gla_v2,
+        :hgrn_v2,
+        :flash_linear_attention
       ],
       vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf],
       generative: [
@@ -319,7 +328,8 @@ defmodule Edifice do
         :mixture_of_agents,
         :rlhf_head,
         :moe_v2,
-        :dora
+        :dora,
+        :speculative_decoding
       ],
       contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg, :jepa, :temporal_jepa],
       interpretability: [:sparse_autoencoder, :transcoder],
@@ -369,6 +379,9 @@ defmodule Edifice do
     - `:temporal_jepa` — `{context_encoder, predictor}`
     - `:mae` — `{encoder, decoder}`
     - `:world_model` — `{encoder, dynamics, reward_head}` (or 4-tuple with decoder)
+    - `:byte_latent_transformer` — `{encoder, latent_transformer, decoder}`
+    - `:speculative_decoding` — `{draft_model, verifier_model}`
+    - `:multi_token_prediction` — `Axon.container(%{pred_1: ..., pred_N: ...})`
   """
   @spec build(atom(), keyword()) :: Axon.t() | tuple()
   def build(name, opts \\ []) do
