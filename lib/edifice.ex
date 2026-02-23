@@ -127,6 +127,7 @@ defmodule Edifice do
     flash_linear_attention: Edifice.Attention.FlashLinearAttention,
     kda: Edifice.Attention.KDA,
     gated_attention: Edifice.Attention.GatedAttention,
+    ssmax: Edifice.Blocks.SSMax,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -156,6 +157,8 @@ defmodule Edifice do
     mmdit: Edifice.Generative.MMDiT,
     soflow: Edifice.Generative.SoFlow,
     var: Edifice.Generative.VAR,
+    linear_dit: Edifice.Generative.LinearDiT,
+    sana: Edifice.Generative.LinearDiT,
     # Graph
     gcn: Edifice.Graph.GCN,
     gat: Edifice.Graph.GAT,
@@ -319,7 +322,8 @@ defmodule Edifice do
         :hgrn_v2,
         :flash_linear_attention,
         :kda,
-        :gated_attention
+        :gated_attention,
+        :ssmax
       ],
       vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :mamba_vision],
       generative: [
@@ -337,7 +341,9 @@ defmodule Edifice do
         :normalizing_flow,
         :mmdit,
         :soflow,
-        :var
+        :var,
+        :linear_dit,
+        :sana
       ],
       graph: [:gcn, :gat, :graph_sage, :gin, :gin_v2, :pna, :graph_transformer, :schnet],
       sets: [:deep_sets, :pointnet],
