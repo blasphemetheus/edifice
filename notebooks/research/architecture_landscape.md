@@ -663,12 +663,12 @@ These reflect the biggest shifts in production architectures since the original 
 
 ### New Tier 3: Exploratory (2026)
 
-| Addition | Difficulty | Why |
-|----------|-----------|-----|
-| **Multimodal fusion layers** | High | Biggest architectural gap. Cross-attention between `:vit` and `:decoder_only`. |
-| **RL environment integration** | High | Carried from original Tier 3. |
-| **MambaVision** | Medium | Hybrid Mamba-Transformer backbone designed specifically for vision. |
-| **KDA (Kimi Delta Attention)** | Medium | Channel-wise gating variant of Gated DeltaNet from Moonshot AI. |
+| Addition | Difficulty | Status |
+|----------|-----------|--------|
+| **Multimodal fusion layers** | High | Done — `:multimodal_mlp_fusion` (MLP projection, cross-attention, Perceiver resampler) |
+| **RL environment integration** | High | Done — `PPOTrainer`, `GAE`, `CartPole`, `GridWorld` environments |
+| **MambaVision** | Medium | Done — `:mamba_vision` (4-stage hierarchical CNN+Mamba+Attention) |
+| **KDA (Kimi Delta Attention)** | Medium | Done — `:kda` (channel-wise decay, low-rank alpha gate) |
 
 ### Notebook / Documentation Gaps
 

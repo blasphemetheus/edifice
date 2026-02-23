@@ -26,8 +26,8 @@ defmodule Edifice do
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
   | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, Reservoir (ESN), Native Recurrence |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
-  | Attention | Multi-Head, GQA, MLA, DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention |
-  | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF |
+  | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention |
+  | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, SoFlow, Normalizing Flow |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
   | Sets | DeepSets, PointNet |
@@ -39,6 +39,7 @@ defmodule Edifice do
   | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA, Temporal JEPA |
   | Interpretability | Sparse Autoencoder, Transcoder |
   | World Model | World Model |
+  | Multimodal | MLP Projection Fusion, Cross-Attention Fusion, Perceiver Resampler |
   | RL | PolicyValue |
   | Neuromorphic | SNN, ANN2SNN |
   """
@@ -123,6 +124,7 @@ defmodule Edifice do
     gla_v2: Edifice.Attention.GLAv2,
     hgrn_v2: Edifice.Attention.HGRNv2,
     flash_linear_attention: Edifice.Attention.FlashLinearAttention,
+    kda: Edifice.Attention.KDA,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -133,6 +135,9 @@ defmodule Edifice do
     focalnet: Edifice.Vision.FocalNet,
     poolformer: Edifice.Vision.PoolFormer,
     nerf: Edifice.Vision.NeRF,
+    mamba_vision: Edifice.Vision.MambaVision,
+    # Multimodal
+    multimodal_mlp_fusion: Edifice.Multimodal.Fusion,
     # Generative
     diffusion: Edifice.Generative.Diffusion,
     ddim: Edifice.Generative.DDIM,
@@ -309,9 +314,10 @@ defmodule Edifice do
         :lightning_attention,
         :gla_v2,
         :hgrn_v2,
-        :flash_linear_attention
+        :flash_linear_attention,
+        :kda
       ],
-      vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf],
+      vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :mamba_vision],
       generative: [
         :diffusion,
         :ddim,
@@ -356,6 +362,7 @@ defmodule Edifice do
       contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg, :jepa, :temporal_jepa],
       interpretability: [:sparse_autoencoder, :transcoder],
       world_model: [:world_model],
+      multimodal: [:multimodal_mlp_fusion],
       rl: [:policy_value],
       liquid: [:liquid],
       neuromorphic: [:snn, :ann2snn]
