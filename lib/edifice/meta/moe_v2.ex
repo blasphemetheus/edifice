@@ -1,10 +1,10 @@
 defmodule Edifice.Meta.MoEv2 do
   @moduledoc """
-  MoE v2: Expert Choice Routing + Shared Experts.
+  MoE v2: Expert Choice Routing + Shared Experts + Aux-Loss-Free Load Balancing.
 
-  Implements two key improvements to the Mixture of Experts architecture:
-  expert choice routing (Zhou et al., 2022) and shared expert slots
-  (DeepSeekMoE).
+  Implements three key improvements to the Mixture of Experts architecture:
+  expert choice routing (Zhou et al., 2022), shared expert slots (DeepSeekMoE),
+  and aux-loss-free load balancing via trainable bias (DeepSeek-V3).
 
   ## Key Innovations
 
@@ -32,6 +32,25 @@ defmodule Edifice.Meta.MoEv2 do
   Output = SharedExperts(x) + RoutedExperts(x)
   ```
 
+  ### 3. Aux-Loss-Free Load Balancing (DeepSeek-V3)
+
+  Traditional MoE uses auxiliary loss to encourage uniform expert utilization.
+  However, this creates a trade-off: higher aux loss weight improves balance
+  but hurts model quality.
+
+  DeepSeek-V3 introduces a **bias-based** approach that achieves load balance
+  without auxiliary loss:
+
+  1. Add a trainable bias term `b[i]` to each expert's routing score
+  2. Router computes: `scores = gate_logits + bias`, then selects top-K
+  3. After each forward pass, update bias based on expert utilization:
+     `bias[i] -= lr * (utilization[i] - target_utilization)`
+     where `target_utilization = 1/num_experts`
+
+  This pushes the model toward uniform utilization without interfering with
+  the main training objective. When an expert is overused, its bias decreases,
+  making it less likely to be selected. When underused, bias increases.
+
   ## Architecture
 
   ```
@@ -40,7 +59,7 @@ defmodule Edifice.Meta.MoEv2 do
         v
   +----------------------------------+
   |     Router (transposed scores)   |
-  |  score = softmax(W_r * x)^T     |
+  |  score = softmax(W_r * x + b)^T |
   |  Each expert picks top-C tokens  |
   +----------------------------------+
         |
@@ -60,18 +79,31 @@ defmodule Edifice.Meta.MoEv2 do
 
   ## Usage
 
+      # Standard with auxiliary loss (default)
       model = MoEv2.build(
         input_size: 256,
         hidden_size: 512,
         num_shared_experts: 1,
         num_routed_experts: 4,
-        tokens_per_expert: 4
+        tokens_per_expert: 4,
+        load_balance: :aux_loss
       )
+
+      # DeepSeek-V3 style: aux-loss-free with bias
+      model = MoEv2.build(
+        input_size: 256,
+        load_balance: :bias
+      )
+
+      # After training step, update bias for :bias mode
+      utilization = MoEv2.compute_utilization(router_logits, tokens_per_expert)
+      params = MoEv2.update_load_balance_bias(params, utilization, lr: 0.001)
 
   ## References
 
   - Zhou et al., "Mixture-of-Experts with Expert Choice Routing" (NeurIPS 2022)
   - DeepSeek-AI, "DeepSeekMoE: Towards Ultimate Expert Specialization" (2024)
+  - DeepSeek-AI, "DeepSeek-V3 Technical Report" (2024) — aux-loss-free load balancing
   """
 
   import Nx.Defn
@@ -86,7 +118,8 @@ defmodule Edifice.Meta.MoEv2 do
           | {:tokens_per_expert, pos_integer()}
           | {:dropout, float()}
           | {:expert_type, :ffn | :glu}
-          | {:load_balance, :bias | :none}
+          | {:load_balance, :aux_loss | :bias | :none}
+          | {:load_balance_weight, float()}
 
   @default_num_shared 1
   @default_num_routed 4
@@ -109,11 +142,14 @@ defmodule Edifice.Meta.MoEv2 do
   - `:tokens_per_expert` - Tokens each routed expert selects (default: 4)
   - `:dropout` - Dropout rate (default: 0.1)
   - `:expert_type` - `:ffn` or `:glu` (default: :ffn)
-  - `:load_balance` - Load balancing strategy (default: `:none`)
-    - `:none` — no load balancing (standard expert choice)
-    - `:bias` — aux-loss-free bias term added to router logits before softmax.
-      At training time, use `update_load_balance_bias/3` to adjust the bias
-      based on expert utilization, eliminating the need for auxiliary loss.
+  - `:load_balance` - Load balancing strategy (default: `:aux_loss`)
+    - `:aux_loss` — traditional auxiliary loss to encourage uniform expert utilization.
+      Use `compute_aux_loss/3` to compute the loss and add it to your training objective.
+    - `:bias` — aux-loss-free bias term (DeepSeek-V3 approach). A trainable bias is
+      added to router logits before softmax. At training time, use
+      `update_load_balance_bias/3` to adjust the bias based on expert utilization.
+    - `:none` — no load balancing (standard expert choice routing provides natural balance)
+  - `:load_balance_weight` - Weight for auxiliary loss when using `:aux_loss` (default: 0.01)
 
   ## Returns
 
@@ -129,7 +165,7 @@ defmodule Edifice.Meta.MoEv2 do
     tokens_per_expert = Keyword.get(opts, :tokens_per_expert, @default_tokens_per_expert)
     dropout = Keyword.get(opts, :dropout, 0.1)
     expert_type = Keyword.get(opts, :expert_type, :ffn)
-    load_balance = Keyword.get(opts, :load_balance, :none)
+    load_balance = Keyword.get(opts, :load_balance, :aux_loss)
     name = Keyword.get(opts, :name, "moe_v2")
 
     input = Axon.input("moe_input", shape: {nil, nil, input_size})
@@ -367,6 +403,55 @@ defmodule Edifice.Meta.MoEv2 do
     end)
   end
 
+  @doc """
+  Compute load balancing auxiliary loss.
+
+  This loss encourages uniform expert utilization, preventing "expert collapse"
+  where only a few experts are used. Used when `load_balance: :aux_loss`.
+
+  ## Formula
+
+      aux_loss = alpha * num_experts * sum(f_i * P_i)
+
+  Where:
+  - f_i = fraction of tokens routed to expert i
+  - P_i = average router probability for expert i
+  - alpha = load_balance_weight
+
+  A balanced router has aux_loss approximately 1.0.
+
+  ## Parameters
+
+    - `router_probs` - Router softmax probabilities `[batch, seq_len, num_experts]`
+    - `expert_mask` - Binary mask of selected experts `[batch, seq_len, num_experts]`
+    - `opts` - Options:
+      - `:load_balance_weight` - Auxiliary loss weight (default: 0.01)
+
+  ## Returns
+
+    Scalar auxiliary loss tensor.
+  """
+  @spec compute_aux_loss(Nx.Tensor.t(), Nx.Tensor.t(), keyword()) :: Nx.Tensor.t()
+  def compute_aux_loss(router_probs, expert_mask, opts \\ []) do
+    num_experts = Nx.axis_size(router_probs, -1)
+    weight = Keyword.get(opts, :load_balance_weight, 0.01)
+
+    # f_i: fraction of tokens routed to expert i
+    # expert_mask: [batch, seq_len, num_experts] binary
+    tokens_per_expert = Nx.sum(expert_mask, axes: [0, 1])
+    total_tokens = Nx.sum(tokens_per_expert)
+    fraction_per_expert = Nx.divide(tokens_per_expert, Nx.max(total_tokens, 1.0))
+
+    # P_i: average probability assigned to expert i
+    avg_prob_per_expert = Nx.mean(router_probs, axes: [0, 1])
+
+    # aux_loss = alpha * N * sum(f_i * P_i)
+    Nx.multiply(
+      Nx.multiply(weight, num_experts),
+      Nx.sum(Nx.multiply(fraction_per_expert, avg_prob_per_expert))
+    )
+  end
+
   @doc "Get recommended defaults."
   @spec recommended_defaults() :: keyword()
   def recommended_defaults do
@@ -376,7 +461,8 @@ defmodule Edifice.Meta.MoEv2 do
       tokens_per_expert: 4,
       expert_type: :ffn,
       dropout: 0.1,
-      load_balance: :none
+      load_balance: :aux_loss,
+      load_balance_weight: 0.01
     ]
   end
 end
