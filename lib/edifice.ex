@@ -24,11 +24,11 @@ defmodule Edifice do
   | Transformer | Decoder-Only (GPT-style), Multi-Token Prediction, Byte Latent Transformer |
   | Feedforward | MLP, KAN, KAT, TabNet, BitNet |
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
-  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, Titans, Reservoir (ESN), Native Recurrence |
+  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, Reservoir (ESN), Native Recurrence |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
   | Attention | Multi-Head, GQA, MLA, DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF |
-  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, Latent Diffusion, Consistency, Score SDE, Flow Matching, Normalizing Flow |
+  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, SoFlow, Normalizing Flow |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
   | Sets | DeepSets, PointNet |
   | Energy | EBM, Hopfield, Neural ODE |
@@ -71,6 +71,7 @@ defmodule Edifice do
     delta_net: Edifice.Recurrent.DeltaNet,
     gated_delta_net: Edifice.Recurrent.GatedDeltaNet,
     ttt: Edifice.Recurrent.TTT,
+    ttt_e2e: Edifice.Recurrent.TTTE2E,
     titans: Edifice.Recurrent.Titans,
     reservoir: Edifice.Recurrent.Reservoir,
     slstm: Edifice.Recurrent.SLSTM,
@@ -145,6 +146,8 @@ defmodule Edifice do
     vq_vae: Edifice.Generative.VQVAE,
     gan: Edifice.Generative.GAN,
     normalizing_flow: Edifice.Generative.NormalizingFlow,
+    mmdit: Edifice.Generative.MMDiT,
+    soflow: Edifice.Generative.SoFlow,
     # Graph
     gcn: Edifice.Graph.GCN,
     gat: Edifice.Graph.GAT,
@@ -252,6 +255,7 @@ defmodule Edifice do
         :delta_net,
         :gated_delta_net,
         :ttt,
+        :ttt_e2e,
         :titans,
         :reservoir,
         :slstm,
@@ -320,7 +324,9 @@ defmodule Edifice do
         :vae,
         :vq_vae,
         :gan,
-        :normalizing_flow
+        :normalizing_flow,
+        :mmdit,
+        :soflow
       ],
       graph: [:gcn, :gat, :graph_sage, :gin, :gin_v2, :pna, :graph_transformer, :schnet],
       sets: [:deep_sets, :pointnet],
