@@ -64,6 +64,9 @@ defmodule Edifice.Transformer.DecoderOnly do
           | {:num_layers, pos_integer()}
           | {:use_rope, boolean()}
           | {:interleave_rope, boolean()}
+          | {:yarn, boolean()}
+          | {:yarn_scale, number()}
+          | {:yarn_original_max_position, pos_integer()}
           | {:dropout, float()}
           | {:window_size, pos_integer()}
 
@@ -78,9 +81,13 @@ defmodule Edifice.Transformer.DecoderOnly do
     - `:num_kv_heads` - Number of key/value heads for GQA (default: 2)
     - `:num_layers` - Number of decoder blocks (default: 4)
     - `:use_rope` - Apply Rotary Position Embeddings (default: true)
-    - `:interleave_rope` - When true, odd layers (1,3,5) use RoPE and even layers (2,4,6)
-      use NoPE (content-only attention). Overrides `:use_rope` on a per-layer basis.
-      This is the iRoPE pattern from Gemini 2.0. (default: false)
+    - `:interleave_rope` - When true, even-indexed layers (0,2,4...) use RoPE and
+      odd-indexed layers (1,3,5...) use NoPE (content-only attention). Overrides
+      `:use_rope` on a per-layer basis. This is the iRoPE pattern used by Llama 4.
+      (default: false)
+    - `:yarn` - Enable YaRN context extension for longer sequences (default: false)
+    - `:yarn_scale` - YaRN scaling factor, e.g., 8 extends 2048 to 16384 (default: 8)
+    - `:yarn_original_max_position` - Original trained context length (default: 2048)
     - `:dropout` - Dropout rate (default: 0.1)
     - `:window_size` - Expected sequence length for JIT optimization (default: 60)
 
@@ -96,6 +103,9 @@ defmodule Edifice.Transformer.DecoderOnly do
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     use_rope = Keyword.get(opts, :use_rope, true)
     interleave_rope = Keyword.get(opts, :interleave_rope, false)
+    use_yarn = Keyword.get(opts, :yarn, false)
+    yarn_scale = Keyword.get(opts, :yarn_scale, 8)
+    yarn_original_max_position = Keyword.get(opts, :yarn_original_max_position, 2048)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
 
     ModelBuilder.build_sequence_model(
@@ -106,10 +116,10 @@ defmodule Edifice.Transformer.DecoderOnly do
           layer_idx = block_opts[:layer_idx]
           name = "decoder_block_#{layer_idx}"
 
-          # iRoPE: odd layers get RoPE, even layers get NoPE (content-only)
+          # iRoPE: even layers (0,2,4...) get RoPE, odd layers get NoPE (content-only)
           apply_rope =
             if interleave_rope do
-              rem(layer_idx, 2) == 1
+              rem(layer_idx, 2) == 0
             else
               use_rope
             end
@@ -120,6 +130,9 @@ defmodule Edifice.Transformer.DecoderOnly do
               num_heads: num_heads,
               num_kv_heads: num_kv_heads,
               rope: apply_rope,
+              yarn: use_yarn,
+              yarn_scale: yarn_scale,
+              yarn_original_max_position: yarn_original_max_position,
               name: attn_name
             )
           end
