@@ -6,7 +6,8 @@ Exploration of the ML architecture landscape — what exists, what's missing, an
 
 | Document | Description |
 |----------|-------------|
-| [Architecture Landscape](architecture_landscape.md) | Survey of ML paradigms, frontier architectures, and prioritized build list for Edifice |
+| [Architecture Landscape](architecture_landscape.md) | Survey of ML paradigms, frontier architectures, and prioritized build list for Edifice (184 architectures, 25 families) |
+| [OpenCLAW Integration](openclaw_integration.md) | OpenCLAW robotics integration research |
 
 ## Purpose
 

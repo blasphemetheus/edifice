@@ -212,21 +212,26 @@ Organized by problem space / theme. Items marked with `*` are already done or pl
 |--------|-------------------|-------------|
 | Feedforward | training_mlp, architecture_comparison | TabNet, building blocks |
 | Transformer | small_language_model | Small LM, text tasks, evolution, iRoPE |
-| SSM | sequence_modeling | Multi-arch benchmark, Mamba family |
-| Attention | — | Visualization gallery, positional encoding, Lightning Attention |
-| Recurrent | sequence_modeling | RNN evolution, multi-arch benchmark |
-| Vision | — | MNIST/CIFAR, U-Net, patch viz |
+| SSM (19) | sequence_modeling | Multi-arch benchmark, Mamba family |
+| Attention (34) | — | Visualization gallery, positional encoding, Lightning Attention, Softmax Shootout |
+| Recurrent (15) | sequence_modeling | RNN evolution, multi-arch benchmark |
+| Vision (15) | — | MNIST/CIFAR, U-Net, patch viz, DINOv2 |
 | Convolutional | — | CNN evolution, image classification |
-| Graph | graph_classification | Node classification, molecules, viz |
+| Graph (9) | graph_classification | Node classification, molecules, EGNN |
 | Sets | — | (could add point cloud classification) |
-| Generative | generative_models | Diffusion, GAN, flows, VQ-VAE |
-| Contrastive | — | SimCLR, BYOL, MAE, JEPA, Temporal JEPA |
-| Meta | — | MoE routing, LoRA, adapters, aux-loss-free MoE |
+| Generative (22) | generative_models | Diffusion, GAN, flows, VQ-VAE, VAR, Transfusion, Image Gen Paradigms |
+| Contrastive (8) | — | SimCLR, BYOL, MAE, JEPA, Temporal JEPA, SigLIP, Self-Supervised Vision |
+| Meta (22) | — | MoE routing, LoRA, adapters, aux-loss-free MoE, DPO/GRPO/KTO |
 | Energy | architecture_comparison | Energy landscapes, Hopfield memory |
 | Probabilistic | architecture_comparison | Uncertainty, OOD detection |
-| Memory | — | NTM copy task, memory viz |
+| Memory (3) | — | NTM copy task, memory viz, Engram |
 | Neuromorphic | architecture_comparison | SNN basics, ANN→SNN |
 | Liquid | — | Continuous dynamics visualization |
-| Interpretability | — | SAE features, transcoder, ablation, superposition |
+| Interpretability (2) | — | SAE features, transcoder, ablation, superposition |
 | World Model | — | Dynamics comparison, imagination, latent structure |
 | RL | — | PolicyValue, PPO, model-based vs model-free |
+| Audio (3) | — | EnCodec tokenization, VALL-E generation, SoundStorm |
+| Scientific (1) | — | FNO for PDEs, operator learning |
+| Robotics (2) | — | ACT imitation learning, OpenVLA |
+| Multimodal (1) | — | Transfusion, cross-modal fusion |
+| Inference (1) | — | Medusa speculative decoding |

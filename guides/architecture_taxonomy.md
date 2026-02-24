@@ -1,6 +1,6 @@
 # Architecture Taxonomy
 
-Edifice provides **113 architectures** across **17 families**, spanning from foundational MLPs to cutting-edge state space models and test-time training layers. This document serves as a comprehensive reference catalog — organized as a taxonomy with provenance, strengths/weaknesses, and adoption context for every architecture.
+Edifice provides **184 registered architectures** across **25 families**, spanning from foundational MLPs to cutting-edge state space models, audio codecs, robotics, and 3D generation. This document serves as a comprehensive reference catalog — organized as a taxonomy with provenance, strengths/weaknesses, and adoption context for every architecture.
 
 For guided learning, see [Learning Path](learning_path.md). For choosing architectures by problem type, see [Problem Landscape](problem_landscape.md).
 
@@ -10,23 +10,31 @@ For guided learning, see [Learning Path](learning_path.md). For choosing archite
 
 | Family | Count | Primary Input | Core Use Case | Era |
 |--------|-------|---------------|---------------|-----|
-| **SSM** (State Space Models) | 15 | Sequences | Efficient long-range sequence modeling | 2021–2024 |
-| **Attention & Linear Attention** | 19 | Sequences | Token mixing, global dependencies | 2017–2024 |
-| **Recurrent** | 10 | Sequences | Sequential state tracking, temporal memory | 1997–2025 |
-| **Transformer** | 1 | Sequences | Autoregressive generation backbone | 2017–2023 |
-| **Vision** | 9 | Images/Patches | Image classification, segmentation, synthesis | 2020–2022 |
+| **Transformer** | 4 | Sequences | Autoregressive generation backbone | 2017–2025 |
+| **SSM** (State Space Models) | 19 | Sequences | Efficient long-range sequence modeling | 2021–2025 |
+| **Attention & Linear Attention** | 34 | Sequences | Token mixing, global dependencies | 2017–2025 |
+| **Recurrent** | 15 | Sequences | Sequential state tracking, temporal memory | 1997–2025 |
+| **Vision** | 15 | Images/Patches | Image classification, segmentation, synthesis | 2020–2025 |
 | **Convolutional** | 6 | Images/Sequences | Local pattern extraction | 2015–2019 |
-| **Graph** | 8 | Graphs | Node/graph classification, molecular modeling | 2017–2021 |
-| **Sets** | 2 | Point sets | Permutation-invariant set functions | 2017 |
-| **Generative** | 11 | Noise/Latents | Data generation, density estimation | 2014–2023 |
-| **Contrastive & Self-Supervised** | 6 | Paired views | Representation learning without labels | 2020–2023 |
-| **Meta-Learning** | 10 | Varied | Routing, adaptation, composition | 2016–2024 |
+| **Generative** | 22 | Noise/Latents | Data generation, density estimation | 2014–2025 |
+| **Graph** | 9 | Graphs | Node/graph classification, molecular modeling | 2017–2025 |
+| **Contrastive & Self-Supervised** | 8 | Paired views | Representation learning without labels | 2020–2025 |
+| **Meta-Learning & Composition** | 22 | Varied | Routing, adaptation, preference optimization | 2016–2025 |
+| **Feedforward** | 5 | Tabular/Vectors | Feature transformation, tabular data | 1986–2024 |
+| **Memory** | 3 | Sequences | External differentiable memory | 2014–2025 |
 | **Energy** | 3 | Varied | Energy landscapes, continuous dynamics | 2006–2020 |
 | **Probabilistic** | 3 | Varied | Uncertainty quantification | 2015–2018 |
-| **Memory** | 2 | Sequences | External differentiable memory | 2014–2015 |
+| **Audio** | 3 | Audio/Speech | Neural audio codecs, TTS | 2023–2025 |
+| **Robotics** | 2 | Vision+Actions | Imitation learning, VLA | 2024–2025 |
+| **Interpretability** | 2 | Activations | Feature extraction, mechanistic analysis | 2024–2025 |
+| **Sets** | 2 | Point sets | Permutation-invariant set functions | 2017 |
 | **Neuromorphic** | 2 | Spike trains | Biologically-plausible, ultra-low-power | 2015–2019 |
-| **Feedforward** | 5 | Tabular/Vectors | Feature transformation, tabular data | 1986–2024 |
+| **Scientific** | 1 | Functions/PDEs | Operator learning, PDE solving | 2021–2025 |
+| **Multimodal** | 1 | Multi-modal | Cross-modal fusion | 2024–2025 |
+| **World Model** | 1 | Observations | Latent dynamics, planning | 2024–2025 |
+| **RL** | 1 | States/Actions | Actor-critic policy networks | 2024–2025 |
 | **Liquid** | 1 | Sequences | Continuous-time adaptive dynamics | 2021 |
+| **Inference** | 1 | Sequences | Speculative decoding acceleration | 2024–2025 |
 
 ---
 
@@ -34,7 +42,7 @@ For guided learning, see [Learning Path](learning_path.md). For choosing archite
 
 ### Sequence Processing
 
-#### State Space Models (15 architectures)
+#### State Space Models (19 architectures)
 
 State Space Models (SSMs) model sequences through continuous-time linear dynamical systems discretized for neural networks. The key equation is:
 

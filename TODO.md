@@ -30,7 +30,7 @@
 - [x] JEPA — Joint Embedding Predictive Architecture (self-supervised)
 - [x] Differential Transformer — Dual softmax attention with noise cancellation
 
-## v0.3.0 Candidates
+## v0.3.0 (done)
 - [x] **Hymba** — Hybrid Mamba+attention with learnable meta tokens
 - [x] **sLSTM** — Scalar LSTM with exponential gating (xLSTM component)
 - [x] **GSS** — Gated State Space (simplified S4 with multiplicative gating)
@@ -46,6 +46,72 @@
 - [ ] **Flash Attention** — IO-aware exact attention (requires EXLA backend work)
 - [x] **Quantization toolkit** — GPTQ, AWQ, SqueezeLLM weight quantization
 - [x] **LoRA+ / DoRA** — Improved low-rank adaptation variants
+
+## 2026 Wave 1 (done)
+- [x] **Gated DeltaNet** — Linear attention with data-dependent gating (Qwen3-Next, Kimi Linear)
+- [x] **RWKV-7** — Generalized delta rule, "Goose" architecture
+- [x] **TTT-E2E** — End-to-end test-time training
+- [x] **MMDiT** — Multimodal Diffusion Transformer (FLUX.1, SD3)
+- [x] **SoFlow** — Flow matching + consistency loss
+- [x] **KDA** — Kimi Delta Attention (channel-wise decay)
+- [x] **MambaVision** — 4-stage hierarchical CNN+Mamba+Attention
+- [x] **Multimodal MLP Fusion** — MLP projection, cross-attention, Perceiver resampler
+- [x] **RL Integration** — PPOTrainer, GAE, CartPole, GridWorld environments
+- [x] **iRoPE** — Interleaved RoPE in decoder_only (Llama 4 pattern)
+- [x] **Aux-loss-free MoE** — Bias-based load balancing in MoE v2
+
+## 2026 Wave 2 (done)
+- [x] **Gated Attention** — Sigmoid post-attention gate (NeurIPS 2025 best paper)
+- [x] **NSA** — Native Sparse Attention (DeepSeek three-path)
+- [x] **Scalable-Softmax** — Drop-in softmax replacement
+- [x] **Softpick** — Non-saturating sparse attention function
+- [x] **VAR** — Visual Autoregressive (next-scale prediction, NeurIPS 2024 best paper)
+- [x] **Transfusion** — Unified AR text + diffusion images
+- [x] **Linear DiT (SANA)** — Linear attention for diffusion
+- [x] **SiT** — Scalable Interpolant Transformer
+- [x] **MAR** — Masked Autoregressive generation
+- [x] **DINOv2** — Self-distillation vision backbone
+- [x] **MetaFormer / CAFormer** — Architecture-first framework
+- [x] **EfficientViT** — Linear attention ViT
+- [x] **SigLIP** — Sigmoid contrastive learning
+- [x] **FNO** — Fourier Neural Operator (scientific ML)
+- [x] **EGNN** — E(n)-Equivariant GNN
+- [x] **DPO** — Direct Preference Optimization
+- [x] **GRPO** — Group Relative Policy Optimization
+- [x] **KTO** — Kahneman-Tversky Optimization
+- [x] **Engram** — O(1) hash-based associative memory
+- [x] **RNoPE-SWA** — No positional encoding + sliding window
+- [x] **YaRN** — RoPE context extension
+- [x] **Dual Chunk Attention** — Long-context chunked attention
+- [x] **TMRoPE** — Time-aligned Multimodal RoPE
+- [x] **Medusa** — Multi-head speculative decoding
+- [x] **Gaussian Splatting** — 3D Gaussian Splatting (NeRF successor)
+- [x] **TRELLIS** — Sparse 3D lattice generation
+- [x] **CogVideoX** — 3D causal video generation
+- [x] **ACT** — Action Chunking Transformer (robotics)
+- [x] **OpenVLA** — Vision-Language-Action model
+- [x] **EnCodec** — Neural audio codec
+- [x] **VALL-E** — Codec language model for TTS
+- [x] **SoundStorm** — Parallel audio token generation
+- [x] **GGUF Export** — Model export to GGUF format
+
+## Remaining Candidates
+- [ ] **Flash Attention** — IO-aware exact attention (requires EXLA backend work)
+- [ ] **SPLA** — Sparse + Linear Attention hybrid
+- [ ] **InfLLM-V2** — Block-partitioned KV cache selection
+- [ ] **F5-TTS** — Non-autoregressive flow-matching TTS
+- [ ] **JanusFlow** — AR text + rectified flow images
+- [ ] **Show-o** — AR + discrete diffusion
+- [ ] **Diffusion Policy** — Diffusion for robot action generation
+- [ ] **CausVid** — Causal video DiT distillation
+- [ ] **DeepONet** — Branch-trunk operator learning
+- [ ] **SE(3)-Transformer** — Equivariant transformer for structural biology
+- [ ] **MAGVIT-v2** — Lookup-free quantization for image/video tokens
+- [ ] **mHC** — Manifold Hyper-Connections (DeepSeek-V4)
+- [ ] **MIRAS** — Google's Titans extension framework
+- [ ] **MoR** — Mixture of Recursions
+- [ ] **MoED** — Mixture of Expert Depths
+- [ ] **Agent swarm patterns** — Multi-agent coordination framework
 
 ## 🔍 Opus Review Pass — AI-Generated Architecture Implementations
 

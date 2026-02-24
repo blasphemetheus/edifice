@@ -15,7 +15,7 @@
 - [ ] LoRA/Adapter fine-tuning — Show meta-learning adapters wrapping a frozen backbone
 - [x] Small language model — `small_language_model.livemd`
 
-### New Architecture Walkthroughs (Tier 1 Build)
+### Architecture Walkthroughs (all architectures now implemented)
 
 - [ ] World Model — Encode observations, learn latent dynamics (MLP vs NeuralODE vs GRU), predict rewards. Train on a simple grid-world or CartPole-like environment, visualize latent trajectories and imagined rollouts
 - [ ] RL PolicyValue + Environment — Build a policy-value network, implement the Environment behaviour, run PPO-style training on a toy environment (e.g. bandit or cliff-walking). Show policy improvement over episodes
@@ -25,6 +25,13 @@
 - [ ] Temporal JEPA (V-JEPA) — Mask timesteps from a sequence, predict masked representations, show EMA target divergence, compare to pixel-level reconstruction (MAE-style)
 - [ ] iRoPE — Compare standard RoPE vs interleaved RoPE (odd/even layers) on a language modeling task, show how NoPE layers learn different attention patterns
 - [ ] Aux-loss-free MoE — Visualize expert utilization with and without the load-balance bias, show how the bias corrects routing imbalance without auxiliary loss
+- [ ] Softmax Shootout — Compare softmax, SSMax, Softpick on same sequence task, visualize attention distributions
+- [ ] Image Generation Paradigms — VAR vs DiT vs consistency model vs flow matching on 2D data
+- [ ] Self-Supervised Vision — DINOv2 vs MAE vs SimCLR vs JEPA feature quality comparison
+- [ ] RLHF Without Tears — DPO vs GRPO vs KTO on simple preference tasks
+- [ ] Audio from Scratch — EnCodec tokenization + VALL-E generation pipeline
+- [ ] Unified Multimodal — Transfusion: one model for text + images
+- [ ] Scientific ML — FNO for solving simple PDEs vs neural ODE
 
 ### Other New Module Candidates
 

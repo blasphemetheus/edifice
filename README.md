@@ -6,7 +6,7 @@
 
 A comprehensive ML architecture library for Elixir, built on [Nx](https://github.com/elixir-nx/nx) and [Axon](https://github.com/elixir-nx/axon).
 
-113 neural network architectures across 17 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons.
+184 neural network architectures across 25 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons, audio codecs to robotics, scientific ML to 3D generation.
 
 ## Why Edifice?
 
@@ -82,7 +82,10 @@ Edifice.list_families()
 
 | Architecture | Module | Key Feature |
 |-------------|--------|-------------|
-| **Decoder-Only** | `Edifice.Transformer.DecoderOnly` | GPT-style with GQA, RoPE, SwiGLU, RMSNorm |
+| **Decoder-Only** | `Edifice.Transformer.DecoderOnly` | GPT-style with GQA, RoPE/iRoPE, SwiGLU, RMSNorm |
+| **Multi-Token Prediction** | `Edifice.Transformer.MultiTokenPrediction` | Predict next N tokens simultaneously |
+| **Byte Latent Transformer** | `Edifice.Transformer.ByteLatentTransformer` | Byte-level processing via encoder-latent-decoder |
+| **Nemotron-H** | `Edifice.Transformer.NemotronH` | NVIDIA's hybrid Mamba-Transformer |
 
 ### State Space Models
 
@@ -103,6 +106,9 @@ Edifice.list_families()
 | **Zamba** | `Edifice.SSM.Zamba` | Mamba + single shared attention layer |
 | **StripedHyena** | `Edifice.SSM.StripedHyena` | Interleaved Hyena long conv + gated conv |
 | **Mamba-3** | `Edifice.SSM.Mamba3` | Complex states, trapezoidal discretization, MIMO |
+| **GSS** | `Edifice.SSM.GSS` | Gated State Space (simplified S4 with gating) |
+| **Hymba** | `Edifice.SSM.Hymba` | Hybrid Mamba + attention with learnable meta tokens |
+| **SS Transformer** | `Edifice.SSM.SSTransformer` | State Space Transformer |
 
 ### Attention & Linear Attention
 
@@ -127,6 +133,15 @@ Edifice.list_families()
 | **InfiniAttention** | `Edifice.Attention.InfiniAttention` | Compressive memory for unbounded context |
 | **Conformer** | `Edifice.Attention.Conformer` | Conv-augmented transformer for audio/speech |
 | **Ring Attention** | `Edifice.Attention.RingAttention` | Distributed chunked attention for long sequences |
+| **Lightning Attention** | `Edifice.Attention.LightningAttention` | Hybrid linear/softmax with I/O-aware tiling |
+| **Gated Attention** | `Edifice.Attention.GatedAttention` | Sigmoid post-attention gate (NeurIPS 2025) |
+| **NSA** | `Edifice.Attention.NSA` | Native Sparse Attention (DeepSeek three-path) |
+| **KDA** | `Edifice.Attention.KDA` | Kimi Delta Attention, channel-wise decay |
+| **Flash Linear Attention** | `Edifice.Attention.FlashLinearAttention` | Optimized linear attention |
+| **YaRN** | `Edifice.Attention.YARN` | RoPE context extension via frequency scaling |
+| **Dual Chunk** | `Edifice.Attention.DualChunk` | Dual Chunk Attention for long-context |
+| **TMRoPE** | `Edifice.Attention.TMRoPE` | Time-aligned Multimodal RoPE |
+| **RNoPE-SWA** | `Edifice.Attention.RNoPESWA` | No positional encoding + sliding window |
 
 ### Recurrent Networks
 
@@ -140,12 +155,11 @@ Edifice.list_families()
 | **TTT** | `Edifice.Recurrent.TTT` | Test-Time Training, self-supervised at inference |
 | **Titans** | `Edifice.Recurrent.Titans` | Neural long-term memory, surprise-gated |
 | **Reservoir** | `Edifice.Recurrent.Reservoir` | Echo State Networks with fixed random reservoir |
-
-### Transformer
-
-| Architecture | Module | Key Feature |
-|-------------|--------|-------------|
-| **Decoder-Only** | `Edifice.Transformer.DecoderOnly` | GPT-style with GQA + RoPE + SwiGLU + RMSNorm |
+| **sLSTM** | `Edifice.Recurrent.SLSTM` | Scalar LSTM with exponential gating |
+| **xLSTM v2** | `Edifice.Recurrent.XLSTMv2` | Updated mLSTM with matrix memory |
+| **Gated DeltaNet** | `Edifice.Recurrent.GatedDeltaNet` | Linear attention with data-dependent gating |
+| **TTT-E2E** | `Edifice.Recurrent.TTTE2E` | End-to-end test-time training |
+| **Native Recurrence** | `Edifice.Recurrent.NativeRecurrence` | Native recurrence block |
 
 ### Vision
 
@@ -160,6 +174,11 @@ Edifice.list_families()
 | **FocalNet** | `Edifice.Vision.FocalNet` | Focal modulation, hierarchical context |
 | **PoolFormer** | `Edifice.Vision.PoolFormer` | Average pooling token mixer (MetaFormer) |
 | **NeRF** | `Edifice.Vision.NeRF` | Neural radiance field, coordinate-to-color mapping |
+| **Gaussian Splat** | `Edifice.Vision.GaussianSplat` | 3D Gaussian Splatting (NeRF successor) |
+| **MambaVision** | `Edifice.Vision.MambaVision` | 4-stage hierarchical CNN+Mamba+Attention |
+| **DINOv2** | `Edifice.Vision.DINOv2` | Self-distillation vision backbone |
+| **MetaFormer** | `Edifice.Vision.MetaFormer` | Architecture-first framework (+ CAFormer variant) |
+| **EfficientViT** | `Edifice.Vision.EfficientViT` | Linear attention ViT |
 
 ### Convolutional
 
@@ -187,6 +206,15 @@ Edifice.list_families()
 | **Score SDE** | `Edifice.Generative.ScoreSDE` | Continuous SDE framework (VP-SDE, VE-SDE) |
 | **Flow Matching** | `Edifice.Generative.FlowMatching` | ODE-based generation, multiple loss variants |
 | **Normalizing Flow** | `Edifice.Generative.NormalizingFlow` | Affine coupling layers (RealNVP-style) |
+| **MMDiT** | `Edifice.Generative.MMDiT` | Multimodal Diffusion Transformer (FLUX.1, SD3) |
+| **SoFlow** | `Edifice.Generative.SoFlow` | Flow matching + consistency loss |
+| **VAR** | `Edifice.Generative.VAR` | Visual Autoregressive (next-scale prediction) |
+| **Linear DiT (SANA)** | `Edifice.Generative.LinearDiT` | Linear attention for diffusion, 100x speedup |
+| **SiT** | `Edifice.Generative.SiT` | Scalable Interpolant Transformer |
+| **Transfusion** | `Edifice.Generative.Transfusion` | Unified AR text + diffusion images |
+| **MAR** | `Edifice.Generative.MAR` | Masked Autoregressive generation |
+| **CogVideoX** | `Edifice.Generative.CogVideoX` | 3D causal VAE + expert transformer for video |
+| **TRELLIS** | `Edifice.Generative.TRELLIS` | Sparse 3D lattice + rectified flow |
 
 ### Contrastive & Self-Supervised
 
@@ -198,6 +226,8 @@ Edifice.list_families()
 | **MAE** | `Edifice.Contrastive.MAE` | Masked Autoencoder, 75% patch masking |
 | **VICReg** | `Edifice.Contrastive.VICReg` | Variance-Invariance-Covariance regularization |
 | **JEPA** | `Edifice.Contrastive.JEPA` | Joint Embedding Predictive Architecture |
+| **Temporal JEPA** | `Edifice.Contrastive.TemporalJEPA` | V-JEPA for video/temporal sequences |
+| **SigLIP** | `Edifice.Contrastive.SigLIP` | Sigmoid contrastive learning (CLIP improvement) |
 
 ### Graph & Set Networks
 
@@ -211,8 +241,8 @@ Edifice.list_families()
 | **PNA** | `Edifice.Graph.PNA` | Principal Neighbourhood Aggregation |
 | **GINv2** | `Edifice.Graph.GINv2` | GIN with edge features |
 | **SchNet** | `Edifice.Graph.SchNet` | Continuous-filter convolutions for molecules |
+| **EGNN** | `Edifice.Graph.EGNN` | E(n)-equivariant GNN for molecular simulation |
 | **DeepSets** | `Edifice.Sets.DeepSets` | Permutation-invariant set functions |
-| **GINv2** | `Edifice.Graph.GINv2` | Enhanced GIN with edge features |
 | **PointNet** | `Edifice.Sets.PointNet` | Point cloud processing with T-Net alignment |
 
 ### Energy, Probabilistic & Memory
@@ -227,6 +257,7 @@ Edifice.list_families()
 | **Evidential NN** | `Edifice.Probabilistic.EvidentialNN` | Dirichlet priors for uncertainty |
 | **NTM** | `Edifice.Memory.NTM` | Neural Turing Machine, differentiable memory |
 | **Memory Network** | `Edifice.Memory.MemoryNetwork` | End-to-end memory with multi-hop attention |
+| **Engram** | `Edifice.Memory.Engram` | O(1) hash-based associative memory |
 
 ### Meta-Learning & Specialized
 
@@ -241,10 +272,62 @@ Edifice.list_families()
 | **Capsule** | `Edifice.Meta.Capsule` | Dynamic routing between capsules |
 | **MixtureOfDepths** | `Edifice.Meta.MixtureOfDepths` | Dynamic per-token compute allocation |
 | **MixtureOfAgents** | `Edifice.Meta.MixtureOfAgents` | Multi-model proposer + aggregator |
-| **RLHF Head** | `Edifice.Meta.RLHFHead` | Reward model and DPO preference heads |
+| **RLHF Head** | `Edifice.Meta.RLHFHead` | Reward model and preference heads |
+| **DPO** | `Edifice.Meta.DPO` | Direct Preference Optimization |
+| **GRPO** | `Edifice.Meta.GRPO` | Group Relative Policy Optimization (DeepSeek-R1) |
+| **KTO** | `Edifice.Meta.KTO` | Kahneman-Tversky Optimization (binary feedback) |
+| **MoE v2** | `Edifice.Meta.MoEv2` | Expert-choice routing + shared experts + bias balancing |
+| **DoRA** | `Edifice.Meta.DoRA` | Weight-decomposed LoRA |
+| **Speculative Decoding** | `Edifice.Meta.SpeculativeDecoding` | Draft + verify inference acceleration |
+| **Test-Time Compute** | `Edifice.Meta.TestTimeCompute` | Adaptive test-time compute |
+| **Mixture of Tokenizers** | `Edifice.Meta.MixtureOfTokenizers` | Multi-tokenization expert routing |
+| **QAT** | `Edifice.Meta.QAT` | Quantization-Aware Training |
+| **Hybrid Builder** | `Edifice.Meta.HybridBuilder` | Configurable SSM/Attention ratio |
 | **Liquid NN** | `Edifice.Liquid` | Continuous-time ODE dynamics (LTC cells) |
 | **SNN** | `Edifice.Neuromorphic.SNN` | Leaky integrate-and-fire, surrogate gradients |
 | **ANN2SNN** | `Edifice.Neuromorphic.ANN2SNN` | Convert trained ANNs to spiking networks |
+
+### Interpretability
+
+| Architecture | Module | Key Feature |
+|-------------|--------|-------------|
+| **Sparse Autoencoder** | `Edifice.Interpretability.SparseAutoencoder` | Feature extraction from model activations |
+| **Transcoder** | `Edifice.Interpretability.Transcoder` | Cross-layer mechanistic interpretability |
+
+### Scientific ML
+
+| Architecture | Module | Key Feature |
+|-------------|--------|-------------|
+| **FNO** | `Edifice.Scientific.FNO` | Fourier Neural Operator for solving PDEs |
+
+### Audio
+
+| Architecture | Module | Key Feature |
+|-------------|--------|-------------|
+| **EnCodec** | `Edifice.Audio.EnCodec` | Neural audio codec (encoder → RVQ → decoder) |
+| **VALL-E** | `Edifice.Audio.VALLE` | Codec language model for zero-shot TTS |
+| **SoundStorm** | `Edifice.Audio.SoundStorm` | Parallel audio token generation |
+
+### Robotics
+
+| Architecture | Module | Key Feature |
+|-------------|--------|-------------|
+| **ACT** | `Edifice.Robotics.ACT` | Action Chunking Transformer for imitation learning |
+| **OpenVLA** | `Edifice.Robotics.OpenVLA` | Vision-Language-Action model for robot control |
+
+### RL & World Models
+
+| Architecture | Module | Key Feature |
+|-------------|--------|-------------|
+| **PolicyValue** | `Edifice.RL.PolicyValue` | Actor-critic policy-value network |
+| **World Model** | `Edifice.WorldModel.WorldModel` | Encoder + dynamics + reward head |
+| **Medusa** | `Edifice.Inference.Medusa` | Multi-head speculative decoding |
+
+### Multimodal
+
+| Architecture | Module | Key Feature |
+|-------------|--------|-------------|
+| **Multimodal Fusion** | `Edifice.Multimodal.Fusion` | MLP projection, cross-attention, Perceiver resampler |
 
 ### Building Blocks
 
@@ -265,6 +348,9 @@ Edifice.list_families()
 | **Depthwise Conv** | `Edifice.Blocks.DepthwiseConv` | 1D depthwise separable convolution |
 | **Model Builder** | `Edifice.Blocks.ModelBuilder` | Sequence/vision model skeletons |
 | **Message Passing** | `Edifice.Graph.MessagePassing` | Generic MPNN framework, global pooling |
+| **Scalable-Softmax** | `Edifice.Blocks.SSMax` | Drop-in softmax replacement for long sequences |
+| **Softpick** | `Edifice.Blocks.Softpick` | Non-saturating sparse attention function |
+| **KV Cache** | `Edifice.Blocks.KVCache` | Inference-time KV caching |
 
 ## Guides
 
@@ -276,11 +362,11 @@ Start here if you're new to machine learning. These guides build from zero to fl
 2. **[Core Vocabulary](guides/core_vocabulary.md)** — Essential terminology used across all guides
 3. **[The Problem Landscape](guides/problem_landscape.md)** — Classification, generation, sequence modeling — which architectures solve which problems
 4. **[Reading Edifice](guides/reading_edifice.md)** — The build/init/predict pattern, Axon graphs, shapes, and runnable examples
-5. **[Learning Path](guides/learning_path.md)** — A guided tour through the 17 architecture families
+5. **[Learning Path](guides/learning_path.md)** — A guided tour through the architecture families
 
 ### Reference
 
-- **[Architecture Taxonomy](guides/architecture_taxonomy.md)** — Comprehensive catalog of all 113 architectures: descriptions, paper references, strengths/weaknesses, adoption context, and gap analysis
+- **[Architecture Taxonomy](guides/architecture_taxonomy.md)** — Comprehensive catalog of architectures: descriptions, paper references, strengths/weaknesses, adoption context, and gap analysis
 
 ### Architecture Guides
 

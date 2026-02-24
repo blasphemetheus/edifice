@@ -2,7 +2,7 @@
 
 > Where Edifice stands, what's happening at the frontier, and what to build next.
 
-Edifice currently implements **151 architectures** spanning 21 families — from transformers and state space models to graph networks, generative models, multimodal fusion, RL integration, and neuromorphic computing. This document maps the broader landscape to identify gaps, emerging paradigms, and high-impact build targets.
+Edifice currently implements **184 registered architectures** spanning 25 families — from transformers and state space models to graph networks, generative models, multimodal fusion, audio synthesis, robotics, RL integration, scientific ML, and neuromorphic computing. This document maps the broader landscape to identify gaps, emerging paradigms, and high-impact build targets.
 
 ---
 
@@ -97,7 +97,7 @@ The attention mechanism is the beating heart of transformers, and it's also the 
 
 **Paper:** "Lightning Attention-2: A Free Lunch for Handling Unlimited Sequence Lengths" (MiniMax, 2024)
 
-**Edifice status:** ❌ Not implemented. Edifice has `:linear_transformer` and `:performer` (both pure linear attention) but not the hybrid approach.
+**Edifice status:** ✅ Implemented as `:lightning_attention` (`Edifice.Attention.LightningAttention`).
 
 ### iRoPE (Meta, Llama 4)
 
@@ -105,7 +105,7 @@ The attention mechanism is the beating heart of transformers, and it's also the 
 
 **Why it matters:** This decouples position-dependent attention (where RoPE helps) from content-dependent attention (where position can be a distraction). The result: better generalization to sequence lengths far beyond training. Llama 4 was trained on shorter contexts but reportedly supports 10M+ tokens at inference.
 
-**Edifice status:** ❌ Not implemented. Edifice's `:decoder_only` applies RoPE uniformly. Adding an `interleave_rope: true` option would be straightforward.
+**Edifice status:** ✅ `:decoder_only` supports `interleave_rope: true` option (alternating RoPE/NoPE layers).
 
 ### YARN + Dual Chunk Attention (Qwen)
 
@@ -116,7 +116,7 @@ The attention mechanism is the beating heart of transformers, and it's also the 
 
 **Why it matters:** These let a model trained on 4K context work at 32K+ context without retraining. Qwen2.5 used this combination to achieve 128K context.
 
-**Edifice status:** ❌ Not implemented. Edifice has standard RoPE but no context extension methods.
+**Edifice status:** ✅ YARN implemented as `:yarn` (`Edifice.Attention.YARN`). Dual Chunk Attention implemented as `:dual_chunk_attention` (`Edifice.Attention.DualChunk`).
 
 ### What Edifice Has vs. What's Missing
 
@@ -133,10 +133,16 @@ The attention mechanism is the beating heart of transformers, and it's also the 
 | Ring Attention | ✅ | `:ring_attention` |
 | Infini-Attention | ✅ | `:infini_attention` |
 | RoPE | ✅ | Built into DecoderOnly |
-| Lightning Attention (hybrid) | ❌ | — |
-| iRoPE (interleaved) | ❌ | — |
-| YARN context extension | ❌ | — |
-| Dual Chunk Attention | ❌ | — |
+| Lightning Attention (hybrid) | ✅ | `:lightning_attention` |
+| Gated Attention | ✅ | `:gated_attention` |
+| Scalable-Softmax (SSMax) | ✅ | `:ssmax` |
+| Softpick | ✅ | `:softpick` |
+| iRoPE (interleaved) | ✅ | `:decoder_only` (interleave_rope: true) |
+| YARN context extension | ✅ | `:yarn` |
+| Dual Chunk Attention | ✅ | `:dual_chunk_attention` |
+| NSA (Native Sparse Attention) | ✅ | `:nsa` |
+| TMRoPE | ✅ | `:tmrope` |
+| RNoPE-SWA | ✅ | `:rnope_swa` |
 | FlashAttention (kernel-level) | ❌ | Requires custom CUDA, beyond Nx |
 
 ---
@@ -372,7 +378,7 @@ Let's look at the specific architectures powering today's strongest models.
 
 **Training cost:** $5.6M reported — dramatically lower than comparable models, largely due to MoE efficiency and FP8 training.
 
-**What Edifice has:** MLA (✅), MoE v2 (✅ partial), Multi-token prediction (❌), FP8 training (❌ — depends on Nx/EXLA support)
+**What Edifice has:** MLA (✅), MoE v2 (✅), Multi-token prediction (✅), FP8 training (❌ — depends on Nx/EXLA support)
 
 ### Kimi K2 (June 2025)
 
@@ -559,19 +565,19 @@ Longer-term additions that open new frontiers but require significant investment
 
 | Addition | Tier | Difficulty | Builds On |
 |----------|:----:|:----------:|-----------|
-| Lightning Attention | 1 | Medium | linear_transformer, performer |
-| Transcoders/SAE Module | 1 | Low-Med | vae, any model |
-| iRoPE | 1 | Low | decoder_only |
-| JEPA v2 / V-JEPA | 1 | Medium | jepa, vit, mae |
-| Aux-loss-free MoE | 1 | Low | moe_v2 |
-| Multi-token prediction | 2 | Low | decoder_only |
-| YARN | 2 | Low | decoder_only |
-| Speculative decoding | 2 | Medium | any model pair |
-| GGUF export | 2 | High | quantization toolkit |
-| RL environments | 3 | High | rlhf_head |
-| Agent swarm patterns | 3 | High | mixture_of_agents |
-| Multimodal fusion | 3 | High | vit, decoder_only |
-| TMRoPE | 3 | Medium | multimodal fusion |
+| Lightning Attention | 1 | Medium | ✅ Done |
+| Transcoders/SAE Module | 1 | Low-Med | ✅ Done |
+| iRoPE | 1 | Low | ✅ Done |
+| JEPA v2 / V-JEPA | 1 | Medium | ✅ Done |
+| Aux-loss-free MoE | 1 | Low | ✅ Done (bias routing in moe_v2) |
+| Multi-token prediction | 2 | Low | ✅ Done |
+| YARN | 2 | Low | ✅ Done |
+| Speculative decoding | 2 | Medium | ✅ Done |
+| GGUF export | 2 | High | ✅ Done (lib/edifice/export/gguf.ex) |
+| RL environments | 3 | High | ✅ Done (PPO, GAE, CartPole, GridWorld) |
+| Agent swarm patterns | 3 | High | ❌ Not done |
+| Multimodal fusion | 3 | High | ✅ Done (multimodal_mlp_fusion) |
+| TMRoPE | 3 | Medium | ✅ Done |
 
 ---
 
@@ -595,14 +601,14 @@ The landscape has shifted significantly since the original tiers were written. S
 
 | Original Item | Tier | Status |
 |---------------|:----:|--------|
-| iRoPE | 1 | **Not done** — still high-value, used by Llama 4 |
-| Aux-loss-free MoE | 1 | **Not done** — DeepSeek-V3's bias routing |
-| YARN context extension | 2 | **Not done** |
-| GGUF export | 2 | **Not done** — high effort |
-| RL environments | 3 | **Not done** |
+| iRoPE | 1 | ✅ Done — `interleave_rope: true` in `:decoder_only` |
+| Aux-loss-free MoE | 1 | ✅ Done — bias routing in `:moe_v2` |
+| YARN context extension | 2 | ✅ Done — `:yarn` |
+| GGUF export | 2 | ✅ Done — `lib/edifice/export/gguf.ex` |
+| RL environments | 3 | ✅ Done — PPOTrainer, GAE, CartPole, GridWorld |
 | Agent swarm patterns | 3 | **Not done** |
-| Multimodal fusion | 3 | **Not done** |
-| TMRoPE | 3 | **Not done** |
+| Multimodal fusion | 3 | ✅ Done — `:multimodal_mlp_fusion` |
+| TMRoPE | 3 | ✅ Done — `:tmrope` |
 
 ### New Tier 1: High Impact (2026)
 
@@ -618,21 +624,13 @@ These reflect the biggest shifts in production architectures since the original 
 | **Builds on** | `:delta_net`, `:gla` (conceptual ancestor) |
 | **Why Tier 1** | The hottest linear attention mechanism of 2025-2026. Two major labs adopted it for production models. |
 
-#### iRoPE (Interleaved RoPE) — carried from original Tier 1
+#### iRoPE (Interleaved RoPE) — ✅ DONE
 
-| | |
-|---|---|
-| **What** | Apply RoPE to alternating transformer layers, NoPE (content-only) for others |
-| **Difficulty** | Low — add `interleave_rope: true` option to `:decoder_only` |
-| **Why Tier 1** | Trivial change, proven by Llama 4 for long-context generalization |
+Implemented as `interleave_rope: true` option in `:decoder_only`.
 
-#### Aux-loss-free MoE Routing — carried from original Tier 1
+#### Aux-loss-free MoE Routing — ✅ DONE
 
-| | |
-|---|---|
-| **What** | Replace auxiliary load-balancing loss with dynamic bias tensor in `:moe_v2` |
-| **Difficulty** | Low — add bias tensor, update based on utilization running average |
-| **Why Tier 1** | Standard practice for frontier MoE models |
+Implemented in `:moe_v2` with bias-based load balancing.
 
 #### RWKV-7 Update (Generalized Delta Rule)
 
@@ -653,27 +651,27 @@ These reflect the biggest shifts in production architectures since the original 
 | **Builds on** | `:jamba`, `:zamba`, any SSM + any attention module |
 | **Why Tier 1** | The 90/10 hybrid is THE dominant production pattern of 2025-2026. |
 
-### New Tier 2: Medium Impact (2026)
-
-| Addition | Difficulty | Why |
-|----------|-----------|-----|
-| **TTT-E2E** | Medium | End-to-end test-time training — mutates 25% of MLP layers at inference for long context. Extends existing `:ttt`. |
-| **MMDiT** | Medium | Multimodal Diffusion Transformer — joint text-image attention blocks. Standard for FLUX.1, SD3, Sora. |
-| **YARN** | Low | Carried from original Tier 2. Still the standard context extension method. |
-| **SoFlow** | Low-Med | Combined flow matching + consistency loss for one-step generation. Extends `:flow_matching` + `:consistency_model`. |
-
-### New Tier 3: Exploratory (2026)
+### New Tier 2: Medium Impact (2026) — All Done
 
 | Addition | Difficulty | Status |
 |----------|-----------|--------|
-| **Multimodal fusion layers** | High | Done — `:multimodal_mlp_fusion` (MLP projection, cross-attention, Perceiver resampler) |
-| **RL environment integration** | High | Done — `PPOTrainer`, `GAE`, `CartPole`, `GridWorld` environments |
-| **MambaVision** | Medium | Done — `:mamba_vision` (4-stage hierarchical CNN+Mamba+Attention) |
-| **KDA (Kimi Delta Attention)** | Medium | Done — `:kda` (channel-wise decay, low-rank alpha gate) |
+| **TTT-E2E** | Medium | ✅ Done — `:ttt_e2e` |
+| **MMDiT** | Medium | ✅ Done — `:mmdit` |
+| **YARN** | Low | ✅ Done — `:yarn` |
+| **SoFlow** | Low-Med | ✅ Done — `:soflow` |
+
+### New Tier 3: Exploratory (2026) — All Done
+
+| Addition | Difficulty | Status |
+|----------|-----------|--------|
+| **Multimodal fusion layers** | High | ✅ Done — `:multimodal_mlp_fusion` (MLP projection, cross-attention, Perceiver resampler) |
+| **RL environment integration** | High | ✅ Done — `PPOTrainer`, `GAE`, `CartPole`, `GridWorld` environments |
+| **MambaVision** | Medium | ✅ Done — `:mamba_vision` (4-stage hierarchical CNN+Mamba+Attention) |
+| **KDA (Kimi Delta Attention)** | Medium | ✅ Done — `:kda` (channel-wise decay, low-rank alpha gate) |
 
 ### Notebook / Documentation Gaps
 
-Edifice has 113+ architectures but only ~11 notebooks. Highest-value additions:
+Edifice has 184 registered architectures but only ~11 notebooks. Highest-value additions:
 
 | Gap | Architectures Uncovered | Priority |
 |-----|------------------------|----------|
@@ -706,19 +704,22 @@ Edifice has 113+ architectures but only ~11 notebooks. Highest-value additions:
 
 ## Appendix: Edifice Architecture Inventory
 
-For reference, here is every architecture currently in Edifice, grouped by family.
+For reference, here is every architecture currently registered in Edifice (184 entries across 25 families), grouped by family.
 
-### Transformer
-- `decoder_only` — GPT-style autoregressive transformer (GQA, RoPE, SwiGLU, RMSNorm)
+### Transformer (4)
+- `decoder_only` — GPT-style autoregressive transformer (GQA, RoPE, iRoPE, SwiGLU, RMSNorm)
+- `multi_token_prediction` — Predict next N tokens simultaneously
+- `byte_latent_transformer` — Encoder + latent transformer + decoder for byte-level processing
+- `nemotron_h` — NVIDIA's hybrid Mamba-Transformer architecture
 
-### Feedforward
+### Feedforward (5)
 - `mlp` — Multi-layer perceptron
 - `kan` — Kolmogorov-Arnold Networks (learnable activation functions)
 - `kat` — KAN-Transformer hybrid
 - `tabnet` — Attentive tabular learning
 - `bitnet` — 1-bit weight networks
 
-### Convolutional
+### Convolutional (6)
 - `conv1d` — 1D convolution blocks
 - `resnet` — Residual networks
 - `densenet` — Dense connections
@@ -726,18 +727,20 @@ For reference, here is every architecture currently in Edifice, grouped by famil
 - `mobilenet` — Depthwise separable convolutions
 - `efficientnet` — Compound scaling
 
-### Recurrent
+### Recurrent (15)
 - `lstm`, `gru` — Classic recurrent cells
 - `xlstm`, `xlstm_v2`, `mlstm`, `slstm` — Extended LSTM family
 - `min_gru`, `min_lstm` — Minimal gated units
 - `delta_net` — Delta rule-based RNN
-- `ttt` — Test-Time Training
+- `gated_delta_net` — Gated DeltaNet (linear attention with data-dependent gating)
+- `ttt`, `ttt_e2e` — Test-Time Training (standard + end-to-end)
 - `titans` — Memory-augmented RNN
 - `reservoir` — Echo State Networks
+- `native_recurrence` — Native recurrence block
 
-### State Space Models
-- `mamba`, `mamba_ssd`, `mamba_cumsum`, `mamba_hillis_steele` — Mamba family (4 implementations)
-- `mamba3` — Mamba v3
+### State Space Models (19)
+- `mamba`, `mamba_ssd`, `mamba_cumsum`, `mamba_hillis_steele` — Mamba family (4 scan algorithms)
+- `mamba3` — Mamba v3 (complex states, trapezoidal discretization, MIMO)
 - `s4`, `s4d`, `s5` — Structured state space family
 - `h3` — Hungry Hungry Hippos
 - `hyena`, `hyena_v2` — Long convolution models
@@ -747,16 +750,17 @@ For reference, here is every architecture currently in Edifice, grouped by famil
 - `striped_hyena` — Alternating attention + Hyena
 - `gss` — Gated State Spaces
 - `hymba` — Hybrid Mamba
+- `ss_transformer` — State Space Transformer
 
-### Attention Variants
+### Attention Variants (34)
 - `attention` — Standard multi-head attention
 - `gqa` — Grouped query attention
 - `mla` — Multi-head latent attention (DeepSeek)
 - `diff_transformer` — Differential attention
 - `retnet`, `retnet_v2` — Retentive networks
-- `rwkv` — Receptance Weighted Key Value
-- `gla` — Gated Linear Attention
-- `hgrn` — Hierarchically Gated Recurrent Network
+- `rwkv` — RWKV-7 "Goose" (generalized delta rule)
+- `gla`, `gla_v2` — Gated Linear Attention
+- `hgrn`, `hgrn_v2` — Hierarchically Gated Recurrent Network
 - `griffin`, `hawk` — Google's RNN-attention hybrids
 - `based` — Linear attention with Taylor expansion
 - `perceiver` — Cross-attention with latent bottleneck
@@ -768,8 +772,19 @@ For reference, here is every architecture currently in Edifice, grouped by famil
 - `infini_attention` — Compressive memory attention
 - `conformer` — Convolution + attention (speech)
 - `ring_attention` — Distributed attention across devices
+- `lightning_attention` — Hybrid linear/softmax attention with I/O-aware tiling
+- `flash_linear_attention` — Flash Linear Attention
+- `kda` — Kimi Delta Attention (channel-wise decay)
+- `gated_attention` — Sigmoid post-attention gate (NeurIPS 2025 best paper)
+- `nsa` — Native Sparse Attention (DeepSeek three-path)
+- `rnope_swa` — No positional encoding + sliding window
+- `yarn` — YaRN context extension (RoPE frequency scaling)
+- `tmrope` — Time-aligned Multimodal RoPE
+- `dual_chunk_attention` — Dual Chunk Attention for long-context
+- `ssmax` — Scalable-Softmax (drop-in softmax replacement)
+- `softpick` — Non-saturating sparse attention function
 
-### Vision
+### Vision (15)
 - `vit` — Vision Transformer
 - `deit` — Data-efficient Image Transformer
 - `swin` — Shifted window transformer
@@ -779,19 +794,34 @@ For reference, here is every architecture currently in Edifice, grouped by famil
 - `focalnet` — Focal modulation
 - `poolformer` — Pooling as token mixing
 - `nerf` — Neural Radiance Fields
+- `gaussian_splat` — 3D Gaussian Splatting
+- `mamba_vision` — MambaVision (4-stage hierarchical CNN+Mamba+Attention)
+- `dino_v2` — DINOv2 self-distillation vision backbone
+- `metaformer` — MetaFormer (architecture-first framework)
+- `caformer` — CAFormer (Conv + Attention stages)
+- `efficient_vit` — EfficientViT (linear attention vision)
 
-### Generative
+### Generative (22)
 - `vae`, `vq_vae` — Variational autoencoders
 - `gan` — Generative adversarial network
 - `diffusion`, `ddim` — Diffusion models
 - `dit`, `dit_v2` — Diffusion Transformer
+- `mmdit` — Multimodal Diffusion Transformer (FLUX.1, SD3)
+- `linear_dit` / `sana` — Linear DiT (linear attention for diffusion)
+- `sit` — Scalable Interpolant Transformer
 - `latent_diffusion` — Latent space diffusion
 - `consistency_model` — Single-step generation
 - `score_sde` — Score-based SDE
 - `flow_matching` — Continuous normalizing flows
+- `soflow` — SoFlow (flow matching + consistency)
 - `normalizing_flow` — Invertible transformations
+- `var` — Visual Autoregressive (next-scale prediction)
+- `transfusion` — Unified AR text + diffusion images
+- `mar` — Masked Autoregressive generation
+- `cogvideox` — CogVideoX video generation
+- `trellis` — TRELLIS 3D generation (sparse lattices + rectified flow)
 
-### Graph
+### Graph (9)
 - `gcn` — Graph Convolutional Network
 - `gat` — Graph Attention Network
 - `graph_sage` — Inductive graph learning
@@ -799,26 +829,28 @@ For reference, here is every architecture currently in Edifice, grouped by famil
 - `pna` — Principal Neighbourhood Aggregation
 - `graph_transformer` — Transformer on graphs
 - `schnet` — Continuous-filter convolution (molecular)
+- `egnn` — E(n)-Equivariant GNN (rotation/translation invariant)
 
-### Sets & Point Clouds
+### Sets & Point Clouds (2)
 - `deep_sets` — Permutation-invariant set functions
 - `pointnet` — 3D point cloud processing
 
-### Energy-Based
+### Energy-Based (3)
 - `ebm` — Energy-Based Model
 - `hopfield` — Modern Hopfield networks
 - `neural_ode` — Neural Ordinary Differential Equations
 
-### Probabilistic
+### Probabilistic (3)
 - `bayesian` — Bayesian neural networks
 - `mc_dropout` — Monte Carlo dropout
 - `evidential` — Evidential deep learning
 
-### Memory
+### Memory (3)
 - `ntm` — Neural Turing Machine
 - `memory_network` — End-to-end memory networks
+- `engram` — O(1) hash-based associative memory
 
-### Meta / Composition
+### Meta / Composition (22)
 - `moe`, `switch_moe`, `soft_moe`, `moe_v2` — Mixture of Experts family
 - `lora`, `dora` — Low-rank adaptation
 - `adapter` — Adapter layers
@@ -826,38 +858,66 @@ For reference, here is every architecture currently in Edifice, grouped by famil
 - `capsule` — Capsule networks
 - `mixture_of_depths` — Dynamic computation allocation
 - `mixture_of_agents` — Multi-model ensemble
+- `mixture_of_tokenizers` — Different experts process different tokenizations
 - `rlhf_head` — Reward/value heads for RLHF
+- `dpo` — Direct Preference Optimization
+- `grpo` — Group Relative Policy Optimization (DeepSeek-R1)
+- `kto` — Kahneman-Tversky Optimization (binary feedback)
+- `speculative_decoding` — Draft + verify inference acceleration
+- `speculative_head` — Multi-head speculative prediction
+- `distillation_head` — Knowledge distillation
+- `test_time_compute` — Adaptive test-time compute
+- `qat` — Quantization-Aware Training
+- `hybrid_builder` — Configurable SSM/Attention ratio builder
 
-### Contrastive / Self-Supervised
+### Contrastive / Self-Supervised (8)
 - `simclr` — Contrastive learning
 - `byol` — Bootstrap Your Own Latent
 - `barlow_twins` — Redundancy reduction
 - `mae` — Masked Autoencoder
 - `vicreg` — Variance-Invariance-Covariance Regularization
 - `jepa` — Joint Embedding Predictive Architecture
+- `temporal_jepa` — V-JEPA (video/temporal JEPA)
+- `siglip` — Sigmoid contrastive learning (CLIP improvement)
 
-### Liquid
-- `liquid` — Liquid Neural Networks (continuous-time ODE)
+### Interpretability (2)
+- `sparse_autoencoder` — Trainable SAE for feature extraction
+- `transcoder` — Cross-layer transcoder for mechanistic interpretability
 
-### Neuromorphic
-- `snn` — Spiking Neural Network
-- `ann2snn` — ANN to SNN conversion
+### World Model (1)
+- `world_model` — Encoder + dynamics + reward head
 
-### New (2026 Update #1)
-- `gated_delta_net` — Gated DeltaNet (linear attention with data-dependent gating)
-- `rwkv_v7` — RWKV-7 "Goose" (generalized delta rule)
-- `ttt_e2e` — End-to-end Test-Time Training
-- `mmdit` — Multimodal Diffusion Transformer
-- `soflow` — SoFlow (flow matching + consistency)
-- `kda` — Kimi Delta Attention (channel-wise decay)
-- `mamba_vision` — MambaVision (4-stage hierarchical vision backbone)
-- `multimodal_mlp_fusion` — Multimodal fusion (MLP projection, cross-attention, Perceiver)
+### Multimodal (1)
+- `multimodal_mlp_fusion` — MLP projection, cross-attention, Perceiver resampler
 
-### RL Integration
+### RL (1 registered + infrastructure)
+- `policy_value` — Actor-critic policy-value network
 - `PPOTrainer` — Proximal Policy Optimization trainer
 - `GAE` — Generalized Advantage Estimation
 - `CartPole` — Classic cart-pole balancing environment
 - `GridWorld` — Discrete grid navigation environment
+
+### Liquid (1)
+- `liquid` — Liquid Neural Networks (continuous-time ODE)
+
+### Scientific (1)
+- `fno` — Fourier Neural Operator (PDE solving)
+
+### Neuromorphic (2)
+- `snn` — Spiking Neural Network
+- `ann2snn` — ANN to SNN conversion
+
+### Inference (1)
+- `medusa` — Multi-head speculative decoding
+
+### Robotics (2)
+- `act` — Action Chunking Transformer (imitation learning)
+- `openvla` — Vision-Language-Action model
+
+### Audio (3)
+- `encodec` — Neural audio codec (encoder → RVQ → decoder)
+- `valle` — VALL-E codec language model (zero-shot TTS)
+- `soundstorm` — Parallel audio token generation
 
 ---
 
@@ -867,7 +927,7 @@ For reference, here is every architecture currently in Edifice, grouped by famil
 > implementable tiers. Research conducted across attention/SSM, generative/diffusion,
 > vision/multimodal, robotics, scientific ML, and dynamic inference domains.
 
-**Current state**: 151 architectures across 21 families. 2420 tests passing.
+**Current state**: 184 registered architectures across 25 families.
 
 ### How Tiers Are Assigned
 
@@ -881,69 +941,25 @@ For reference, here is every architecture currently in Edifice, grouped by famil
 
 ### New Tier 1: High Impact (2026 Update #2)
 
-These are architectures deployed in production models or with best-paper-level recognition that Edifice should support.
+These were architectures deployed in production models or with best-paper-level recognition. **All 6 are now implemented.**
 
-#### 1. Gated Attention
+#### 1. Gated Attention — ✅ DONE
+Implemented as `:gated_attention` (`Edifice.Attention.GatedAttention`).
 
-| | |
-|---|---|
-| **What** | A sigmoid gate applied after standard softmax attention: `output = sigmoid(g) * Attention(Q,K,V)`. Simple modification that stabilizes training and improves quality. |
-| **Recognition** | NeurIPS 2025 Outstanding Paper Award |
-| **Adopted by** | Qwen3.5 (deployed at scale) |
-| **Difficulty** | Low — 5-10 lines added to existing attention module |
-| **Builds on** | `:attention`, `:gqa` |
-| **Why Tier 1** | Best-paper award + production deployment in a frontier model. Trivially easy to implement. |
+#### 2. Native Sparse Attention (NSA) — ✅ DONE
+Implemented as `:nsa` (`Edifice.Attention.NSA`). Three-path sparse attention (compressed, top-k block selection, sliding window).
 
-#### 2. Native Sparse Attention (NSA)
+#### 3. DiffTransformer V2 — ✅ DONE
+`:diff_transformer` updated with simplified formulation.
 
-| | |
-|---|---|
-| **What** | Three-path sparse attention: (1) compressed tokens via pooling for global context, (2) selected top-k blocks for fine-grained retrieval, (3) sliding window for local. Hardware-aligned block layout. |
-| **Adopted by** | DeepSeek-V3/V4 core attention mechanism |
-| **Paper** | "Native Sparse Attention: Hardware-Aligned and Natively Trainable Sparse Attention" (2025) |
-| **Difficulty** | Medium-High — three parallel attention paths with routing |
-| **Builds on** | `:attention`, `:ring_attention` (distributed concepts) |
-| **Why Tier 1** | Core mechanism of the strongest open-weight model family. |
+#### 4. VAR (Visual Autoregressive Modeling) — ✅ DONE
+Implemented as `:var` (`Edifice.Generative.VAR`). Next-scale prediction with multi-scale VQ tokenizer.
 
-#### 3. DiffTransformer V2
+#### 5. Scalable-Softmax (SSMax) — ✅ DONE
+Implemented as `:ssmax` (`Edifice.Blocks.SSMax`). Drop-in softmax replacement.
 
-| | |
-|---|---|
-| **What** | Simplified differential attention: `output = (softmax(Q1·K1) - lambda·softmax(Q2·K2))·V`. V2 simplifies the original by making lambda a simple learnable scalar and removing GroupNorm. |
-| **Paper** | "You Only Need Two Attentions for Differential Transformer" (2025) |
-| **Difficulty** | Low — update existing `:diff_transformer` with simplified formulation |
-| **Builds on** | `:diff_transformer` |
-| **Why Tier 1** | Direct upgrade to existing architecture. Reduces noise in attention by canceling common-mode patterns. |
-
-#### 4. VAR (Visual Autoregressive Modeling)
-
-| | |
-|---|---|
-| **What** | Next-scale prediction instead of next-token. Generates images coarse-to-fine: first 1×1, then 2×2, then 4×4, ... up to 256×256. Uses a standard GPT-2 backbone with multi-scale VQ tokenizer. |
-| **Recognition** | NeurIPS 2024 Best Paper Award |
-| **Difficulty** | Medium — requires multi-scale VQ-VAE tokenizer + modified AR generation |
-| **Builds on** | `:vq_vae`, `:decoder_only` |
-| **Why Tier 1** | Best-paper award. Fundamentally new take on image generation that outperforms diffusion models on FID. |
-
-#### 5. Scalable-Softmax (SSMax)
-
-| | |
-|---|---|
-| **What** | Drop-in softmax replacement: `SSMax(x)_i = exp(x_i - s·log(n)) / sum(exp(x_j - s·log(n)))` where n = sequence length, s = learnable. Removes softmax's implicit entropy bias that causes attention to diffuse over long sequences. |
-| **Paper** | "Scalable-Softmax Is Superior for Attention" (2025) |
-| **Difficulty** | Low — single function replacement in attention computation |
-| **Builds on** | Any attention module |
-| **Why Tier 1** | Trivial to implement, improves all attention models for free. Strong theoretical motivation. |
-
-#### 6. Transfusion
-
-| | |
-|---|---|
-| **What** | Unified model: autoregressive next-token for text + diffusion denoising for images, in a single transformer. Text tokens use causal attention; image patches use bidirectional attention within their block. Two loss functions applied simultaneously. |
-| **Paper** | "Transfusion: Predict the Next Token and Diffuse Images with One Multi-Modal Model" (Meta, 2024) |
-| **Difficulty** | Medium-High — hybrid loss, mixed attention masks, multi-modal tokenization |
-| **Builds on** | `:decoder_only`, `:dit`, `:flow_matching` |
-| **Why Tier 1** | The emerging paradigm for native multimodal models. Likely architecture behind GPT-5 native image generation. |
+#### 6. Transfusion — ✅ DONE
+Implemented as `:transfusion` (`Edifice.Generative.Transfusion`). Unified AR text + diffusion images.
 
 ---
 
@@ -951,48 +967,48 @@ These are architectures deployed in production models or with best-paper-level r
 
 #### Attention & Sequence Innovations
 
-| Architecture | What | Difficulty | Why |
-|-------------|------|-----------|-----|
-| **Softpick** | Non-saturating attention: `Softpick(x)_i = x_i / (1 + sum(abs(x_j)))`. Sparse by nature — drives most logits to zero. | Low | Drop-in softmax alternative with natural sparsity. |
-| **Engram** | O(1) hash-based associative memory. Keys are hashed to memory slots, values stored/retrieved in constant time. Used in DeepSeek-V4. | Medium | Adds a fundamentally new memory primitive (hash-based vs recurrent vs attention). |
-| **SPLA** | Sparse + Linear Attention hybrid: top-k tokens get full attention, rest get linear. Budget-controlled. | Medium | Principled way to combine quadratic and linear attention in one layer. |
-| **InfLLM-V2** | Partitions KV cache into blocks, selects relevant blocks via lightweight scoring, enables million-token context on consumer GPUs. | Medium | Practical infinite-context solution. |
-| **RNoPE-SWA** | Remove positional encoding entirely; rely on sliding-window attention's implicit position. Used in parts of Gemma 3. | Low | Interesting ablation — proves position isn't always needed. |
+| Architecture | What | Status |
+|-------------|------|--------|
+| **Softpick** | Non-saturating sparse attention function | ✅ Done — `:softpick` |
+| **Engram** | O(1) hash-based associative memory | ✅ Done — `:engram` |
+| **SPLA** | Sparse + Linear Attention hybrid | ❌ Not done |
+| **InfLLM-V2** | Block-partitioned KV cache selection | ❌ Not done |
+| **RNoPE-SWA** | No positional encoding + sliding window | ✅ Done — `:rnope_swa` |
 
 #### Generative Models
 
-| Architecture | What | Difficulty | Why |
-|-------------|------|-----------|-----|
-| **SANA (Linear DiT)** | Replaces quadratic attention in DiT with linear attention. Achieves FLUX-quality images at 100x speed. | Medium | Direct upgrade path for existing `:dit` — huge practical speedup. |
-| **SiT** | Scalable Interpolant Transformers — generalizes DiT by learning the interpolant between noise and data (not just score or velocity). | Medium | Cleaner theory than DiT, same architecture, better FID. |
-| **MAR** | Masked Autoregressive generation — masks random tokens and iteratively unmasks. Combines AR and masked prediction. | Medium | Bridges AR and masked generative approaches. |
-| **F5-TTS** | Non-autoregressive flow-matching TTS. Fills in masked speech given text + reference audio. Zero-shot voice cloning. | Medium | First strong non-AR TTS. Fills audio generation gap. |
-| **JanusFlow** | Single LLM with AR head for text + rectified flow head for images. Understanding + generation unified. | Medium-High | Show-o approach with continuous (not discrete) image generation. |
-| **Show-o** | Unified AR + discrete diffusion: text tokens generated autoregressively, image tokens via iterative denoising of discrete tokens. | Medium | Alternative to Transfusion — discrete instead of continuous. |
+| Architecture | What | Status |
+|-------------|------|--------|
+| **SANA (Linear DiT)** | Linear attention for diffusion, 100x speedup | ✅ Done — `:linear_dit` / `:sana` |
+| **SiT** | Scalable Interpolant Transformer | ✅ Done — `:sit` |
+| **MAR** | Masked Autoregressive generation | ✅ Done — `:mar` |
+| **F5-TTS** | Non-autoregressive flow-matching TTS | ❌ Not done |
+| **JanusFlow** | AR text + rectified flow images | ❌ Not done |
+| **Show-o** | AR + discrete diffusion | ❌ Not done |
 
 #### Vision & Multimodal
 
-| Architecture | What | Difficulty | Why |
-|-------------|------|-----------|-----|
-| **DINOv2** | Self-distillation + masked patch prediction. Produces universal visual features without labels. | Medium | The standard vision foundation model backbone. Fills self-supervised vision gap. |
-| **SigLIP** | Replaces CLIP's softmax cross-entropy with per-pair sigmoid loss. Removes need for global normalization → better scaling. | Low | Drop-in CLIP improvement. Simple, proven at scale. |
-| **MetaFormer / CAFormer** | Framework showing ViT's power comes from the architecture (MetaFormer), not the specific token mixer. CAFormer: Conv stages + Attention stages. | Medium | Clean architectural insight. Good for Edifice's educational mission. |
-| **EfficientViT** | Linear attention ViT (O(n) instead of O(n²)). Cascaded group attention with different heads seeing different splits. | Medium | Efficient vision backbone — fills gap between `:vit` and `:mobilenet`. |
+| Architecture | What | Status |
+|-------------|------|--------|
+| **DINOv2** | Self-distillation vision backbone | ✅ Done — `:dino_v2` |
+| **SigLIP** | Sigmoid contrastive learning | ✅ Done — `:siglip` |
+| **MetaFormer / CAFormer** | Architecture-first framework | ✅ Done — `:metaformer`, `:caformer` |
+| **EfficientViT** | Linear attention ViT | ✅ Done — `:efficient_vit` |
 
 #### Scientific & Specialized
 
-| Architecture | What | Difficulty | Why |
-|-------------|------|-----------|-----|
-| **FNO (Fourier Neural Operator)** | Learns operators mapping between function spaces via spectral convolutions. Solves PDEs 1000x faster than traditional solvers. | Medium | Opens scientific ML domain — completely new capability for Edifice. |
-| **EGNN (E(n)-Equivariant GNN)** | Graph network that preserves Euclidean symmetries (rotation, translation, reflection). For molecular/physical simulations. | Medium | Extends graph family with physics-aware equivariance. |
-| **Diffusion Policy** | Conditional diffusion model for robot action generation. Predicts multi-step action sequences given observations. | Medium | Bridges diffusion + RL — uses existing infrastructure in novel way. |
+| Architecture | What | Status |
+|-------------|------|--------|
+| **FNO** | Fourier Neural Operator for PDEs | ✅ Done — `:fno` |
+| **EGNN** | E(n)-Equivariant GNN | ✅ Done — `:egnn` |
+| **Diffusion Policy** | Diffusion for robot actions | ❌ Not done |
 
 #### Training & Optimization
 
-| Architecture | What | Difficulty | Why |
-|-------------|------|-----------|-----|
-| **DPO (Direct Preference Optimization)** | Eliminates reward model from RLHF. Directly optimizes policy from preference pairs using implicit reward. | Medium | Standard RLHF replacement. Extends existing `:rlhf_head`. |
-| **GRPO (Group Relative Policy Optimization)** | DeepSeek's RLHF method: sample group of completions, rank within group, use relative advantage. No critic needed. | Medium | The method behind DeepSeek-R1's reasoning capability. |
+| Architecture | What | Status |
+|-------------|------|--------|
+| **DPO** | Direct Preference Optimization | ✅ Done — `:dpo` |
+| **GRPO** | Group Relative Policy Optimization | ✅ Done — `:grpo` |
 
 ---
 
@@ -1000,89 +1016,109 @@ These are architectures deployed in production models or with best-paper-level r
 
 #### Dynamic Inference
 
-| Architecture | What | Difficulty | Why |
-|-------------|------|-----------|-----|
-| **Medusa** | Multi-head speculative decoding: K extra heads predict K future tokens in parallel. Accepts/rejects via verification. 2-3x speedup. | Medium | Practical inference speedup. Could integrate with any AR model. |
-| **MoR (Mixture of Recursions)** | Dynamic depth per token: easy tokens get fewer layers, hard tokens get more (via learned recycling). | Medium-High | Natural extension of `:mixture_of_depths` — varies *which* tokens recurse. |
-| **MoED (Mixture of Expert Depths)** | Each expert in MoE has different depth. Router assigns tokens to shallow or deep experts based on difficulty. | Medium | Combines MoE + dynamic depth in one mechanism. |
+| Architecture | What | Status |
+|-------------|------|--------|
+| **Medusa** | Multi-head speculative decoding, 2-3x speedup | ✅ Done — `:medusa` |
+| **MoR (Mixture of Recursions)** | Dynamic depth per token | ❌ Not done |
+| **MoED (Mixture of Expert Depths)** | Per-expert depth routing | ❌ Not done |
 
 #### Audio & Speech
 
-| Architecture | What | Difficulty | Why |
-|-------------|------|-----------|-----|
-| **EnCodec / Mimi** | Neural audio codec: encoder → RVQ (residual vector quantization) → decoder. Compresses audio to discrete tokens for LM consumption. | Medium-High | Foundational for any audio-language model. |
-| **VALL-E 2** | Codec language model: generates EnCodec tokens autoregressively for TTS. Achieves human parity. | High | First human-parity TTS system. |
-| **SoundStorm** | Parallel audio token generation via masked prediction on codec tokens. Non-autoregressive. | Medium | Fast alternative to VALL-E's sequential generation. |
+| Architecture | What | Status |
+|-------------|------|--------|
+| **EnCodec** | Neural audio codec (encoder → RVQ → decoder) | ✅ Done — `:encodec` |
+| **VALL-E** | Codec language model for TTS | ✅ Done — `:valle` |
+| **SoundStorm** | Parallel audio token generation | ✅ Done — `:soundstorm` |
 
 #### Video Generation
 
-| Architecture | What | Difficulty | Why |
-|-------------|------|-----------|-----|
-| **CogVideoX** | 3D causal VAE + expert transformer for video. Full 3D attention over space-time patches. | High | Strong open-source video generation model. |
-| **CausVid / Causal Forcing** | Distills bidirectional video DiT into causal (streaming) version. Enables real-time video generation. | High | Converts any video DiT into a streaming model. |
+| Architecture | What | Status |
+|-------------|------|--------|
+| **CogVideoX** | 3D causal VAE + expert transformer for video | ✅ Done — `:cogvideox` |
+| **CausVid / Causal Forcing** | Causal video DiT distillation | ❌ Not done |
 
 #### 3D & Spatial
 
-| Architecture | What | Difficulty | Why |
-|-------------|------|-----------|-----|
-| **3D Gaussian Splatting** | Represents scenes as collections of 3D Gaussians. Renders via differentiable rasterization (not ray marching like NeRF). | High | 100x faster than NeRF, better quality. Natural upgrade to existing `:nerf`. |
-| **TRELLIS** | Structured 3D generation using sparse 3D lattices + rectified flow. Outputs textured meshes + Gaussian splats. | High | State-of-art single-image-to-3D. |
+| Architecture | What | Status |
+|-------------|------|--------|
+| **3D Gaussian Splatting** | Differentiable rasterization of 3D Gaussians | ✅ Done — `:gaussian_splat` |
+| **TRELLIS** | Sparse 3D lattice + rectified flow generation | ✅ Done — `:trellis` |
 
 #### Robotics & Embodied AI
 
-| Architecture | What | Difficulty | Why |
-|-------------|------|-----------|-----|
-| **ACT (Action Chunking Transformer)** | Transformer + VAE that predicts action chunks (sequences of motor commands). For imitation learning. | Medium | Simple, effective robot policy architecture. Builds on existing VAE + transformer. |
-| **OpenVLA / Pi0** | Vision-Language-Action models: ViT encoder + LLM backbone → robot actions. Fine-tuned from VLMs. | High | Bridges language models and physical control. |
+| Architecture | What | Status |
+|-------------|------|--------|
+| **ACT** | Action Chunking Transformer for imitation learning | ✅ Done — `:act` |
+| **OpenVLA** | Vision-Language-Action model | ✅ Done — `:openvla` |
 
 #### Scientific ML (Extended)
 
-| Architecture | What | Difficulty | Why |
-|-------------|------|-----------|-----|
-| **DeepONet** | Operator learning with branch (input function) and trunk (query point) networks. Dot product gives output. | Medium | Complements FNO — different approach to operator learning (spatial vs spectral). |
-| **SE(3)-Transformer** | Transformer equivariant to 3D rotations, translations, reflections. For protein/molecular structure. | High | Physics-aware transformer for structural biology. |
+| Architecture | What | Status |
+|-------------|------|--------|
+| **DeepONet** | Branch-trunk operator learning | ❌ Not done |
+| **SE(3)-Transformer** | Equivariant transformer for structural biology | ❌ Not done |
 
 #### Modern Tokenizers
 
-| Architecture | What | Difficulty | Why |
-|-------------|------|-----------|-----|
-| **MAGVIT-v2** | Lookup-free quantization for image/video tokenization. Single codebook achieves competitive quality. | Medium-High | Better image tokenizer enables better AR image generation (VAR, etc). |
+| Architecture | What | Status |
+|-------------|------|--------|
+| **MAGVIT-v2** | Lookup-free quantization for image/video tokens | ❌ Not done |
 
 #### Miscellaneous High-Interest
 
-| Architecture | What | Difficulty | Why |
-|-------------|------|-----------|-----|
-| **mHC (Manifold Hyper-Connections)** | Embeds residual stream on a Riemannian manifold, enabling richer layer-to-layer communication. Used in DeepSeek-V4. | High | Novel residual stream design from a frontier lab. |
-| **KTO (Kahneman-Tversky Optimization)** | RLHF from binary (good/bad) feedback only — no pairwise preferences needed. Based on prospect theory. | Medium | Simplest RLHF variant. Only needs thumbs-up/thumbs-down data. |
-| **MIRAS (Moneta/Memora/Yaad)** | Google's framework extending Titans: Moneta (recurrence + linear attention), Memora (recurrence + sliding window), Yaad (Memora + chunk-wise softmax). | High | Comprehensive memory framework from Google Brain. |
+| Architecture | What | Status |
+|-------------|------|--------|
+| **mHC (Manifold Hyper-Connections)** | Riemannian manifold residual stream | ❌ Not done |
+| **KTO** | Binary feedback RLHF (Kahneman-Tversky) | ✅ Done — `:kto` |
+| **MIRAS (Moneta/Memora/Yaad)** | Google's Titans extension framework | ❌ Not done |
 
 ---
 
-### Priority Recommendation
+### Priority Recommendation — Updated Status
 
-If implementing in order, the highest-impact sequence would be:
+All 16 items from the original priority list are now implemented:
 
-**Quick Wins (< 1 day each)**:
-1. Gated Attention — 5-10 lines, NeurIPS best paper
-2. Scalable-Softmax — single function, benefits all attention models
-3. DiffTransformer V2 — simplify existing `:diff_transformer`
-4. Softpick — another softmax alternative, natural sparsity
-5. SigLIP — sigmoid loss for contrastive learning
-6. RNoPE-SWA — remove position encoding option
+**Quick Wins — ✅ All Done**:
+1. ~~Gated Attention~~ → `:gated_attention`
+2. ~~Scalable-Softmax~~ → `:ssmax`
+3. ~~DiffTransformer V2~~ → `:diff_transformer` (updated)
+4. ~~Softpick~~ → `:softpick`
+5. ~~SigLIP~~ → `:siglip`
+6. ~~RNoPE-SWA~~ → `:rnope_swa`
 
-**Medium Builds (1-3 days each)**:
-7. VAR — next-scale image generation (NeurIPS best paper)
-8. SANA / Linear DiT — linear attention for diffusion
-9. DINOv2 — self-supervised vision backbone
-10. FNO — opens scientific ML domain
-11. DPO / GRPO — modern RLHF methods
-12. Transfusion — unified AR + diffusion
+**Medium Builds — ✅ All Done**:
+7. ~~VAR~~ → `:var`
+8. ~~SANA / Linear DiT~~ → `:linear_dit` / `:sana`
+9. ~~DINOv2~~ → `:dino_v2`
+10. ~~FNO~~ → `:fno`
+11. ~~DPO / GRPO~~ → `:dpo`, `:grpo`
+12. ~~Transfusion~~ → `:transfusion`
 
-**Ambitious (3-5 days each)**:
-13. NSA — DeepSeek's sparse attention
-14. EGNN — equivariant graph networks
-15. EnCodec — neural audio codec (enables audio LM)
-16. 3D Gaussian Splatting — NeRF successor
+**Ambitious — ✅ All Done**:
+13. ~~NSA~~ → `:nsa`
+14. ~~EGNN~~ → `:egnn`
+15. ~~EnCodec~~ → `:encodec`
+16. ~~3D Gaussian Splatting~~ → `:gaussian_splat`
+
+### Remaining Unimplemented (from all tiers)
+
+| Architecture | Category | Difficulty |
+|-------------|----------|-----------|
+| SPLA (Sparse+Linear Attention) | Attention | Medium |
+| InfLLM-V2 | Attention | Medium |
+| F5-TTS | Audio/TTS | Medium |
+| JanusFlow | Generative | Medium-High |
+| Show-o | Generative | Medium |
+| Diffusion Policy | Robotics | Medium |
+| CausVid / Causal Forcing | Video | High |
+| DeepONet | Scientific ML | Medium |
+| SE(3)-Transformer | Scientific ML | High |
+| MAGVIT-v2 | Tokenizers | Medium-High |
+| mHC (Manifold Hyper-Connections) | Architecture | High |
+| MIRAS (Moneta/Memora/Yaad) | Memory | High |
+| MoR (Mixture of Recursions) | Dynamic inference | Medium-High |
+| MoED (Mixture of Expert Depths) | Dynamic inference | Medium |
+| Agent swarm patterns | Application | High |
 
 ---
 
