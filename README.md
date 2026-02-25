@@ -6,7 +6,7 @@
 
 A comprehensive ML architecture library for Elixir, built on [Nx](https://github.com/elixir-nx/nx) and [Axon](https://github.com/elixir-nx/axon).
 
-184 neural network architectures across 25 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons, audio codecs to robotics, scientific ML to 3D generation.
+186 neural network architectures across 25 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons, audio codecs to robotics, scientific ML to 3D generation.
 
 ## Why Edifice?
 
@@ -25,7 +25,7 @@ Add `edifice` to your dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:edifice, "~> 0.1.0"}
+    {:edifice, "~> 0.2.0"}
   ]
 end
 ```

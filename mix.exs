@@ -1,7 +1,7 @@
 defmodule Edifice.MixProject do
   use Mix.Project
 
-  @version "0.1.1"
+  @version "0.2.0"
   @source_url "https://github.com/blasphemetheus/edifice"
 
   def project do
@@ -17,7 +17,7 @@ defmodule Edifice.MixProject do
       # Docs
       name: "Edifice",
       description:
-        "90+ neural network architectures for Nx/Axon: transformers, Mamba, diffusion models, GNNs, and more",
+        "186 neural network architectures for Nx/Axon: transformers, Mamba, diffusion, GNNs, audio, robotics, and more",
       source_url: @source_url,
       homepage_url: @source_url,
       docs: docs(),
