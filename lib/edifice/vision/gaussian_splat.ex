@@ -1,11 +1,4 @@
 defmodule Edifice.Vision.GaussianSplat do
-  # TODO: The render pipeline (render_layer/render/1) uses Nx.to_number + Enum.reduce
-  # for per-Gaussian alpha compositing, which is not JIT-compatible with EXLA.
-  # To fix: rewrite the render loop using vectorized Nx operations (e.g. Nx.sort for
-  # depth ordering, cumulative product for transmittance, and batched alpha compositing
-  # without host-side iteration). This would enable the full model to run in the bench
-  # sweep and sanity checks. See bench/full_sweep.exs for the skip comment.
-
   @moduledoc """
   3D Gaussian Splatting for real-time radiance field rendering.
 
@@ -105,6 +98,7 @@ defmodule Edifice.Vision.GaussianSplat do
           {:num_gaussians, pos_integer()}
           | {:sh_degree, 0..3}
           | {:name, String.t()}
+          | {:image_size, pos_integer()}
 
   @typedoc "Gaussian representation."
   @type gaussians :: %{
@@ -207,6 +201,8 @@ defmodule Edifice.Vision.GaussianSplat do
       )
 
     # Render layer
+    image_size = Keyword.get(opts, :image_size)
+
     Axon.layer(
       &render_layer/10,
       [
@@ -222,7 +218,8 @@ defmodule Edifice.Vision.GaussianSplat do
       ],
       name: "#{name}_render",
       op_name: :gaussian_render,
-      sh_degree: sh_degree
+      sh_degree: sh_degree,
+      image_size: image_size
     )
   end
 
@@ -239,6 +236,9 @@ defmodule Edifice.Vision.GaussianSplat do
          opts
        ) do
     sh_degree = opts[:sh_degree]
+    # Use image_size from opts if provided (static), fall back to tensor extraction
+    height = opts[:image_size] || Nx.to_number(Nx.squeeze(image_height[0]))
+    width = height
 
     # Build Gaussians map
     gaussians = %{
@@ -248,10 +248,6 @@ defmodule Edifice.Vision.GaussianSplat do
       opacities: opacities,
       sh_coeffs: sh_coeffs
     }
-
-    # Get image dimensions from input (assume square for simplicity)
-    height = Nx.to_number(Nx.squeeze(image_height[0]))
-    width = height
 
     # Build camera
     camera = %{
@@ -576,78 +572,96 @@ defmodule Edifice.Vision.GaussianSplat do
 
   defp rasterize_gaussians_simple(means_2d, covs_2d, opacities, colors, sorted_indices, height, width) do
     num_gaussians = Nx.axis_size(means_2d, 0)
+    num_to_process = min(num_gaussians, 100)
 
-    # Create pixel coordinates (in normalized [-1, 1] space)
-    y_coords = Nx.iota({height, width, 1}, axis: 0, type: :f32) |> Nx.divide(height) |> Nx.multiply(2.0) |> Nx.subtract(1.0)
-    x_coords = Nx.iota({height, width, 1}, axis: 1, type: :f32) |> Nx.divide(width) |> Nx.multiply(2.0) |> Nx.subtract(1.0)
+    # Reorder all Gaussian data by depth (front-to-back) — vectorized gather
+    sorted_indices_clipped = Nx.slice(sorted_indices, [0], [num_to_process])
+    means = Nx.take(means_2d, sorted_indices_clipped, axis: 0)
+    covs = Nx.take(covs_2d, sorted_indices_clipped, axis: 0)
+    ops = Nx.take(opacities, sorted_indices_clipped, axis: 0)
+    cols = Nx.take(colors, sorted_indices_clipped, axis: 0)
 
-    # Initialize output
+    # Precompute pixel coordinate grids [height, width]
+    y_coords = Nx.iota({height, width}, axis: 0, type: :f32)
+                |> Nx.divide(height) |> Nx.multiply(2.0) |> Nx.subtract(1.0)
+    x_coords = Nx.iota({height, width}, axis: 1, type: :f32)
+                |> Nx.divide(width) |> Nx.multiply(2.0) |> Nx.subtract(1.0)
+
+    # Precompute inverse covariances for all Gaussians [N] each
+    c00 = covs[[.., 0, 0]]
+    c01 = covs[[.., 0, 1]]
+    c11 = covs[[.., 1, 1]]
+    det = Nx.add(Nx.subtract(Nx.multiply(c00, c11), Nx.multiply(c01, c01)), 1.0e-6)
+    inv_00 = Nx.divide(c11, det)
+    inv_01 = Nx.divide(Nx.negate(c01), det)
+    inv_11 = Nx.divide(c00, det)
+
+    # Pack precomputed per-Gaussian data [N, 6]: (mean_x, mean_y, inv_00, inv_01, inv_11, opacity)
+    gauss_data = Nx.stack([
+      means[[.., 0]], means[[.., 1]],
+      inv_00, inv_01, inv_11,
+      ops
+    ], axis: 1)
+
+    # Run the compositing loop (defn while — JIT-compatible)
+    composite_loop(gauss_data, cols, x_coords, y_coords,
+      num_to_process: num_to_process, height: height, width: width)
+  end
+
+  # JIT-compatible front-to-back alpha compositing loop.
+  # num_to_process, height, width passed as opts (compile-time constants for the while range).
+  deftransformp composite_loop_opts(opts) do
+    {opts[:num_to_process], opts[:height], opts[:width]}
+  end
+
+  defnp composite_loop(gauss_data, colors, x_coords, y_coords, opts \\ []) do
+    {num_to_process, height, width} = composite_loop_opts(opts)
+
     image = Nx.broadcast(0.0, {height, width, 3})
     transmittance = Nx.broadcast(1.0, {height, width})
 
-    # Process up to 100 Gaussians for efficiency
-    num_to_process = min(num_gaussians, 100)
+    {final_image, _trans, _data, _cols, _xc, _yc} =
+      while {image, transmittance, gauss_data, colors, x_coords, y_coords},
+            i <- 0..(num_to_process - 1) do
+        # Extract Gaussian i's precomputed parameters
+        g = gauss_data[i]
+        mean_x = g[0]
+        mean_y = g[1]
+        ic00 = g[2]
+        ic01 = g[3]
+        ic11 = g[4]
+        op = g[5]
+        color = colors[i]
 
-    # Process Gaussians front-to-back using Enum.reduce
-    {final_image, _} =
-      Enum.reduce(0..(num_to_process - 1), {image, transmittance}, fn i, {img, trans} ->
-        idx = sorted_indices[i] |> Nx.to_number()
+        # Pixel offsets from Gaussian center [height, width]
+        dx = Nx.subtract(x_coords, mean_x)
+        dy = Nx.subtract(y_coords, mean_y)
 
-        # Get Gaussian parameters
-        mean = means_2d[idx]
-        cov = covs_2d[idx]
-        opacity = opacities[idx] |> Nx.to_number()
-        color = colors[idx]
-
-        # Compute Gaussian contribution at each pixel
-        dx = Nx.subtract(x_coords, Nx.to_number(mean[0]))
-        dy = Nx.subtract(y_coords, Nx.to_number(mean[1]))
-
-        # Invert 2x2 covariance
-        c00 = Nx.to_number(cov[0][0])
-        c01 = Nx.to_number(cov[0][1])
-        c11 = Nx.to_number(cov[1][1])
-        det = c00 * c11 - c01 * c01 + 1.0e-6
-        inv_cov_00 = c11 / det
-        inv_cov_01 = -c01 / det
-        inv_cov_11 = c00 / det
-
-        # Mahalanobis distance squared
-        dist_sq =
+        # Mahalanobis distance squared [height, width]
+        dist_sq = Nx.add(
           Nx.add(
-            Nx.add(
-              Nx.multiply(inv_cov_00, Nx.multiply(dx, dx)),
-              Nx.multiply(2.0 * inv_cov_01, Nx.multiply(dx, dy))
-            ),
-            Nx.multiply(inv_cov_11, Nx.multiply(dy, dy))
-          )
+            Nx.multiply(ic00, Nx.multiply(dx, dx)),
+            Nx.multiply(Nx.multiply(2.0, ic01), Nx.multiply(dx, dy))
+          ),
+          Nx.multiply(ic11, Nx.multiply(dy, dy))
+        )
 
-        # Gaussian weight
-        weight = Nx.exp(Nx.multiply(-0.5, dist_sq)) |> Nx.squeeze(axes: [2])
+        # Gaussian weight × opacity → alpha [height, width]
+        alpha = Nx.multiply(Nx.exp(Nx.multiply(-0.5, dist_sq)), op)
 
-        # Alpha for this Gaussian
-        alpha = Nx.multiply(weight, opacity)
+        # Alpha compositing: image += transmittance * alpha * color
+        ta = Nx.multiply(transmittance, alpha)
+        contrib = Nx.stack([
+          Nx.multiply(ta, color[0]),
+          Nx.multiply(ta, color[1]),
+          Nx.multiply(ta, color[2])
+        ], axis: 2)
 
-        # Alpha compositing: C += T * α * c
-        c_r = Nx.to_number(color[0])
-        c_g = Nx.to_number(color[1])
-        c_b = Nx.to_number(color[2])
+        new_image = Nx.add(image, contrib)
+        new_trans = Nx.multiply(transmittance, Nx.subtract(1.0, alpha))
 
-        contrib_r = Nx.multiply(Nx.multiply(trans, alpha), c_r)
-        contrib_g = Nx.multiply(Nx.multiply(trans, alpha), c_g)
-        contrib_b = Nx.multiply(Nx.multiply(trans, alpha), c_b)
-
-        new_img =
-          img
-          |> Nx.put_slice([0, 0, 0], Nx.new_axis(Nx.add(img[[.., .., 0]], contrib_r), 2))
-          |> Nx.put_slice([0, 0, 1], Nx.new_axis(Nx.add(img[[.., .., 1]], contrib_g), 2))
-          |> Nx.put_slice([0, 0, 2], Nx.new_axis(Nx.add(img[[.., .., 2]], contrib_b), 2))
-
-        # Update transmittance: T *= (1 - α)
-        new_trans = Nx.multiply(trans, Nx.subtract(1.0, alpha))
-
-        {new_img, new_trans}
-      end)
+        {new_image, new_trans, gauss_data, colors, x_coords, y_coords}
+      end
 
     Nx.clip(final_image, 0.0, 1.0)
   end

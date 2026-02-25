@@ -1,12 +1,4 @@
 defmodule Edifice.Audio.EnCodec do
-  # TODO: Fix conv layers to use `channels: :first` option. The encoder/decoder
-  # expect waveform input shaped {batch, 1, samples} (channels-first), but Axon.conv
-  # defaults to channels-last. All Axon.conv and Axon.conv_transpose calls in
-  # build_encoder/1, build_decoder/1, encoder_block/5, decoder_block/5, and
-  # residual_unit/3 need `channels: :first` added. Also, the hardcoded @strides
-  # [2, 4, 5, 8] (320x downsample) should be configurable via opts for smaller
-  # test inputs. See bench/full_sweep.exs for the skip comment.
-
   @moduledoc """
   EnCodec: High-Fidelity Neural Audio Compression.
 
@@ -166,6 +158,7 @@ defmodule Edifice.Audio.EnCodec do
       Axon.conv(input, hidden_dim,
         kernel_size: {7},
         padding: :same,
+        channels: :first,
         name: "encoder_conv_in"
       )
 
@@ -187,6 +180,7 @@ defmodule Edifice.Audio.EnCodec do
       Axon.conv(x, final_dim,
         kernel_size: {3},
         padding: :same,
+        channels: :first,
         name: "encoder_conv_out"
       )
 
@@ -223,6 +217,7 @@ defmodule Edifice.Audio.EnCodec do
       Axon.conv(x, final_dim,
         kernel_size: {7},
         padding: :same,
+        channels: :first,
         name: "decoder_conv_in"
       )
 
@@ -244,6 +239,7 @@ defmodule Edifice.Audio.EnCodec do
     Axon.conv(x, 1,
       kernel_size: {7},
       padding: :same,
+      channels: :first,
       name: "decoder_conv_out"
     )
   end
@@ -294,7 +290,8 @@ defmodule Edifice.Audio.EnCodec do
     Axon.conv(x, ch_out,
       kernel_size: {stride * 2},
       strides: [stride],
-      padding: [{div(stride, 2), div(stride, 2)}],
+      padding: :same,
+      channels: :first,
       name: "#{name}_downsample"
     )
   end
@@ -308,7 +305,8 @@ defmodule Edifice.Audio.EnCodec do
       Axon.conv_transpose(x, ch_out,
         kernel_size: {stride * 2},
         strides: [stride],
-        padding: [{div(stride, 2), div(stride, 2)}],
+        padding: :same,
+        channels: :first,
         name: "#{name}_upsample"
       )
 
@@ -327,6 +325,7 @@ defmodule Edifice.Audio.EnCodec do
         kernel_size: {3},
         padding: :same,
         kernel_dilation: [1],
+        channels: :first,
         name: "#{name}_conv1"
       )
 
@@ -336,6 +335,7 @@ defmodule Edifice.Audio.EnCodec do
     x =
       Axon.conv(x, channels,
         kernel_size: {1},
+        channels: :first,
         name: "#{name}_conv2"
       )
 

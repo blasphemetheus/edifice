@@ -578,9 +578,24 @@ defmodule FullSweep do
         {:nerf, "vision",
          fn -> Edifice.build(:nerf, coord_dim: 3, hidden_size: @hidden, use_viewdir: false) end,
          fn -> %{"coordinates" => rand({@batch, 3})} end},
-        # gaussian_splat: skipped — render pipeline uses Nx.to_number + Enum.reduce
-        # which are not JIT-compatible (requires host-side iteration for alpha compositing)
-        # TODO: fix in lib/edifice/vision/gaussian_splat.ex (see TODO comment there)
+        # gaussian_splat: render pipeline uses vectorized defn while loop for compositing
+        {:gaussian_splat, "vision",
+         fn ->
+           Edifice.build(:gaussian_splat,
+             num_gaussians: 20,
+             sh_degree: 1,
+             image_size: 16
+           )
+         end,
+         fn ->
+           %{
+             "camera_position" => rand({@batch, 3}),
+             "view_matrix" => Nx.eye(4) |> Nx.broadcast({@batch, 4, 4}),
+             "proj_matrix" => Nx.eye(4) |> Nx.broadcast({@batch, 4, 4}),
+             "image_height" => Nx.broadcast(16.0, {@batch}),
+             "image_width" => Nx.broadcast(16.0, {@batch})
+           }
+         end},
         # Mamba Vision: hybrid ViT + Mamba (4 stages: dim, 2*dim, 4*dim, 8*dim)
         # mamba_vision needs image_size >= 64 so stage 4 has >=2x2 spatial tokens
         # (stem 4x + 3 downsamples 8x = 32x total, so 64/32 = 2x2 at stage 4)
@@ -1569,10 +1584,16 @@ defmodule FullSweep do
 
   defp audio_specs do
     [
-      # encodec_encoder: skipped — module conv layers missing channels: :first,
-      # causing shape mismatch with {batch, channels, samples} waveform input
-      # TODO: fix in lib/edifice/audio/encodec.ex (see TODO comment there)
-
+      # EnCodec: encoder uses channels:first 1D conv (320x downsample)
+      {:encodec_encoder, "audio",
+       fn ->
+         {enc, _dec} = Edifice.build(:encodec, hidden_dim: @hidden)
+         enc
+       end,
+       fn ->
+         # samples must be divisible by 320 (total downsampling factor)
+         %{"waveform" => rand({@batch, 1, 320})}
+       end},
       # VALLE: returns {ar_model, nar_model}
       {:valle_ar, "audio",
        fn ->

@@ -39,8 +39,10 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Gradient checker ────────────────────────────────────────────
 
-  # Analytical gradient check: uses value_and_grad to verify backprop.
-  # Works for most architectures, but NOT for conv-based models (see known_issue tests).
+  # Analytical gradient check: uses value_and_grad wrapped in Nx.Defn.jit
+  # so that all tensors (trainable params, full data, input) are JIT arguments.
+  # This allows gradient tracing through conv ops that BinaryBackend can't
+  # differentiate through on its own.
   defp check_gradients(model, input_map) do
     {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
@@ -50,15 +52,38 @@ defmodule Edifice.GradientSmokeTest do
       end)
 
     model_state = init_fn.(template, Axon.ModelState.empty())
-    params_data = model_state.data
+    trainable = Axon.ModelState.trainable_parameters(model_state)
+    assert trainable != %{}, "model has no trainable parameters"
 
-    loss_fn = fn params ->
-      state = %{model_state | data: params}
-      output = predict_fn.(state, input_map)
-      Nx.mean(output)
+    # JIT-wrapped gradient function: all tensors are JIT arguments so the
+    # gradient tracer can see through predict_fn (including conv ops).
+    step_fn = fn trainable_params, full_data, inp ->
+      {loss, grad} =
+        Nx.Defn.value_and_grad(trainable_params, fn tp ->
+          merged = deep_merge(full_data, tp)
+
+          ms = %Axon.ModelState{
+            data: merged,
+            parameters: model_state.parameters,
+            state: model_state.state,
+            frozen_parameters: model_state.frozen_parameters
+          }
+
+          output = predict_fn.(ms, inp)
+          sum_container(output)
+        end)
+
+      {loss, grad}
     end
 
-    {loss, grads} = Nx.Defn.value_and_grad(params_data, loss_fn)
+    # Use EXLA compiler when available — BinaryBackend's select_and_scatter
+    # crashes on max_pool gradients (negative padding bug).
+    jit_opts =
+      if Code.ensure_loaded?(EXLA),
+        do: [compiler: EXLA, on_conflict: :reuse],
+        else: [on_conflict: :reuse]
+
+    {loss, grads} = Nx.Defn.jit(step_fn, jit_opts).(trainable, model_state.data, input_map)
 
     # Assert loss is finite
     assert_finite!(loss, "loss")
@@ -84,9 +109,37 @@ defmodule Edifice.GradientSmokeTest do
     assert any_nonzero, "all gradients are zero — model may have dead/disconnected layers"
   end
 
+  # Deep-merge two nested maps, preferring values from `override`
+  defp deep_merge(base, override) when is_map(base) and is_map(override) do
+    Map.merge(base, override, fn
+      _key, base_val, override_val when is_map(base_val) and is_map(override_val) ->
+        deep_merge(base_val, override_val)
+
+      _key, _base_val, override_val ->
+        override_val
+    end)
+  end
+
+  # Sum all tensors in a container (tuple, map, or plain tensor) into a scalar.
+  defp sum_container(%Nx.Tensor{} = t), do: Nx.sum(t)
+
+  defp sum_container(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> Enum.reduce(Nx.tensor(0.0), fn elem, acc -> Nx.add(acc, sum_container(elem)) end)
+  end
+
+  defp sum_container(%{} = map) when not is_struct(map) do
+    map
+    |> Map.values()
+    |> Enum.reduce(Nx.tensor(0.0), fn val, acc -> Nx.add(acc, sum_container(val)) end)
+  end
+
+  defp sum_container(_other), do: Nx.tensor(0.0)
+
   # Parameter sensitivity check: perturbs each parameter and verifies the
-  # output changes. This proves gradient flow without value_and_grad, working
-  # around Axon's non-defn predict_fn limitation for conv-based models.
+  # output changes. Used for models where BinaryBackend can't compute
+  # analytical gradients (e.g. resnet/densenet with max_pool).
   defp check_parameter_sensitivity(model, input_map) do
     {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
@@ -111,7 +164,6 @@ defmodule Edifice.GradientSmokeTest do
 
     changed_count =
       Enum.count(flat_params, fn {path, param_tensor} ->
-        # Add small perturbation (epsilon = 0.1 for robustness)
         perturbed = Nx.add(param_tensor, 0.1)
         perturbed_data = put_nested(model_state.data, path, perturbed)
         perturbed_state = %{model_state | data: perturbed_data}
@@ -119,17 +171,14 @@ defmodule Edifice.GradientSmokeTest do
         perturbed_output = predict_fn.(perturbed_state, input_map)
         perturbed_loss = Nx.mean(perturbed_output) |> Nx.to_number()
 
-        # Output changed — this parameter affects the output
         abs(perturbed_loss - baseline_loss) > 1.0e-10
       end)
 
-    # At least some parameters must affect the output
     assert changed_count > 0,
            "no parameters affected output — model may have dead/disconnected layers " <>
              "(0/#{length(flat_params)} params sensitive)"
   end
 
-  # Put a value into a nested map at a dot-separated path like "layer.kernel"
   defp put_nested(map, path, value) do
     keys = String.split(path, ".")
     do_put_nested(map, keys, value)
@@ -344,33 +393,12 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Convolutional Models ──────────────────────────────────────
   #
-  # Conv-based gradient limitation:
-  # Axon's predict_fn is not defn-traceable (it contains Process.info,
-  # :timer.tc, recursive graph traversal in deps/axon/lib/axon/compiler.ex
-  # lines 80-143). Both BinaryBackend and EXLA fail analytical gradients:
-  # BinaryBackend can't differentiate through conv; EXLA's tracer treats
-  # predict_fn as runtime_fun, which evaluates conv on BinaryBackend
-  # expression tensors.
-  #
-  # Upstream fix (Axon PR needed):
-  # 1. Remove Process.info/2 call (~line 83) from predict_fun — it's only
-  #    used for stack trace formatting in error messages
-  # 2. Remove :timer.tc wrapper (~line 90) — only used for debug logging
-  # 3. Factor the recursive graph traversal (lines 95-143) into a pure defn
-  #    by pre-computing the execution plan at build time (topological sort)
-  #    and generating a flat sequence of Nx/Axon.Layers calls
-  # 4. The resulting predict_fn would be a closure over a defn-traceable
-  #    function, allowing value_and_grad to trace through conv operations
-  # See: https://github.com/elixir-nx/axon/issues
-  #
-  # In the meantime, we use parameter sensitivity tests (perturb params,
-  # verify output changes) to validate gradient flow for conv models.
-  # The analytical gradient tests are kept as :known_issue for future
-  # validation once the upstream fix is available.
+  # ResNet and DenseNet require EXLA for gradient computation because
+  # Nx.BinaryBackend.select_and_scatter crashes on max_pool gradients.
+  # check_gradients auto-detects EXLA when available.
 
-  # ── Conv analytical gradient tests (known_issue) ──────────────
   @tag timeout: 120_000
-  @tag :known_issue
+  @tag :exla_only
   test "gradient flows through resnet" do
     model =
       Edifice.build(:resnet,
@@ -385,7 +413,7 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   @tag timeout: 120_000
-  @tag :known_issue
+  @tag :exla_only
   test "gradient flows through densenet" do
     model =
       Edifice.build(:densenet,
@@ -401,7 +429,6 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   @tag timeout: 120_000
-  @tag :known_issue
   test "gradient flows through tcn" do
     model = Edifice.build(:tcn, input_size: @embed, hidden_size: @hidden, num_layers: 2)
     input = random_tensor({@batch, @seq_len, @embed})
@@ -409,7 +436,6 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   @tag timeout: 120_000
-  @tag :known_issue
   test "gradient flows through capsule" do
     model =
       Edifice.build(:capsule,
@@ -426,7 +452,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"input" => input})
   end
 
-  # ── Conv parameter sensitivity tests (workaround) ─────────────
+  # ── Parameter sensitivity tests for max_pool models (BinaryBackend workaround)
 
   @tag timeout: 120_000
   test "parameters are sensitive in resnet" do
@@ -455,63 +481,6 @@ defmodule Edifice.GradientSmokeTest do
 
     input = random_tensor({@batch, 32, 32, @in_channels})
     check_parameter_sensitivity(model, %{"input" => input})
-  end
-
-  @tag timeout: 120_000
-  test "parameters are sensitive in tcn" do
-    model = Edifice.build(:tcn, input_size: @embed, hidden_size: @hidden, num_layers: 2)
-    input = random_tensor({@batch, @seq_len, @embed})
-    check_parameter_sensitivity(model, %{"input" => input})
-  end
-
-  @tag timeout: 120_000
-  test "parameters are sensitive in capsule" do
-    model =
-      Edifice.build(:capsule,
-        input_shape: {nil, 28, 28, 1},
-        conv_channels: 16,
-        conv_kernel: 9,
-        num_primary_caps: 4,
-        primary_cap_dim: 4,
-        num_digit_caps: @num_classes,
-        digit_cap_dim: 4
-      )
-
-    input = random_tensor({@batch, 28, 28, 1})
-    check_parameter_sensitivity(model, %{"input" => input})
-  end
-
-  # ── Conv EXLA.Backend analytical gradient test ─────────────────
-  # Tested: setting Nx.default_backend(EXLA.Backend) does NOT help.
-  # The gradient tracer creates expression tensors, predict_fn is treated
-  # as runtime_fun, and EXLA can't JIT-compile Axon.Layers.conv_impl
-  # with expression tensor arguments. Same root cause, different error:
-  # "cannot pass a tensor expression as argument to defn"
-
-  @tag timeout: 120_000
-  @tag :exla_only
-  @tag :known_issue
-  test "gradient flows through resnet with EXLA.Backend" do
-    previous_backend = Nx.default_backend()
-
-    try do
-      Nx.default_backend(EXLA.Backend)
-      Nx.Defn.default_options(compiler: EXLA)
-
-      model =
-        Edifice.build(:resnet,
-          input_shape: {nil, @image_size, @image_size, @in_channels},
-          num_classes: @num_classes,
-          block_sizes: [1, 1],
-          initial_channels: 4
-        )
-
-      input = random_tensor({@batch, @image_size, @image_size, @in_channels})
-      check_gradients(model, %{"input" => input})
-    after
-      Nx.default_backend(previous_backend)
-      Nx.Defn.default_options(compiler: Nx.Defn.Evaluator)
-    end
   end
 
   @tag timeout: 120_000

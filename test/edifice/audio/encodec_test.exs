@@ -21,8 +21,6 @@ defmodule Edifice.Audio.EnCodecTest do
   end
 
   describe "EnCodec.build_encoder/1" do
-    # TODO: encoder uses channels:first layout but Axon conv defaults to channels:last
-    @tag :known_issue
     test "produces correct output shape" do
       encoder = EnCodec.build_encoder(hidden_dim: @hidden_dim)
 
@@ -48,8 +46,6 @@ defmodule Edifice.Audio.EnCodecTest do
   end
 
   describe "EnCodec.build_decoder/1" do
-    # TODO: decoder uses channels:first conv layout, too slow on BinaryBackend
-    @tag :known_issue
     test "produces correct output shape" do
       decoder = EnCodec.build_decoder(hidden_dim: @hidden_dim)
 
