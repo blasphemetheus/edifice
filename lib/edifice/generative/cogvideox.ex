@@ -103,8 +103,6 @@ defmodule Edifice.Generative.CogVideoX do
   - Code: https://github.com/THUDM/CogVideo
   """
 
-  alias Edifice.Blocks.FFN
-
   # VAE defaults
   @default_in_channels 3
   @default_latent_channels 16
@@ -236,7 +234,7 @@ defmodule Edifice.Generative.CogVideoX do
     # Spatial upsampling stages
     spatial_stages = round(:math.log2(spatial_downsample))
 
-    x = Enum.reduce(spatial_stages..1, x, fn stage, acc ->
+    x = Enum.reduce(spatial_stages..1//-1, x, fn stage, acc ->
       channels = base_channels * round(:math.pow(2, min(stage - 1, 3)))
 
       acc
@@ -302,7 +300,7 @@ defmodule Edifice.Generative.CogVideoX do
     x_padded = Nx.pad(x_flat, 0.0, [{0, 0, 0}, {pad_h, pad_h, 0}, {pad_w, pad_w, 0}, {0, 0, 0}])
 
     # Average pooling as conv approximation (structural placeholder)
-    kernel = Nx.broadcast(1.0 / (kh * kw), {kh, kw, 1, 1})
+    _kernel = Nx.broadcast(1.0 / (kh * kw), {kh, kw, 1, 1})
     pooled = Nx.window_mean(x_padded, {1, kh, kw, 1}, padding: :valid)
 
     # Project to output channels
@@ -372,7 +370,7 @@ defmodule Edifice.Generative.CogVideoX do
   end
 
   defp temporal_downsample_impl(x, _opts) do
-    {batch, frames, channels, h, w} = Nx.shape(x)
+    {_batch, frames, _channels, _h, _w} = Nx.shape(x)
 
     # Stride-2 temporal downsampling (causal: take every other frame starting from 0)
     new_frames = div(frames, 2)
@@ -468,7 +466,7 @@ defmodule Edifice.Generative.CogVideoX do
     text_hidden_size = Keyword.get(opts, :text_hidden_size, @default_text_hidden_size)
     mlp_ratio = Keyword.get(opts, :mlp_ratio, @default_mlp_ratio)
 
-    [_pt, ph, pw] = patch_size
+    [_pt, _ph, _pw] = patch_size
     head_dim = div(hidden_size, num_heads)
 
     # Inputs
@@ -850,7 +848,7 @@ defmodule Edifice.Generative.CogVideoX do
     {Nx.sin(all_angles), Nx.cos(all_angles)}
   end
 
-  defp compute_axis_freqs(dim, head_dim, base) do
+  defp compute_axis_freqs(_dim, head_dim, base) do
     inv_freq = Nx.exp(
       Nx.multiply(
         Nx.negate(Nx.log(Nx.tensor(base))),

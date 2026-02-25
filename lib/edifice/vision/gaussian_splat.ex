@@ -1,4 +1,11 @@
 defmodule Edifice.Vision.GaussianSplat do
+  # TODO: The render pipeline (render_layer/render/1) uses Nx.to_number + Enum.reduce
+  # for per-Gaussian alpha compositing, which is not JIT-compatible with EXLA.
+  # To fix: rewrite the render loop using vectorized Nx operations (e.g. Nx.sort for
+  # depth ordering, cumulative product for transmittance, and batched alpha compositing
+  # without host-side iteration). This would enable the full model to run in the bench
+  # sweep and sanity checks. See bench/full_sweep.exs for the skip comment.
+
   @moduledoc """
   3D Gaussian Splatting for real-time radiance field rendering.
 
@@ -160,64 +167,44 @@ defmodule Edifice.Vision.GaussianSplat do
     _image_width = Axon.input("image_width", shape: {nil})
 
     # Learnable Gaussian parameters
+    # Dense projections from camera_position produce per-Gaussian attributes.
+    # During training, the dense weights encode the scene representation.
+    # Each projection: camera_position [batch, 3] -> [batch, N*D] -> [N, D]
+    # The batch dim is squeezed out (take first) since params are scene-global.
     positions =
-      Axon.param("#{name}_positions", fn _ -> {num_gaussians, 3} end,
-        initializer: :zeros
+      camera_position
+      |> Axon.dense(num_gaussians * 3, use_bias: true, name: "#{name}_positions")
+      |> Axon.nx(fn t -> t[0] |> Nx.reshape({num_gaussians, 3}) end,
+        name: "#{name}_positions_reshape"
       )
-      |> then(&Axon.layer(fn _input, params, _opts -> params end, [camera_position], params: &1))
 
-    # Rotations as quaternions [w, x, y, z]
     rotations =
-      Axon.param("#{name}_rotations", fn _ -> {num_gaussians, 4} end,
-        initializer: fn shape, type, _key ->
-          # Initialize to identity quaternion [1, 0, 0, 0]
-          zeros = Nx.broadcast(0.0, shape) |> Nx.as_type(type)
-          Nx.put_slice(zeros, [0, 0], Nx.broadcast(1.0, {elem(shape, 0), 1}) |> Nx.as_type(type))
-        end
+      camera_position
+      |> Axon.dense(num_gaussians * 4, use_bias: true, name: "#{name}_rotations")
+      |> Axon.nx(fn t -> t[0] |> Nx.reshape({num_gaussians, 4}) end,
+        name: "#{name}_rotations_reshape"
       )
-      |> then(&Axon.layer(fn _input, params, _opts -> params end, [camera_position], params: &1))
 
-    # Scales (log-space for stability)
     scales =
-      Axon.param("#{name}_scales", fn _ -> {num_gaussians, 3} end,
-        initializer: fn shape, type, _key ->
-          # Initialize to small scales
-          Nx.broadcast(-3.0, shape) |> Nx.as_type(type)
-        end
+      camera_position
+      |> Axon.dense(num_gaussians * 3, use_bias: true, name: "#{name}_scales")
+      |> Axon.nx(fn t -> t[0] |> Nx.reshape({num_gaussians, 3}) end,
+        name: "#{name}_scales_reshape"
       )
-      |> then(&Axon.layer(fn _input, params, _opts -> params end, [camera_position], params: &1))
 
-    # Opacities (logit-space for sigmoid activation)
     opacities =
-      Axon.param("#{name}_opacities", fn _ -> {num_gaussians, 1} end,
-        initializer: fn shape, type, _key ->
-          # Initialize to ~0.1 opacity (inverse sigmoid of 0.1)
-          Nx.broadcast(-2.2, shape) |> Nx.as_type(type)
-        end
+      camera_position
+      |> Axon.dense(num_gaussians * 1, use_bias: true, name: "#{name}_opacities")
+      |> Axon.nx(fn t -> t[0] |> Nx.reshape({num_gaussians, 1}) end,
+        name: "#{name}_opacities_reshape"
       )
-      |> then(&Axon.layer(fn _input, params, _opts -> params end, [camera_position], params: &1))
 
-    # Spherical harmonics coefficients
     sh_coeffs_param =
-      Axon.param("#{name}_sh_coeffs", fn _ -> {num_gaussians, sh_dim} end,
-        initializer: fn shape, type, _key ->
-          # Initialize DC component to gray, rest to zero
-          zeros = Nx.broadcast(0.0, shape) |> Nx.as_type(type)
-          # Set DC components (indices 0, sh_coeffs, 2*sh_coeffs) to 0.5
-          dc_val = 0.5
-          zeros
-          |> Nx.put_slice([0, 0], Nx.broadcast(dc_val, {elem(shape, 0), 1}) |> Nx.as_type(type))
-          |> Nx.put_slice(
-            [0, sh_coeffs],
-            Nx.broadcast(dc_val, {elem(shape, 0), 1}) |> Nx.as_type(type)
-          )
-          |> Nx.put_slice(
-            [0, 2 * sh_coeffs],
-            Nx.broadcast(dc_val, {elem(shape, 0), 1}) |> Nx.as_type(type)
-          )
-        end
+      camera_position
+      |> Axon.dense(num_gaussians * sh_dim, use_bias: true, name: "#{name}_sh_coeffs")
+      |> Axon.nx(fn t -> t[0] |> Nx.reshape({num_gaussians, sh_dim}) end,
+        name: "#{name}_sh_coeffs_reshape"
       )
-      |> then(&Axon.layer(fn _input, params, _opts -> params end, [camera_position], params: &1))
 
     # Render layer
     Axon.layer(

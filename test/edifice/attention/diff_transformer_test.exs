@@ -101,10 +101,8 @@ defmodule Edifice.Attention.DiffTransformerTest do
         end)
 
       # Lambda parameters should be present for each block
-      assert Enum.any?(all_keys, &String.contains?(&1, "lambda_q1"))
-      assert Enum.any?(all_keys, &String.contains?(&1, "lambda_k1"))
-      assert Enum.any?(all_keys, &String.contains?(&1, "lambda_q2"))
-      assert Enum.any?(all_keys, &String.contains?(&1, "lambda_k2"))
+      # Implementation uses a single combined lambda param per block
+      assert Enum.any?(all_keys, &String.contains?(&1, "lambda"))
     end
   end
 

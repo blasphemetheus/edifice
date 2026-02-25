@@ -117,8 +117,6 @@ defmodule Edifice.Generative.TRELLIS do
   - Project: https://trellis3d.github.io/
   """
 
-  alias Edifice.Blocks.FFN
-
   # Default configuration
   @default_voxel_resolution 64
   @default_feature_dim 32
@@ -298,8 +296,8 @@ defmodule Edifice.Generative.TRELLIS do
     hidden_size = opts[:hidden_size]
     voxel_resolution = opts[:voxel_resolution]
 
-    batch = Nx.axis_size(x, 0)
-    num_voxels = Nx.axis_size(x, 1)
+    _batch = Nx.axis_size(x, 0)
+    _num_voxels = Nx.axis_size(x, 1)
 
     # Normalize positions to [0, 1]
     pos_norm = Nx.divide(Nx.as_type(positions, :f32), voxel_resolution)
@@ -642,13 +640,13 @@ defmodule Edifice.Generative.TRELLIS do
     end
   end
 
-  defp decode_to_dense(features, positions, mask, resolution) do
+  defp decode_to_dense(features, _positions, mask, resolution) do
     batch = Nx.axis_size(features, 0)
     num_voxels = Nx.axis_size(features, 1)
     feature_dim = Nx.axis_size(features, 2)
 
     # Initialize empty dense grid
-    dense = Nx.broadcast(0.0, {batch, resolution, resolution, resolution, feature_dim})
+    _dense = Nx.broadcast(0.0, {batch, resolution, resolution, resolution, feature_dim})
 
     # Scatter features to positions (simplified - uses loop semantics)
     # In practice, would use scatter operations
@@ -682,7 +680,7 @@ defmodule Edifice.Generative.TRELLIS do
 
     # Extract splat parameters from features
     # Assume feature layout: [scale_3, rotation_4, color_3, opacity_1, ...]
-    min_dim = min(feature_dim, 11)
+    _min_dim = min(feature_dim, 11)
 
     scales = if feature_dim >= 3 do
       Nx.slice_along_axis(features, 0, 3, axis: 2)
@@ -850,7 +848,7 @@ defmodule Edifice.Generative.TRELLIS do
     voxel_resolution = Keyword.get(opts, :voxel_resolution, @default_voxel_resolution)
 
     batch = Nx.axis_size(conditioning, 0)
-    dt = 1.0 / num_steps
+    _dt = 1.0 / num_steps
 
     # Initialize with noise at t=1
     key = Nx.Random.key(42)

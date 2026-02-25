@@ -259,9 +259,9 @@ defmodule Edifice.Scientific.FNO do
   # Real implementation - works without Nx.fft which may not exist
   defp fft_1d(x) do
     # x: [batch, grid_size, channels]
-    batch = Nx.axis_size(x, 0)
+    _batch = Nx.axis_size(x, 0)
     n = Nx.axis_size(x, 1)
-    channels = Nx.axis_size(x, 2)
+    _channels = Nx.axis_size(x, 2)
 
     # DFT matrix: W[k,j] = exp(-2*pi*i*k*j/n)
     k = Nx.iota({n, 1}, type: :f32)
@@ -294,9 +294,9 @@ defmodule Edifice.Scientific.FNO do
   # Inverse FFT
   defp ifft_1d(x_ft, grid_size) do
     # x_ft: [batch, grid_size, channels, 2] where last dim is [real, imag]
-    batch = Nx.axis_size(x_ft, 0)
+    _batch = Nx.axis_size(x_ft, 0)
     n = grid_size
-    channels = Nx.axis_size(x_ft, 2)
+    _channels = Nx.axis_size(x_ft, 2)
 
     # Extract real and imaginary parts
     x_real = Nx.squeeze(Nx.slice_along_axis(x_ft, 0, 1, axis: 3), axes: [3])

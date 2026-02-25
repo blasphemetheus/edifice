@@ -8,6 +8,7 @@ pkgs.mkShell {
     erlang_27
     elixir_1_18
     git
+    tmux
 
     # CUDA
     cuda.cuda_nvcc

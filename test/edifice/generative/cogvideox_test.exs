@@ -1,5 +1,7 @@
 defmodule Edifice.Generative.CogVideoXTest do
   use ExUnit.Case, async: true
+  # 3D convolutions are slow on BinaryBackend (no EXLA in tests)
+  @moduletag timeout: 300_000
 
   alias Edifice.Generative.CogVideoX
 

@@ -31,6 +31,12 @@ RELEASE_PLAN.md
 .nix-mix/
 .nix-hex/
 
+# Backup files
+*.bak
+
+# Logs
+*.log
+
 # OS
 .DS_Store
 Thumbs.db

@@ -287,7 +287,7 @@ defmodule Edifice.Attention.NSA do
 
   # Path 1: Compressed attention via average pooling
   defp compressed_attention(q, k, v, compression_ratio) do
-    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
+    {_batch, _num_heads, seq_len, head_dim} = Nx.shape(q)
     compressed_len = max(div(seq_len, compression_ratio), 1)
 
     # Average pool K and V along sequence dimension
@@ -364,7 +364,7 @@ defmodule Edifice.Attention.NSA do
     # Select top-k blocks (simplified: use top positions from argsort)
     # Since Nx doesn't have native top-k, we use argsort
     sorted_indices = Nx.argsort(block_scores, axis: 2, direction: :desc)
-    top_k_indices = Nx.slice_along_axis(sorted_indices, 0, actual_num_selected, axis: 2)
+    _top_k_indices = Nx.slice_along_axis(sorted_indices, 0, actual_num_selected, axis: 2)
 
     # Gather K, V from selected blocks and compute attention
     # For simplicity, we compute attention over all blocks weighted by their scores

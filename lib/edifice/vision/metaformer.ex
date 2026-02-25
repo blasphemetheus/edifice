@@ -362,7 +362,7 @@ defmodule Edifice.Vision.MetaFormer do
 
   # 1D depthwise conv simulation with kernel size 3
   defp local_conv_compute(input) do
-    {batch, seq_len, dim} = Nx.shape(input)
+    {_batch, seq_len, _dim} = Nx.shape(input)
 
     padded = Nx.pad(input, 0.0, [{0, 0, 0}, {1, 1, 0}, {0, 0, 0}])
 

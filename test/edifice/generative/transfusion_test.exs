@@ -31,7 +31,7 @@ defmodule Edifice.Generative.TransfusionTest do
     Nx.concatenate([text_part, img_part], axis: 1)
   end
 
-  defp random_inputs(seed \\ 42) do
+  defp random_inputs(seed) do
     key = Nx.Random.key(seed)
     {seq, key} = Nx.Random.uniform(key, shape: {@batch, @seq_len, @embed_dim})
     {timestep, _key} = Nx.Random.uniform(key, shape: {@batch})

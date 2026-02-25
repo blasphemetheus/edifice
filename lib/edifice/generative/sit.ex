@@ -438,11 +438,11 @@ defmodule Edifice.Generative.SiT do
     Target velocity tensor with same shape as x.
   """
   @spec linear_velocity(Nx.Tensor.t(), Nx.Tensor.t()) :: Nx.Tensor.t()
-  defn linear_velocity(_x, noise) do
+  defn linear_velocity(x, noise) do
     # For linear interpolant: α(t)=1-t, β(t)=t
     # α'(t) = -1, β'(t) = 1
     # v = α'(t)·x + β'(t)·ε = -x + ε
-    noise - _x
+    noise - x
   end
 
   @doc """

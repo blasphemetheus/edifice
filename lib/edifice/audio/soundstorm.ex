@@ -359,7 +359,7 @@ defmodule Edifice.Audio.SoundStorm do
     mask_ratio = cosine_schedule(step, total_steps)
 
     # Count masked positions and determine how many to unmask
-    {batch, seq_len} = Nx.shape(mask)
+    {_batch, _seq_len} = Nx.shape(mask)
     mask_f32 = Nx.as_type(mask, :f32)
     num_masked = Nx.sum(mask_f32, axes: [-1], keep_axes: true)
     num_to_keep_masked = Nx.multiply(num_masked, mask_ratio) |> Nx.floor() |> Nx.as_type(:s64)
@@ -478,7 +478,7 @@ defmodule Edifice.Audio.SoundStorm do
       sorted_indices = Nx.argsort(masked_conf, direction: :asc)
 
       # The first `keep_masked` indices stay masked, rest get unmasked
-      unmask_count = Nx.axis_size(mask_b, 0) - trunc(keep_masked)
+      _unmask_count = Nx.axis_size(mask_b, 0) - trunc(keep_masked)
 
       # Create unmask indicator
       position_in_sort = Nx.argsort(sorted_indices, direction: :asc)
