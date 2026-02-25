@@ -93,7 +93,7 @@ defmodule Edifice.Contrastive.SigLIP do
     - `encoder_model` is an Axon model mapping inputs to normalized embeddings
     - `temperature_param` is an Axon parameter for learnable temperature
   """
-  @spec build([build_opt()]) :: {Axon.t(), %Axon.Parameter{}}
+  @spec build([build_opt()]) :: {Axon.t(), struct()}
   def build(opts \\ []) do
     input_dim = Keyword.get(opts, :input_dim) || Keyword.fetch!(opts, :embed_dim)
     projection_dim = Keyword.get(opts, :projection_dim, @default_projection_dim)
