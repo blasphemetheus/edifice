@@ -70,8 +70,8 @@ defmodule Edifice.SSM.Hymba do
   - https://arxiv.org/abs/2411.13676
   """
 
-  alias Edifice.SSM.Common
   alias Edifice.Blocks.FFN
+  alias Edifice.SSM.Common
 
   @typedoc "Options for `build/1`."
   @type build_opt ::

@@ -94,7 +94,7 @@ defmodule Edifice.Meta.DPO do
   @default_hidden_size 512
   @default_num_layers 6
   @default_num_heads 8
-  @default_vocab_size 32000
+  @default_vocab_size 32_000
   @default_beta 0.1
 
   @doc """

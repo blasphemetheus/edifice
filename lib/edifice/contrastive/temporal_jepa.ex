@@ -66,8 +66,8 @@ defmodule Edifice.Contrastive.TemporalJEPA do
 
   import Nx.Defn
 
+  alias Edifice.Attention.MultiHead
   alias Edifice.Blocks.{ModelBuilder, TransformerBlock}
-  alias Edifice.Attention.{MultiHead}
 
   @default_embed_dim 128
   @default_predictor_embed_dim 64

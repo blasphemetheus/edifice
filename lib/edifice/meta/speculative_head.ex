@@ -42,8 +42,8 @@ defmodule Edifice.Meta.SpeculativeHead do
   - Li et al., "EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty" (2024)
   """
 
-  alias Edifice.Blocks.TransformerBlock
   alias Edifice.Attention.GQA
+  alias Edifice.Blocks.TransformerBlock
 
   @default_hidden_size 256
   @default_num_layers 4

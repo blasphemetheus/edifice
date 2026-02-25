@@ -97,7 +97,7 @@ defmodule Edifice.Robotics.OpenVLA do
 
   import Nx.Defn
 
-  alias Edifice.Blocks.{RMSNorm, FFN}
+  alias Edifice.Blocks.{FFN, RMSNorm}
 
   # Default hyperparameters
   @default_image_size 224

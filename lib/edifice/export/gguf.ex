@@ -183,7 +183,7 @@ defmodule Edifice.Export.GGUF do
     num_kv_heads = Map.get(config, :num_kv_heads, num_heads)
     num_layers = Map.get(config, :num_layers, 4)
     context_length = Map.get(config, :context_length, 2048)
-    vocab_size = Map.get(config, :vocab_size, 32000)
+    vocab_size = Map.get(config, :vocab_size, 32_000)
     name = Map.get(config, :name, "edifice_model")
 
     # FFN hidden size (SwiGLU uses ~2.667x expansion)
@@ -505,7 +505,8 @@ defmodule Edifice.Export.GGUF do
     <<byte_size(str)::little-64, str::binary>>
   end
 
-  # Encode typed values
+  # Encode typed values (all GGUF value types defined for format completeness)
+  @dialyzer {:nowarn_function, encode_value: 2}
   defp encode_value(:string, value) when is_binary(value) do
     {@type_string, encode_string(value)}
   end

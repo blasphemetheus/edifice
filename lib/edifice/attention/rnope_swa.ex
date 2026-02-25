@@ -232,7 +232,7 @@ defmodule Edifice.Attention.RNoPESWA do
 
     # Frequency bands: 10000^(-2i/d) for i in 0..half_dim-1
     freq_seq = Nx.iota({half_dim}) |> Nx.as_type(:f32)
-    inv_freq = Nx.exp(Nx.multiply(freq_seq, -2.0 * :math.log(10000.0) / head_dim))
+    inv_freq = Nx.exp(Nx.multiply(freq_seq, -2.0 * :math.log(10_000.0) / head_dim))
 
     # Outer product: [seq_len, half_dim]
     angles = Nx.outer(positions, inv_freq)

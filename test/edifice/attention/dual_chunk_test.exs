@@ -2,6 +2,7 @@ defmodule Edifice.Attention.DualChunkTest do
   use ExUnit.Case, async: true
 
   alias Edifice.Attention.DualChunk
+  alias Edifice.Transformer.DecoderOnly
 
   @batch 2
   @seq_len 8
@@ -106,7 +107,7 @@ defmodule Edifice.Attention.DualChunkTest do
   describe "integration with decoder_only" do
     test "decoder_only with dual_chunk attention builds" do
       model =
-        Edifice.Transformer.DecoderOnly.build(
+        DecoderOnly.build(
           embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_heads: 4,
@@ -122,7 +123,7 @@ defmodule Edifice.Attention.DualChunkTest do
 
     test "decoder_only with dual_chunk attention produces correct output" do
       model =
-        Edifice.Transformer.DecoderOnly.build(
+        DecoderOnly.build(
           embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_heads: 4,

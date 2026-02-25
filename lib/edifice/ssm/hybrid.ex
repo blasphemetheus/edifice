@@ -78,10 +78,10 @@ defmodule Edifice.SSM.Hybrid do
   """
 
   alias Edifice.Attention.MultiHead, as: Attention
-  alias Edifice.SSM.GatedSSM
+  alias Edifice.Attention.RWKV
   alias Edifice.Recurrent.DeltaNet
   alias Edifice.Recurrent.GatedDeltaNet
-  alias Edifice.Attention.RWKV
+  alias Edifice.SSM.GatedSSM
 
   # Default hyperparameters
   @default_hidden_size 256

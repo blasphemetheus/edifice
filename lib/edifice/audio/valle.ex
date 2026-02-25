@@ -351,7 +351,7 @@ defmodule Edifice.Audio.VALLE do
         angle_rates =
           Nx.exp(
             Nx.multiply(
-              Nx.negate(Nx.log(Nx.tensor(10000.0))),
+              Nx.negate(Nx.log(Nx.tensor(10_000.0))),
               Nx.divide(Nx.multiply(Nx.floor(Nx.divide(dim_idx, 2)), 2.0), dim)
             )
           )

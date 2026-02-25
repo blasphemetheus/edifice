@@ -172,8 +172,8 @@ defmodule Edifice.Inference.MedusaTest do
 
   describe "Medusa.output_size/1" do
     test "returns vocab_size" do
-      assert Medusa.output_size(vocab_size: 32000) == 32000
-      assert Medusa.output_size(vocab_size: 50257) == 50257
+      assert Medusa.output_size(vocab_size: 32_000) == 32_000
+      assert Medusa.output_size(vocab_size: 50_257) == 50_257
     end
   end
 end

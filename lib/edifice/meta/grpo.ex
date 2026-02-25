@@ -85,7 +85,7 @@ defmodule Edifice.Meta.GRPO do
   @default_hidden_size 512
   @default_num_layers 6
   @default_num_heads 8
-  @default_vocab_size 32000
+  @default_vocab_size 32_000
   @default_group_size 8
 
   @doc """

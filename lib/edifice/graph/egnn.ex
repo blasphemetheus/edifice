@@ -218,30 +218,24 @@ defmodule Edifice.Graph.EGNN do
         Axon.nx(node_feats, fn _ -> Nx.tensor(0.0) end, name: "#{name}_no_edge_feats")
       end
 
-    # Compute EGNN layer
-    layer_inputs =
-      [
-        node_feats,
-        coords,
-        edge_index,
-        edge_feat_input,
-        edge_w1,
-        edge_b1,
-        edge_w2,
-        edge_b2,
-        coord_w1,
-        coord_b1,
-        coord_w2,
-        coord_b2,
-        node_w1,
-        node_b1,
-        node_w2,
-        node_b2
-      ]
+    # Bundle weights into containers to reduce layer arity
+    edge_weights = Axon.container({edge_w1, edge_b1, edge_w2, edge_b2})
+    coord_weights = Axon.container({coord_w1, coord_b1, coord_w2, coord_b2})
+    node_weights = Axon.container({node_w1, node_b1, node_w2, node_b2})
+
+    layer_inputs = [
+      node_feats,
+      coords,
+      edge_index,
+      edge_feat_input,
+      edge_weights,
+      coord_weights,
+      node_weights
+    ]
 
     result =
       Axon.layer(
-        &egnn_layer_impl/17,
+        &egnn_layer_impl/8,
         layer_inputs,
         name: name,
         hidden_dim: hidden_dim,
@@ -266,18 +260,9 @@ defmodule Edifice.Graph.EGNN do
          coords,
          edge_index,
          edge_features,
-         edge_w1,
-         edge_b1,
-         edge_w2,
-         edge_b2,
-         coord_w1,
-         coord_b1,
-         coord_w2,
-         coord_b2,
-         node_w1,
-         node_b1,
-         node_w2,
-         node_b2,
+         {edge_w1, edge_b1, edge_w2, edge_b2},
+         {coord_w1, coord_b1, coord_w2, coord_b2},
+         {node_w1, node_b1, node_w2, node_b2},
          opts
        ) do
     hidden_dim = opts[:hidden_dim]

@@ -79,7 +79,7 @@ defmodule Edifice.Transformer.NemotronH do
   - Mamba-2: "Transformers are SSMs" (Gu & Dao, 2024)
   """
 
-  alias Edifice.Blocks.{TransformerBlock, RMSNorm, FFN}
+  alias Edifice.Blocks.{FFN, RMSNorm, TransformerBlock}
   alias Edifice.SSM.Common, as: SSMCommon
 
   # Default hyperparameters (Nemotron-H style)
@@ -415,15 +415,7 @@ defmodule Edifice.Transformer.NemotronH do
               new_running = Enum.at(chunk_final_states, idx)
               {new_running, acc ++ [chunk_h]}
             else
-              # Get A cumulative products for this chunk
-              a_chunk =
-                if idx == length(chunk_outputs) - 1 and remainder > 0 do
-                  start = num_chunks * chunk_size
-                  Nx.slice_along_axis(a, start, remainder, axis: 1)
-                else
-                  start = idx * chunk_size
-                  Nx.slice_along_axis(a, start, chunk_size, axis: 1)
-                end
+              a_chunk = slice_a_chunk(a, idx, chunk_outputs, num_chunks, chunk_size, remainder)
 
               a_cumprods = compute_cumulative_products(a_chunk)
               state_contribution = Nx.multiply(a_cumprods, running_state)
@@ -438,6 +430,16 @@ defmodule Edifice.Transformer.NemotronH do
         )
 
       Nx.concatenate(propagated_outputs, axis: 1)
+    end
+  end
+
+  defp slice_a_chunk(a, idx, chunk_outputs, num_chunks, chunk_size, remainder) do
+    if idx == length(chunk_outputs) - 1 and remainder > 0 do
+      start = num_chunks * chunk_size
+      Nx.slice_along_axis(a, start, remainder, axis: 1)
+    else
+      start = idx * chunk_size
+      Nx.slice_along_axis(a, start, chunk_size, axis: 1)
     end
   end
 

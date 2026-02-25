@@ -53,8 +53,8 @@ defmodule Edifice.Transformer.ByteLatentTransformer do
     (Meta, 2024) — https://arxiv.org/abs/2412.09871
   """
 
-  alias Edifice.Blocks.TransformerBlock
   alias Edifice.Attention.GQA
+  alias Edifice.Blocks.TransformerBlock
 
   @default_vocab_size 256
   @default_patch_size 4

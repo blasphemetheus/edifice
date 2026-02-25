@@ -143,8 +143,8 @@ defmodule Edifice.Attention.YARNTest do
 
   describe "effective_context_length/2" do
     test "returns original * scale" do
-      assert YARN.effective_context_length(2048, 8) == 16384
-      assert YARN.effective_context_length(4096, 4) == 16384
+      assert YARN.effective_context_length(2048, 8) == 16_384
+      assert YARN.effective_context_length(4096, 4) == 16_384
       assert YARN.effective_context_length(2048, 1) == 2048
     end
   end

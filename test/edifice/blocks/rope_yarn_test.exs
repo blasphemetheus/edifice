@@ -52,7 +52,7 @@ defmodule Edifice.Blocks.RoPEYarnTest do
       {cos_yarn, _sin_yarn} =
         RoPE.precompute_freqs(@dim, @max_seq_len,
           scaling_type: :yarn,
-          target_length: 16384,
+          target_length: 16_384,
           original_length: 4096
         )
 

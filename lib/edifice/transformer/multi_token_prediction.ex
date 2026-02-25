@@ -44,8 +44,8 @@ defmodule Edifice.Transformer.MultiTokenPrediction do
     (Gloeckle et al., 2024) — https://arxiv.org/abs/2404.19737
   """
 
-  alias Edifice.Blocks.TransformerBlock
   alias Edifice.Attention.GQA
+  alias Edifice.Blocks.TransformerBlock
 
   @default_hidden_size 256
   @default_num_layers 4

@@ -111,7 +111,7 @@ defmodule Edifice.Vision.DINOv2 do
   @default_num_register_tokens 4
   @default_head_hidden_dim 2048
   @default_head_bottleneck_dim 256
-  @default_head_output_dim 65536
+  @default_head_output_dim 65_536
   @default_student_temp 0.1
   @default_teacher_temp 0.04
   @default_momentum 0.996

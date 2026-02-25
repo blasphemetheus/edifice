@@ -188,7 +188,7 @@ defmodule Edifice.Vision.GaussianSplat do
 
     opacities =
       camera_position
-      |> Axon.dense(num_gaussians * 1, use_bias: true, name: "#{name}_opacities")
+      |> Axon.dense(num_gaussians, use_bias: true, name: "#{name}_opacities")
       |> Axon.nx(fn t -> t[0] |> Nx.reshape({num_gaussians, 1}) end,
         name: "#{name}_opacities_reshape"
       )

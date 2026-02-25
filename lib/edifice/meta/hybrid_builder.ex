@@ -81,8 +81,8 @@ defmodule Edifice.Meta.HybridBuilder do
   - Nemotron-H (NVIDIA, 2025) — 90:10 SSM:attention ratio
   """
 
-  alias Edifice.SSM.Hybrid
   alias Edifice.Blocks.FFN
+  alias Edifice.SSM.Hybrid
 
   @default_hidden_size 256
   @default_num_layers 6

@@ -44,8 +44,8 @@ defmodule Edifice.Meta.TestTimeCompute do
   - "Scaling LLM Test-Time Compute Optimally" (Snell et al., 2024)
   """
 
-  alias Edifice.Blocks.TransformerBlock
   alias Edifice.Attention.GQA
+  alias Edifice.Blocks.TransformerBlock
 
   @default_hidden_size 256
   @default_num_layers 4

@@ -115,7 +115,7 @@ defmodule Edifice.Export.GGUFTest do
         num_kv_heads: 4,
         num_layers: 6,
         context_length: 2048,
-        vocab_size: 32000,
+        vocab_size: 32_000,
         name: "test_model"
       }
 

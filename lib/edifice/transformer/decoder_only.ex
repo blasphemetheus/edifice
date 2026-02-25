@@ -76,7 +76,7 @@ defmodule Edifice.Transformer.DecoderOnly do
   - DeepSeek/Qwen2.5 Dual Chunk Attention (2024)
   """
 
-  alias Edifice.Attention.{GQA, DualChunk}
+  alias Edifice.Attention.{DualChunk, GQA}
   alias Edifice.Attention.LightningAttention
   alias Edifice.Blocks.{ModelBuilder, TransformerBlock}
 

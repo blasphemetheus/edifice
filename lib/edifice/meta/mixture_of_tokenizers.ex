@@ -40,8 +40,8 @@ defmodule Edifice.Meta.MixtureOfTokenizers do
   - "Mixture-of-Tokenizers" (Pham et al., 2024) — multi-granularity tokenization
   """
 
-  alias Edifice.Blocks.TransformerBlock
   alias Edifice.Attention.GQA
+  alias Edifice.Blocks.TransformerBlock
 
   @default_hidden_size 256
   @default_num_tokenizers 4

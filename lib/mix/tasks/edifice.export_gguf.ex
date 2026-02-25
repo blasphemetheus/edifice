@@ -39,6 +39,7 @@ defmodule Mix.Tasks.Edifice.ExportGguf do
   """
 
   use Mix.Task
+  @dialyzer [:no_missing_calls, :no_return]
 
   @shortdoc "Export Edifice model to GGUF format"
 
@@ -143,32 +144,63 @@ defmodule Mix.Tasks.Edifice.ExportGguf do
     end
   end
 
-  defp build_config(opts, params) do
-    # Try to load from config file if provided
-    base_config =
-      if opts[:config] do
-        opts[:config]
-        |> File.read!()
-        |> Jason.decode!(keys: :atoms)
-      else
-        %{}
-      end
+  @default_config %{
+    num_layers: 4,
+    hidden_size: 256,
+    num_heads: 8,
+    num_kv_heads: 8,
+    context_length: 2048,
+    vocab_size: 32_000,
+    name: "edifice_model"
+  }
 
-    # Infer num_layers from params if not specified
+  defp build_config(opts, params) do
+    file_config = load_config_file(opts[:config])
     inferred_layers = infer_num_layers(params)
 
-    # Merge with CLI options (CLI takes precedence)
+    defaults = %{@default_config | num_layers: inferred_layers || @default_config.num_layers}
+
+    config = Map.merge(defaults, drop_nils(file_config))
+    config = Map.merge(config, drop_nils(cli_overrides(opts)))
+
+    # num_kv_heads defaults to num_heads when not explicitly set
+    if config.num_kv_heads == @default_config.num_kv_heads and
+         config.num_heads != @default_config.num_heads do
+      %{config | num_kv_heads: config.num_heads}
+    else
+      config
+    end
+  end
+
+  defp load_config_file(nil), do: %{}
+
+  defp load_config_file(path) do
+    json = File.read!(path)
+    # Use :json module (OTP 27+) to avoid Jason dependency
+    json |> :json.decode() |> atomize_keys()
+  end
+
+  defp atomize_keys(map) when is_map(map) do
+    Map.new(map, fn {k, v} -> {String.to_atom(k), atomize_keys(v)} end)
+  end
+
+  defp atomize_keys(list) when is_list(list), do: Enum.map(list, &atomize_keys/1)
+  defp atomize_keys(value), do: value
+
+  defp cli_overrides(opts) do
     %{
-      num_layers: opts[:num_layers] || base_config[:num_layers] || inferred_layers || 4,
-      hidden_size: opts[:hidden_size] || base_config[:hidden_size] || 256,
-      num_heads: opts[:num_heads] || base_config[:num_heads] || 8,
-      num_kv_heads:
-        opts[:num_kv_heads] || base_config[:num_kv_heads] || opts[:num_heads] ||
-          base_config[:num_heads] || 8,
-      context_length: opts[:context_length] || base_config[:context_length] || 2048,
-      vocab_size: opts[:vocab_size] || base_config[:vocab_size] || 32000,
-      name: opts[:name] || base_config[:name] || "edifice_model"
+      num_layers: opts[:num_layers],
+      hidden_size: opts[:hidden_size],
+      num_heads: opts[:num_heads],
+      num_kv_heads: opts[:num_kv_heads],
+      context_length: opts[:context_length],
+      vocab_size: opts[:vocab_size],
+      name: opts[:name]
     }
+  end
+
+  defp drop_nils(map) do
+    map |> Enum.reject(fn {_k, v} -> is_nil(v) end) |> Map.new()
   end
 
   # Try to infer number of layers from parameter names

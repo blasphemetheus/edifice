@@ -2,6 +2,7 @@ defmodule Edifice.Attention.LightningAttentionTest do
   use ExUnit.Case, async: true
 
   alias Edifice.Attention.LightningAttention
+  alias Edifice.Transformer.DecoderOnly
 
   @batch 2
   @seq_len 8
@@ -66,7 +67,7 @@ defmodule Edifice.Attention.LightningAttentionTest do
   describe "integration with decoder_only" do
     test "decoder_only with lightning attention builds" do
       model =
-        Edifice.Transformer.DecoderOnly.build(
+        DecoderOnly.build(
           embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_heads: 4,
@@ -82,7 +83,7 @@ defmodule Edifice.Attention.LightningAttentionTest do
 
     test "decoder_only with lightning attention produces correct output" do
       model =
-        Edifice.Transformer.DecoderOnly.build(
+        DecoderOnly.build(
           embed_dim: @embed_dim,
           hidden_size: @hidden_size,
           num_heads: 4,
