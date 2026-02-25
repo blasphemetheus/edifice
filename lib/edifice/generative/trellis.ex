@@ -193,14 +193,15 @@ defmodule Edifice.Generative.TRELLIS do
     x = Axon.dense(sparse_features, hidden_size, name: "input_proj")
 
     # Add 3D positional encoding based on voxel positions
-    x = Axon.layer(
-      &add_3d_position_encoding/3,
-      [x, voxel_positions],
-      name: "pos_encoding",
-      hidden_size: hidden_size,
-      voxel_resolution: voxel_resolution,
-      op_name: :pos_3d
-    )
+    x =
+      Axon.layer(
+        &add_3d_position_encoding/3,
+        [x, voxel_positions],
+        name: "pos_encoding",
+        hidden_size: hidden_size,
+        voxel_resolution: voxel_resolution,
+        op_name: :pos_3d
+      )
 
     # Project conditioning
     cond_proj = Axon.dense(conditioning, hidden_size, name: "cond_proj")
@@ -209,17 +210,22 @@ defmodule Edifice.Generative.TRELLIS do
     time_embed = build_timestep_embed(timestep, hidden_size)
 
     # Sparse transformer layers
-    x = Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
-      build_sparse_transformer_block(
-        acc, voxel_positions, occupancy_mask, cond_proj, time_embed,
-        hidden_size: hidden_size,
-        num_heads: num_heads,
-        head_dim: head_dim,
-        window_size: window_size,
-        mlp_ratio: mlp_ratio,
-        name: "layer_#{layer_idx}"
-      )
-    end)
+    x =
+      Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
+        build_sparse_transformer_block(
+          acc,
+          voxel_positions,
+          occupancy_mask,
+          cond_proj,
+          time_embed,
+          hidden_size: hidden_size,
+          num_heads: num_heads,
+          head_dim: head_dim,
+          window_size: window_size,
+          mlp_ratio: mlp_ratio,
+          name: "layer_#{layer_idx}"
+        )
+      end)
 
     # Final norm and projection back to feature space
     x = Axon.layer_norm(x, name: "final_norm")
@@ -236,58 +242,63 @@ defmodule Edifice.Generative.TRELLIS do
     mlp_dim = round(hidden_size * mlp_ratio)
 
     # Add timestep conditioning
-    x = Axon.layer(
-      &add_time_conditioning/3,
-      [input, time_embed],
-      name: "#{name}_time_cond",
-      op_name: :time_cond
-    )
+    x =
+      Axon.layer(
+        &add_time_conditioning/3,
+        [input, time_embed],
+        name: "#{name}_time_cond",
+        op_name: :time_cond
+      )
 
     # Sparse self-attention with 3D windowing
     x_norm = Axon.layer_norm(x, name: "#{name}_self_attn_norm")
 
-    self_attn_out = Axon.layer(
-      &sparse_windowed_attention_impl/4,
-      [x_norm, positions, mask],
-      name: "#{name}_self_attn",
-      num_heads: num_heads,
-      head_dim: head_dim,
-      window_size: window_size,
-      op_name: :sparse_self_attention
-    )
+    self_attn_out =
+      Axon.layer(
+        &sparse_windowed_attention_impl/4,
+        [x_norm, positions, mask],
+        name: "#{name}_self_attn",
+        num_heads: num_heads,
+        head_dim: head_dim,
+        window_size: window_size,
+        op_name: :sparse_self_attention
+      )
 
     x = Axon.add(x, self_attn_out, name: "#{name}_self_attn_residual")
 
     # Sparse cross-attention to conditioning
     x_norm2 = Axon.layer_norm(x, name: "#{name}_cross_attn_norm")
 
-    cross_attn_out = Axon.layer(
-      &sparse_cross_attention_impl/4,
-      [x_norm2, conditioning, mask],
-      name: "#{name}_cross_attn",
-      num_heads: num_heads,
-      head_dim: head_dim,
-      hidden_size: hidden_size,
-      op_name: :sparse_cross_attention
-    )
+    cross_attn_out =
+      Axon.layer(
+        &sparse_cross_attention_impl/4,
+        [x_norm2, conditioning, mask],
+        name: "#{name}_cross_attn",
+        num_heads: num_heads,
+        head_dim: head_dim,
+        hidden_size: hidden_size,
+        op_name: :sparse_cross_attention
+      )
 
     x = Axon.add(x, cross_attn_out, name: "#{name}_cross_attn_residual")
 
     # FFN
     x_norm3 = Axon.layer_norm(x, name: "#{name}_ffn_norm")
 
-    ffn_out = x_norm3
-    |> Axon.dense(mlp_dim, name: "#{name}_ffn_up")
-    |> Axon.activation(:gelu, name: "#{name}_ffn_act")
-    |> Axon.dense(hidden_size, name: "#{name}_ffn_down")
+    ffn_out =
+      x_norm3
+      |> Axon.dense(mlp_dim, name: "#{name}_ffn_up")
+      |> Axon.activation(:gelu, name: "#{name}_ffn_act")
+      |> Axon.dense(hidden_size, name: "#{name}_ffn_down")
 
     # Mask FFN output (zero out padded positions)
-    ffn_out = Axon.layer(
-      &apply_occupancy_mask/3,
-      [ffn_out, mask],
-      name: "#{name}_ffn_mask",
-      op_name: :apply_mask
-    )
+    ffn_out =
+      Axon.layer(
+        &apply_occupancy_mask/3,
+        [ffn_out, mask],
+        name: "#{name}_ffn_mask",
+        op_name: :apply_mask
+      )
 
     Axon.add(x, ffn_out, name: "#{name}_ffn_residual")
   end
@@ -303,31 +314,36 @@ defmodule Edifice.Generative.TRELLIS do
     pos_norm = Nx.divide(Nx.as_type(positions, :f32), voxel_resolution)
 
     # Sinusoidal encoding for each axis
-    dim_per_axis = div(hidden_size, 6)  # 3 axes × 2 (sin + cos)
+    # 3 axes × 2 (sin + cos)
+    dim_per_axis = div(hidden_size, 6)
 
-    freqs = Nx.exp(
-      Nx.multiply(
-        Nx.negate(Nx.log(Nx.tensor(10_000.0))),
-        Nx.divide(Nx.iota({dim_per_axis}, type: :f32), max(dim_per_axis - 1, 1))
+    freqs =
+      Nx.exp(
+        Nx.multiply(
+          Nx.negate(Nx.log(Nx.tensor(10_000.0))),
+          Nx.divide(Nx.iota({dim_per_axis}, type: :f32), max(dim_per_axis - 1, 1))
+        )
       )
-    )
 
     # Compute encoding for x, y, z
-    encodings = Enum.map(0..2, fn axis ->
-      axis_pos = Nx.slice_along_axis(pos_norm, axis, 1, axis: 2)
-      angles = Nx.multiply(axis_pos, Nx.reshape(freqs, {1, 1, dim_per_axis}))
-      Nx.concatenate([Nx.sin(angles), Nx.cos(angles)], axis: 2)
-    end)
+    encodings =
+      Enum.map(0..2, fn axis ->
+        axis_pos = Nx.slice_along_axis(pos_norm, axis, 1, axis: 2)
+        angles = Nx.multiply(axis_pos, Nx.reshape(freqs, {1, 1, dim_per_axis}))
+        Nx.concatenate([Nx.sin(angles), Nx.cos(angles)], axis: 2)
+      end)
 
     pos_embed = Nx.concatenate(encodings, axis: 2)
 
     # Pad or truncate to hidden_size
     current_dim = Nx.axis_size(pos_embed, 2)
-    pos_embed = if current_dim < hidden_size do
-      Nx.pad(pos_embed, 0.0, [{0, 0, 0}, {0, 0, 0}, {0, hidden_size - current_dim, 0}])
-    else
-      Nx.slice_along_axis(pos_embed, 0, hidden_size, axis: 2)
-    end
+
+    pos_embed =
+      if current_dim < hidden_size do
+        Nx.pad(pos_embed, 0.0, [{0, 0, 0}, {0, 0, 0}, {0, hidden_size - current_dim, 0}])
+      else
+        Nx.slice_along_axis(pos_embed, 0, hidden_size, axis: 2)
+      end
 
     Nx.add(x, pos_embed)
   end
@@ -337,9 +353,10 @@ defmodule Edifice.Generative.TRELLIS do
     num_voxels = Nx.axis_size(x, 1)
     hidden = Nx.axis_size(x, 2)
 
-    time_expanded = time_embed
-    |> Nx.reshape({batch, 1, hidden})
-    |> Nx.broadcast({batch, num_voxels, hidden})
+    time_expanded =
+      time_embed
+      |> Nx.reshape({batch, 1, hidden})
+      |> Nx.broadcast({batch, num_voxels, hidden})
 
     Nx.add(x, time_expanded)
   end
@@ -360,9 +377,20 @@ defmodule Edifice.Generative.TRELLIS do
     v = x
 
     # Reshape to multi-head
-    q = q |> Nx.reshape({batch, num_voxels, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    k = k |> Nx.reshape({batch, num_voxels, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    v = v |> Nx.reshape({batch, num_voxels, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
+    q =
+      q
+      |> Nx.reshape({batch, num_voxels, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    k =
+      k
+      |> Nx.reshape({batch, num_voxels, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    v =
+      v
+      |> Nx.reshape({batch, num_voxels, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
 
     # Compute attention scores
     scale_factor = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
@@ -374,30 +402,35 @@ defmodule Edifice.Generative.TRELLIS do
 
     # Combine with occupancy mask
     # mask: [batch, num_voxels]
-    mask_2d = Nx.logical_and(
-      Nx.reshape(mask, {batch, 1, num_voxels, 1}),
-      Nx.reshape(mask, {batch, 1, 1, num_voxels})
-    )
+    mask_2d =
+      Nx.logical_and(
+        Nx.reshape(mask, {batch, 1, num_voxels, 1}),
+        Nx.reshape(mask, {batch, 1, 1, num_voxels})
+      )
 
-    combined_mask = Nx.logical_and(
-      Nx.reshape(window_mask, {batch, 1, num_voxels, num_voxels}),
-      mask_2d
-    )
+    combined_mask =
+      Nx.logical_and(
+        Nx.reshape(window_mask, {batch, 1, num_voxels, num_voxels}),
+        mask_2d
+      )
 
     # Expand combined_mask to [batch, num_heads, num_voxels, num_voxels]
     combined_mask = Nx.broadcast(combined_mask, {batch, num_heads, num_voxels, num_voxels})
 
     # Apply mask
-    scores = Nx.select(
-      combined_mask,
-      scores,
-      Nx.broadcast(-1.0e9, Nx.shape(scores))
-    )
+    scores =
+      Nx.select(
+        combined_mask,
+        scores,
+        Nx.broadcast(-1.0e9, Nx.shape(scores))
+      )
 
     # Softmax
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    attn_weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
+
+    attn_weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
 
     # Apply to values
     output = Nx.dot(attn_weights, [3], [0, 1], v, [2], [0, 1])
@@ -438,31 +471,45 @@ defmodule Edifice.Generative.TRELLIS do
     q = Nx.divide(x, scale)
 
     # Reshape Q to multi-head
-    q = q |> Nx.reshape({batch, num_voxels, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
+    q =
+      q
+      |> Nx.reshape({batch, num_voxels, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
 
     # K, V from conditioning
-    k = conditioning |> Nx.reshape({batch, cond_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    v = conditioning |> Nx.reshape({batch, cond_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
+    k =
+      conditioning
+      |> Nx.reshape({batch, cond_len, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    v =
+      conditioning
+      |> Nx.reshape({batch, cond_len, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
 
     # Attention scores
     scale_factor = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
     scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale_factor)
 
     # Mask padded voxel queries
-    query_mask = mask
-    |> Nx.reshape({batch, 1, num_voxels, 1})
-    |> Nx.broadcast({batch, num_heads, num_voxels, cond_len})
+    query_mask =
+      mask
+      |> Nx.reshape({batch, 1, num_voxels, 1})
+      |> Nx.broadcast({batch, num_heads, num_voxels, cond_len})
 
-    scores = Nx.select(
-      query_mask,
-      scores,
-      Nx.broadcast(-1.0e9, Nx.shape(scores))
-    )
+    scores =
+      Nx.select(
+        query_mask,
+        scores,
+        Nx.broadcast(-1.0e9, Nx.shape(scores))
+      )
 
     # Softmax
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    attn_weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
+
+    attn_weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
 
     # Apply to values
     output = Nx.dot(attn_weights, [3], [0, 1], v, [2], [0, 1])
@@ -477,22 +524,24 @@ defmodule Edifice.Generative.TRELLIS do
     num_voxels = Nx.axis_size(x, 1)
     hidden = Nx.axis_size(x, 2)
 
-    mask_expanded = mask
-    |> Nx.reshape({batch, num_voxels, 1})
-    |> Nx.as_type(Nx.type(x))
-    |> Nx.broadcast({batch, num_voxels, hidden})
+    mask_expanded =
+      mask
+      |> Nx.reshape({batch, num_voxels, 1})
+      |> Nx.as_type(Nx.type(x))
+      |> Nx.broadcast({batch, num_voxels, hidden})
 
     Nx.multiply(x, mask_expanded)
   end
 
   defp build_timestep_embed(timestep, hidden_size) do
-    embed = Axon.layer(
-      &sinusoidal_embed_impl/2,
-      [timestep],
-      name: "time_sinusoidal",
-      hidden_size: hidden_size,
-      op_name: :sinusoidal_embed
-    )
+    embed =
+      Axon.layer(
+        &sinusoidal_embed_impl/2,
+        [timestep],
+        name: "time_sinusoidal",
+        hidden_size: hidden_size,
+        op_name: :sinusoidal_embed
+      )
 
     embed
     |> Axon.dense(hidden_size, name: "time_mlp_1")
@@ -504,12 +553,13 @@ defmodule Edifice.Generative.TRELLIS do
     hidden_size = opts[:hidden_size]
     half_dim = div(hidden_size, 2)
 
-    freqs = Nx.exp(
-      Nx.multiply(
-        Nx.negate(Nx.log(Nx.tensor(10_000.0))),
-        Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
+    freqs =
+      Nx.exp(
+        Nx.multiply(
+          Nx.negate(Nx.log(Nx.tensor(10_000.0))),
+          Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
+        )
       )
-    )
 
     t_f = Nx.as_type(t, :f32)
     angles = Nx.multiply(Nx.new_axis(t_f, 1), Nx.reshape(freqs, {1, half_dim}))
@@ -544,16 +594,17 @@ defmodule Edifice.Generative.TRELLIS do
     # Determine if input is occupancy-only or has features
     rank = Nx.rank(voxel_grid)
 
-    {occupancy, features} = if rank == 4 do
-      # Just occupancy: [batch, res, res, res]
-      occ = Nx.greater(voxel_grid, threshold)
-      {occ, nil}
-    else
-      # With features: [batch, res, res, res, features]
-      # Use first channel or norm for occupancy
-      occ = Nx.greater(Nx.sum(Nx.abs(voxel_grid), axes: [-1]), threshold)
-      {occ, voxel_grid}
-    end
+    {occupancy, features} =
+      if rank == 4 do
+        # Just occupancy: [batch, res, res, res]
+        occ = Nx.greater(voxel_grid, threshold)
+        {occ, nil}
+      else
+        # With features: [batch, res, res, res, features]
+        # Use first channel or norm for occupancy
+        occ = Nx.greater(Nx.sum(Nx.abs(voxel_grid), axes: [-1]), threshold)
+        {occ, voxel_grid}
+      end
 
     batch = Nx.axis_size(occupancy, 0)
     res = Nx.axis_size(occupancy, 1)
@@ -580,21 +631,23 @@ defmodule Edifice.Generative.TRELLIS do
     positions = Nx.broadcast(coords, {batch, res * res * res, 3})
 
     # Create mask based on occupancy (take first max_voxels)
-    mask = Nx.slice_along_axis(occ_flat, 0, min(max_voxels, res * res * res), axis: 1)
-    |> Nx.as_type(:f32)
+    mask =
+      Nx.slice_along_axis(occ_flat, 0, min(max_voxels, res * res * res), axis: 1)
+      |> Nx.as_type(:f32)
 
     positions = Nx.slice_along_axis(positions, 0, min(max_voxels, res * res * res), axis: 1)
 
     # Extract or create features
-    sparse_features = if features != nil do
-      feat_dim = Nx.axis_size(features, 4)
-      feat_flat = Nx.reshape(features, {batch, res * res * res, feat_dim})
-      Nx.slice_along_axis(feat_flat, 0, min(max_voxels, res * res * res), axis: 1)
-    else
-      # Create placeholder features
-      feat_dim = Keyword.get(opts, :feature_dim, @default_feature_dim)
-      Nx.broadcast(0.0, {batch, min(max_voxels, res * res * res), feat_dim})
-    end
+    sparse_features =
+      if features != nil do
+        feat_dim = Nx.axis_size(features, 4)
+        feat_flat = Nx.reshape(features, {batch, res * res * res, feat_dim})
+        Nx.slice_along_axis(feat_flat, 0, min(max_voxels, res * res * res), axis: 1)
+      else
+        # Create placeholder features
+        feat_dim = Keyword.get(opts, :feature_dim, @default_feature_dim)
+        Nx.broadcast(0.0, {batch, min(max_voxels, res * res * res), feat_dim})
+      end
 
     %{
       features: sparse_features,
@@ -655,10 +708,12 @@ defmodule Edifice.Generative.TRELLIS do
     # Compute mean feature as a summary
     masked_features = Nx.multiply(features, Nx.reshape(mask, {batch, num_voxels, 1}))
     total_mask = Nx.sum(mask, axes: [1], keep_axes: true)
-    mean_feature = Nx.divide(
-      Nx.sum(masked_features, axes: [1]),
-      Nx.add(total_mask, 1.0e-8)
-    )
+
+    mean_feature =
+      Nx.divide(
+        Nx.sum(masked_features, axes: [1]),
+        Nx.add(total_mask, 1.0e-8)
+      )
 
     # Broadcast to dense grid (placeholder)
     mean_feature
@@ -682,35 +737,41 @@ defmodule Edifice.Generative.TRELLIS do
     # Assume feature layout: [scale_3, rotation_4, color_3, opacity_1, ...]
     _min_dim = min(feature_dim, 11)
 
-    scales = if feature_dim >= 3 do
-      Nx.slice_along_axis(features, 0, 3, axis: 2)
-      |> Nx.sigmoid()  # Ensure positive
-    else
-      Nx.broadcast(0.1, {batch, num_voxels, 3})
-    end
+    scales =
+      if feature_dim >= 3 do
+        Nx.slice_along_axis(features, 0, 3, axis: 2)
+        # Ensure positive
+        |> Nx.sigmoid()
+      else
+        Nx.broadcast(0.1, {batch, num_voxels, 3})
+      end
 
-    rotations = if feature_dim >= 7 do
-      Nx.slice_along_axis(features, 3, 4, axis: 2)
-      |> normalize_quaternions()
-    else
-      # Identity quaternion
-      Nx.broadcast(Nx.tensor([1.0, 0.0, 0.0, 0.0]), {batch, num_voxels, 4})
-    end
+    rotations =
+      if feature_dim >= 7 do
+        Nx.slice_along_axis(features, 3, 4, axis: 2)
+        |> normalize_quaternions()
+      else
+        # Identity quaternion
+        Nx.broadcast(Nx.tensor([1.0, 0.0, 0.0, 0.0]), {batch, num_voxels, 4})
+      end
 
-    colors = if feature_dim >= 10 do
-      Nx.slice_along_axis(features, 7, 3, axis: 2)
-      |> Nx.sigmoid()  # RGB in [0, 1]
-    else
-      Nx.broadcast(0.5, {batch, num_voxels, 3})
-    end
+    colors =
+      if feature_dim >= 10 do
+        Nx.slice_along_axis(features, 7, 3, axis: 2)
+        # RGB in [0, 1]
+        |> Nx.sigmoid()
+      else
+        Nx.broadcast(0.5, {batch, num_voxels, 3})
+      end
 
-    opacities = if feature_dim >= 11 do
-      Nx.slice_along_axis(features, 10, 1, axis: 2)
-      |> Nx.sigmoid()
-    else
-      # Use mask as opacity
-      Nx.reshape(mask, {batch, num_voxels, 1})
-    end
+    opacities =
+      if feature_dim >= 11 do
+        Nx.slice_along_axis(features, 10, 1, axis: 2)
+        |> Nx.sigmoid()
+      else
+        # Use mask as opacity
+        Nx.reshape(mask, {batch, num_voxels, 1})
+      end
 
     %{
       positions: positions,
@@ -761,7 +822,9 @@ defmodule Edifice.Generative.TRELLIS do
     head_dim = div(feature_dim, num_heads)
 
     sparse_windowed_attention_impl(
-      sparse_features, positions, mask,
+      sparse_features,
+      positions,
+      mask,
       %{num_heads: num_heads, head_dim: head_dim, window_size: window_size}
     )
   end
@@ -793,7 +856,8 @@ defmodule Edifice.Generative.TRELLIS do
 
     Denoised sparse latent at t - dt.
   """
-  @spec rectified_flow_step(Axon.t(), map(), map(), Nx.Tensor.t(), Nx.Tensor.t(), keyword()) :: map()
+  @spec rectified_flow_step(Axon.t(), map(), map(), Nx.Tensor.t(), Nx.Tensor.t(), keyword()) ::
+          map()
   def rectified_flow_step(model, params, x_t, t, conditioning, opts \\ []) do
     num_steps = Keyword.get(opts, :num_steps, 20)
     dt = Keyword.get(opts, :dt, 1.0 / num_steps)
@@ -803,13 +867,14 @@ defmodule Edifice.Generative.TRELLIS do
     mask = x_t[:mask]
 
     # Predict velocity v = x_1 - x_0
-    velocity = Axon.predict(model, params, %{
-      "sparse_features" => features,
-      "voxel_positions" => positions,
-      "occupancy_mask" => mask,
-      "conditioning" => conditioning,
-      "timestep" => t
-    })
+    velocity =
+      Axon.predict(model, params, %{
+        "sparse_features" => features,
+        "voxel_positions" => positions,
+        "occupancy_mask" => mask,
+        "conditioning" => conditioning,
+        "timestep" => t
+      })
 
     # Update: x_{t-dt} = x_t - dt * v
     # (Moving backwards from noise to data)
@@ -869,10 +934,14 @@ defmodule Edifice.Generative.TRELLIS do
     # Iterative denoising from t=1 to t=0
     timesteps = Enum.map(num_steps..1, fn step -> step / num_steps end)
 
-    final_latent = Enum.reduce(timesteps, initial_latent, fn t, current_latent ->
-      t_tensor = Nx.broadcast(Nx.tensor(t, type: :f32), {batch})
-      rectified_flow_step(model, params, current_latent, t_tensor, conditioning, num_steps: num_steps)
-    end)
+    final_latent =
+      Enum.reduce(timesteps, initial_latent, fn t, current_latent ->
+        t_tensor = Nx.broadcast(Nx.tensor(t, type: :f32), {batch})
+
+        rectified_flow_step(model, params, current_latent, t_tensor, conditioning,
+          num_steps: num_steps
+        )
+      end)
 
     final_latent
   end
@@ -880,23 +949,26 @@ defmodule Edifice.Generative.TRELLIS do
   defp initialize_voxel_positions(batch, max_voxels, resolution) do
     # Create a subset of regular grid positions
     # Sample uniformly from the grid
-    side = round(:math.pow(max_voxels, 1/3))
+    side = round(:math.pow(max_voxels, 1 / 3))
     step = max(1, div(resolution, side))
 
-    coords = for x <- 0..(side-1), y <- 0..(side-1), z <- 0..(side-1) do
-      [x * step, y * step, z * step]
-    end
-    |> Enum.take(max_voxels)
-    |> Nx.tensor(type: :f32)
+    coords =
+      for x <- 0..(side - 1), y <- 0..(side - 1), z <- 0..(side - 1) do
+        [x * step, y * step, z * step]
+      end
+      |> Enum.take(max_voxels)
+      |> Nx.tensor(type: :f32)
 
     # Pad if needed
     num_coords = Nx.axis_size(coords, 0)
-    coords = if num_coords < max_voxels do
-      padding = Nx.broadcast(0.0, {max_voxels - num_coords, 3})
-      Nx.concatenate([coords, padding], axis: 0)
-    else
-      coords
-    end
+
+    coords =
+      if num_coords < max_voxels do
+        padding = Nx.broadcast(0.0, {max_voxels - num_coords, 3})
+        Nx.concatenate([coords, padding], axis: 0)
+      else
+        coords
+      end
 
     Nx.broadcast(coords, {batch, max_voxels, 3})
   end
@@ -947,9 +1019,10 @@ defmodule Edifice.Generative.TRELLIS do
     # Self-attn: QKV + out = 4 * hidden^2
     # Cross-attn: Q + KV + out = 4 * hidden^2
     # FFN: up + down = 2 * hidden * mlp_dim
-    per_layer = 4 * hidden_size * hidden_size +
-                4 * hidden_size * hidden_size +
-                2 * hidden_size * mlp_dim
+    per_layer =
+      4 * hidden_size * hidden_size +
+        4 * hidden_size * hidden_size +
+        2 * hidden_size * mlp_dim
 
     io_proj + cond_proj + time_mlp + num_layers * per_layer
   end

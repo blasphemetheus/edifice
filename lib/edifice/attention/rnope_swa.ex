@@ -259,8 +259,11 @@ defmodule Edifice.Attention.RNoPESWA do
     x2 = Nx.slice_along_axis(x, half_dim, half_dim, axis: 3)
 
     # Broadcast cos/sin to [batch, heads, seq, half_dim]
-    cos = Nx.broadcast(Nx.reshape(cos, {1, 1, seq_len, half_dim}), {batch, heads, seq_len, half_dim})
-    sin = Nx.broadcast(Nx.reshape(sin, {1, 1, seq_len, half_dim}), {batch, heads, seq_len, half_dim})
+    cos =
+      Nx.broadcast(Nx.reshape(cos, {1, 1, seq_len, half_dim}), {batch, heads, seq_len, half_dim})
+
+    sin =
+      Nx.broadcast(Nx.reshape(sin, {1, 1, seq_len, half_dim}), {batch, heads, seq_len, half_dim})
 
     # Rotate: [x1*cos - x2*sin, x1*sin + x2*cos]
     rotated_x1 = Nx.subtract(Nx.multiply(x1, cos), Nx.multiply(x2, sin))

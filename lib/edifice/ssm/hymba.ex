@@ -345,8 +345,11 @@ defmodule Edifice.SSM.Hymba do
 
     # Prepend meta tokens to K, V
     # meta_k: [num_meta, hidden_size] -> [batch, num_meta, hidden_size]
-    meta_k_batch = Nx.broadcast(Nx.new_axis(meta_k, 0), {batch_size, num_meta, num_heads * head_dim})
-    meta_v_batch = Nx.broadcast(Nx.new_axis(meta_v, 0), {batch_size, num_meta, num_heads * head_dim})
+    meta_k_batch =
+      Nx.broadcast(Nx.new_axis(meta_k, 0), {batch_size, num_meta, num_heads * head_dim})
+
+    meta_v_batch =
+      Nx.broadcast(Nx.new_axis(meta_v, 0), {batch_size, num_meta, num_heads * head_dim})
 
     k_with_meta = Nx.concatenate([meta_k_batch, k], axis: 1)
     v_with_meta = Nx.concatenate([meta_v_batch, v], axis: 1)
@@ -392,7 +395,9 @@ defmodule Edifice.SSM.Hymba do
     # Softmax
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    attn_weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
+
+    attn_weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
 
     # Apply to values
     output = Nx.dot(attn_weights, [3], [0, 1], v_heads, [2], [0, 1])

@@ -144,7 +144,15 @@ defmodule Edifice.Audio.SoundStorm do
       )
 
     # Conformer backbone
-    x = conformer_backbone(embedded_with_pos, hidden_dim, num_heads, num_layers, conv_kernel_size, dropout)
+    x =
+      conformer_backbone(
+        embedded_with_pos,
+        hidden_dim,
+        num_heads,
+        num_layers,
+        conv_kernel_size,
+        dropout
+      )
 
     # Project to codebook logits
     Axon.dense(x, codebook_size, name: "output_projection")
@@ -181,7 +189,14 @@ defmodule Edifice.Audio.SoundStorm do
   # Simplified Conformer backbone (uses existing Conformer block structure)
   defp conformer_backbone(input, hidden_dim, num_heads, num_layers, conv_kernel_size, dropout) do
     Enum.reduce(1..num_layers, input, fn layer_idx, acc ->
-      conformer_block(acc, hidden_dim, num_heads, conv_kernel_size, dropout, "conformer_#{layer_idx}")
+      conformer_block(
+        acc,
+        hidden_dim,
+        num_heads,
+        conv_kernel_size,
+        dropout,
+        "conformer_#{layer_idx}"
+      )
     end)
     |> Axon.layer_norm(name: "final_norm")
   end
@@ -248,7 +263,9 @@ defmodule Edifice.Audio.SoundStorm do
           # Bidirectional attention (no causal mask) for masked prediction
           max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
           exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-          weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
+
+          weights =
+            Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
 
           output = Nx.dot(weights, [3], [0, 1], value, [2], [0, 1])
 
@@ -408,17 +425,23 @@ defmodule Edifice.Audio.SoundStorm do
 
     # Initialize: codebook 0 = conditioning, codebooks 1-7 = mask_token
     initial_tokens =
-      Nx.concatenate([
-        conditioning_tokens,
-        Nx.broadcast(Nx.tensor(mask_token), {batch, (num_codebooks - 1) * seq_len})
-      ], axis: -1)
+      Nx.concatenate(
+        [
+          conditioning_tokens,
+          Nx.broadcast(Nx.tensor(mask_token), {batch, (num_codebooks - 1) * seq_len})
+        ],
+        axis: -1
+      )
 
     # Initial mask: codebook 0 = false (keep), codebooks 1-7 = true (predict)
     initial_mask =
-      Nx.concatenate([
-        Nx.broadcast(Nx.tensor(0, type: :u8), {batch, seq_len}),
-        Nx.broadcast(Nx.tensor(1, type: :u8), {batch, (num_codebooks - 1) * seq_len})
-      ], axis: -1)
+      Nx.concatenate(
+        [
+          Nx.broadcast(Nx.tensor(0, type: :u8), {batch, seq_len}),
+          Nx.broadcast(Nx.tensor(1, type: :u8), {batch, (num_codebooks - 1) * seq_len})
+        ],
+        axis: -1
+      )
       |> Nx.as_type(:u8)
       |> Nx.equal(1)
 
@@ -471,7 +494,9 @@ defmodule Edifice.Audio.SoundStorm do
       preds_b = Nx.slice(predictions, [b, 0], [1, seq_len]) |> Nx.squeeze(axes: [0])
       mask_b = Nx.slice(mask, [b, 0], [1, seq_len]) |> Nx.squeeze(axes: [0])
       conf_b = Nx.slice(confidence, [b, 0], [1, seq_len]) |> Nx.squeeze(axes: [0])
-      keep_masked = num_to_keep_masked |> Nx.slice([b, 0], [1, 1]) |> Nx.squeeze() |> Nx.to_number()
+
+      keep_masked =
+        num_to_keep_masked |> Nx.slice([b, 0], [1, 1]) |> Nx.squeeze() |> Nx.to_number()
 
       # Get masked indices sorted by confidence (ascending = least confident first)
       masked_conf = Nx.select(mask_b, conf_b, Nx.tensor(2.0))

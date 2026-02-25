@@ -94,9 +94,7 @@ defmodule Edifice.Blocks.SSMax do
 
     # Learnable s parameter
     s_param =
-      Axon.param("#{name}_s", {},
-        initializer: fn _, _ -> Nx.tensor(init_s) end
-      )
+      Axon.param("#{name}_s", {}, initializer: fn _, _ -> Nx.tensor(init_s) end)
 
     Axon.layer(
       fn logits, s, _opts ->
@@ -186,9 +184,7 @@ defmodule Edifice.Blocks.SSMax do
 
     # Learnable s parameter for SSMax
     s_param =
-      Axon.param("#{name}_s", {},
-        initializer: fn _, _ -> Nx.tensor(1.0) end
-      )
+      Axon.param("#{name}_s", {}, initializer: fn _, _ -> Nx.tensor(1.0) end)
 
     output =
       Axon.layer(

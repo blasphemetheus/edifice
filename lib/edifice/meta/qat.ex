@@ -253,12 +253,20 @@ defmodule Edifice.Meta.QAT do
           rows = Nx.iota({seq_len, seq_len}, axis: 0)
           cols = Nx.iota({seq_len, seq_len}, axis: 1)
           mask = Nx.greater_equal(rows, cols)
-          mask = mask |> Nx.new_axis(0) |> Nx.new_axis(0) |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
+
+          mask =
+            mask
+            |> Nx.new_axis(0)
+            |> Nx.new_axis(0)
+            |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
 
           scores = Nx.select(mask, scores, Nx.broadcast(-1.0e9, Nx.shape(scores)))
 
-          weights = Nx.exp(Nx.subtract(scores, Nx.reduce_max(scores, axes: [-1], keep_axes: true)))
-          weights = Nx.divide(weights, Nx.add(Nx.sum(weights, axes: [-1], keep_axes: true), 1.0e-8))
+          weights =
+            Nx.exp(Nx.subtract(scores, Nx.reduce_max(scores, axes: [-1], keep_axes: true)))
+
+          weights =
+            Nx.divide(weights, Nx.add(Nx.sum(weights, axes: [-1], keep_axes: true), 1.0e-8))
 
           output = Nx.dot(weights, [3], [0, 1], value, [2], [0, 1])
           reshape_from_heads(output, batch, seq_len, num_heads, head_dim)

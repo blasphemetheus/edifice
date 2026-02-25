@@ -61,7 +61,13 @@ defmodule Edifice.Interpretability.SparseAutoencoderTest do
     test "produces sparse hidden activations" do
       encoder = SparseAutoencoder.build_encoder(@opts)
       {init_fn, predict_fn} = Axon.build(encoder, mode: :inference)
-      params = init_fn.(%{"sae_input" => Nx.template({@batch, @input_size}, :f32)}, Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          %{"sae_input" => Nx.template({@batch, @input_size}, :f32)},
+          Axon.ModelState.empty()
+        )
+
       hidden = predict_fn.(params, %{"sae_input" => random_input()})
       assert Nx.shape(hidden) == {@batch, @dict_size}
 

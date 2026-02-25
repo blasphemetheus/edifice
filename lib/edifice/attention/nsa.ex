@@ -154,7 +154,8 @@ defmodule Edifice.Attention.NSA do
             head_dim: Keyword.get(opts, :head_dim, @default_head_dim),
             window_size: Keyword.get(opts, :window_size, @default_window_size),
             block_size: Keyword.get(opts, :block_size, @default_block_size),
-            num_selected_blocks: Keyword.get(opts, :num_selected_blocks, @default_num_selected_blocks),
+            num_selected_blocks:
+              Keyword.get(opts, :num_selected_blocks, @default_num_selected_blocks),
             compression_ratio: Keyword.get(opts, :compression_ratio, @default_compression_ratio),
             dropout: dropout,
             name: "nsa_block_#{layer_idx}"
@@ -323,7 +324,9 @@ defmodule Edifice.Attention.NSA do
 
     x_padded =
       if pad_len > 0 do
-        padding = Nx.broadcast(0.0, {batch, num_heads, pad_len, head_dim}) |> Nx.as_type(Nx.type(x))
+        padding =
+          Nx.broadcast(0.0, {batch, num_heads, pad_len, head_dim}) |> Nx.as_type(Nx.type(x))
+
         Nx.concatenate([x, padding], axis: 2)
       else
         x
@@ -358,8 +361,10 @@ defmodule Edifice.Attention.NSA do
     k_block_means = compute_block_means(k, seq_len, num_blocks, block_size)
 
     # Score each block: dot(mean(Q), mean(K_block))
-    q_mean = Nx.mean(q, axes: [2])  # [batch, heads, head_dim]
-    block_scores = Nx.dot(q_mean, [2], [0, 1], k_block_means, [3], [0, 1])  # [batch, heads, num_blocks]
+    # [batch, heads, head_dim]
+    q_mean = Nx.mean(q, axes: [2])
+    # [batch, heads, num_blocks]
+    block_scores = Nx.dot(q_mean, [2], [0, 1], k_block_means, [3], [0, 1])
 
     # Select top-k blocks (simplified: use top positions from argsort)
     # Since Nx doesn't have native top-k, we use argsort
@@ -369,7 +374,8 @@ defmodule Edifice.Attention.NSA do
     # Gather K, V from selected blocks and compute attention
     # For simplicity, we compute attention over all blocks weighted by their scores
     # This is an approximation that's still efficient and differentiable
-    block_weights = stable_softmax(block_scores)  # [batch, heads, num_blocks]
+    # [batch, heads, num_blocks]
+    block_weights = stable_softmax(block_scores)
 
     # Reshape K, V into blocks: [batch, heads, num_blocks, block_size, head_dim]
     k_blocks = reshape_to_blocks(k, seq_len, num_blocks, block_size)
@@ -382,24 +388,27 @@ defmodule Edifice.Attention.NSA do
     q_blocks = reshape_to_blocks(q, seq_len, num_blocks, block_size)
 
     # Scores: [batch, heads, num_blocks, block_size, block_size]
-    scores = Nx.divide(
-      Nx.dot(q_blocks, [4], [0, 1, 2], k_blocks, [4], [0, 1, 2]),
-      scale
-    )
+    scores =
+      Nx.divide(
+        Nx.dot(q_blocks, [4], [0, 1, 2], k_blocks, [4], [0, 1, 2]),
+        scale
+      )
 
     # Apply causal mask within blocks
     rows = Nx.iota({block_size, block_size}, axis: 0)
     cols = Nx.iota({block_size, block_size}, axis: 1)
+
     causal_mask =
       Nx.greater_equal(rows, cols)
       |> Nx.reshape({1, 1, 1, block_size, block_size})
       |> Nx.broadcast({batch, num_heads, num_blocks, block_size, block_size})
 
-    scores = Nx.select(
-      causal_mask,
-      scores,
-      Nx.broadcast(-1.0e9, Nx.shape(scores))
-    )
+    scores =
+      Nx.select(
+        causal_mask,
+        scores,
+        Nx.broadcast(-1.0e9, Nx.shape(scores))
+      )
 
     # Softmax and weighted values per block
     attn_weights = stable_softmax_axis(scores, 4)
@@ -422,8 +431,10 @@ defmodule Edifice.Attention.NSA do
 
     k_padded =
       if padded_len > seq_len do
-        padding = Nx.broadcast(0.0, {batch, num_heads, padded_len - seq_len, head_dim})
-                  |> Nx.as_type(Nx.type(k))
+        padding =
+          Nx.broadcast(0.0, {batch, num_heads, padded_len - seq_len, head_dim})
+          |> Nx.as_type(Nx.type(k))
+
         Nx.concatenate([k, padding], axis: 2)
       else
         Nx.slice_along_axis(k, 0, padded_len, axis: 2)
@@ -431,7 +442,8 @@ defmodule Edifice.Attention.NSA do
 
     k_padded
     |> Nx.reshape({batch, num_heads, num_blocks, block_size, head_dim})
-    |> Nx.mean(axes: [3])  # [batch, heads, num_blocks, head_dim]
+    # [batch, heads, num_blocks, head_dim]
+    |> Nx.mean(axes: [3])
   end
 
   # Reshape sequence to blocks
@@ -441,8 +453,10 @@ defmodule Edifice.Attention.NSA do
 
     x_padded =
       if padded_len > seq_len do
-        padding = Nx.broadcast(0.0, {batch, num_heads, padded_len - seq_len, head_dim})
-                  |> Nx.as_type(Nx.type(x))
+        padding =
+          Nx.broadcast(0.0, {batch, num_heads, padded_len - seq_len, head_dim})
+          |> Nx.as_type(Nx.type(x))
+
         Nx.concatenate([x, padding], axis: 2)
       else
         Nx.slice_along_axis(x, 0, padded_len, axis: 2)
@@ -484,11 +498,12 @@ defmodule Edifice.Attention.NSA do
       |> Nx.reshape({1, 1, seq_len, seq_len})
       |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
 
-    scores = Nx.select(
-      combined_mask,
-      scores,
-      Nx.broadcast(-1.0e9, Nx.shape(scores))
-    )
+    scores =
+      Nx.select(
+        combined_mask,
+        scores,
+        Nx.broadcast(-1.0e9, Nx.shape(scores))
+      )
 
     # Softmax and weighted values
     weights = stable_softmax(scores)

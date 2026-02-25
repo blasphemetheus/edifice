@@ -247,7 +247,13 @@ defmodule Edifice.Attention.FlashLinearAttention do
 
     # Cumulative sum (shifted by 1)
     cumulative_kv = Nx.cumulative_sum(kv_per_chunk, axis: 2)
-    zeros = Nx.broadcast(Nx.tensor(0.0, type: Nx.type(cumulative_kv)), {batch, num_heads, 1, head_dim, head_dim})
+
+    zeros =
+      Nx.broadcast(
+        Nx.tensor(0.0, type: Nx.type(cumulative_kv)),
+        {batch, num_heads, 1, head_dim, head_dim}
+      )
+
     shifted_cumulative = Nx.slice_along_axis(cumulative_kv, 0, num_chunks - 1, axis: 2)
     shifted_kv = Nx.concatenate([zeros, shifted_cumulative], axis: 2)
 
@@ -257,7 +263,13 @@ defmodule Edifice.Attention.FlashLinearAttention do
     # Normalize inter-chunk
     k_sum_per_chunk = Nx.sum(k_chunks, axes: [3])
     cumulative_k_sum = Nx.cumulative_sum(k_sum_per_chunk, axis: 2)
-    shifted_k_zeros = Nx.broadcast(Nx.tensor(0.0, type: Nx.type(cumulative_k_sum)), {batch, num_heads, 1, head_dim})
+
+    shifted_k_zeros =
+      Nx.broadcast(
+        Nx.tensor(0.0, type: Nx.type(cumulative_k_sum)),
+        {batch, num_heads, 1, head_dim}
+      )
+
     shifted_k_prefix = Nx.slice_along_axis(cumulative_k_sum, 0, num_chunks - 1, axis: 2)
     shifted_k_sum = Nx.concatenate([shifted_k_zeros, shifted_k_prefix], axis: 2)
 

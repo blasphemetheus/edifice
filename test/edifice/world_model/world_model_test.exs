@@ -45,7 +45,13 @@ defmodule Edifice.WorldModel.WorldModelTest do
     test "encoder maps obs to latent" do
       {encoder, _dyn, _rh} = WorldModel.build(@base_opts ++ [dynamics: :mlp])
       {init_fn, predict_fn} = Axon.build(encoder, mode: :inference)
-      params = init_fn.(%{"observation" => Nx.template({@batch, @obs_size}, :f32)}, Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          %{"observation" => Nx.template({@batch, @obs_size}, :f32)},
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, %{"observation" => random_obs()})
       assert Nx.shape(output) == {@batch, @latent_size}
     end
@@ -53,7 +59,13 @@ defmodule Edifice.WorldModel.WorldModelTest do
     test "dynamics maps (z, action) to next_z" do
       {_enc, dynamics, _rh} = WorldModel.build(@base_opts ++ [dynamics: :mlp])
       {init_fn, predict_fn} = Axon.build(dynamics, mode: :inference)
-      params = init_fn.(%{"state_action" => Nx.template({@batch, @latent_size + @action_size}, :f32)}, Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          %{"state_action" => Nx.template({@batch, @latent_size + @action_size}, :f32)},
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, %{"state_action" => random_state_action()})
       assert Nx.shape(output) == {@batch, @latent_size}
     end
@@ -61,7 +73,13 @@ defmodule Edifice.WorldModel.WorldModelTest do
     test "reward head maps z to scalar" do
       {_enc, _dyn, reward_head} = WorldModel.build(@base_opts ++ [dynamics: :mlp])
       {init_fn, predict_fn} = Axon.build(reward_head, mode: :inference)
-      params = init_fn.(%{"latent_state" => Nx.template({@batch, @latent_size}, :f32)}, Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          %{"latent_state" => Nx.template({@batch, @latent_size}, :f32)},
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, %{"latent_state" => random_latent()})
       assert Nx.shape(output) == {@batch}
     end
@@ -71,7 +89,13 @@ defmodule Edifice.WorldModel.WorldModelTest do
     test "dynamics produces correct shape" do
       {_enc, dynamics, _rh} = WorldModel.build(@base_opts ++ [dynamics: :neural_ode])
       {init_fn, predict_fn} = Axon.build(dynamics, mode: :inference)
-      params = init_fn.(%{"state_action" => Nx.template({@batch, @latent_size + @action_size}, :f32)}, Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          %{"state_action" => Nx.template({@batch, @latent_size + @action_size}, :f32)},
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, %{"state_action" => random_state_action()})
       assert Nx.shape(output) == {@batch, @latent_size}
     end
@@ -79,7 +103,13 @@ defmodule Edifice.WorldModel.WorldModelTest do
     test "output contains finite values" do
       {_enc, dynamics, _rh} = WorldModel.build(@base_opts ++ [dynamics: :neural_ode])
       {init_fn, predict_fn} = Axon.build(dynamics, mode: :inference)
-      params = init_fn.(%{"state_action" => Nx.template({@batch, @latent_size + @action_size}, :f32)}, Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          %{"state_action" => Nx.template({@batch, @latent_size + @action_size}, :f32)},
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, %{"state_action" => random_state_action()})
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
     end
@@ -89,7 +119,13 @@ defmodule Edifice.WorldModel.WorldModelTest do
     test "dynamics produces correct shape" do
       {_enc, dynamics, _rh} = WorldModel.build(@base_opts ++ [dynamics: :gru])
       {init_fn, predict_fn} = Axon.build(dynamics, mode: :inference)
-      params = init_fn.(%{"state_action" => Nx.template({@batch, @latent_size + @action_size}, :f32)}, Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          %{"state_action" => Nx.template({@batch, @latent_size + @action_size}, :f32)},
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, %{"state_action" => random_state_action()})
       assert Nx.shape(output) == {@batch, @latent_size}
     end
@@ -97,7 +133,13 @@ defmodule Edifice.WorldModel.WorldModelTest do
     test "output contains finite values" do
       {_enc, dynamics, _rh} = WorldModel.build(@base_opts ++ [dynamics: :gru])
       {init_fn, predict_fn} = Axon.build(dynamics, mode: :inference)
-      params = init_fn.(%{"state_action" => Nx.template({@batch, @latent_size + @action_size}, :f32)}, Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          %{"state_action" => Nx.template({@batch, @latent_size + @action_size}, :f32)},
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, %{"state_action" => random_state_action()})
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
     end
@@ -119,7 +161,13 @@ defmodule Edifice.WorldModel.WorldModelTest do
         WorldModel.build(@base_opts ++ [dynamics: :mlp, use_decoder: true])
 
       {init_fn, predict_fn} = Axon.build(decoder, mode: :inference)
-      params = init_fn.(%{"latent_state" => Nx.template({@batch, @latent_size}, :f32)}, Axon.ModelState.empty())
+
+      params =
+        init_fn.(
+          %{"latent_state" => Nx.template({@batch, @latent_size}, :f32)},
+          Axon.ModelState.empty()
+        )
+
       output = predict_fn.(params, %{"latent_state" => random_latent()})
       assert Nx.shape(output) == {@batch, @obs_size}
     end

@@ -93,15 +93,16 @@ defmodule Edifice.Meta.TestTimeCompute do
     seq_len = Keyword.get(opts, :seq_len, Keyword.get(opts, :window_size, 60))
 
     # Build backbone (all timesteps)
-    backbone = build_backbone(
-      embed_dim: embed_dim,
-      hidden_size: hidden_size,
-      num_layers: num_layers,
-      num_heads: num_heads,
-      num_kv_heads: num_kv_heads,
-      dropout: dropout,
-      seq_len: seq_len
-    )
+    backbone =
+      build_backbone(
+        embed_dim: embed_dim,
+        hidden_size: hidden_size,
+        num_layers: num_layers,
+        num_heads: num_heads,
+        num_kv_heads: num_kv_heads,
+        dropout: dropout,
+        seq_len: seq_len
+      )
 
     # Scorer MLP: dense(scorer_hidden) -> silu -> dense(1)
     scores =

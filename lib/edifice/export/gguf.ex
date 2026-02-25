@@ -405,6 +405,7 @@ defmodule Edifice.Export.GGUF do
     flat_params = flatten_params(params)
 
     # Map known Edifice param patterns to GGUF names
+    # Per-layer mappings
     mappings =
       [
         # Token embedding / input projection
@@ -420,55 +421,38 @@ defmodule Edifice.Export.GGUF do
         {~r/final_norm\.beta$/, "output_norm.bias"},
         {~r/final_norm_gamma$/, "output_norm.weight"}
       ] ++
-        # Per-layer mappings
         Enum.flat_map(1..num_layers, fn layer ->
           # GGUF uses 0-indexed layers
           gguf_layer = layer - 1
 
           [
             # Attention norm
-            {~r/decoder_block_#{layer}_attn_norm\.gamma$/,
-             "blk.#{gguf_layer}.attn_norm.weight"},
-            {~r/decoder_block_#{layer}_attn_norm_gamma$/,
-             "blk.#{gguf_layer}.attn_norm.weight"},
+            {~r/decoder_block_#{layer}_attn_norm\.gamma$/, "blk.#{gguf_layer}.attn_norm.weight"},
+            {~r/decoder_block_#{layer}_attn_norm_gamma$/, "blk.#{gguf_layer}.attn_norm.weight"},
 
             # Attention projections
-            {~r/decoder_block_#{layer}_attn_q_proj\.kernel$/,
-             "blk.#{gguf_layer}.attn_q.weight"},
-            {~r/decoder_block_#{layer}_attn_q_proj\.bias$/,
-             "blk.#{gguf_layer}.attn_q.bias"},
-            {~r/decoder_block_#{layer}_attn_k_proj\.kernel$/,
-             "blk.#{gguf_layer}.attn_k.weight"},
-            {~r/decoder_block_#{layer}_attn_k_proj\.bias$/,
-             "blk.#{gguf_layer}.attn_k.bias"},
-            {~r/decoder_block_#{layer}_attn_v_proj\.kernel$/,
-             "blk.#{gguf_layer}.attn_v.weight"},
-            {~r/decoder_block_#{layer}_attn_v_proj\.bias$/,
-             "blk.#{gguf_layer}.attn_v.bias"},
+            {~r/decoder_block_#{layer}_attn_q_proj\.kernel$/, "blk.#{gguf_layer}.attn_q.weight"},
+            {~r/decoder_block_#{layer}_attn_q_proj\.bias$/, "blk.#{gguf_layer}.attn_q.bias"},
+            {~r/decoder_block_#{layer}_attn_k_proj\.kernel$/, "blk.#{gguf_layer}.attn_k.weight"},
+            {~r/decoder_block_#{layer}_attn_k_proj\.bias$/, "blk.#{gguf_layer}.attn_k.bias"},
+            {~r/decoder_block_#{layer}_attn_v_proj\.kernel$/, "blk.#{gguf_layer}.attn_v.weight"},
+            {~r/decoder_block_#{layer}_attn_v_proj\.bias$/, "blk.#{gguf_layer}.attn_v.bias"},
             {~r/decoder_block_#{layer}_attn_out_proj\.kernel$/,
              "blk.#{gguf_layer}.attn_output.weight"},
             {~r/decoder_block_#{layer}_attn_out_proj\.bias$/,
              "blk.#{gguf_layer}.attn_output.bias"},
 
             # FFN norm
-            {~r/decoder_block_#{layer}_ffn_norm\.gamma$/,
-             "blk.#{gguf_layer}.ffn_norm.weight"},
-            {~r/decoder_block_#{layer}_ffn_norm_gamma$/,
-             "blk.#{gguf_layer}.ffn_norm.weight"},
+            {~r/decoder_block_#{layer}_ffn_norm\.gamma$/, "blk.#{gguf_layer}.ffn_norm.weight"},
+            {~r/decoder_block_#{layer}_ffn_norm_gamma$/, "blk.#{gguf_layer}.ffn_norm.weight"},
 
             # FFN projections (SwiGLU)
-            {~r/decoder_block_#{layer}_ffn_gate\.kernel$/,
-             "blk.#{gguf_layer}.ffn_gate.weight"},
-            {~r/decoder_block_#{layer}_ffn_gate\.bias$/,
-             "blk.#{gguf_layer}.ffn_gate.bias"},
-            {~r/decoder_block_#{layer}_ffn_up\.kernel$/,
-             "blk.#{gguf_layer}.ffn_up.weight"},
-            {~r/decoder_block_#{layer}_ffn_up\.bias$/,
-             "blk.#{gguf_layer}.ffn_up.bias"},
-            {~r/decoder_block_#{layer}_ffn_down\.kernel$/,
-             "blk.#{gguf_layer}.ffn_down.weight"},
-            {~r/decoder_block_#{layer}_ffn_down\.bias$/,
-             "blk.#{gguf_layer}.ffn_down.bias"}
+            {~r/decoder_block_#{layer}_ffn_gate\.kernel$/, "blk.#{gguf_layer}.ffn_gate.weight"},
+            {~r/decoder_block_#{layer}_ffn_gate\.bias$/, "blk.#{gguf_layer}.ffn_gate.bias"},
+            {~r/decoder_block_#{layer}_ffn_up\.kernel$/, "blk.#{gguf_layer}.ffn_up.weight"},
+            {~r/decoder_block_#{layer}_ffn_up\.bias$/, "blk.#{gguf_layer}.ffn_up.bias"},
+            {~r/decoder_block_#{layer}_ffn_down\.kernel$/, "blk.#{gguf_layer}.ffn_down.weight"},
+            {~r/decoder_block_#{layer}_ffn_down\.bias$/, "blk.#{gguf_layer}.ffn_down.bias"}
           ]
         end)
 
@@ -543,7 +527,7 @@ defmodule Edifice.Export.GGUF do
   end
 
   defp encode_value(:bool, value) when is_boolean(value) do
-    {@type_bool, <<(if value, do: 1, else: 0)::8>>}
+    {@type_bool, <<if(value, do: 1, else: 0)::8>>}
   end
 
   # Calculate padding needed to reach alignment

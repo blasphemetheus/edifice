@@ -71,11 +71,12 @@ defmodule Edifice.Audio.EnCodecTest do
 
   describe "EnCodec.build_rvq/1" do
     test "returns RVQ configuration" do
-      config = EnCodec.build_rvq(
-        num_codebooks: @num_codebooks,
-        codebook_size: @codebook_size,
-        hidden_dim: @hidden_dim
-      )
+      config =
+        EnCodec.build_rvq(
+          num_codebooks: @num_codebooks,
+          codebook_size: @codebook_size,
+          hidden_dim: @hidden_dim
+        )
 
       assert config.num_codebooks == @num_codebooks
       assert config.codebook_size == @codebook_size
@@ -109,8 +110,11 @@ defmodule Edifice.Audio.EnCodecTest do
 
     test "indices are in valid range" do
       seq_len = 4
-      z_e = Nx.Random.uniform(Nx.Random.key(42), shape: {@batch_size, seq_len, @embedding_dim})
-               |> elem(0)
+
+      z_e =
+        Nx.Random.uniform(Nx.Random.key(42), shape: {@batch_size, seq_len, @embedding_dim})
+        |> elem(0)
+
       codebooks = EnCodec.init_codebooks(@num_codebooks, @codebook_size, @embedding_dim)
 
       {_z_q, indices} = EnCodec.rvq_quantize(z_e, codebooks)
@@ -136,8 +140,11 @@ defmodule Edifice.Audio.EnCodecTest do
 
     test "roundtrip quantize-dequantize produces valid embeddings" do
       seq_len = 4
-      z_e = Nx.Random.uniform(Nx.Random.key(123), shape: {@batch_size, seq_len, @embedding_dim})
-               |> elem(0)
+
+      z_e =
+        Nx.Random.uniform(Nx.Random.key(123), shape: {@batch_size, seq_len, @embedding_dim})
+        |> elem(0)
+
       codebooks = EnCodec.init_codebooks(@num_codebooks, @codebook_size, @embedding_dim)
 
       {_z_q_st, indices} = EnCodec.rvq_quantize(z_e, codebooks)
@@ -196,7 +203,8 @@ defmodule Edifice.Audio.EnCodecTest do
     test "returns embedding dimension" do
       assert EnCodec.output_size(hidden_dim: 128) == 128 * 16
       assert EnCodec.output_size(hidden_dim: 64) == 64 * 16
-      assert EnCodec.output_size() == 128 * 16  # default
+      # default
+      assert EnCodec.output_size() == 128 * 16
     end
   end
 

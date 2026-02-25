@@ -97,15 +97,16 @@ defmodule Edifice.Meta.SpeculativeHead do
     head_hidden = Keyword.get(opts, :head_hidden, @default_head_hidden)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
 
-    backbone = build_backbone(
-      embed_dim: embed_dim,
-      hidden_size: hidden_size,
-      num_layers: num_layers,
-      num_heads: num_heads,
-      num_kv_heads: num_kv_heads,
-      dropout: dropout,
-      seq_len: Keyword.get(opts, :seq_len, Keyword.get(opts, :window_size, 60))
-    )
+    backbone =
+      build_backbone(
+        embed_dim: embed_dim,
+        hidden_size: hidden_size,
+        num_layers: num_layers,
+        num_heads: num_heads,
+        num_kv_heads: num_kv_heads,
+        dropout: dropout,
+        seq_len: Keyword.get(opts, :seq_len, Keyword.get(opts, :window_size, 60))
+      )
 
     # N independent speculative heads, each with its own MLP
     heads =

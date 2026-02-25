@@ -294,7 +294,9 @@ defmodule Edifice.Generative.SiT do
 
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    attn_weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
+
+    attn_weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
 
     output = Nx.dot(attn_weights, [3], [0, 1], v, [2], [0, 1])
 

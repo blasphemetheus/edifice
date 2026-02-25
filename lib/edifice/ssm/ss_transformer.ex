@@ -334,7 +334,12 @@ defmodule Edifice.SSM.SSTransformer do
     rows = Nx.iota({seq_len, seq_len}, axis: 0)
     cols = Nx.iota({seq_len, seq_len}, axis: 1)
     mask = Nx.greater_equal(rows, cols)
-    mask = mask |> Nx.new_axis(0) |> Nx.new_axis(0) |> Nx.broadcast({batch_size, num_heads, seq_len, seq_len})
+
+    mask =
+      mask
+      |> Nx.new_axis(0)
+      |> Nx.new_axis(0)
+      |> Nx.broadcast({batch_size, num_heads, seq_len, seq_len})
 
     neg_inf = Nx.Constants.neg_infinity(Nx.type(scores))
     scores = Nx.select(mask, scores, neg_inf)
@@ -342,7 +347,9 @@ defmodule Edifice.SSM.SSTransformer do
     # Softmax
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    attn_weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
+
+    attn_weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
 
     # Apply to values
     output = Nx.dot(attn_weights, [3], [0, 1], v_heads, [2], [0, 1])

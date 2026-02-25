@@ -111,7 +111,10 @@ defmodule Edifice.Attention.YARN do
   def build(opts \\ []) do
     embed_dim = Keyword.fetch!(opts, :embed_dim)
     scale = Keyword.get(opts, :scale, @default_scale)
-    original_max_position = Keyword.get(opts, :original_max_position, @default_original_max_position)
+
+    original_max_position =
+      Keyword.get(opts, :original_max_position, @default_original_max_position)
+
     low_freq_factor = Keyword.get(opts, :low_freq_factor, @default_low_freq_factor)
     high_freq_factor = Keyword.get(opts, :high_freq_factor, @default_high_freq_factor)
     base = Keyword.get(opts, :base, @default_base)
@@ -163,7 +166,10 @@ defmodule Edifice.Attention.YARN do
   @spec yarn_freqs(pos_integer(), keyword()) :: Nx.Tensor.t()
   def yarn_freqs(embed_dim, opts \\ []) do
     scale = Keyword.get(opts, :scale, @default_scale)
-    original_max_position = Keyword.get(opts, :original_max_position, @default_original_max_position)
+
+    original_max_position =
+      Keyword.get(opts, :original_max_position, @default_original_max_position)
+
     low_freq_factor = Keyword.get(opts, :low_freq_factor, @default_low_freq_factor)
     high_freq_factor = Keyword.get(opts, :high_freq_factor, @default_high_freq_factor)
     base = Keyword.get(opts, :base, @default_base)
@@ -224,15 +230,34 @@ defmodule Edifice.Attention.YARN do
   @spec apply_yarn(Nx.Tensor.t(), Nx.Tensor.t(), keyword()) :: {Nx.Tensor.t(), Nx.Tensor.t()}
   def apply_yarn(query, key, opts \\ []) do
     scale = Keyword.get(opts, :scale, @default_scale)
-    original_max_position = Keyword.get(opts, :original_max_position, @default_original_max_position)
+
+    original_max_position =
+      Keyword.get(opts, :original_max_position, @default_original_max_position)
+
     low_freq_factor = Keyword.get(opts, :low_freq_factor, @default_low_freq_factor)
     high_freq_factor = Keyword.get(opts, :high_freq_factor, @default_high_freq_factor)
     base = Keyword.get(opts, :base, @default_base)
 
-    apply_yarn_impl(query, key, scale, original_max_position, low_freq_factor, high_freq_factor, base)
+    apply_yarn_impl(
+      query,
+      key,
+      scale,
+      original_max_position,
+      low_freq_factor,
+      high_freq_factor,
+      base
+    )
   end
 
-  defnp apply_yarn_impl(query, key, scale, original_max_position, low_freq_factor, high_freq_factor, base) do
+  defnp apply_yarn_impl(
+          query,
+          key,
+          scale,
+          original_max_position,
+          low_freq_factor,
+          high_freq_factor,
+          base
+        ) do
     embed_dim = Nx.axis_size(query, 2)
     seq_len = Nx.axis_size(query, 1)
     half_dim = div(embed_dim, 2)

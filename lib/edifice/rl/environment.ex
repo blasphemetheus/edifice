@@ -100,12 +100,16 @@ defmodule Edifice.RL.Environment do
     {obs, state} = env_module.reset(reset_opts)
 
     {trajectory, _obs, _state, _done} =
-      Enum.reduce(1..num_steps, {[], obs, state, false}, fn _step, {traj, current_obs, current_state, done} ->
+      Enum.reduce(1..num_steps, {[], obs, state, false}, fn _step,
+                                                            {traj, current_obs, current_state,
+                                                             done} ->
         if done do
           {traj, current_obs, current_state, true}
         else
           action = policy_fn.(current_obs)
-          {next_obs, reward, next_done, _info, next_state} = env_module.step(action, current_state)
+
+          {next_obs, reward, next_done, _info, next_state} =
+            env_module.step(action, current_state)
 
           experience = %{
             obs: current_obs,

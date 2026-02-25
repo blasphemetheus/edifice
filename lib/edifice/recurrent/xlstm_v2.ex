@@ -204,9 +204,7 @@ defmodule Edifice.Recurrent.XLSTMv2 do
 
     # Learnable normalizer bias for improved gradient flow
     norm_bias =
-      Axon.param("#{name}_norm_bias", {num_heads},
-        initializer: :zeros
-      )
+      Axon.param("#{name}_norm_bias", {num_heads}, initializer: :zeros)
 
     Axon.layer(
       &mlstm_v2_forward/3,

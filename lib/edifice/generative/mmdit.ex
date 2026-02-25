@@ -155,7 +155,9 @@ defmodule Edifice.Generative.MMDiT do
     {img, txt} =
       Enum.reduce(1..depth, {img, txt}, fn block_idx, {img_acc, txt_acc} ->
         build_double_stream_block(
-          img_acc, txt_acc, vec,
+          img_acc,
+          txt_acc,
+          vec,
           hidden_size: hidden_size,
           num_heads: num_heads,
           mlp_ratio: mlp_ratio,
@@ -357,14 +359,28 @@ defmodule Edifice.Generative.MMDiT do
     total_len = txt_len + img_len
 
     # Reshape to [batch, seq, heads, head_dim] -> [batch, heads, seq, head_dim]
-    q = q |> Nx.reshape({batch_size, total_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    k = k |> Nx.reshape({batch_size, total_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    v = v |> Nx.reshape({batch_size, total_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
+    q =
+      q
+      |> Nx.reshape({batch_size, total_len, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    k =
+      k
+      |> Nx.reshape({batch_size, total_len, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    v =
+      v
+      |> Nx.reshape({batch_size, total_len, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
 
     # Scaled dot-product attention
     scale = Nx.rsqrt(Nx.tensor(head_dim, type: Nx.type(q)))
     attn_weights = Nx.dot(q, [3], [0, 1], k, [3], [0, 1]) |> Nx.multiply(scale)
-    attn_weights = Nx.exp(Nx.subtract(attn_weights, Nx.reduce_max(attn_weights, axes: [3], keep_axes: true)))
+
+    attn_weights =
+      Nx.exp(Nx.subtract(attn_weights, Nx.reduce_max(attn_weights, axes: [3], keep_axes: true)))
+
     attn_weights = Nx.divide(attn_weights, Nx.sum(attn_weights, axes: [3], keep_axes: true))
 
     # Apply to values
@@ -381,10 +397,14 @@ defmodule Edifice.Generative.MMDiT do
       )
 
     img_out =
-      Axon.nx(joint_out, fn x ->
-        total = Nx.axis_size(x, 1)
-        Nx.slice_along_axis(x, txt_tokens, total - txt_tokens, axis: 1)
-      end, name: "#{name}_split_img")
+      Axon.nx(
+        joint_out,
+        fn x ->
+          total = Nx.axis_size(x, 1)
+          Nx.slice_along_axis(x, txt_tokens, total - txt_tokens, axis: 1)
+        end,
+        name: "#{name}_split_img"
+      )
 
     {img_out, txt_out}
   end

@@ -113,7 +113,14 @@ defmodule Edifice.Generative.TransfusionTest do
       }
 
       params = init_fn.(template, Axon.ModelState.empty())
-      output = predict_fn.(params, %{"sequence" => seq, "modality_mask" => all_text_mask, "timestep" => ts})
+
+      output =
+        predict_fn.(params, %{
+          "sequence" => seq,
+          "modality_mask" => all_text_mask,
+          "timestep" => ts
+        })
+
       assert Nx.shape(output.text_logits) == {@batch, @seq_len, @vocab_size}
     end
 
@@ -133,7 +140,14 @@ defmodule Edifice.Generative.TransfusionTest do
       }
 
       params = init_fn.(template, Axon.ModelState.empty())
-      output = predict_fn.(params, %{"sequence" => seq, "modality_mask" => all_img_mask, "timestep" => ts})
+
+      output =
+        predict_fn.(params, %{
+          "sequence" => seq,
+          "modality_mask" => all_img_mask,
+          "timestep" => ts
+        })
+
       assert Nx.shape(output.image_pred) == {@batch, @seq_len, @patch_dim}
     end
   end
@@ -181,6 +195,7 @@ defmodule Edifice.Generative.TransfusionTest do
 
     test "diagonal (self-attention) is always allowed" do
       mask = Transfusion.build_mixed_mask(3, 3)
+
       for i <- 0..5 do
         assert Nx.to_number(mask[i][i]) == 1
       end
@@ -242,7 +257,11 @@ defmodule Edifice.Generative.TransfusionTest do
       assert Nx.to_number(loss_no_image) > 0
     end
 
-    test "text_weight and image_weight scale the losses", %{text_logits: tl, image_pred: ip, targets: t} do
+    test "text_weight and image_weight scale the losses", %{
+      text_logits: tl,
+      image_pred: ip,
+      targets: t
+    } do
       loss_1x = Transfusion.transfusion_loss(tl, ip, t, text_weight: 1.0, image_weight: 1.0)
       loss_2x = Transfusion.transfusion_loss(tl, ip, t, text_weight: 2.0, image_weight: 2.0)
 

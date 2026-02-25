@@ -278,10 +278,20 @@ defmodule Edifice.Vision.EfficientViT do
 
     # Apply linear attention with ELU+1 kernel per head
     # φ(x) = elu(x) + 1
-    q_feat = Nx.add(Nx.max(q_heads, 0.0), Nx.multiply(Nx.min(q_heads, 0.0) |> Nx.exp() |> Nx.subtract(1.0), 1.0))
+    q_feat =
+      Nx.add(
+        Nx.max(q_heads, 0.0),
+        Nx.multiply(Nx.min(q_heads, 0.0) |> Nx.exp() |> Nx.subtract(1.0), 1.0)
+      )
+
     q_feat = Nx.add(q_feat, 1.0)
 
-    k_feat = Nx.add(Nx.max(k_heads, 0.0), Nx.multiply(Nx.min(k_heads, 0.0) |> Nx.exp() |> Nx.subtract(1.0), 1.0))
+    k_feat =
+      Nx.add(
+        Nx.max(k_heads, 0.0),
+        Nx.multiply(Nx.min(k_heads, 0.0) |> Nx.exp() |> Nx.subtract(1.0), 1.0)
+      )
+
     k_feat = Nx.add(k_feat, 1.0)
 
     # Linear attention: φ(Q) × (φ(K)^T × V) — O(n·d²) instead of O(n²·d)

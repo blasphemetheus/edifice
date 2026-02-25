@@ -141,14 +141,15 @@ defmodule Edifice.Meta.MixtureOfTokenizers do
           )
         end
 
-        block = TransformerBlock.layer(acc,
-          attention_fn: attn_fn,
-          hidden_size: hidden_size,
-          norm: :rms_norm,
-          ffn_type: :gated,
-          dropout: dropout,
-          name: name
-        )
+        block =
+          TransformerBlock.layer(acc,
+            attention_fn: attn_fn,
+            hidden_size: hidden_size,
+            norm: :rms_norm,
+            ffn_type: :gated,
+            dropout: dropout,
+            name: name
+          )
 
         if dropout > 0 and layer_idx < num_layers do
           Axon.dropout(block, rate: dropout, name: "mot_dropout_#{layer_idx}")

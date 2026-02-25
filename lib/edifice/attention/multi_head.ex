@@ -287,7 +287,8 @@ defmodule Edifice.Attention.MultiHead do
     {final_output, _final_max, final_sum} =
       Enum.reduce(0..(num_kv_chunks - 1), {init_output, init_max, init_sum}, fn chunk_idx,
                                                                                 {acc_output,
-                                                                                 acc_max, acc_sum} ->
+                                                                                 acc_max,
+                                                                                 acc_sum} ->
         # Extract K/V chunk
         k_start = chunk_idx * chunk_size
         actual_chunk_size = min(chunk_size, seq_k - k_start)
@@ -1091,7 +1092,8 @@ defmodule Edifice.Attention.MultiHead do
     {final_output, _final_max, final_sum} =
       Enum.reduce(0..(num_kv_chunks - 1), {init_output, init_max, init_sum}, fn chunk_idx,
                                                                                 {acc_output,
-                                                                                 acc_max, acc_sum} ->
+                                                                                 acc_max,
+                                                                                 acc_sum} ->
         k_start = chunk_idx * chunk_size
         actual_chunk_size = min(chunk_size, seq_k - k_start)
 

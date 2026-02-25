@@ -244,7 +244,8 @@ defmodule Edifice.Transformer.NemotronH do
     normed = RMSNorm.layer(input, hidden_size: hidden_dim, name: "#{name}_norm1")
 
     # Mamba2 block using SSD algorithm
-    mamba_out = build_mamba2_sublayer(normed, hidden_dim, inner_size, d_state, d_conv, chunk_size, name)
+    mamba_out =
+      build_mamba2_sublayer(normed, hidden_dim, inner_size, d_state, d_conv, chunk_size, name)
 
     # First residual
     x = Axon.add(input, mamba_out, name: "#{name}_residual1")
@@ -611,7 +612,9 @@ defmodule Edifice.Transformer.NemotronH do
     # Softmax
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
+
+    weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
 
     # Weighted sum
     output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
@@ -657,30 +660,30 @@ defmodule Edifice.Transformer.NemotronH do
     head_dim = div(hidden_dim, num_heads)
 
     # Mamba layer params
+    # in_proj (2 * inner)
+    # depthwise conv
+    # BC projection
+    # dt projection
+    # out_proj
+    # FFN (gated: 3 * hidden * inner)
     mamba_per_layer =
-      # in_proj (2 * inner)
       hidden_dim * (2 * inner_size) +
-        # depthwise conv
         d_conv * inner_size +
-        # BC projection
         inner_size * (2 * d_state) +
-        # dt projection
         inner_size * dt_rank + dt_rank * inner_size +
-        # out_proj
         inner_size * hidden_dim +
-        # FFN (gated: 3 * hidden * inner)
         3 * hidden_dim * inner_size
 
     # Attention layer params
     q_dim = num_heads * head_dim
     kv_dim = num_kv_heads * head_dim
 
+    # Q, K, V projections
+    # out projection
+    # FFN (gated)
     attn_per_layer =
-      # Q, K, V projections
       hidden_dim * q_dim + hidden_dim * kv_dim * 2 +
-        # out projection
         q_dim * hidden_dim +
-        # FFN (gated)
         3 * hidden_dim * inner_size
 
     input_proj = if embed_dim != hidden_dim, do: embed_dim * hidden_dim, else: 0

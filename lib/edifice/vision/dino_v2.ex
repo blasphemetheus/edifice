@@ -295,7 +295,9 @@ defmodule Edifice.Vision.DINOv2 do
       reg_source =
         Axon.nx(
           input,
-          fn _tensor -> Nx.iota({1, num_register_tokens}, axis: 1) |> Nx.divide(num_register_tokens) end,
+          fn _tensor ->
+            Nx.iota({1, num_register_tokens}, axis: 1) |> Nx.divide(num_register_tokens)
+          end,
           name: "#{name}_reg_src"
         )
 
@@ -437,7 +439,9 @@ defmodule Edifice.Vision.DINOv2 do
     # Softmax
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    attn_weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
+
+    attn_weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
 
     # Apply attention to values
     output = Nx.dot(attn_weights, [3], [0, 1], v, [2], [0, 1])
@@ -631,7 +635,8 @@ defmodule Edifice.Vision.DINOv2 do
   end
 
   defp ema_blend(student, teacher, momentum)
-       when is_map(student) and not is_struct(student) and is_map(teacher) and not is_struct(teacher) do
+       when is_map(student) and not is_struct(student) and is_map(teacher) and
+              not is_struct(teacher) do
     Map.new(teacher, fn {k, t_v} ->
       case Map.fetch(student, k) do
         {:ok, s_v} -> {k, ema_blend(s_v, t_v, momentum)}

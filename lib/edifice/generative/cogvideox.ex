@@ -161,16 +161,37 @@ defmodule Edifice.Generative.CogVideoX do
     temporal_downsample = Keyword.get(opts, :temporal_downsample, @default_temporal_downsample)
     base_channels = Keyword.get(opts, :base_channels, 128)
 
-    encoder = build_vae_encoder(in_channels, latent_channels, num_frames,
-                                spatial_downsample, temporal_downsample, base_channels)
-    decoder = build_vae_decoder(in_channels, latent_channels, num_frames,
-                                spatial_downsample, temporal_downsample, base_channels)
+    encoder =
+      build_vae_encoder(
+        in_channels,
+        latent_channels,
+        num_frames,
+        spatial_downsample,
+        temporal_downsample,
+        base_channels
+      )
+
+    decoder =
+      build_vae_decoder(
+        in_channels,
+        latent_channels,
+        num_frames,
+        spatial_downsample,
+        temporal_downsample,
+        base_channels
+      )
 
     {encoder, decoder}
   end
 
-  defp build_vae_encoder(in_channels, latent_channels, num_frames,
-                         spatial_downsample, temporal_downsample, base_channels) do
+  defp build_vae_encoder(
+         in_channels,
+         latent_channels,
+         num_frames,
+         spatial_downsample,
+         temporal_downsample,
+         base_channels
+       ) do
     # Input: [batch, frames, channels, height, width]
     # We'll flatten batch*frames for spatial ops, then reshape for temporal
     input = Axon.input("video", shape: {nil, num_frames, in_channels, nil, nil})
@@ -181,38 +202,49 @@ defmodule Edifice.Generative.CogVideoX do
     # Spatial downsampling stages (2D conv with stride 2)
     spatial_stages = round(:math.log2(spatial_downsample))
 
-    x = Enum.reduce(1..spatial_stages, x, fn stage, acc ->
-      channels = base_channels * round(:math.pow(2, min(stage, 3)))
+    x =
+      Enum.reduce(1..spatial_stages, x, fn stage, acc ->
+        channels = base_channels * round(:math.pow(2, min(stage, 3)))
 
-      acc
-      |> build_causal_conv3d(channels, [3, 3, 3], "encoder_spatial_#{stage}_conv1")
-      |> Axon.activation(:silu, name: "encoder_spatial_#{stage}_act1")
-      |> build_spatial_downsample("encoder_spatial_#{stage}_down")
-    end)
+        acc
+        |> build_causal_conv3d(channels, [3, 3, 3], "encoder_spatial_#{stage}_conv1")
+        |> Axon.activation(:silu, name: "encoder_spatial_#{stage}_act1")
+        |> build_spatial_downsample("encoder_spatial_#{stage}_down")
+      end)
 
     # Temporal downsampling stages (causal 1D conv with stride)
     temporal_stages = round(:math.log2(temporal_downsample))
 
-    x = Enum.reduce(1..temporal_stages, x, fn stage, acc ->
-      acc
-      |> build_causal_temporal_conv(base_channels * 8, 3, "encoder_temporal_#{stage}")
-      |> Axon.activation(:silu, name: "encoder_temporal_#{stage}_act")
-      |> build_temporal_downsample("encoder_temporal_#{stage}_down")
-    end)
+    x =
+      Enum.reduce(1..temporal_stages, x, fn stage, acc ->
+        acc
+        |> build_causal_temporal_conv(base_channels * 8, 3, "encoder_temporal_#{stage}")
+        |> Axon.activation(:silu, name: "encoder_temporal_#{stage}_act")
+        |> build_temporal_downsample("encoder_temporal_#{stage}_down")
+      end)
 
     # Final projection to latent space (mean for VAE)
     x
     |> build_causal_conv3d(latent_channels * 2, [1, 1, 1], "encoder_to_latent")
-    |> Axon.nx(fn t ->
-      # Split into mean and logvar, return mean (for simplicity)
-      {batch, frames, _channels, h, w} = Nx.shape(t)
-      mean = Nx.slice_along_axis(t, 0, latent_channels, axis: 2)
-      Nx.reshape(mean, {batch, frames, latent_channels, h, w})
-    end, name: "encoder_split_mean")
+    |> Axon.nx(
+      fn t ->
+        # Split into mean and logvar, return mean (for simplicity)
+        {batch, frames, _channels, h, w} = Nx.shape(t)
+        mean = Nx.slice_along_axis(t, 0, latent_channels, axis: 2)
+        Nx.reshape(mean, {batch, frames, latent_channels, h, w})
+      end,
+      name: "encoder_split_mean"
+    )
   end
 
-  defp build_vae_decoder(in_channels, latent_channels, _num_frames,
-                         spatial_downsample, temporal_downsample, base_channels) do
+  defp build_vae_decoder(
+         in_channels,
+         latent_channels,
+         _num_frames,
+         spatial_downsample,
+         temporal_downsample,
+         base_channels
+       ) do
     # Compute compressed dimensions
     latent_frames = div(@default_num_frames, temporal_downsample) + 1
 
@@ -224,24 +256,26 @@ defmodule Edifice.Generative.CogVideoX do
     # Temporal upsampling stages
     temporal_stages = round(:math.log2(temporal_downsample))
 
-    x = Enum.reduce(1..temporal_stages, x, fn stage, acc ->
-      acc
-      |> build_temporal_upsample("decoder_temporal_#{stage}_up")
-      |> build_causal_temporal_conv(base_channels * 8, 3, "decoder_temporal_#{stage}")
-      |> Axon.activation(:silu, name: "decoder_temporal_#{stage}_act")
-    end)
+    x =
+      Enum.reduce(1..temporal_stages, x, fn stage, acc ->
+        acc
+        |> build_temporal_upsample("decoder_temporal_#{stage}_up")
+        |> build_causal_temporal_conv(base_channels * 8, 3, "decoder_temporal_#{stage}")
+        |> Axon.activation(:silu, name: "decoder_temporal_#{stage}_act")
+      end)
 
     # Spatial upsampling stages
     spatial_stages = round(:math.log2(spatial_downsample))
 
-    x = Enum.reduce(spatial_stages..1//-1, x, fn stage, acc ->
-      channels = base_channels * round(:math.pow(2, min(stage - 1, 3)))
+    x =
+      Enum.reduce(spatial_stages..1//-1, x, fn stage, acc ->
+        channels = base_channels * round(:math.pow(2, min(stage - 1, 3)))
 
-      acc
-      |> build_spatial_upsample("decoder_spatial_#{stage}_up")
-      |> build_causal_conv3d(channels, [3, 3, 3], "decoder_spatial_#{stage}_conv")
-      |> Axon.activation(:silu, name: "decoder_spatial_#{stage}_act")
-    end)
+        acc
+        |> build_spatial_upsample("decoder_spatial_#{stage}_up")
+        |> build_causal_conv3d(channels, [3, 3, 3], "decoder_spatial_#{stage}_conv")
+        |> Axon.activation(:silu, name: "decoder_spatial_#{stage}_act")
+      end)
 
     # Final projection to RGB
     build_causal_conv3d(x, in_channels, [3, 3, 3], "decoder_to_rgb")
@@ -250,14 +284,15 @@ defmodule Edifice.Generative.CogVideoX do
   # Factorized 3D convolution: 2D spatial + 1D causal temporal
   defp build_causal_conv3d(input, out_channels, [_kt, kh, kw], name) do
     # Spatial 2D convolution (applied per frame)
-    x = Axon.layer(
-      &spatial_conv_impl/2,
-      [input],
-      name: "#{name}_spatial",
-      out_channels: out_channels,
-      kernel_size: {kh, kw},
-      op_name: :spatial_conv
-    )
+    x =
+      Axon.layer(
+        &spatial_conv_impl/2,
+        [input],
+        name: "#{name}_spatial",
+        out_channels: out_channels,
+        kernel_size: {kh, kw},
+        op_name: :spatial_conv
+      )
 
     # Causal temporal 1D convolution
     Axon.layer(
@@ -288,9 +323,10 @@ defmodule Edifice.Generative.CogVideoX do
     {batch, frames, in_channels, h, w} = Nx.shape(x)
 
     # Reshape to [batch * frames, h, w, in_channels] for 2D conv
-    x_flat = x
-    |> Nx.transpose(axes: [0, 1, 3, 4, 2])
-    |> Nx.reshape({batch * frames, h, w, in_channels})
+    x_flat =
+      x
+      |> Nx.transpose(axes: [0, 1, 3, 4, 2])
+      |> Nx.reshape({batch * frames, h, w, in_channels})
 
     # Simple depthwise-separable approximation
     # In practice, this would use proper conv weights
@@ -304,7 +340,8 @@ defmodule Edifice.Generative.CogVideoX do
     pooled = Nx.window_mean(x_padded, {1, kh, kw, 1}, padding: :valid)
 
     # Project to output channels
-    result = Nx.dot(pooled, [3], Nx.broadcast(1.0 / in_channels, {in_channels, out_channels}), [0])
+    result =
+      Nx.dot(pooled, [3], Nx.broadcast(1.0 / in_channels, {in_channels, out_channels}), [0])
 
     # Reshape back to [batch, frames, out_channels, h, w]
     result
@@ -490,23 +527,25 @@ defmodule Edifice.Generative.CogVideoX do
     combined = Axon.concatenate([text_proj, video_tokens], axis: 1, name: "concat_tokens")
 
     # Create modality mask (0 = text, 1 = video) for expert routing
-    modality_mask = Axon.layer(
-      &create_modality_mask/3,
-      [text_proj, video_tokens],
-      name: "modality_mask",
-      op_name: :modality_mask
-    )
+    modality_mask =
+      Axon.layer(
+        &create_modality_mask/3,
+        [text_proj, video_tokens],
+        name: "modality_mask",
+        op_name: :modality_mask
+      )
 
     # Expert transformer blocks
-    x = Enum.reduce(1..num_layers, combined, fn layer_idx, acc ->
-      build_expert_block(acc, modality_mask, time_embed,
-        hidden_size: hidden_size,
-        num_heads: num_heads,
-        head_dim: head_dim,
-        mlp_ratio: mlp_ratio,
-        name: "layer_#{layer_idx}"
-      )
-    end)
+    x =
+      Enum.reduce(1..num_layers, combined, fn layer_idx, acc ->
+        build_expert_block(acc, modality_mask, time_embed,
+          hidden_size: hidden_size,
+          num_heads: num_heads,
+          head_dim: head_dim,
+          mlp_ratio: mlp_ratio,
+          name: "layer_#{layer_idx}"
+        )
+      end)
 
     # Final norm and extract video tokens
     x = Axon.layer_norm(x, name: "final_norm")
@@ -582,12 +621,13 @@ defmodule Edifice.Generative.CogVideoX do
     mlp_dim = round(hidden_size * mlp_ratio)
 
     # Add timestep conditioning
-    x = Axon.layer(
-      &add_time_conditioning/3,
-      [input, time_embed],
-      name: "#{name}_time_cond",
-      op_name: :time_cond
-    )
+    x =
+      Axon.layer(
+        &add_time_conditioning/3,
+        [input, time_embed],
+        name: "#{name}_time_cond",
+        op_name: :time_cond
+      )
 
     # Self-attention (full 3D attention over all tokens)
     x_norm = Axon.layer_norm(x, name: "#{name}_attn_norm")
@@ -596,14 +636,15 @@ defmodule Edifice.Generative.CogVideoX do
     k = Axon.dense(x_norm, hidden_size, name: "#{name}_k")
     v = Axon.dense(x_norm, hidden_size, name: "#{name}_v")
 
-    attn_out = Axon.layer(
-      &full_attention_impl/4,
-      [q, k, v],
-      name: "#{name}_attn",
-      num_heads: num_heads,
-      head_dim: head_dim,
-      op_name: :full_attention
-    )
+    attn_out =
+      Axon.layer(
+        &full_attention_impl/4,
+        [q, k, v],
+        name: "#{name}_attn",
+        num_heads: num_heads,
+        head_dim: head_dim,
+        op_name: :full_attention
+      )
 
     attn_out = Axon.dense(attn_out, hidden_size, name: "#{name}_attn_out")
     x = Axon.add(x, attn_out, name: "#{name}_attn_residual")
@@ -611,14 +652,15 @@ defmodule Edifice.Generative.CogVideoX do
     # Expert FFN: route by modality
     x_norm2 = Axon.layer_norm(x, name: "#{name}_ffn_norm")
 
-    ffn_out = Axon.layer(
-      &expert_ffn_impl/3,
-      [x_norm2, modality_mask],
-      name: "#{name}_expert_ffn",
-      hidden_size: hidden_size,
-      mlp_dim: mlp_dim,
-      op_name: :expert_ffn
-    )
+    ffn_out =
+      Axon.layer(
+        &expert_ffn_impl/3,
+        [x_norm2, modality_mask],
+        name: "#{name}_expert_ffn",
+        hidden_size: hidden_size,
+        mlp_dim: mlp_dim,
+        op_name: :expert_ffn
+      )
 
     Axon.add(x, ffn_out, name: "#{name}_ffn_residual")
   end
@@ -628,9 +670,10 @@ defmodule Edifice.Generative.CogVideoX do
     seq_len = Nx.axis_size(x, 1)
     hidden = Nx.axis_size(x, 2)
 
-    time_expanded = time_embed
-    |> Nx.reshape({batch, 1, hidden})
-    |> Nx.broadcast({batch, seq_len, hidden})
+    time_expanded =
+      time_embed
+      |> Nx.reshape({batch, 1, hidden})
+      |> Nx.broadcast({batch, seq_len, hidden})
 
     Nx.add(x, time_expanded)
   end
@@ -654,7 +697,9 @@ defmodule Edifice.Generative.CogVideoX do
     # Softmax
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    attn_weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
+
+    attn_weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
 
     # Apply to values
     output = Nx.dot(attn_weights, [3], [0, 1], v, [2], [0, 1])
@@ -681,21 +726,25 @@ defmodule Edifice.Generative.CogVideoX do
     video_down = Nx.broadcast(0.01, {mlp_dim, hidden_size})
 
     # Compute both expert outputs
-    text_out = x
-    |> Nx.dot([2], text_up, [0])
-    |> Nx.max(0)  # ReLU approximation of GELU
-    |> Nx.dot([2], text_down, [0])
+    text_out =
+      x
+      |> Nx.dot([2], text_up, [0])
+      # ReLU approximation of GELU
+      |> Nx.max(0)
+      |> Nx.dot([2], text_down, [0])
 
-    video_out = x
-    |> Nx.dot([2], video_up, [0])
-    |> Nx.max(0)
-    |> Nx.dot([2], video_down, [0])
+    video_out =
+      x
+      |> Nx.dot([2], video_up, [0])
+      |> Nx.max(0)
+      |> Nx.dot([2], video_down, [0])
 
     # Route based on modality mask
-    mask_expanded = modality_mask
-    |> Nx.reshape({batch, seq_len, 1})
-    |> Nx.as_type(Nx.type(x))
-    |> Nx.broadcast({batch, seq_len, hidden_size})
+    mask_expanded =
+      modality_mask
+      |> Nx.reshape({batch, seq_len, 1})
+      |> Nx.as_type(Nx.type(x))
+      |> Nx.broadcast({batch, seq_len, hidden_size})
 
     # text_out where mask=0, video_out where mask=1
     Nx.add(
@@ -705,13 +754,14 @@ defmodule Edifice.Generative.CogVideoX do
   end
 
   defp build_timestep_embed(timestep, hidden_size) do
-    embed = Axon.layer(
-      &sinusoidal_embed_impl/2,
-      [timestep],
-      name: "time_sinusoidal",
-      hidden_size: hidden_size,
-      op_name: :sinusoidal_embed
-    )
+    embed =
+      Axon.layer(
+        &sinusoidal_embed_impl/2,
+        [timestep],
+        name: "time_sinusoidal",
+        hidden_size: hidden_size,
+        op_name: :sinusoidal_embed
+      )
 
     embed
     |> Axon.dense(hidden_size, name: "time_mlp_1")
@@ -723,12 +773,13 @@ defmodule Edifice.Generative.CogVideoX do
     hidden_size = opts[:hidden_size]
     half_dim = div(hidden_size, 2)
 
-    freqs = Nx.exp(
-      Nx.multiply(
-        Nx.negate(Nx.log(Nx.tensor(10_000.0))),
-        Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
+    freqs =
+      Nx.exp(
+        Nx.multiply(
+          Nx.negate(Nx.log(Nx.tensor(10_000.0))),
+          Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
+        )
       )
-    )
 
     t_f = Nx.as_type(t, :f32)
     angles = Nx.multiply(Nx.new_axis(t_f, 1), Nx.reshape(freqs, {1, half_dim}))
@@ -833,9 +884,20 @@ defmodule Edifice.Generative.CogVideoX do
     total_positions = time_dim * height_dim * width_dim
 
     # Create position grid
-    t_pos = Nx.iota({time_dim, 1, 1}) |> Nx.broadcast({time_dim, height_dim, width_dim}) |> Nx.reshape({total_positions, 1})
-    h_pos = Nx.iota({1, height_dim, 1}) |> Nx.broadcast({time_dim, height_dim, width_dim}) |> Nx.reshape({total_positions, 1})
-    w_pos = Nx.iota({1, 1, width_dim}) |> Nx.broadcast({time_dim, height_dim, width_dim}) |> Nx.reshape({total_positions, 1})
+    t_pos =
+      Nx.iota({time_dim, 1, 1})
+      |> Nx.broadcast({time_dim, height_dim, width_dim})
+      |> Nx.reshape({total_positions, 1})
+
+    h_pos =
+      Nx.iota({1, height_dim, 1})
+      |> Nx.broadcast({time_dim, height_dim, width_dim})
+      |> Nx.reshape({total_positions, 1})
+
+    w_pos =
+      Nx.iota({1, 1, width_dim})
+      |> Nx.broadcast({time_dim, height_dim, width_dim})
+      |> Nx.reshape({total_positions, 1})
 
     # Compute sin/cos for each axis
     t_angles = Nx.multiply(Nx.as_type(t_pos, :f32), t_freqs)
@@ -849,12 +911,13 @@ defmodule Edifice.Generative.CogVideoX do
   end
 
   defp compute_axis_freqs(_dim, head_dim, base) do
-    inv_freq = Nx.exp(
-      Nx.multiply(
-        Nx.negate(Nx.log(Nx.tensor(base))),
-        Nx.divide(Nx.iota({div(head_dim, 2)}, type: :f32), max(div(head_dim, 2), 1))
+    inv_freq =
+      Nx.exp(
+        Nx.multiply(
+          Nx.negate(Nx.log(Nx.tensor(base))),
+          Nx.divide(Nx.iota({div(head_dim, 2)}, type: :f32), max(div(head_dim, 2), 1))
+        )
       )
-    )
 
     Nx.reshape(inv_freq, {1, div(head_dim, 2)})
   end
@@ -894,7 +957,8 @@ defmodule Edifice.Generative.CogVideoX do
 
     # Per layer: attention (QKV + out) + 2 expert FFNs
     attn_params = 4 * hidden_size * hidden_size
-    ffn_params = 2 * (hidden_size * mlp_dim + mlp_dim * hidden_size)  # 2 experts
+    # 2 experts
+    ffn_params = 2 * (hidden_size * mlp_dim + mlp_dim * hidden_size)
     per_layer = attn_params + ffn_params
 
     # Text projection + time embedding

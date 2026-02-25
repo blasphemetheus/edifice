@@ -57,7 +57,12 @@ defmodule Edifice.RL.Environments.CartPole do
 
   @impl true
   def observation_space do
-    %{shape: {4}, type: :f32, low: [-2.4, :neg_inf, -0.2095, :neg_inf], high: [2.4, :inf, 0.2095, :inf]}
+    %{
+      shape: {4},
+      type: :f32,
+      low: [-2.4, :neg_inf, -0.2095, :neg_inf],
+      high: [2.4, :inf, 0.2095, :inf]
+    }
   end
 
   @impl true

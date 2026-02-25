@@ -314,9 +314,10 @@ defmodule Edifice.Generative.DiTv2 do
 
   # RMSNorm: x / sqrt(mean(x^2) + eps) * gamma
   defp build_rms_norm(input, hidden_size, name) do
-    gamma = Axon.param("#{name}_gamma", {hidden_size},
-      initializer: fn shape, _opts -> Nx.broadcast(Nx.tensor(1.0), shape) end
-    )
+    gamma =
+      Axon.param("#{name}_gamma", {hidden_size},
+        initializer: fn shape, _opts -> Nx.broadcast(Nx.tensor(1.0), shape) end
+      )
 
     Axon.layer(
       fn x, g, _opts ->
@@ -373,6 +374,7 @@ defmodule Edifice.Generative.DiTv2 do
       Axon.layer(
         fn labels, opts ->
           nc = opts[:num_classes]
+
           Nx.equal(Nx.new_axis(Nx.as_type(labels, :s64), 1), Nx.iota({1, nc}))
           |> Nx.as_type(:f32)
         end,

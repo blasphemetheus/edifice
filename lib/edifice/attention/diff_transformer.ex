@@ -161,9 +161,7 @@ defmodule Edifice.Attention.DiffTransformer do
 
     # V2: Simple learnable lambda scalar (initialized to layer-dependent value)
     lambda_param =
-      Axon.param("#{name}_lambda", {},
-        initializer: fn _, _ -> Nx.tensor(lambda_init) end
-      )
+      Axon.param("#{name}_lambda", {}, initializer: fn _, _ -> Nx.tensor(lambda_init) end)
 
     # RMSNorm scale parameter
     rms_scale = Axon.param("#{name}_rms_scale", {hidden_size}, initializer: :ones)

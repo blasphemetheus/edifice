@@ -9,12 +9,13 @@ defmodule Edifice.Inference.MedusaTest do
 
   describe "Medusa.build/1" do
     test "produces correct output shape with 4 heads" do
-      model = Medusa.build(
-        base_hidden_dim: @base_hidden_dim,
-        vocab_size: @vocab_size,
-        num_medusa_heads: 4,
-        medusa_num_layers: 1
-      )
+      model =
+        Medusa.build(
+          base_hidden_dim: @base_hidden_dim,
+          vocab_size: @vocab_size,
+          num_medusa_heads: 4,
+          medusa_num_layers: 1
+        )
 
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
@@ -39,12 +40,13 @@ defmodule Edifice.Inference.MedusaTest do
     end
 
     test "with 2 heads and 2 layers per head" do
-      model = Medusa.build(
-        base_hidden_dim: @base_hidden_dim,
-        vocab_size: @vocab_size,
-        num_medusa_heads: 2,
-        medusa_num_layers: 2
-      )
+      model =
+        Medusa.build(
+          base_hidden_dim: @base_hidden_dim,
+          vocab_size: @vocab_size,
+          num_medusa_heads: 2,
+          medusa_num_layers: 2
+        )
 
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
@@ -69,11 +71,12 @@ defmodule Edifice.Inference.MedusaTest do
     test "builds heads as Axon subgraph" do
       input = Axon.input("hidden_states", shape: {nil, @base_hidden_dim})
 
-      heads = Medusa.medusa_heads(input,
-        base_hidden_dim: @base_hidden_dim,
-        vocab_size: @vocab_size,
-        num_medusa_heads: 3
-      )
+      heads =
+        Medusa.medusa_heads(input,
+          base_hidden_dim: @base_hidden_dim,
+          vocab_size: @vocab_size,
+          num_medusa_heads: 3
+        )
 
       {init_fn, predict_fn} = Axon.build(heads, mode: :inference)
 
@@ -97,9 +100,15 @@ defmodule Edifice.Inference.MedusaTest do
     test "generates candidate tree with correct shape" do
       # Simulate logits from 3 heads
       head_logits = %{
-        head_1: Nx.broadcast(0.0, {1, @vocab_size}) |> Nx.put_slice([0, 0], Nx.tensor([[1.0, 2.0, 3.0]])),
-        head_2: Nx.broadcast(0.0, {1, @vocab_size}) |> Nx.put_slice([0, 0], Nx.tensor([[2.0, 1.0, 3.0]])),
-        head_3: Nx.broadcast(0.0, {1, @vocab_size}) |> Nx.put_slice([0, 0], Nx.tensor([[3.0, 2.0, 1.0]]))
+        head_1:
+          Nx.broadcast(0.0, {1, @vocab_size})
+          |> Nx.put_slice([0, 0], Nx.tensor([[1.0, 2.0, 3.0]])),
+        head_2:
+          Nx.broadcast(0.0, {1, @vocab_size})
+          |> Nx.put_slice([0, 0], Nx.tensor([[2.0, 1.0, 3.0]])),
+        head_3:
+          Nx.broadcast(0.0, {1, @vocab_size})
+          |> Nx.put_slice([0, 0], Nx.tensor([[3.0, 2.0, 1.0]]))
       }
 
       {candidates, tree_indices} = Medusa.build_tree_candidates(head_logits, top_k: 2)

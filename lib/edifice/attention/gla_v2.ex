@@ -277,10 +277,14 @@ defmodule Edifice.Attention.GLAv2 do
     # padded: [batch, seq_len + kernel_size - 1, dim]
     seq_len = Nx.axis_size(v, 1)
 
-    Enum.reduce(0..(kernel_size - 1), Nx.broadcast(Nx.tensor(0.0, type: Nx.type(v)), {batch, seq_len, dim}), fn offset, acc ->
-      slice = Nx.slice_along_axis(padded, offset, seq_len, axis: 1)
-      Nx.add(acc, slice)
-    end)
+    Enum.reduce(
+      0..(kernel_size - 1),
+      Nx.broadcast(Nx.tensor(0.0, type: Nx.type(v)), {batch, seq_len, dim}),
+      fn offset, acc ->
+        slice = Nx.slice_along_axis(padded, offset, seq_len, axis: 1)
+        Nx.add(acc, slice)
+      end
+    )
     |> Nx.divide(kernel_size)
   end
 

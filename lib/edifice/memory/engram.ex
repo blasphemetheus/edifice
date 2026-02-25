@@ -122,9 +122,7 @@ defmodule Edifice.Memory.Engram do
 
     # Learnable LSH projection matrices — one per table
     hash_matrices =
-      Axon.param("hash_matrices", {num_tables, hash_bits, key_dim},
-        initializer: :glorot_uniform
-      )
+      Axon.param("hash_matrices", {num_tables, hash_bits, key_dim}, initializer: :glorot_uniform)
 
     Axon.layer(
       &engram_lookup_impl/4,
@@ -365,7 +363,9 @@ defmodule Edifice.Memory.Engram do
     batch_size = Nx.axis_size(query, 0)
     value_dim = Nx.axis_size(memory_slots, 2)
 
-    bucket_indices = compute_bucket_indices(query, hash_matrices, batch_size, hash_bits, num_tables)
+    bucket_indices =
+      compute_bucket_indices(query, hash_matrices, batch_size, hash_bits, num_tables)
+
     results = gather_slots(memory_slots, bucket_indices, batch_size, value_dim)
     Nx.mean(results, axes: [0])
   end

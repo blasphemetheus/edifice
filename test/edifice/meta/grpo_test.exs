@@ -5,12 +5,13 @@ defmodule Edifice.Meta.GRPOTest do
 
   describe "build/1" do
     test "builds GRPO policy model with default options" do
-      model = GRPO.build(
-        hidden_size: 64,
-        num_layers: 2,
-        num_heads: 2,
-        vocab_size: 100
-      )
+      model =
+        GRPO.build(
+          hidden_size: 64,
+          num_layers: 2,
+          num_heads: 2,
+          vocab_size: 100
+        )
 
       assert %Axon{} = model
     end
@@ -21,20 +22,22 @@ defmodule Edifice.Meta.GRPOTest do
       seq_len = 8
       batch_size = 2
 
-      model = GRPO.build(
-        hidden_size: hidden_size,
-        num_layers: 1,
-        num_heads: 2,
-        vocab_size: vocab_size,
-        dropout: 0.0
-      )
+      model =
+        GRPO.build(
+          hidden_size: hidden_size,
+          num_layers: 1,
+          num_heads: 2,
+          vocab_size: vocab_size,
+          dropout: 0.0
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
 
-      params = init_fn.(
-        Nx.template({batch_size, seq_len}, :s64),
-        %{}
-      )
+      params =
+        init_fn.(
+          Nx.template({batch_size, seq_len}, :s64),
+          %{}
+        )
 
       input = Nx.broadcast(1, {batch_size, seq_len}) |> Nx.as_type(:s64)
       output = predict_fn.(params, %{"tokens" => input})
@@ -46,10 +49,11 @@ defmodule Edifice.Meta.GRPOTest do
   describe "compute_advantages/2" do
     test "computes group-relative advantages from 2D rewards" do
       # 2 prompts, 4 responses each
-      rewards = Nx.tensor([
-        [1.0, 2.0, 3.0, 4.0],
-        [10.0, 20.0, 30.0, 40.0]
-      ])
+      rewards =
+        Nx.tensor([
+          [1.0, 2.0, 3.0, 4.0],
+          [10.0, 20.0, 30.0, 40.0]
+        ])
 
       advantages = GRPO.compute_advantages(rewards)
 
@@ -100,10 +104,11 @@ defmodule Edifice.Meta.GRPOTest do
       old_log_probs = Nx.tensor([-1.1, -1.9])
       advantages = Nx.tensor([1.0, -1.0])
 
-      loss = GRPO.loss(log_probs, advantages,
-        clip_range: 0.2,
-        old_log_probs: old_log_probs
-      )
+      loss =
+        GRPO.loss(log_probs, advantages,
+          clip_range: 0.2,
+          old_log_probs: old_log_probs
+        )
 
       assert is_struct(loss, Nx.Tensor)
       assert Nx.shape(loss) == {}

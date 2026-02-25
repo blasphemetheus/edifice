@@ -11,14 +11,15 @@ defmodule Edifice.Robotics.ACTTest do
 
   describe "ACT.build/1" do
     test "returns encoder and decoder tuple" do
-      {encoder, decoder} = ACT.build(
-        obs_dim: @obs_dim,
-        action_dim: @action_dim,
-        chunk_size: @chunk_size,
-        hidden_dim: 32,
-        num_layers: 2,
-        latent_dim: @latent_dim
-      )
+      {encoder, decoder} =
+        ACT.build(
+          obs_dim: @obs_dim,
+          action_dim: @action_dim,
+          chunk_size: @chunk_size,
+          hidden_dim: 32,
+          num_layers: 2,
+          latent_dim: @latent_dim
+        )
 
       assert is_struct(encoder, Axon)
       assert is_struct(decoder, Axon)
@@ -27,13 +28,14 @@ defmodule Edifice.Robotics.ACTTest do
 
   describe "ACT.build_encoder/1" do
     test "produces mu and log_var outputs" do
-      encoder = ACT.build_encoder(
-        obs_dim: @obs_dim,
-        action_dim: @action_dim,
-        chunk_size: @chunk_size,
-        hidden_dim: 32,
-        latent_dim: @latent_dim
-      )
+      encoder =
+        ACT.build_encoder(
+          obs_dim: @obs_dim,
+          action_dim: @action_dim,
+          chunk_size: @chunk_size,
+          hidden_dim: 32,
+          latent_dim: @latent_dim
+        )
 
       {init_fn, predict_fn} = Axon.build(encoder, mode: :inference)
 
@@ -61,14 +63,15 @@ defmodule Edifice.Robotics.ACTTest do
 
   describe "ACT.build_decoder/1" do
     test "produces action chunk output" do
-      decoder = ACT.build_decoder(
-        obs_dim: @obs_dim,
-        action_dim: @action_dim,
-        chunk_size: @chunk_size,
-        hidden_dim: 32,
-        num_layers: 2,
-        latent_dim: @latent_dim
-      )
+      decoder =
+        ACT.build_decoder(
+          obs_dim: @obs_dim,
+          action_dim: @action_dim,
+          chunk_size: @chunk_size,
+          hidden_dim: 32,
+          num_layers: 2,
+          latent_dim: @latent_dim
+        )
 
       {init_fn, predict_fn} = Axon.build(decoder, mode: :inference)
 
@@ -105,7 +108,8 @@ defmodule Edifice.Robotics.ACTTest do
     test "respects mu and log_var distributions" do
       # Large positive mu should shift samples
       mu = Nx.broadcast(10.0, {100, @latent_dim})
-      log_var = Nx.broadcast(-10.0, {100, @latent_dim})  # Very small variance
+      # Very small variance
+      log_var = Nx.broadcast(-10.0, {100, @latent_dim})
       key = Nx.Random.key(42)
 
       {z, _} = ACT.reparameterize(mu, log_var, key)

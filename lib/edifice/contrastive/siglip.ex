@@ -121,10 +121,14 @@ defmodule Edifice.Contrastive.SigLIP do
 
     # L2 normalize output
     encoder =
-      Axon.nx(projected, fn x ->
-        norm = Nx.sqrt(Nx.sum(Nx.multiply(x, x), axes: [-1], keep_axes: true))
-        Nx.divide(x, Nx.add(norm, 1.0e-8))
-      end, name: "l2_normalize")
+      Axon.nx(
+        projected,
+        fn x ->
+          norm = Nx.sqrt(Nx.sum(Nx.multiply(x, x), axes: [-1], keep_axes: true))
+          Nx.divide(x, Nx.add(norm, 1.0e-8))
+        end,
+        name: "l2_normalize"
+      )
 
     # Learnable temperature parameter (log scale for stability)
     temperature =

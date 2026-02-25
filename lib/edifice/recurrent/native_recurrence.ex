@@ -148,7 +148,12 @@ defmodule Edifice.Recurrent.NativeRecurrence do
 
     z = Nx.sigmoid(gate_pre)
     # 1 + elu(x) ensures candidate is non-negative: elu(x) >= -1, so c >= 0
-    c = Nx.add(1.0, Nx.max(candidate_pre, 0.0) |> Nx.add(Nx.min(candidate_pre, 0.0) |> Nx.exp() |> Nx.subtract(1.0)))
+    c =
+      Nx.add(
+        1.0,
+        Nx.max(candidate_pre, 0.0)
+        |> Nx.add(Nx.min(candidate_pre, 0.0) |> Nx.exp() |> Nx.subtract(1.0))
+      )
 
     h_init = Nx.broadcast(0.0, {batch_size, hidden_size})
 

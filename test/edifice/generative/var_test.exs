@@ -5,43 +5,47 @@ defmodule Edifice.Generative.VARTest do
 
   describe "build/1" do
     test "builds VAR model with default options" do
-      model = VAR.build(
-        hidden_size: 64,
-        num_layers: 2,
-        num_heads: 2,
-        scales: [1, 2, 4],
-        codebook_size: 32
-      )
+      model =
+        VAR.build(
+          hidden_size: 64,
+          num_layers: 2,
+          num_heads: 2,
+          scales: [1, 2, 4],
+          codebook_size: 32
+        )
 
       assert %Axon{} = model
     end
 
     test "builds model with custom scales" do
-      model = VAR.build(
-        hidden_size: 32,
-        num_layers: 1,
-        num_heads: 2,
-        scales: [1, 2],
-        codebook_size: 16
-      )
+      model =
+        VAR.build(
+          hidden_size: 32,
+          num_layers: 1,
+          num_heads: 2,
+          scales: [1, 2],
+          codebook_size: 16
+        )
 
       assert %Axon{} = model
     end
 
     test "model produces output with correct shape" do
       scales = [1, 2]
-      total_tokens = 1 + 4  # 1x1 + 2x2
+      # 1x1 + 2x2
+      total_tokens = 1 + 4
       hidden_size = 32
       codebook_size = 16
 
-      model = VAR.build(
-        hidden_size: hidden_size,
-        num_layers: 1,
-        num_heads: 2,
-        scales: scales,
-        codebook_size: codebook_size,
-        dropout: 0.0
-      )
+      model =
+        VAR.build(
+          hidden_size: hidden_size,
+          num_layers: 1,
+          num_heads: 2,
+          scales: scales,
+          codebook_size: codebook_size,
+          dropout: 0.0
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
       params = init_fn.(Nx.template({2, total_tokens, hidden_size}, :f32), %{})
@@ -58,13 +62,14 @@ defmodule Edifice.Generative.VARTest do
 
   describe "build_tokenizer/1" do
     test "builds encoder and decoder" do
-      {encoder, decoder} = VAR.build_tokenizer(
-        image_size: 16,
-        scales: [1, 2, 4],
-        codebook_size: 32,
-        embed_dim: 16,
-        in_channels: 3
-      )
+      {encoder, decoder} =
+        VAR.build_tokenizer(
+          image_size: 16,
+          scales: [1, 2, 4],
+          codebook_size: 32,
+          embed_dim: 16,
+          in_channels: 3
+        )
 
       assert %Axon{} = encoder
       assert %Axon{} = decoder
@@ -72,13 +77,15 @@ defmodule Edifice.Generative.VARTest do
 
     test "encoder produces scale tokens" do
       scales = [1, 2]
-      {encoder, _decoder} = VAR.build_tokenizer(
-        image_size: 8,
-        scales: scales,
-        codebook_size: 16,
-        embed_dim: 8,
-        in_channels: 3
-      )
+
+      {encoder, _decoder} =
+        VAR.build_tokenizer(
+          image_size: 8,
+          scales: scales,
+          codebook_size: 16,
+          embed_dim: 8,
+          in_channels: 3
+        )
 
       {init_fn, predict_fn} = Axon.build(encoder)
       params = init_fn.(Nx.template({2, 8, 8, 3}, :f32), %{})
@@ -98,8 +105,10 @@ defmodule Edifice.Generative.VARTest do
     end
 
     test "computes correct total for custom scales" do
-      assert VAR.total_tokens([1, 2]) == 5  # 1 + 4
-      assert VAR.total_tokens([1, 2, 4]) == 21  # 1 + 4 + 16
+      # 1 + 4
+      assert VAR.total_tokens([1, 2]) == 5
+      # 1 + 4 + 16
+      assert VAR.total_tokens([1, 2, 4]) == 21
     end
   end
 

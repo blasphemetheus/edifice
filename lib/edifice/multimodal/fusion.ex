@@ -324,9 +324,7 @@ defmodule Edifice.Multimodal.Fusion do
 
     # Learned query embeddings: [1, num_queries, output_dim]
     queries =
-      Axon.nx(visual_input, fn _t -> Nx.broadcast(1.0, {1, num_queries}) end,
-        name: "query_src"
-      )
+      Axon.nx(visual_input, fn _t -> Nx.broadcast(1.0, {1, num_queries}) end, name: "query_src")
       |> Axon.dense(output_dim, name: "query_proj")
       |> Axon.nx(
         fn q ->

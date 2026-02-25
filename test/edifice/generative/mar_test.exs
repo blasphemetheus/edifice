@@ -82,7 +82,10 @@ defmodule Edifice.Generative.MARTest do
       # Mask only first half
       half_mask =
         Nx.concatenate(
-          [Nx.broadcast(1, {@batch, div(@seq_len, 2)}), Nx.broadcast(0, {@batch, div(@seq_len, 2)})],
+          [
+            Nx.broadcast(1, {@batch, div(@seq_len, 2)}),
+            Nx.broadcast(0, {@batch, div(@seq_len, 2)})
+          ],
           axis: 1
         )
 

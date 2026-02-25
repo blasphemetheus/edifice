@@ -194,12 +194,16 @@ defmodule Mix.Tasks.Edifice.ExportGguf do
   defp flatten_param_names(params) when is_map(params) do
     Enum.flat_map(params, fn {key, value} ->
       case value do
-        %Nx.Tensor{} -> [to_string(key)]
+        %Nx.Tensor{} ->
+          [to_string(key)]
+
         nested when is_map(nested) ->
           nested
           |> flatten_param_names()
           |> Enum.map(&"#{key}.#{&1}")
-        _ -> []
+
+        _ ->
+          []
       end
     end)
   end

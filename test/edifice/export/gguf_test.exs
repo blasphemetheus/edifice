@@ -155,7 +155,8 @@ defmodule Edifice.Export.GGUFTest do
       [{name, shape, ggml_type, offset}] = tensor_infos
       assert name == "test.weight"
       assert shape == [64, 128]
-      assert ggml_type == 0  # F32
+      # F32
+      assert ggml_type == 0
       assert offset == 0
     end
 
@@ -319,14 +320,15 @@ defmodule Edifice.Export.GGUFTest do
   describe "round-trip integration" do
     test "exports a complete tiny decoder model" do
       # Build an actual decoder_only model
-      model = Edifice.build(:decoder_only,
-        embed_dim: 32,
-        hidden_size: 32,
-        num_heads: 2,
-        num_kv_heads: 1,
-        num_layers: 2,
-        window_size: 8
-      )
+      model =
+        Edifice.build(:decoder_only,
+          embed_dim: 32,
+          hidden_size: 32,
+          num_heads: 2,
+          num_kv_heads: 1,
+          num_layers: 2,
+          window_size: 8
+        )
 
       # Initialize params
       {init_fn, _predict_fn} = Axon.build(model)
@@ -355,7 +357,8 @@ defmodule Edifice.Export.GGUFTest do
         header = IO.binread(file, 24)
         File.close(file)
 
-        <<magic::little-32, version::little-32, tensor_count::little-64, metadata_count::little-64>> =
+        <<magic::little-32, version::little-32, tensor_count::little-64,
+          metadata_count::little-64>> =
           header
 
         assert magic == @magic

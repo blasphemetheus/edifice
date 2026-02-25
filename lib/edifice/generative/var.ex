@@ -403,7 +403,9 @@ defmodule Edifice.Generative.VAR do
     # Softmax
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    attn_weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
+
+    attn_weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
 
     # Apply attention to values
     output = Nx.dot(attn_weights, [3], [0, 1], v, [2], [0, 1])
@@ -443,10 +445,14 @@ defmodule Edifice.Generative.VAR do
 
         # Use the last token of current scale to predict next scale
         context_token =
-          Axon.nx(x, fn t ->
-            Nx.slice_along_axis(t, end_offset - 1, 1, axis: 1)
-            |> Nx.squeeze(axes: [1])
-          end, name: "scale_#{idx}_context")
+          Axon.nx(
+            x,
+            fn t ->
+              Nx.slice_along_axis(t, end_offset - 1, 1, axis: 1)
+              |> Nx.squeeze(axes: [1])
+            end,
+            name: "scale_#{idx}_context"
+          )
 
         # Predict all tokens for next scale
         logits =
@@ -454,10 +460,13 @@ defmodule Edifice.Generative.VAR do
           |> Axon.dense(hidden_size, name: "scale_#{idx + 1}_head_proj")
           |> Axon.activation(:gelu, name: "scale_#{idx + 1}_head_act")
           |> Axon.dense(num_next_tokens * codebook_size, name: "scale_#{idx + 1}_head_logits")
-          |> Axon.nx(fn t ->
-            batch = Nx.axis_size(t, 0)
-            Nx.reshape(t, {batch, num_next_tokens, codebook_size})
-          end, name: "scale_#{idx + 1}_reshape")
+          |> Axon.nx(
+            fn t ->
+              batch = Nx.axis_size(t, 0)
+              Nx.reshape(t, {batch, num_next_tokens, codebook_size})
+            end,
+            name: "scale_#{idx + 1}_reshape"
+          )
 
         {"scale_#{idx + 1}_logits", logits}
       end)
@@ -481,8 +490,14 @@ defmodule Edifice.Generative.VAR do
 
     # Learnable position embeddings (simplified: sinusoidal)
     positions = Nx.iota({seq_len}, type: :f32)
-    freqs = Nx.exp(Nx.multiply(Nx.negate(Nx.log(Nx.tensor(10_000.0))),
-      Nx.divide(Nx.iota({div(hidden_size, 2)}, type: :f32), max(div(hidden_size, 2) - 1, 1))))
+
+    freqs =
+      Nx.exp(
+        Nx.multiply(
+          Nx.negate(Nx.log(Nx.tensor(10_000.0))),
+          Nx.divide(Nx.iota({div(hidden_size, 2)}, type: :f32), max(div(hidden_size, 2) - 1, 1))
+        )
+      )
 
     angles = Nx.outer(positions, freqs)
     pos_embed = Nx.concatenate([Nx.sin(angles), Nx.cos(angles)], axis: 1)
@@ -499,11 +514,14 @@ defmodule Edifice.Generative.VAR do
       padding: :valid,
       name: "#{name}_patch_conv"
     )
-    |> Axon.nx(fn x ->
-      # Flatten spatial dims: [batch, h, w, c] -> [batch, h*w, c]
-      {batch, h, w, c} = Nx.shape(x)
-      Nx.reshape(x, {batch, h * w, c})
-    end, name: "#{name}_flatten")
+    |> Axon.nx(
+      fn x ->
+        # Flatten spatial dims: [batch, h, w, c] -> [batch, h*w, c]
+        {batch, h, w, c} = Nx.shape(x)
+        Nx.reshape(x, {batch, h * w, c})
+      end,
+      name: "#{name}_flatten"
+    )
   end
 
   defp build_token_embedding(input, codebook_size, embed_dim, name) do
@@ -523,10 +541,12 @@ defmodule Edifice.Generative.VAR do
     embed_dim = opts[:embed_dim]
 
     # One-hot encoding
-    one_hot = Nx.equal(
-      Nx.new_axis(Nx.as_type(indices, :s64), -1),
-      Nx.iota({1, 1, codebook_size})
-    ) |> Nx.as_type(:f32)
+    one_hot =
+      Nx.equal(
+        Nx.new_axis(Nx.as_type(indices, :s64), -1),
+        Nx.iota({1, 1, codebook_size})
+      )
+      |> Nx.as_type(:f32)
 
     # Simple linear projection (in practice would use learnable embedding table)
     # Here we use a deterministic projection for the structure

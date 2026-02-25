@@ -153,7 +153,15 @@ defmodule Edifice.Attention.KDA do
     # Stack KDA layers
     output =
       Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
-        layer = build_kda_layer(acc, hidden_size, num_heads, use_short_conv, conv_size, "kda_#{layer_idx}")
+        layer =
+          build_kda_layer(
+            acc,
+            hidden_size,
+            num_heads,
+            use_short_conv,
+            conv_size,
+            "kda_#{layer_idx}"
+          )
 
         if dropout > 0 and layer_idx < num_layers do
           Axon.dropout(layer, rate: dropout, name: "dropout_#{layer_idx}")
@@ -326,8 +334,10 @@ defmodule Edifice.Attention.KDA do
 
         # (I - beta * k k^T) * S: erase old value for key k_t before writing new
         # S @ k: [batch, heads, d_v] (what k_t currently retrieves)
-        sk = Nx.dot(s_decayed, [2], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1])
-             |> Nx.squeeze(axes: [3])
+        sk =
+          Nx.dot(s_decayed, [2], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1])
+          |> Nx.squeeze(axes: [3])
+
         # correction = beta * k * (k^T S)^T = beta * outer(k, S^T k)
         erase = Nx.multiply(beta_bc, Nx.multiply(Nx.new_axis(k_t, 3), Nx.new_axis(sk, 2)))
 

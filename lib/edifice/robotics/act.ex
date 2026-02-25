@@ -151,10 +151,14 @@ defmodule Edifice.Robotics.ACT do
 
     # Flatten actions: [batch, chunk_size * action_dim]
     actions_flat =
-      Axon.nx(actions, fn a ->
-        {batch, cs, ad} = Nx.shape(a)
-        Nx.reshape(a, {batch, cs * ad})
-      end, name: "flatten_actions")
+      Axon.nx(
+        actions,
+        fn a ->
+          {batch, cs, ad} = Nx.shape(a)
+          Nx.reshape(a, {batch, cs * ad})
+        end,
+        name: "flatten_actions"
+      )
 
     # Concatenate obs and flattened actions
     concat = Axon.concatenate([obs, actions_flat], axis: -1, name: "encoder_concat")
@@ -221,7 +225,8 @@ defmodule Edifice.Robotics.ACT do
 
     # Learnable query embeddings for each chunk position
     # Shape: [chunk_size, hidden_dim] broadcast to [batch, chunk_size, hidden_dim]
-    query_embed = Axon.param("query_embed", {chunk_size, hidden_dim}, initializer: :glorot_uniform)
+    query_embed =
+      Axon.param("query_embed", {chunk_size, hidden_dim}, initializer: :glorot_uniform)
 
     queries =
       Axon.layer(
@@ -263,18 +268,41 @@ defmodule Edifice.Robotics.ACT do
 
     # Self-attention (causal not strictly needed for chunk prediction, but helps)
     x_norm = Axon.layer_norm(x, name: "#{name}_self_attn_norm")
-    self_attn = multi_head_attention(x_norm, x_norm, x_norm, hidden_dim, num_heads, head_dim, "#{name}_self_attn")
+
+    self_attn =
+      multi_head_attention(
+        x_norm,
+        x_norm,
+        x_norm,
+        hidden_dim,
+        num_heads,
+        head_dim,
+        "#{name}_self_attn"
+      )
+
     self_attn = Axon.dropout(self_attn, rate: dropout, name: "#{name}_self_attn_drop")
     x = Axon.add(x, self_attn, name: "#{name}_self_attn_residual")
 
     # Cross-attention to context (obs + z)
     x_norm = Axon.layer_norm(x, name: "#{name}_cross_attn_norm")
-    cross_attn = multi_head_attention(x_norm, context, context, hidden_dim, num_heads, head_dim, "#{name}_cross_attn")
+
+    cross_attn =
+      multi_head_attention(
+        x_norm,
+        context,
+        context,
+        hidden_dim,
+        num_heads,
+        head_dim,
+        "#{name}_cross_attn"
+      )
+
     cross_attn = Axon.dropout(cross_attn, rate: dropout, name: "#{name}_cross_attn_drop")
     x = Axon.add(x, cross_attn, name: "#{name}_cross_attn_residual")
 
     # FFN
     x_norm = Axon.layer_norm(x, name: "#{name}_ffn_norm")
+
     ffn_out =
       x_norm
       |> Axon.dense(hidden_dim * 4, name: "#{name}_ffn_up")
@@ -320,7 +348,9 @@ defmodule Edifice.Robotics.ACT do
     # Softmax
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
+
+    weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
 
     # Apply to values
     output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
@@ -357,10 +387,14 @@ defmodule Edifice.Robotics.ACT do
 
     # Flatten actions
     actions_flat =
-      Axon.nx(actions, fn a ->
-        {batch, cs, ad} = Nx.shape(a)
-        Nx.reshape(a, {batch, cs * ad})
-      end, name: "encode_flatten_actions")
+      Axon.nx(
+        actions,
+        fn a ->
+          {batch, cs, ad} = Nx.shape(a)
+          Nx.reshape(a, {batch, cs * ad})
+        end,
+        name: "encode_flatten_actions"
+      )
 
     # Verify dimensions match
     _expected_flat = chunk_size * action_dim
@@ -416,7 +450,8 @@ defmodule Edifice.Robotics.ACT do
         op_name: :stack_context
       )
 
-    query_embed = Axon.param("decode_query_embed", {chunk_size, hidden_dim}, initializer: :glorot_uniform)
+    query_embed =
+      Axon.param("decode_query_embed", {chunk_size, hidden_dim}, initializer: :glorot_uniform)
 
     queries =
       Axon.layer(

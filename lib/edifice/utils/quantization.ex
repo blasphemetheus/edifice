@@ -56,7 +56,6 @@ defmodule Edifice.Utils.Quantization do
   - Lin et al., "AWQ: Activation-aware Weight Quantization" (MLSys 2024)
   """
 
-
   @typedoc "Quantization method."
   @type method :: :rtn | :gptq | :awq
 
@@ -252,10 +251,15 @@ defmodule Edifice.Utils.Quantization do
   @doc """
   Estimate the memory savings in bytes for quantized vs original.
   """
-  @spec memory_savings(map(), map()) :: %{original_bytes: integer(), quantized_bytes: integer(), saved_bytes: integer()}
+  @spec memory_savings(map(), map()) :: %{
+          original_bytes: integer(),
+          quantized_bytes: integer(),
+          saved_bytes: integer()
+        }
   def memory_savings(%{bits: bits}, original_params) do
     total_elements = count_elements(original_params)
-    original_bytes = total_elements * 4  # f32
+    # f32
+    original_bytes = total_elements * 4
     quantized_bytes = div(total_elements * bits, 8)
 
     %{

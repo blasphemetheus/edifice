@@ -342,7 +342,9 @@ defmodule Edifice.Robotics.OpenVLA do
     # No causal mask for ViT (bidirectional attention)
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    attn_weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
+
+    attn_weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
 
     output = Nx.dot(attn_weights, [3], [0, 1], v, [2], [0, 1])
 
@@ -382,7 +384,10 @@ defmodule Edifice.Robotics.OpenVLA do
 
     # Pre-norm GQA attention
     normed = RMSNorm.layer(input, hidden_size: hidden_dim, name: "#{name}_attn_norm")
-    attn_out = build_gqa_attention(normed, hidden_dim, num_heads, num_kv_heads, head_dim, use_rope, name)
+
+    attn_out =
+      build_gqa_attention(normed, hidden_dim, num_heads, num_kv_heads, head_dim, use_rope, name)
+
     attn_out = maybe_dropout(attn_out, dropout, "#{name}_attn_dropout")
     x = Axon.add(input, attn_out, name: "#{name}_attn_residual")
 
@@ -497,7 +502,9 @@ defmodule Edifice.Robotics.OpenVLA do
     # Softmax
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
+
+    weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
 
     output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
 
@@ -509,7 +516,8 @@ defmodule Edifice.Robotics.OpenVLA do
   # Build learnable action queries
   defp build_action_queries(text_input, action_dim, hidden_dim) do
     # Use a learnable parameter for action queries
-    query_embed = Axon.param("action_query_embed", {action_dim, hidden_dim}, initializer: :glorot_uniform)
+    query_embed =
+      Axon.param("action_query_embed", {action_dim, hidden_dim}, initializer: :glorot_uniform)
 
     Axon.layer(
       fn text, q_embed, _opts ->
@@ -529,13 +537,26 @@ defmodule Edifice.Robotics.OpenVLA do
 
     # Self-attention among action queries
     q_normed = Axon.layer_norm(action_queries, name: "action_self_attn_norm")
-    self_attn = build_self_attention(q_normed, hidden_dim, num_heads, head_dim, "action_self_attn")
+
+    self_attn =
+      build_self_attention(q_normed, hidden_dim, num_heads, head_dim, "action_self_attn")
+
     self_attn = maybe_dropout(self_attn, dropout, "action_self_attn_dropout")
     x = Axon.add(action_queries, self_attn, name: "action_self_attn_residual")
 
     # Cross-attention: action queries attend to encoded visual+text sequence
     x_normed = Axon.layer_norm(x, name: "action_cross_attn_norm")
-    cross_attn = build_cross_attention(x_normed, encoded_seq, hidden_dim, num_heads, head_dim, "action_cross_attn")
+
+    cross_attn =
+      build_cross_attention(
+        x_normed,
+        encoded_seq,
+        hidden_dim,
+        num_heads,
+        head_dim,
+        "action_cross_attn"
+      )
+
     cross_attn = maybe_dropout(cross_attn, dropout, "action_cross_attn_dropout")
     x = Axon.add(x, cross_attn, name: "action_cross_attn_residual")
 
@@ -581,7 +602,9 @@ defmodule Edifice.Robotics.OpenVLA do
 
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
+
+    weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
 
     output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
 
@@ -626,7 +649,9 @@ defmodule Edifice.Robotics.OpenVLA do
 
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
+
+    weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
 
     output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
 
@@ -753,14 +778,18 @@ defmodule Edifice.Robotics.OpenVLA do
 
     # Log-softmax
     max_logits = Nx.reduce_max(logits_flat, axes: [1], keep_axes: true)
-    log_probs = logits_flat - max_logits - Nx.log(Nx.sum(Nx.exp(logits_flat - max_logits), axes: [1], keep_axes: true))
+
+    log_probs =
+      logits_flat - max_logits -
+        Nx.log(Nx.sum(Nx.exp(logits_flat - max_logits), axes: [1], keep_axes: true))
 
     # Gather log probabilities at target indices
     # One-hot encode targets
-    targets_one_hot = Nx.equal(
-      Nx.iota({batch * action_dim, num_bins}, axis: 1),
-      Nx.reshape(targets_flat, {batch * action_dim, 1})
-    )
+    targets_one_hot =
+      Nx.equal(
+        Nx.iota({batch * action_dim, num_bins}, axis: 1),
+        Nx.reshape(targets_flat, {batch * action_dim, 1})
+      )
 
     # Select log probs at target positions
     target_log_probs = Nx.sum(log_probs * targets_one_hot, axes: [1])
@@ -808,7 +837,10 @@ defmodule Edifice.Robotics.OpenVLA do
 
     # ViT encoder
     vit_patch_embed = 3 * patch_size * patch_size * vision_dim
-    vit_per_layer = vision_dim * 3 * vision_dim + vision_dim * vision_dim + vision_dim * 4 * vision_dim * 2
+
+    vit_per_layer =
+      vision_dim * 3 * vision_dim + vision_dim * vision_dim + vision_dim * 4 * vision_dim * 2
+
     vit_total = vit_patch_embed + vit_layers * vit_per_layer
 
     # Vision projection

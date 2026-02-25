@@ -118,10 +118,14 @@ defmodule Edifice.Generative.TRELLISTest do
 
       inputs = random_inputs()
       # Set half of voxels as unoccupied
-      partial_mask = Nx.concatenate([
-        Nx.broadcast(1.0, {@batch, div(@max_voxels, 2)}),
-        Nx.broadcast(0.0, {@batch, div(@max_voxels, 2)})
-      ], axis: 1)
+      partial_mask =
+        Nx.concatenate(
+          [
+            Nx.broadcast(1.0, {@batch, div(@max_voxels, 2)}),
+            Nx.broadcast(0.0, {@batch, div(@max_voxels, 2)})
+          ],
+          axis: 1
+        )
 
       inputs_masked = Map.put(inputs, "occupancy_mask", partial_mask)
       output = predict_fn.(params, inputs_masked)
@@ -158,7 +162,8 @@ defmodule Edifice.Generative.TRELLISTest do
       result = TRELLIS.encode_to_slat(dense_grid, max_voxels: 64, feature_dim: 4)
 
       assert Map.has_key?(result, :features)
-      assert Nx.axis_size(result.features, 2) >= 1  # Has feature dimension
+      # Has feature dimension
+      assert Nx.axis_size(result.features, 2) >= 1
     end
 
     test "respects max_voxels limit" do
@@ -233,10 +238,11 @@ defmodule Edifice.Generative.TRELLISTest do
       {positions, _key} = Nx.Random.uniform(key, shape: {@batch, @max_voxels, 3})
       positions = Nx.multiply(positions, @voxel_resolution) |> Nx.floor() |> Nx.as_type(:f32)
 
-      result = TRELLIS.sparse_attention(features, positions,
-        window_size: @window_size,
-        num_heads: @num_heads
-      )
+      result =
+        TRELLIS.sparse_attention(features, positions,
+          window_size: @window_size,
+          num_heads: @num_heads
+        )
 
       assert Nx.shape(result) == {@batch, @max_voxels, @hidden_size}
     end
@@ -260,15 +266,20 @@ defmodule Edifice.Generative.TRELLISTest do
       positions = Nx.multiply(positions, @voxel_resolution) |> Nx.floor() |> Nx.as_type(:f32)
 
       # Half occupied
-      mask = Nx.concatenate([
-        Nx.broadcast(1.0, {@batch, div(@max_voxels, 2)}),
-        Nx.broadcast(0.0, {@batch, div(@max_voxels, 2)})
-      ], axis: 1)
+      mask =
+        Nx.concatenate(
+          [
+            Nx.broadcast(1.0, {@batch, div(@max_voxels, 2)}),
+            Nx.broadcast(0.0, {@batch, div(@max_voxels, 2)})
+          ],
+          axis: 1
+        )
 
-      result = TRELLIS.sparse_attention(features, positions,
-        window_size: 4,
-        mask: mask
-      )
+      result =
+        TRELLIS.sparse_attention(features, positions,
+          window_size: 4,
+          mask: mask
+        )
 
       assert Nx.shape(result) == {@batch, @max_voxels, @hidden_size}
     end

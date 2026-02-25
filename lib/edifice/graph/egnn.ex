@@ -184,11 +184,16 @@ defmodule Edifice.Graph.EGNN do
       Axon.param("#{name}_edge_w1", {edge_mlp_in, hidden_dim}, initializer: :glorot_uniform)
 
     edge_b1 = Axon.param("#{name}_edge_b1", {hidden_dim}, initializer: :zeros)
-    edge_w2 = Axon.param("#{name}_edge_w2", {hidden_dim, hidden_dim}, initializer: :glorot_uniform)
+
+    edge_w2 =
+      Axon.param("#{name}_edge_w2", {hidden_dim, hidden_dim}, initializer: :glorot_uniform)
+
     edge_b2 = Axon.param("#{name}_edge_b2", {hidden_dim}, initializer: :zeros)
 
     # Coordinate update MLP (scalar output)
-    coord_w1 = Axon.param("#{name}_coord_w1", {hidden_dim, hidden_dim}, initializer: :glorot_uniform)
+    coord_w1 =
+      Axon.param("#{name}_coord_w1", {hidden_dim, hidden_dim}, initializer: :glorot_uniform)
+
     coord_b1 = Axon.param("#{name}_coord_b1", {hidden_dim}, initializer: :zeros)
     coord_w2 = Axon.param("#{name}_coord_w2", {hidden_dim, 1}, initializer: :zeros)
     coord_b2 = Axon.param("#{name}_coord_b2", {1}, initializer: :zeros)
@@ -198,7 +203,10 @@ defmodule Edifice.Graph.EGNN do
       Axon.param("#{name}_node_w1", {hidden_dim * 2, hidden_dim}, initializer: :glorot_uniform)
 
     node_b1 = Axon.param("#{name}_node_b1", {hidden_dim}, initializer: :zeros)
-    node_w2 = Axon.param("#{name}_node_w2", {hidden_dim, hidden_dim}, initializer: :glorot_uniform)
+
+    node_w2 =
+      Axon.param("#{name}_node_w2", {hidden_dim, hidden_dim}, initializer: :glorot_uniform)
+
     node_b2 = Axon.param("#{name}_node_b2", {hidden_dim}, initializer: :zeros)
 
     # Build edge features input (or nil placeholder)

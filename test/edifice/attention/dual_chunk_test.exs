@@ -57,13 +57,14 @@ defmodule Edifice.Attention.DualChunkTest do
     test "builds attention sublayer" do
       input = Axon.input("x", shape: {nil, @seq_len, @hidden_size})
 
-      attn = DualChunk.build_dual_chunk_attention(input,
-        hidden_size: @hidden_size,
-        num_heads: 4,
-        head_dim: 8,
-        chunk_size: @chunk_size,
-        name: "test_attn"
-      )
+      attn =
+        DualChunk.build_dual_chunk_attention(input,
+          hidden_size: @hidden_size,
+          num_heads: 4,
+          head_dim: 8,
+          chunk_size: @chunk_size,
+          name: "test_attn"
+        )
 
       assert %Axon{} = attn
     end
@@ -71,13 +72,14 @@ defmodule Edifice.Attention.DualChunkTest do
     test "produces correct output shape for sublayer" do
       input = Axon.input("x", shape: {nil, @seq_len, @hidden_size})
 
-      attn = DualChunk.build_dual_chunk_attention(input,
-        hidden_size: @hidden_size,
-        num_heads: 4,
-        head_dim: 8,
-        chunk_size: @chunk_size,
-        name: "test_attn"
-      )
+      attn =
+        DualChunk.build_dual_chunk_attention(input,
+          hidden_size: @hidden_size,
+          num_heads: 4,
+          head_dim: 8,
+          chunk_size: @chunk_size,
+          name: "test_attn"
+        )
 
       template = %{"x" => Nx.template({@batch, @seq_len, @hidden_size}, :f32)}
       {init_fn, predict_fn} = Axon.build(attn, mode: :inference)
@@ -103,31 +105,33 @@ defmodule Edifice.Attention.DualChunkTest do
 
   describe "integration with decoder_only" do
     test "decoder_only with dual_chunk attention builds" do
-      model = Edifice.Transformer.DecoderOnly.build(
-        embed_dim: @embed_dim,
-        hidden_size: @hidden_size,
-        num_heads: 4,
-        num_layers: 2,
-        attention_type: :dual_chunk,
-        chunk_size: @chunk_size,
-        window_size: @seq_len,
-        dropout: 0.0
-      )
+      model =
+        Edifice.Transformer.DecoderOnly.build(
+          embed_dim: @embed_dim,
+          hidden_size: @hidden_size,
+          num_heads: 4,
+          num_layers: 2,
+          attention_type: :dual_chunk,
+          chunk_size: @chunk_size,
+          window_size: @seq_len,
+          dropout: 0.0
+        )
 
       assert %Axon{} = model
     end
 
     test "decoder_only with dual_chunk attention produces correct output" do
-      model = Edifice.Transformer.DecoderOnly.build(
-        embed_dim: @embed_dim,
-        hidden_size: @hidden_size,
-        num_heads: 4,
-        num_layers: 2,
-        attention_type: :dual_chunk,
-        chunk_size: @chunk_size,
-        window_size: @seq_len,
-        dropout: 0.0
-      )
+      model =
+        Edifice.Transformer.DecoderOnly.build(
+          embed_dim: @embed_dim,
+          hidden_size: @hidden_size,
+          num_heads: 4,
+          num_layers: 2,
+          attention_type: :dual_chunk,
+          chunk_size: @chunk_size,
+          window_size: @seq_len,
+          dropout: 0.0
+        )
 
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
       params = init_fn.(template(), Axon.ModelState.empty())
@@ -144,14 +148,15 @@ defmodule Edifice.Attention.DualChunkTest do
     end
 
     test "can build from registry" do
-      model = Edifice.build(:dual_chunk_attention,
-        embed_dim: @embed_dim,
-        hidden_size: @hidden_size,
-        num_heads: 4,
-        num_layers: 2,
-        chunk_size: @chunk_size,
-        window_size: @seq_len
-      )
+      model =
+        Edifice.build(:dual_chunk_attention,
+          embed_dim: @embed_dim,
+          hidden_size: @hidden_size,
+          num_heads: 4,
+          num_layers: 2,
+          chunk_size: @chunk_size,
+          window_size: @seq_len
+        )
 
       assert %Axon{} = model
     end

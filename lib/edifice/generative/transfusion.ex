@@ -277,8 +277,12 @@ defmodule Edifice.Generative.Transfusion do
     # Handle degenerate cases where one of the lengths is 0
     modality =
       cond do
-        text_len == 0 -> Nx.broadcast(Nx.tensor(1, type: :s32), {image_len})
-        image_len == 0 -> Nx.broadcast(Nx.tensor(0, type: :s32), {text_len})
+        text_len == 0 ->
+          Nx.broadcast(Nx.tensor(1, type: :s32), {image_len})
+
+        image_len == 0 ->
+          Nx.broadcast(Nx.tensor(0, type: :s32), {text_len})
+
         true ->
           Nx.concatenate([
             Nx.broadcast(Nx.tensor(0, type: :s32), {text_len}),
@@ -406,7 +410,9 @@ defmodule Edifice.Generative.Transfusion do
       |> Nx.as_type(Nx.type(seq))
       |> Nx.broadcast({batch, seq_len, embed_dim})
 
-    text_expanded = Nx.broadcast(Nx.reshape(text_e, {1, 1, embed_dim}), {batch, seq_len, embed_dim})
+    text_expanded =
+      Nx.broadcast(Nx.reshape(text_e, {1, 1, embed_dim}), {batch, seq_len, embed_dim})
+
     img_expanded = Nx.broadcast(Nx.reshape(img_e, {1, 1, embed_dim}), {batch, seq_len, embed_dim})
 
     type_emb =

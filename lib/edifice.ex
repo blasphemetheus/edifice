@@ -369,7 +369,23 @@ defmodule Edifice do
         :tmrope,
         :dual_chunk_attention
       ],
-      vision: [:vit, :deit, :swin, :unet, :convnext, :mlp_mixer, :focalnet, :poolformer, :nerf, :gaussian_splat, :mamba_vision, :dino_v2, :metaformer, :caformer, :efficient_vit],
+      vision: [
+        :vit,
+        :deit,
+        :swin,
+        :unet,
+        :convnext,
+        :mlp_mixer,
+        :focalnet,
+        :poolformer,
+        :nerf,
+        :gaussian_splat,
+        :mamba_vision,
+        :dino_v2,
+        :metaformer,
+        :caformer,
+        :efficient_vit
+      ],
       generative: [
         :diffusion,
         :ddim,

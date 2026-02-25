@@ -468,7 +468,9 @@ defmodule Edifice.Generative.MAR do
 
       # Keep the k least-confident positions masked
       keep_count = min(k, length(indexed_masked))
-      keep_set = indexed_masked |> Enum.take(keep_count) |> Enum.map(fn {_, i} -> i end) |> MapSet.new()
+
+      keep_set =
+        indexed_masked |> Enum.take(keep_count) |> Enum.map(fn {_, i} -> i end) |> MapSet.new()
 
       Nx.iota({seq_len})
       |> Nx.to_flat_list()

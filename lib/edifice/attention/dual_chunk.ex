@@ -214,7 +214,17 @@ defmodule Edifice.Attention.DualChunk do
     inter_output = inter_chunk_attention(q_chunks, k_chunks, v_chunks, head_dim)
 
     # === Combine outputs with learnable gate ===
-    combined = combine_chunk_outputs(intra_output, inter_output, gate, batch, num_heads, num_chunks, chunk_size, head_dim)
+    combined =
+      combine_chunk_outputs(
+        intra_output,
+        inter_output,
+        gate,
+        batch,
+        num_heads,
+        num_chunks,
+        chunk_size,
+        head_dim
+      )
 
     # Reshape back: [batch, heads, num_chunks, chunk_size, head_dim] -> [batch, seq_len, hidden_size]
     combined
@@ -282,7 +292,9 @@ defmodule Edifice.Attention.DualChunk do
     row_idx = Nx.iota({num_chunks, num_chunks}, axis: 0)
     col_idx = Nx.iota({num_chunks, num_chunks}, axis: 1)
     causal_mask_2d = Nx.greater_equal(row_idx, col_idx)
-    causal_mask = Nx.broadcast(causal_mask_2d, {batch, num_heads, num_chunks, num_chunks}, axes: [2, 3])
+
+    causal_mask =
+      Nx.broadcast(causal_mask_2d, {batch, num_heads, num_chunks, num_chunks}, axes: [2, 3])
 
     scores =
       Nx.select(
@@ -308,9 +320,19 @@ defmodule Edifice.Attention.DualChunk do
   # Combine intra-chunk and inter-chunk outputs with learnable gating.
   # Uses a sigmoid gate to blend local (intra) and global (inter) representations:
   # output = gate * inter + (1 - gate) * intra
-  defnp combine_chunk_outputs(intra, inter, gate, batch, num_heads, num_chunks, chunk_size, head_dim) do
+  defnp combine_chunk_outputs(
+          intra,
+          inter,
+          gate,
+          batch,
+          num_heads,
+          num_chunks,
+          chunk_size,
+          head_dim
+        ) do
     # gate: [num_heads, head_dim] -> broadcast to match output shape
     gate_sigmoid = Nx.sigmoid(gate)
+
     gate_broadcast =
       gate_sigmoid
       |> Nx.reshape({1, num_heads, 1, 1, head_dim})

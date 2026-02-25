@@ -171,7 +171,14 @@ defmodule Edifice.Audio.VALLE do
       Axon.embedding(text_tokens, text_vocab_size, hidden_dim, name: "ar_text_embedding")
 
     # Audio prompt embedding: sum embeddings from all codebooks
-    prompt_embed = embed_multi_codebook(prompt_tokens, audio_vocab_size, hidden_dim, num_codebooks, "ar_prompt")
+    prompt_embed =
+      embed_multi_codebook(
+        prompt_tokens,
+        audio_vocab_size,
+        hidden_dim,
+        num_codebooks,
+        "ar_prompt"
+      )
 
     # Audio tokens (codebook 0) embedding
     audio_embed =
@@ -310,7 +317,8 @@ defmodule Edifice.Audio.VALLE do
         {batch, _num_cb, seq_len} = Nx.shape(tokens_tensor)
 
         # Sum embeddings from all codebooks
-        Enum.reduce(0..(num_codebooks - 1), Nx.broadcast(0.0, {batch, seq_len, hidden_dim}), fn i, acc ->
+        Enum.reduce(0..(num_codebooks - 1), Nx.broadcast(0.0, {batch, seq_len, hidden_dim}), fn i,
+                                                                                                acc ->
           # Get tokens for codebook i: [batch, seq_len]
           cb_tokens = Nx.slice_along_axis(tokens_tensor, i, 1, axis: 1) |> Nx.squeeze(axes: [1])
           # Flatten for indexing
@@ -413,7 +421,12 @@ defmodule Edifice.Audio.VALLE do
           scores =
             if causal do
               mask = create_causal_mask(seq_len) |> Nx.broadcast(Nx.shape(scores))
-              Nx.select(mask, scores, Nx.broadcast(Nx.tensor(-1.0e9, type: Nx.type(scores)), Nx.shape(scores)))
+
+              Nx.select(
+                mask,
+                scores,
+                Nx.broadcast(Nx.tensor(-1.0e9, type: Nx.type(scores)), Nx.shape(scores))
+              )
             else
               scores
             end
@@ -421,7 +434,9 @@ defmodule Edifice.Audio.VALLE do
           # Softmax
           max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
           exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-          weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
+
+          weights =
+            Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
 
           # Apply attention
           output = Nx.dot(weights, [3], [0, 1], value, [2], [0, 1])

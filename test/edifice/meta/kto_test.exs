@@ -109,6 +109,7 @@ defmodule Edifice.Meta.KTOTest do
       labels = Nx.tensor([1, 0])
       loss_b001 = KTO.kto_loss(policy_lp, ref_lp, labels, beta: 0.01) |> Nx.to_number()
       loss_b100 = KTO.kto_loss(policy_lp, ref_lp, labels, beta: 100.0) |> Nx.to_number()
+
       # Very small beta → rewards ≈ 0 → sigmoid(0) ≈ 0.5; large beta → saturated → differ
       refute_in_delta loss_b001, loss_b100, 0.01
     end
@@ -126,16 +127,23 @@ defmodule Edifice.Meta.KTOTest do
       logits = Nx.broadcast(0.0, {@batch, @seq_len, @vocab_size})
       targets = Nx.broadcast(0, {@batch, @seq_len}) |> Nx.as_type(:s64)
       mask_full = Nx.broadcast(1, {@batch, @seq_len})
-      mask_half = Nx.concatenate(
-        [Nx.broadcast(1, {@batch, div(@seq_len, 2)}),
-         Nx.broadcast(0, {@batch, div(@seq_len, 2)})],
-        axis: 1
-      )
+
+      mask_half =
+        Nx.concatenate(
+          [
+            Nx.broadcast(1, {@batch, div(@seq_len, 2)}),
+            Nx.broadcast(0, {@batch, div(@seq_len, 2)})
+          ],
+          axis: 1
+        )
+
       lp_full = KTO.compute_logprobs(logits, targets, mask_full) |> Nx.to_flat_list()
       lp_half = KTO.compute_logprobs(logits, targets, mask_half) |> Nx.to_flat_list()
       # Half-masked should have smaller magnitude (less sequence summed)
-      Enum.zip(lp_full, lp_half) |> Enum.each(fn {f, h} ->
-        assert f < h  # log-probs are negative; summing fewer gives larger (closer to 0)
+      Enum.zip(lp_full, lp_half)
+      |> Enum.each(fn {f, h} ->
+        # log-probs are negative; summing fewer gives larger (closer to 0)
+        assert f < h
       end)
     end
   end

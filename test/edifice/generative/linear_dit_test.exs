@@ -5,24 +5,26 @@ defmodule Edifice.Generative.LinearDiTTest do
 
   describe "build/1" do
     test "builds model with default options" do
-      model = LinearDiT.build(
-        input_dim: 32,
-        hidden_size: 64,
-        num_layers: 2,
-        num_heads: 4
-      )
+      model =
+        LinearDiT.build(
+          input_dim: 32,
+          hidden_size: 64,
+          num_layers: 2,
+          num_heads: 4
+        )
 
       assert %Axon{} = model
     end
 
     test "builds model with class conditioning" do
-      model = LinearDiT.build(
-        input_dim: 32,
-        hidden_size: 64,
-        num_layers: 2,
-        num_heads: 4,
-        num_classes: 10
-      )
+      model =
+        LinearDiT.build(
+          input_dim: 32,
+          hidden_size: 64,
+          num_layers: 2,
+          num_heads: 4,
+          num_classes: 10
+        )
 
       assert %Axon{} = model
     end
@@ -32,22 +34,24 @@ defmodule Edifice.Generative.LinearDiTTest do
       hidden_size = 64
       batch_size = 2
 
-      model = LinearDiT.build(
-        input_dim: input_dim,
-        hidden_size: hidden_size,
-        num_layers: 2,
-        num_heads: 4
-      )
+      model =
+        LinearDiT.build(
+          input_dim: input_dim,
+          hidden_size: hidden_size,
+          num_layers: 2,
+          num_heads: 4
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
 
-      params = init_fn.(
-        %{
-          "noisy_input" => Nx.template({batch_size, input_dim}, :f32),
-          "timestep" => Nx.template({batch_size}, :f32)
-        },
-        %{}
-      )
+      params =
+        init_fn.(
+          %{
+            "noisy_input" => Nx.template({batch_size, input_dim}, :f32),
+            "timestep" => Nx.template({batch_size}, :f32)
+          },
+          %{}
+        )
 
       input = %{
         "noisy_input" => Nx.broadcast(0.1, {batch_size, input_dim}),
@@ -65,24 +69,26 @@ defmodule Edifice.Generative.LinearDiTTest do
       batch_size = 2
       num_classes = 10
 
-      model = LinearDiT.build(
-        input_dim: input_dim,
-        hidden_size: hidden_size,
-        num_layers: 2,
-        num_heads: 4,
-        num_classes: num_classes
-      )
+      model =
+        LinearDiT.build(
+          input_dim: input_dim,
+          hidden_size: hidden_size,
+          num_layers: 2,
+          num_heads: 4,
+          num_classes: num_classes
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
 
-      params = init_fn.(
-        %{
-          "noisy_input" => Nx.template({batch_size, input_dim}, :f32),
-          "timestep" => Nx.template({batch_size}, :f32),
-          "class_label" => Nx.template({batch_size}, :f32)
-        },
-        %{}
-      )
+      params =
+        init_fn.(
+          %{
+            "noisy_input" => Nx.template({batch_size, input_dim}, :f32),
+            "timestep" => Nx.template({batch_size}, :f32),
+            "class_label" => Nx.template({batch_size}, :f32)
+          },
+          %{}
+        )
 
       input = %{
         "noisy_input" => Nx.broadcast(0.1, {batch_size, input_dim}),
@@ -104,12 +110,13 @@ defmodule Edifice.Generative.LinearDiTTest do
       input = Axon.input("input", shape: {nil, hidden_size})
       condition = Axon.input("condition", shape: {nil, hidden_size})
 
-      output = LinearDiT.build_linear_dit_block(input, condition,
-        hidden_size: hidden_size,
-        num_heads: num_heads,
-        mlp_ratio: 4.0,
-        name: "test_block"
-      )
+      output =
+        LinearDiT.build_linear_dit_block(input, condition,
+          hidden_size: hidden_size,
+          num_heads: num_heads,
+          mlp_ratio: 4.0,
+          name: "test_block"
+        )
 
       assert %Axon{} = output
     end
@@ -127,11 +134,12 @@ defmodule Edifice.Generative.LinearDiTTest do
 
   describe "param_count/1" do
     test "returns positive count" do
-      count = LinearDiT.param_count(
-        input_dim: 64,
-        hidden_size: 256,
-        num_layers: 6
-      )
+      count =
+        LinearDiT.param_count(
+          input_dim: 64,
+          hidden_size: 256,
+          num_layers: 6
+        )
 
       assert count > 0
     end

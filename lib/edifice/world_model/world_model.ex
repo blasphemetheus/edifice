@@ -96,7 +96,8 @@ defmodule Edifice.WorldModel.WorldModel do
     `{encoder, dynamics, reward_head}` or
     `{encoder, dynamics, reward_head, decoder}` if `use_decoder: true`.
   """
-  @spec build([build_opt()]) :: {Axon.t(), Axon.t(), Axon.t()} | {Axon.t(), Axon.t(), Axon.t(), Axon.t()}
+  @spec build([build_opt()]) ::
+          {Axon.t(), Axon.t(), Axon.t()} | {Axon.t(), Axon.t(), Axon.t(), Axon.t()}
   def build(opts \\ []) do
     encoder = build_encoder(opts)
     dynamics = build_dynamics(opts)
@@ -239,8 +240,10 @@ defmodule Edifice.WorldModel.WorldModel do
   # GRU dynamics: gated update from concatenated (state, action)
   defp build_gru_dynamics(input, latent_size, hidden_size) do
     # Extract state from concatenated input
-    z = Axon.nx(input, fn x -> Nx.slice_along_axis(x, 0, latent_size, axis: 1) end,
-         name: "wm_dyn_gru_extract_z")
+    z =
+      Axon.nx(input, fn x -> Nx.slice_along_axis(x, 0, latent_size, axis: 1) end,
+        name: "wm_dyn_gru_extract_z"
+      )
 
     # Update gate
     update_gate =

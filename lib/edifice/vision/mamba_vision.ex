@@ -330,11 +330,12 @@ defmodule Edifice.Vision.MambaVision do
     # Mixer sub-block
     normed = Axon.layer_norm(input, name: "#{name}_norm1")
 
-    mixed = build_mamba_vision_mixer(normed, dim,
-      d_state: d_state,
-      d_conv: d_conv,
-      name: "#{name}_mixer"
-    )
+    mixed =
+      build_mamba_vision_mixer(normed, dim,
+        d_state: d_state,
+        d_conv: d_conv,
+        name: "#{name}_mixer"
+      )
 
     x = Axon.add(input, mixed, name: "#{name}_residual1")
 
@@ -418,8 +419,15 @@ defmodule Edifice.Vision.MambaVision do
 
     # Project to dt, B, C
     params = Axon.dense(input, dt_rank + 2 * d_state, name: "#{name}_x_proj")
-    dt_proj = Axon.dense(Axon.nx(params, fn t -> Nx.slice_along_axis(t, 0, dt_rank, axis: 2) end,
-      name: "#{name}_dt_slice"), d_inner, name: "#{name}_dt_proj")
+
+    dt_proj =
+      Axon.dense(
+        Axon.nx(params, fn t -> Nx.slice_along_axis(t, 0, dt_rank, axis: 2) end,
+          name: "#{name}_dt_slice"
+        ),
+        d_inner,
+        name: "#{name}_dt_proj"
+      )
 
     # Run the SSM
     Axon.layer(
@@ -448,7 +456,8 @@ defmodule Edifice.Vision.MambaVision do
     delta = Nx.log1p(Nx.exp(dt))
 
     # A parameter: initialized as negative log-spaced values
-    a_log = Nx.iota({d_inner, d_state}, type: :f32, axis: 1) |> Nx.add(1) |> Nx.log() |> Nx.negate()
+    a_log =
+      Nx.iota({d_inner, d_state}, type: :f32, axis: 1) |> Nx.add(1) |> Nx.log() |> Nx.negate()
 
     # Discretize: A_bar = exp(delta * A), B_bar = delta * B
     # delta: [batch, seq, d_inner], a_log: [d_inner, d_state]
@@ -560,6 +569,7 @@ defmodule Edifice.Vision.MambaVision do
   @spec output_size(keyword()) :: non_neg_integer()
   def output_size(opts \\ []) do
     dim = Keyword.get(opts, :dim, @default_dim)
+
     case Keyword.get(opts, :num_classes) do
       nil -> dim * 8
       num_classes -> num_classes

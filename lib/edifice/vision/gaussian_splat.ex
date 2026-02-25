@@ -397,7 +397,9 @@ defmodule Edifice.Vision.GaussianSplat do
 
     # Perspective divide
     w = pos_clip[[.., 3]] |> Nx.add(1.0e-6)
-    means_2d = Nx.stack([pos_clip[[.., 0]], pos_clip[[.., 1]]], axis: 1) |> Nx.divide(Nx.new_axis(w, 1))
+
+    means_2d =
+      Nx.stack([pos_clip[[.., 0]], pos_clip[[.., 1]]], axis: 1) |> Nx.divide(Nx.new_axis(w, 1))
 
     # Build 3D covariance from rotation and scale
     # Σ = R·S·S^T·R^T where S is diagonal scale matrix
@@ -570,7 +572,15 @@ defmodule Edifice.Vision.GaussianSplat do
     Nx.clip(colors, 0.0, 1.0)
   end
 
-  defp rasterize_gaussians_simple(means_2d, covs_2d, opacities, colors, sorted_indices, height, width) do
+  defp rasterize_gaussians_simple(
+         means_2d,
+         covs_2d,
+         opacities,
+         colors,
+         sorted_indices,
+         height,
+         width
+       ) do
     num_gaussians = Nx.axis_size(means_2d, 0)
     num_to_process = min(num_gaussians, 100)
 
@@ -582,10 +592,17 @@ defmodule Edifice.Vision.GaussianSplat do
     cols = Nx.take(colors, sorted_indices_clipped, axis: 0)
 
     # Precompute pixel coordinate grids [height, width]
-    y_coords = Nx.iota({height, width}, axis: 0, type: :f32)
-                |> Nx.divide(height) |> Nx.multiply(2.0) |> Nx.subtract(1.0)
-    x_coords = Nx.iota({height, width}, axis: 1, type: :f32)
-                |> Nx.divide(width) |> Nx.multiply(2.0) |> Nx.subtract(1.0)
+    y_coords =
+      Nx.iota({height, width}, axis: 0, type: :f32)
+      |> Nx.divide(height)
+      |> Nx.multiply(2.0)
+      |> Nx.subtract(1.0)
+
+    x_coords =
+      Nx.iota({height, width}, axis: 1, type: :f32)
+      |> Nx.divide(width)
+      |> Nx.multiply(2.0)
+      |> Nx.subtract(1.0)
 
     # Precompute inverse covariances for all Gaussians [N] each
     c00 = covs[[.., 0, 0]]
@@ -597,15 +614,25 @@ defmodule Edifice.Vision.GaussianSplat do
     inv_11 = Nx.divide(c00, det)
 
     # Pack precomputed per-Gaussian data [N, 6]: (mean_x, mean_y, inv_00, inv_01, inv_11, opacity)
-    gauss_data = Nx.stack([
-      means[[.., 0]], means[[.., 1]],
-      inv_00, inv_01, inv_11,
-      ops
-    ], axis: 1)
+    gauss_data =
+      Nx.stack(
+        [
+          means[[.., 0]],
+          means[[.., 1]],
+          inv_00,
+          inv_01,
+          inv_11,
+          ops
+        ],
+        axis: 1
+      )
 
     # Run the compositing loop (defn while — JIT-compatible)
     composite_loop(gauss_data, cols, x_coords, y_coords,
-      num_to_process: num_to_process, height: height, width: width)
+      num_to_process: num_to_process,
+      height: height,
+      width: width
+    )
   end
 
   # JIT-compatible front-to-back alpha compositing loop.
@@ -638,24 +665,30 @@ defmodule Edifice.Vision.GaussianSplat do
         dy = Nx.subtract(y_coords, mean_y)
 
         # Mahalanobis distance squared [height, width]
-        dist_sq = Nx.add(
+        dist_sq =
           Nx.add(
-            Nx.multiply(ic00, Nx.multiply(dx, dx)),
-            Nx.multiply(Nx.multiply(2.0, ic01), Nx.multiply(dx, dy))
-          ),
-          Nx.multiply(ic11, Nx.multiply(dy, dy))
-        )
+            Nx.add(
+              Nx.multiply(ic00, Nx.multiply(dx, dx)),
+              Nx.multiply(Nx.multiply(2.0, ic01), Nx.multiply(dx, dy))
+            ),
+            Nx.multiply(ic11, Nx.multiply(dy, dy))
+          )
 
         # Gaussian weight × opacity → alpha [height, width]
         alpha = Nx.multiply(Nx.exp(Nx.multiply(-0.5, dist_sq)), op)
 
         # Alpha compositing: image += transmittance * alpha * color
         ta = Nx.multiply(transmittance, alpha)
-        contrib = Nx.stack([
-          Nx.multiply(ta, color[0]),
-          Nx.multiply(ta, color[1]),
-          Nx.multiply(ta, color[2])
-        ], axis: 2)
+
+        contrib =
+          Nx.stack(
+            [
+              Nx.multiply(ta, color[0]),
+              Nx.multiply(ta, color[1]),
+              Nx.multiply(ta, color[2])
+            ],
+            axis: 2
+          )
 
         new_image = Nx.add(image, contrib)
         new_trans = Nx.multiply(transmittance, Nx.subtract(1.0, alpha))
@@ -665,7 +698,6 @@ defmodule Edifice.Vision.GaussianSplat do
 
     Nx.clip(final_image, 0.0, 1.0)
   end
-
 
   # ============================================================================
   # Adaptive Density Control

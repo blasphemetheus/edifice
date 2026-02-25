@@ -276,11 +276,12 @@ defmodule Edifice.Meta.GRPO do
     # Take minimum (pessimistic bound)
     # For positive advantages: min(ratio*A, clip(ratio)*A)
     # For negative advantages: this becomes max in terms of loss
-    surr = Nx.select(
-      Nx.greater_equal(advantages_flat, 0.0),
-      Nx.min(surr1, surr2),
-      Nx.max(surr1, surr2)
-    )
+    surr =
+      Nx.select(
+        Nx.greater_equal(advantages_flat, 0.0),
+        Nx.min(surr1, surr2),
+        Nx.max(surr1, surr2)
+      )
 
     Nx.negate(Nx.mean(surr))
   end
@@ -454,7 +455,9 @@ defmodule Edifice.Meta.GRPO do
 
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    attn_weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
+
+    attn_weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
 
     output = Nx.dot(attn_weights, [3], [0, 1], v, [2], [0, 1])
 

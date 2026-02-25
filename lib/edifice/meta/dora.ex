@@ -146,15 +146,11 @@ defmodule Edifice.Meta.DoRA do
 
     # Base weight (frozen direction component V)
     base_weight =
-      Axon.param("#{name}_base_weight", {input_size, output_size},
-        initializer: :glorot_uniform
-      )
+      Axon.param("#{name}_base_weight", {input_size, output_size}, initializer: :glorot_uniform)
 
     # Learnable magnitude vector m [output_size]
     magnitude =
-      Axon.param("#{name}_magnitude", {output_size},
-        initializer: &init_magnitude/2
-      )
+      Axon.param("#{name}_magnitude", {output_size}, initializer: &init_magnitude/2)
 
     # LoRA matrices for direction update
     # A: down-project [input_size, rank]
@@ -165,9 +161,7 @@ defmodule Edifice.Meta.DoRA do
 
     # B: up-project [rank, output_size] (zero-init for clean start)
     b_weight =
-      Axon.param("#{name}_B", {rank, output_size},
-        initializer: Axon.Initializers.zeros()
-      )
+      Axon.param("#{name}_B", {rank, output_size}, initializer: Axon.Initializers.zeros())
 
     # Compute DoRA: m * normalize(V*x + scale * B(A(x)))
     Axon.layer(
@@ -204,9 +198,7 @@ defmodule Edifice.Meta.DoRA do
 
     # Magnitude for scaling
     magnitude =
-      Axon.param("#{name}_magnitude", {output_size},
-        initializer: &init_magnitude/2
-      )
+      Axon.param("#{name}_magnitude", {output_size}, initializer: &init_magnitude/2)
 
     # LoRA delta: A down-projects, B up-projects
     a_proj =

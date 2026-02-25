@@ -316,7 +316,9 @@ defmodule Edifice.SSM.Hybrid do
   def build_backbone_layer(input, :gru, opts), do: build_gru_layer(input, opts)
   def build_backbone_layer(input, :rwkv, opts), do: build_rwkv_layer(input, opts)
   def build_backbone_layer(input, :delta_net, opts), do: build_delta_net_layer(input, opts)
-  def build_backbone_layer(input, :gated_delta_net, opts), do: build_gated_delta_net_layer(input, opts)
+
+  def build_backbone_layer(input, :gated_delta_net, opts),
+    do: build_gated_delta_net_layer(input, opts)
 
   def build_backbone_layer(input, :griffin_lru, opts) do
     # Griffin's RG-LRU is available via Edifice.Attention.Griffin.build_griffin_block
@@ -390,7 +392,11 @@ defmodule Edifice.SSM.Hybrid do
         input
       end
 
-    block = RWKV.build_rwkv_block(normalized_input, Keyword.merge(opts, name: name, hidden_size: hidden_size))
+    block =
+      RWKV.build_rwkv_block(
+        normalized_input,
+        Keyword.merge(opts, name: name, hidden_size: hidden_size)
+      )
 
     block =
       if dropout > 0 do

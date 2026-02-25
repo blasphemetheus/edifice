@@ -163,7 +163,9 @@ defmodule Edifice.Attention.Megalodon do
     ema_normed = Axon.layer_norm(input, name: "#{name}_ema_norm")
 
     # CEMA parameters
-    proj_w = Axon.param("#{name}_cema_proj_w", {hidden_size, ema_dim}, initializer: :glorot_uniform)
+    proj_w =
+      Axon.param("#{name}_cema_proj_w", {hidden_size, ema_dim}, initializer: :glorot_uniform)
+
     proj_b = Axon.param("#{name}_cema_proj_b", {ema_dim}, initializer: :zeros)
     # Complex alpha: real and imaginary parts
     alpha_real = Axon.param("#{name}_cema_alpha_r", {ema_dim}, initializer: :zeros)
@@ -243,20 +245,24 @@ defmodule Edifice.Attention.Megalodon do
     count = Nx.broadcast(Nx.tensor(0.0, type: Nx.type(input)), {batch_size, ema_dim})
 
     {ema_outputs, _} =
-      Enum.reduce(0..(seq_len - 1), {[], {h_real, h_imag, count}}, fn t, {outputs, {hr, hi, cnt}} ->
+      Enum.reduce(0..(seq_len - 1), {[], {h_real, h_imag, count}}, fn t,
+                                                                      {outputs, {hr, hi, cnt}} ->
         x_t = Nx.slice_along_axis(projected, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
         # Complex EMA update:
         # h_t = alpha * h_{t-1} + (1-|alpha|) * x_t
         # where alpha multiplication is complex: (a+bi)(c+di) = (ac-bd) + (ad+bc)i
-        new_hr = Nx.add(
-          Nx.subtract(Nx.multiply(cos_alpha, hr), Nx.multiply(sin_alpha, hi)),
-          Nx.multiply(one_minus_mag, x_t)
-        )
-        new_hi = Nx.add(
-          Nx.add(Nx.multiply(sin_alpha, hr), Nx.multiply(cos_alpha, hi)),
-          Nx.multiply(one_minus_mag, x_t)
-        )
+        new_hr =
+          Nx.add(
+            Nx.subtract(Nx.multiply(cos_alpha, hr), Nx.multiply(sin_alpha, hi)),
+            Nx.multiply(one_minus_mag, x_t)
+          )
+
+        new_hi =
+          Nx.add(
+            Nx.add(Nx.multiply(sin_alpha, hr), Nx.multiply(cos_alpha, hi)),
+            Nx.multiply(one_minus_mag, x_t)
+          )
 
         # Timestep normalization: count effective timesteps
         new_count = Nx.add(Nx.multiply(alpha_mag, cnt), 1.0)

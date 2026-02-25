@@ -239,7 +239,12 @@ defmodule Edifice.Attention.LightningAttention do
     cumulative_kv = Nx.cumulative_sum(kv_per_block, axis: 2)
 
     # Shift: block 0 sees no history, block i sees cumsum of blocks 0..i-1
-    zeros = Nx.broadcast(Nx.tensor(0.0, type: Nx.type(cumulative_kv)), {batch, num_heads, 1, head_dim, head_dim})
+    zeros =
+      Nx.broadcast(
+        Nx.tensor(0.0, type: Nx.type(cumulative_kv)),
+        {batch, num_heads, 1, head_dim, head_dim}
+      )
+
     # Take cumsum up to second-to-last block
     shifted_cumulative = Nx.slice_along_axis(cumulative_kv, 0, num_blocks - 1, axis: 2)
     shifted_kv = Nx.concatenate([zeros, shifted_cumulative], axis: 2)
@@ -252,7 +257,13 @@ defmodule Edifice.Attention.LightningAttention do
     k_sum_per_block = Nx.sum(k_blocks, axes: [3])
     # [batch, heads, num_blocks, head_dim]
     cumulative_k_sum = Nx.cumulative_sum(k_sum_per_block, axis: 2)
-    shifted_k_zeros = Nx.broadcast(Nx.tensor(0.0, type: Nx.type(cumulative_k_sum)), {batch, num_heads, 1, head_dim})
+
+    shifted_k_zeros =
+      Nx.broadcast(
+        Nx.tensor(0.0, type: Nx.type(cumulative_k_sum)),
+        {batch, num_heads, 1, head_dim}
+      )
+
     shifted_k_prefix = Nx.slice_along_axis(cumulative_k_sum, 0, num_blocks - 1, axis: 2)
     shifted_k_sum = Nx.concatenate([shifted_k_zeros, shifted_k_prefix], axis: 2)
 

@@ -5,12 +5,13 @@ defmodule Edifice.Meta.DPOTest do
 
   describe "build/1" do
     test "builds DPO policy model with default options" do
-      model = DPO.build(
-        hidden_size: 64,
-        num_layers: 2,
-        num_heads: 2,
-        vocab_size: 100
-      )
+      model =
+        DPO.build(
+          hidden_size: 64,
+          num_layers: 2,
+          num_heads: 2,
+          vocab_size: 100
+        )
 
       assert %Axon{} = model
     end
@@ -21,20 +22,22 @@ defmodule Edifice.Meta.DPOTest do
       seq_len = 8
       batch_size = 2
 
-      model = DPO.build(
-        hidden_size: hidden_size,
-        num_layers: 1,
-        num_heads: 2,
-        vocab_size: vocab_size,
-        dropout: 0.0
-      )
+      model =
+        DPO.build(
+          hidden_size: hidden_size,
+          num_layers: 1,
+          num_heads: 2,
+          vocab_size: vocab_size,
+          dropout: 0.0
+        )
 
       {init_fn, predict_fn} = Axon.build(model)
 
-      params = init_fn.(
-        Nx.template({batch_size, seq_len}, :s64),
-        %{}
-      )
+      params =
+        init_fn.(
+          Nx.template({batch_size, seq_len}, :s64),
+          %{}
+        )
 
       input = Nx.broadcast(1, {batch_size, seq_len}) |> Nx.as_type(:s64)
       output = predict_fn.(params, %{"tokens" => input})
@@ -66,8 +69,11 @@ defmodule Edifice.Meta.DPOTest do
       ref_chosen = Nx.tensor([-1.5, -2.0])
       ref_rejected = Nx.tensor([-1.5, -2.0])
 
-      loss_low_beta = DPO.loss(policy_chosen, policy_rejected, ref_chosen, ref_rejected, beta: 0.01)
-      loss_high_beta = DPO.loss(policy_chosen, policy_rejected, ref_chosen, ref_rejected, beta: 1.0)
+      loss_low_beta =
+        DPO.loss(policy_chosen, policy_rejected, ref_chosen, ref_rejected, beta: 0.01)
+
+      loss_high_beta =
+        DPO.loss(policy_chosen, policy_rejected, ref_chosen, ref_rejected, beta: 1.0)
 
       # Different betas should give different losses
       # (unless log ratios are equal, which they're not here)

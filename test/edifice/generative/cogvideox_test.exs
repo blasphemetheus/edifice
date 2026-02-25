@@ -52,11 +52,16 @@ defmodule Edifice.Generative.CogVideoXTest do
       {encoder, _decoder} = CogVideoX.build_vae(@vae_opts)
       {init_fn, predict_fn} = Axon.build(encoder)
 
-      template = %{"video" => Nx.template({@batch, @num_frames, @in_channels, @height, @width}, :f32)}
+      template = %{
+        "video" => Nx.template({@batch, @num_frames, @in_channels, @height, @width}, :f32)
+      }
+
       params = init_fn.(template, Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {video, _key} = Nx.Random.uniform(key, shape: {@batch, @num_frames, @in_channels, @height, @width})
+
+      {video, _key} =
+        Nx.Random.uniform(key, shape: {@batch, @num_frames, @in_channels, @height, @width})
 
       latent = predict_fn.(params, %{"video" => video})
 
@@ -72,11 +77,16 @@ defmodule Edifice.Generative.CogVideoXTest do
       {encoder, _decoder} = CogVideoX.build_vae(@vae_opts)
       {init_fn, predict_fn} = Axon.build(encoder)
 
-      template = %{"video" => Nx.template({@batch, @num_frames, @in_channels, @height, @width}, :f32)}
+      template = %{
+        "video" => Nx.template({@batch, @num_frames, @in_channels, @height, @width}, :f32)
+      }
+
       params = init_fn.(template, Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {video, _key} = Nx.Random.uniform(key, shape: {@batch, @num_frames, @in_channels, @height, @width})
+
+      {video, _key} =
+        Nx.Random.uniform(key, shape: {@batch, @num_frames, @in_channels, @height, @width})
 
       latent = predict_fn.(params, %{"video" => video})
 
@@ -89,11 +99,16 @@ defmodule Edifice.Generative.CogVideoXTest do
       {init_fn, predict_fn} = Axon.build(decoder)
 
       # Decoder input shape (post-encoding dimensions)
-      template = %{"latent" => Nx.template({@batch, @latent_frames, @latent_channels, 4, 4}, :f32)}
+      template = %{
+        "latent" => Nx.template({@batch, @latent_frames, @latent_channels, 4, 4}, :f32)
+      }
+
       params = init_fn.(template, Axon.ModelState.empty())
 
       key = Nx.Random.key(42)
-      {latent, _key} = Nx.Random.uniform(key, shape: {@batch, @latent_frames, @latent_channels, 4, 4})
+
+      {latent, _key} =
+        Nx.Random.uniform(key, shape: {@batch, @latent_frames, @latent_channels, 4, 4})
 
       output = predict_fn.(params, %{"latent" => latent})
 
@@ -134,11 +149,12 @@ defmodule Edifice.Generative.CogVideoXTest do
       {text_embed, key} = Nx.Random.uniform(key, shape: text_embed_shape)
       {timestep, _key} = Nx.Random.uniform(key, shape: timestep_shape)
 
-      output = predict_fn.(params, %{
-        "video_latent" => video_latent,
-        "text_embed" => text_embed,
-        "timestep" => timestep
-      })
+      output =
+        predict_fn.(params, %{
+          "video_latent" => video_latent,
+          "text_embed" => text_embed,
+          "timestep" => timestep
+        })
 
       # Output should be video tokens (excluding text)
       assert Nx.rank(output) == 3
@@ -166,11 +182,12 @@ defmodule Edifice.Generative.CogVideoXTest do
       {text_embed, key} = Nx.Random.uniform(key, shape: text_embed_shape)
       {timestep, _key} = Nx.Random.uniform(key, shape: timestep_shape)
 
-      output = predict_fn.(params, %{
-        "video_latent" => video_latent,
-        "text_embed" => text_embed,
-        "timestep" => timestep
-      })
+      output =
+        predict_fn.(params, %{
+          "video_latent" => video_latent,
+          "text_embed" => text_embed,
+          "timestep" => timestep
+        })
 
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
       assert Nx.all(Nx.is_infinity(output) |> Nx.logical_not()) |> Nx.to_number() == 1

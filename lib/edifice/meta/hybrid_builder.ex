@@ -488,9 +488,20 @@ defmodule Edifice.Meta.HybridBuilder do
     batch_size = Nx.axis_size(q, 0)
     seq_len = Nx.axis_size(q, 1)
 
-    q_heads = q |> Nx.reshape({batch_size, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    k_heads = k |> Nx.reshape({batch_size, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    v_heads = v |> Nx.reshape({batch_size, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
+    q_heads =
+      q
+      |> Nx.reshape({batch_size, seq_len, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    k_heads =
+      k
+      |> Nx.reshape({batch_size, seq_len, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    v_heads =
+      v
+      |> Nx.reshape({batch_size, seq_len, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
 
     scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
     scores = Nx.dot(q_heads, [3], [0, 1], k_heads, [3], [0, 1]) |> Nx.divide(scale)
@@ -505,7 +516,9 @@ defmodule Edifice.Meta.HybridBuilder do
 
     max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
     exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    attn_weights = Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
+
+    attn_weights =
+      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
 
     output = Nx.dot(attn_weights, [3], [0, 1], v_heads, [2], [0, 1])
 

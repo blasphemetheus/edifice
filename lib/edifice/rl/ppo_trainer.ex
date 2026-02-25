@@ -117,7 +117,8 @@ defmodule Edifice.RL.PPOTrainer do
     # Training loop
     {final_params, _opt_state, reward_history} =
       Enum.reduce(1..num_iterations, {params, optimizer_state, []}, fn iteration,
-                                                                       {current_params, opt_state, rewards_acc} ->
+                                                                       {current_params, opt_state,
+                                                                        rewards_acc} ->
         # 1. Collect rollout with policy
         {trajectory, avg_reward} =
           collect_rollout(env_module, predict_fn, current_params, rollout_steps, reset_opts)
@@ -131,10 +132,11 @@ defmodule Edifice.RL.PPOTrainer do
         last_exp = List.last(trajectory)
         last_value = if last_exp.done, do: 0.0, else: last_exp.value
 
-        {advantages, returns} = GAE.compute(traj_rewards, traj_values, traj_dones, last_value,
-          gamma: gamma,
-          lambda: lambda
-        )
+        {advantages, returns} =
+          GAE.compute(traj_rewards, traj_values, traj_dones, last_value,
+            gamma: gamma,
+            lambda: lambda
+          )
 
         # Normalize advantages
         advantages = GAE.normalize(advantages)
@@ -210,8 +212,9 @@ defmodule Edifice.RL.PPOTrainer do
 
     {trajectory, _obs, _state, _done, total_reward, episode_count} =
       Enum.reduce(1..num_steps, {[], obs, env_state, false, 0.0, 0}, fn _step,
-        {traj, current_obs, current_state, done, total_r, ep_count} ->
-
+                                                                        {traj, current_obs,
+                                                                         current_state, done,
+                                                                         total_r, ep_count} ->
         # Reset if previous episode ended
         {actual_obs, actual_state, new_ep_count} =
           if done do
@@ -261,6 +264,7 @@ defmodule Edifice.RL.PPOTrainer do
     {action, _} =
       Enum.reduce_while(Enum.with_index(probs_list), {0, 0.0}, fn {p, i}, {_best, cumsum} ->
         new_cumsum = cumsum + p
+
         if new_cumsum >= r do
           {:halt, {i, new_cumsum}}
         else
@@ -275,14 +279,30 @@ defmodule Edifice.RL.PPOTrainer do
   # PPO Loss Computation
   # ============================================================================
 
-  defp ppo_loss_and_grad(params, predict_fn, obs, actions, old_log_probs, advantages, returns,
-         epsilon, value_coeff, entropy_coeff) do
+  defp ppo_loss_and_grad(
+         params,
+         predict_fn,
+         obs,
+         actions,
+         old_log_probs,
+         advantages,
+         returns,
+         epsilon,
+         value_coeff,
+         entropy_coeff
+       ) do
     loss_fn = fn p ->
       %{policy: new_probs, value: new_values} = predict_fn.(p, %{"observation" => obs})
 
       # Get log probs of taken actions
       num_actions = Nx.axis_size(new_probs, 1)
-      action_one_hot = Nx.equal(Nx.iota({Nx.axis_size(actions, 0), num_actions}, axis: 1), Nx.new_axis(actions, 1))
+
+      action_one_hot =
+        Nx.equal(
+          Nx.iota({Nx.axis_size(actions, 0), num_actions}, axis: 1),
+          Nx.new_axis(actions, 1)
+        )
+
       selected_probs = Nx.sum(Nx.multiply(new_probs, action_one_hot), axes: [1])
       new_log_probs = Nx.log(Nx.add(selected_probs, 1.0e-8))
 
@@ -296,12 +316,16 @@ defmodule Edifice.RL.PPOTrainer do
       value_loss = Nx.mean(Nx.pow(Nx.subtract(new_values, returns), 2))
 
       # Entropy bonus: -sum(p * log(p))
-      entropy = Nx.negate(Nx.sum(Nx.multiply(new_probs, Nx.log(Nx.add(new_probs, 1.0e-8))), axes: [1]))
+      entropy =
+        Nx.negate(Nx.sum(Nx.multiply(new_probs, Nx.log(Nx.add(new_probs, 1.0e-8))), axes: [1]))
+
       entropy_loss = Nx.negate(Nx.mean(entropy))
 
       # Total loss
-      Nx.add(Nx.add(policy_loss, Nx.multiply(value_coeff, value_loss)),
-        Nx.multiply(entropy_coeff, entropy_loss))
+      Nx.add(
+        Nx.add(policy_loss, Nx.multiply(value_coeff, value_loss)),
+        Nx.multiply(entropy_coeff, entropy_loss)
+      )
     end
 
     Nx.Defn.value_and_grad(params, loss_fn)
@@ -329,7 +353,8 @@ defmodule Edifice.RL.PPOTrainer do
         {obs, state} = env_module.reset(reset_opts)
 
         {ep_reward, _obs, _state} =
-          Enum.reduce_while(1..max_steps, {0.0, obs, state}, fn _step, {r, current_obs, current_state} ->
+          Enum.reduce_while(1..max_steps, {0.0, obs, state}, fn _step,
+                                                                {r, current_obs, current_state} ->
             input = Nx.new_axis(current_obs, 0)
             %{policy: probs} = predict_fn.(params, %{"observation" => input})
 
