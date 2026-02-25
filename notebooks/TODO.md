@@ -259,6 +259,25 @@ input-agnostic design, Transfusion's unified text+image approach
 **Teaches:** Draft-verify acceleration, Medusa multi-head parallel drafting,
 test-time compute scaling, multi-token prediction. Pure inference — no training.
 
+### 21. `diffusion_language_models.livemd`
+
+**Architectures:** `:mercury` (new — needs registration), plus `:diffusion` family
+**Task:** Character-level text generation via discrete diffusion
+**What it teaches:**
+- Diffusion applied to discrete tokens — start from noise, denoise in parallel
+- Why autoregressive LMs are memory-bound and how parallel generation becomes compute-bound
+- The denoising process: coarse-to-fine iterative refinement across all positions
+- Error correction — diffusion LMs can revise earlier tokens (autoregressive can't)
+- Speed vs quality tradeoff: fewer denoising steps = faster but lower quality
+- Connection to image diffusion (same math, discrete domain)
+**Key sections:** Forward corruption visualization (clean text -> noise over T steps),
+reverse denoising animation (noise -> coherent text), step count vs quality chart,
+throughput comparison against autoregressive baseline
+**References:** Mercury (Inception Labs, arXiv:2506.17298) — first production dLLM,
+plus related work: MDLM, SEDD, Plaid for discrete diffusion foundations
+**Note:** Mercury 2 (Feb 2026) is a closed API product. Implementation would be based
+on the published Mercury 1 paper and general discrete diffusion techniques.
+
 ---
 
 ## Tier 4 — LM Concept Deep-Dives

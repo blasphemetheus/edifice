@@ -5,14 +5,14 @@ defmodule Edifice.Generative.CogVideoXTest do
 
   alias Edifice.Generative.CogVideoX
 
-  # Use smaller dimensions for faster testing
+  # Use tiny dimensions — 3D conv on BinaryBackend is extremely slow
   @batch 1
-  @num_frames 9
+  @num_frames 5
   @latent_frames 3
-  @in_channels 3
-  @latent_channels 4
-  @height 16
-  @width 16
+  @in_channels 2
+  @latent_channels 2
+  @height 4
+  @width 4
   @text_len 4
   @hidden_size 32
   @num_heads 4
@@ -23,9 +23,9 @@ defmodule Edifice.Generative.CogVideoXTest do
     in_channels: @in_channels,
     latent_channels: @latent_channels,
     num_frames: @num_frames,
-    spatial_downsample: 4,
+    spatial_downsample: 2,
     temporal_downsample: 2,
-    base_channels: 8
+    base_channels: 4
   ]
 
   @transformer_opts [
@@ -100,7 +100,7 @@ defmodule Edifice.Generative.CogVideoXTest do
 
       # Decoder input shape (post-encoding dimensions)
       template = %{
-        "latent" => Nx.template({@batch, @latent_frames, @latent_channels, 4, 4}, :f32)
+        "latent" => Nx.template({@batch, @latent_frames, @latent_channels, 2, 2}, :f32)
       }
 
       params = init_fn.(template, Axon.ModelState.empty())
@@ -108,7 +108,7 @@ defmodule Edifice.Generative.CogVideoXTest do
       key = Nx.Random.key(42)
 
       {latent, _key} =
-        Nx.Random.uniform(key, shape: {@batch, @latent_frames, @latent_channels, 4, 4})
+        Nx.Random.uniform(key, shape: {@batch, @latent_frames, @latent_channels, 2, 2})
 
       output = predict_fn.(params, %{"latent" => latent})
 
@@ -132,7 +132,7 @@ defmodule Edifice.Generative.CogVideoXTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       # Video latent: [batch, frames, channels, h, w]
-      video_latent_shape = {@batch, @latent_frames, @latent_channels, 4, 4}
+      video_latent_shape = {@batch, @latent_frames, @latent_channels, 2, 2}
       text_embed_shape = {@batch, @text_len, @text_hidden_size}
       timestep_shape = {@batch}
 
@@ -165,7 +165,7 @@ defmodule Edifice.Generative.CogVideoXTest do
       model = CogVideoX.build_transformer(@transformer_opts)
       {init_fn, predict_fn} = Axon.build(model)
 
-      video_latent_shape = {@batch, @latent_frames, @latent_channels, 4, 4}
+      video_latent_shape = {@batch, @latent_frames, @latent_channels, 2, 2}
       text_embed_shape = {@batch, @text_len, @text_hidden_size}
       timestep_shape = {@batch}
 
