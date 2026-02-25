@@ -96,6 +96,7 @@
 - [x] **GGUF Export** — Model export to GGUF format
 
 ## Remaining Candidates
+- [ ] **Mercury** — Discrete diffusion LM (Inception Labs, arXiv:2506.17298). Parallel token denoising instead of autoregressive generation. Transformer backbone + discrete noise process + iterative refinement. Related work: MDLM, SEDD, Plaid. New family: `diffusion_lm` or under `generative`.
 - [ ] **Flash Attention** — IO-aware exact attention (requires EXLA backend work)
 - [ ] **SPLA** — Sparse + Linear Attention hybrid
 - [ ] **InfLLM-V2** — Block-partitioned KV cache selection
