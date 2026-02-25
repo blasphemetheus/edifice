@@ -295,12 +295,11 @@ vs data size. Demonstrate when more data beats more parameters.
 | Already covered | ~30 | 12 |
 | Tier 1-2 would add | ~60 | +14 |
 | Tier 3-4 would add | ~25 | +10 |
-| **Total** | **~115 of 184** | **36** |
+| Per-architecture notebooks | ~89 | +23 |
+| **Total** | **184 of 184** | **59** |
 
-The remaining ~69 atoms are mostly variants (v2s, aliases like `:sana`),
-specialized attention patterns (`:yarn`, `:nsa`, `:dual_chunk_attention`),
-or niche architectures that appear in the zoo tour but don't need their
-own dedicated notebooks.
+With all tiers + per-architecture notebooks, every registered atom has a
+dedicated notebook home.
 
 ---
 
@@ -333,3 +332,308 @@ Remaining 14 can be interleaved based on interest.
 - VegaLite visualizations (use `Vl.concat/2` with `:horizontal` for multi-chart)
 - Default 10-15 epochs with comments suggesting more
 - Experiment suggestions at the end
+
+---
+
+## Per-Architecture Notebooks
+
+Every architecture in the registry deserves at least a mention in a notebook.
+The thematic notebooks above (Tiers 1-4) cover many, but ~89 atoms still lack
+dedicated exploration. Below are specialized notebooks grouped by theme, each
+covering the remaining uncovered atoms.
+
+### 25. `byte_latent_transformer.livemd`
+
+**Atom:** `:byte_latent_transformer`
+**What it covers:** Byte-level processing via an encoder-latent-decoder triple.
+Raw bytes go in, get compressed to latent patches, processed by a transformer,
+then decoded back. No tokenizer needed.
+**Task:** Character-level text — feed raw UTF-8 bytes, compare to char-level
+decoder-only transformer on the same corpus.
+**Key demo:** Visualize the encoder's patch boundaries, show how the model
+learns to group bytes into meaningful units, compare perplexity with vs
+without the byte-level bottleneck.
+
+### 26. `kan_and_kat.livemd`
+
+**Atoms:** `:kan`, `:kat`
+**What it covers:** Kolmogorov-Arnold Networks put learnable activations on
+edges instead of nodes. KAT puts KAN inside a transformer's FFN sublayer.
+**Task:** Function approximation — fit a complex 1D or 2D function (e.g.
+`sin(x) * cos(3x)`), compare KAN vs MLP on interpolation AND extrapolation.
+Then KAT vs standard transformer on sequence classification.
+**Key demo:** Plot the learned activation functions on each edge. Show that
+KAN can extrapolate beyond training range where MLP fails. Visualize edge
+sparsity.
+
+### 27. `convolutional_zoo.livemd`
+
+**Atoms:** `:conv1d`, `:densenet`, `:tcn`, `:mobilenet`, `:efficientnet`
+**What it covers:** The full convolutional family beyond ResNet.
+**Task:** Image classification (MNIST or synthetic) for DenseNet/MobileNet/
+EfficientNet. Sequence classification for Conv1D/TCN.
+**Key demo:** Parameter count vs accuracy scatter plot. Show DenseNet's
+dense connectivity pattern diagram. TCN's dilated receptive field growth.
+MobileNet's depthwise separable factorization (param savings). EfficientNet's
+compound scaling (depth x width x resolution).
+
+### 28. `modern_recurrent.livemd`
+
+**Atoms:** `:mlstm`, `:slstm`, `:xlstm_v2`, `:min_lstm`, `:native_recurrence`
+**What it covers:** The modern recurrent renaissance — minimal and extended
+LSTM variants that are parallel-scannable or have matrix memory.
+**Task:** Char-level LM (reuse LM shootout corpus) with all 5 + GRU/LSTM
+baselines from existing notebooks.
+**Key demo:** Loss curves for all variants, highlight that MinLSTM matches
+LSTM quality with far fewer parameters. Show mLSTM's matrix memory capacity
+vs sLSTM's scalar memory. xlstm_v2 scaling improvements.
+
+### 29. `delta_rule_attention.livemd`
+
+**Atoms:** `:delta_net`, `:gated_delta_net`
+**What it covers:** Linear attention with delta-rule weight updates — the
+model maintains an associative memory that gets updated with each token.
+**Task:** Associative recall — present key-value pairs, then query a key
+and expect the correct value. This directly tests the delta-rule memory.
+**Key demo:** Compare DeltaNet vs standard attention on recall accuracy
+as the number of stored pairs grows. Show that GatedDeltaNet's data-dependent
+gating improves selective forgetting.
+
+### 30. `test_time_training.livemd`
+
+**Atoms:** `:ttt`, `:ttt_e2e`
+**What it covers:** TTT layers perform self-supervised weight updates at
+inference time — the model literally trains itself on the input sequence
+as it processes it.
+**Task:** Long-context sequence with distributional shift — the beginning
+of the sequence follows one pattern, the end follows another. TTT should
+adapt in real-time.
+**Key demo:** Compare TTT vs frozen transformer on a sequence where the
+"rules" change midway. Visualize how TTT's internal weights evolve during
+inference. Show TTT-E2E's end-to-end gradient flow.
+
+### 31. `titans_long_memory.livemd`
+
+**Atom:** `:titans`
+**What it covers:** Neural long-term memory with surprise-gated updates —
+the model stores information when it encounters something unexpected.
+**Task:** Long sequence with rare important events (e.g. a signal token
+that appears once every 100 positions).
+**Key demo:** Visualize the surprise gate activations — when does the model
+decide something is worth remembering? Compare retrieval accuracy vs
+sequence length against standard attention and LSTM.
+
+### 32. `reservoir_computing.livemd`
+
+**Atom:** `:reservoir`
+**What it covers:** Echo State Networks — a fixed random recurrent network
+where only the readout layer is trained. Extremely fast training.
+**Task:** Chaotic time series prediction (Lorenz attractor or Mackey-Glass).
+**Key demo:** Show that the reservoir captures dynamics without backprop
+through time. Compare training time vs quality against LSTM/GRU. Visualize
+the echo state property — how information decays in the reservoir.
+
+### 33. `ssm_family_tree.livemd`
+
+**Atoms:** `:s4d`, `:s5`, `:h3`, `:gss`, `:ss_transformer`
+**What it covers:** The S4 family beyond vanilla S4 — diagonal simplification
+(S4D), MIMO extension (S5), language-focused H3, gated variant GSS, and the
+SSM+attention hybrid (SSTransformer).
+**Task:** Char-level LM shootout restricted to SSM variants.
+**Key demo:** S4 vs S4D (does diagonal lose quality?). S5's single-layer MIMO
+vs S4's multiple SISO. H3's multiplicative gating. GSS's additive simplicity.
+Loss curves + perplexity table for all 5.
+
+### 34. `hyena_long_convolution.livemd`
+
+**Atoms:** `:hyena`, `:hyena_v2`, `:striped_hyena`
+**What it covers:** Implicit long convolutions as an attention alternative —
+O(L log L) via FFT instead of O(L^2).
+**Task:** Long-range sequence task (e.g. ListOps-style or long-context LM).
+**Key demo:** Visualize the learned implicit convolution filters. Show
+frequency response of the filters. Compare Hyena vs Hyena v2 filter quality.
+Striped Hyena's interleaved architecture diagram.
+
+### 35. `mamba_variants.livemd`
+
+**Atoms:** `:mamba_ssd`, `:mamba3`, `:mamba_cumsum`, `:mamba_hillis_steele`, `:bimamba`
+**What it covers:** The full Mamba family — SSD (tensor-core efficient),
+Mamba-3 (complex states), scan algorithm variants, and bidirectional Mamba.
+**Task:** Causal LM for Mamba/SSD/Mamba3, bidirectional classification for BiMamba.
+**Key demo:** Scan algorithm comparison (cumsum vs Hillis-Steele — work vs
+depth tradeoff). Mamba-3's complex state dynamics visualization. BiMamba on
+a task where future context helps (e.g. sentiment classification).
+
+### 36. `linear_attention_landscape.livemd`
+
+**Atoms:** `:linear_transformer`, `:performer`, `:nystromformer`, `:based`,
+`:flash_linear_attention`, `:lightning_attention`
+**What it covers:** All the ways to approximate or replace quadratic softmax
+attention with linear-time alternatives.
+**Task:** Sequence modeling or char-level LM — same task, 6 different
+linear attention methods.
+**Key demo:** Quality vs speed scatter plot. Show how each method approximates
+the full attention matrix (feature maps, Nystrom landmarks, Taylor expansion).
+Lightning Attention's intra/inter block split diagram.
+
+### 37. `retention_and_gated_rnn.livemd`
+
+**Atoms:** `:retnet`, `:retnet_v2`, `:gla`, `:gla_v2`, `:hgrn`, `:hgrn_v2`
+**What it covers:** The linear-recurrence family — models that train in
+parallel like transformers but infer in O(1) like RNNs.
+**Task:** Char-level LM with parallel training, then demonstrate O(1)
+recurrent inference mode.
+**Key demo:** Multi-scale retention visualization (RetNet). GLA's data-dependent
+decay heatmap. HGRN's hierarchical gating across layers. Show the parallel
+vs recurrent mode equivalence.
+
+### 38. `attention_efficiency.livemd`
+
+**Atoms:** `:gqa`, `:mla`, `:ring_attention`, `:infini_attention`,
+`:dual_chunk_attention`
+**What it covers:** Efficiency improvements to standard attention — fewer
+KV heads, compressed KV cache, distributed computation, infinite context.
+**Task:** Build models at increasing sequence lengths, measure memory usage
+and throughput.
+**Key demo:** GQA's KV head sharing (4 heads share 1 KV = 4x KV-cache
+savings). MLA's low-rank compression ratio. InfiniAttention's compressive
+memory growing with context. Ring Attention's chunk distribution diagram.
+
+### 39. `specialized_attention.livemd`
+
+**Atoms:** `:diff_transformer`, `:fnet`, `:conformer`, `:mega`, `:megalodon`,
+`:gated_attention`, `:hawk`, `:kda`
+**What it covers:** Attention mechanisms designed for specific use cases.
+**Task:** Varies per architecture — audio features for Conformer, noise
+cancellation demo for DiffTransformer, FNet's FFT replacement.
+**Key demo:** DiffTransformer's dual-softmax noise cancellation visualized.
+FNet's pure-FFT attention (no learned parameters!). Conformer's
+conv-attention sandwich for audio. Mega/Megalodon's exponential moving
+average visualization. Hawk as recurrence-only Griffin.
+
+### 40. `positional_encoding.livemd`
+
+**Atoms:** `:yarn`, `:nsa`, `:rnope_swa`, `:tmrope`
+**What it covers:** Advanced positional encoding and context-window strategies.
+**Task:** Train a small LM, then test on sequences longer than training length.
+**Key demo:** YaRN's frequency scaling for context extension. RNoPE-SWA's
+no-positional-encoding approach. NSA's three-path sparse attention pattern.
+TMRoPE's multimodal position alignment.
+
+### 41. `vision_architectures.livemd`
+
+**Atoms:** `:deit`, `:unet`, `:focalnet`, `:poolformer`, `:mamba_vision`,
+`:metaformer`, `:caformer`, `:efficient_vit`
+**What it covers:** The full vision family beyond ViT/ConvNeXt/Swin.
+**Task:** Image classification for most; segmentation for UNet.
+**Key demo:** DeiT's distillation token mechanism. PoolFormer proving that
+the MetaFormer structure matters more than the mixer. FocalNet's multi-scale
+focal modulation. MambaVision's hybrid CNN+Mamba+Attention. CAFormer's
+conv-to-attention stage transition. EfficientViT's linear attention.
+
+### 42. `3d_neural_rendering.livemd`
+
+**Atoms:** `:nerf`, `:gaussian_splat`
+**What it covers:** Neural 3D scene representation and rendering.
+**Task:** Synthetic 3D scene (spheres/cubes) — train NeRF and Gaussian
+Splatting to render novel views.
+**Key demo:** Novel view synthesis from trained models. NeRF's coordinate
+MLP (position -> color + density). Gaussian Splatting's explicit 3D
+Gaussians vs NeRF's implicit field. Rendering speed comparison.
+
+### 43. `generative_deep_dive.livemd`
+
+**Atoms:** `:vq_vae`, `:gan`, `:normalizing_flow`, `:score_sde`, `:dit_v2`,
+`:soflow`, `:sit`
+**What it covers:** Generative models beyond basic diffusion — discrete
+tokens (VQ-VAE), adversarial (GAN), invertible (flows), score-based (SDE).
+**Task:** 2D point cloud generation for all, compare sample quality and
+diversity.
+**Key demo:** VQ-VAE's codebook utilization heatmap. GAN's generator vs
+discriminator loss dynamics (the training dance). Normalizing flow's
+invertible transformations visualized. Score SDE's VP vs VE comparison.
+SiT's interpolant generalization of DiT.
+
+### 44. `video_and_3d_generation.livemd`
+
+**Atoms:** `:cogvideox`, `:trellis`, `:mar`, `:sana`
+**What it covers:** Generation beyond 2D images — video, 3D assets, and
+masked autoregressive approaches.
+**Task:** Synthetic sequential frames for CogVideoX, 3D lattice for TRELLIS,
+2D for MAR/SANA.
+**Key demo:** CogVideoX's 3D causal VAE temporal compression. TRELLIS's
+sparse lattice structure. MAR's bridge between autoregressive and masked
+prediction. SANA as an efficiency-focused LinearDiT variant.
+
+### 45. `graph_edges_and_molecules.livemd`
+
+**Atom:** `:gin_v2`
+**What it covers:** GINv2 adds edge features to the maximally-expressive GIN.
+**Task:** Molecular property prediction where bond types (edge features) matter.
+**Key demo:** Compare GIN vs GINv2 on a molecular task — show that edge
+features improve accuracy on bond-dependent properties. Visualize molecular
+graphs with colored edges.
+
+### 46. `evidential_uncertainty.livemd`
+
+**Atom:** `:evidential`
+**What it covers:** Evidential deep learning — place a Dirichlet prior over
+class probabilities for principled uncertainty without MC sampling.
+**Task:** Classification with out-of-distribution detection.
+**Key demo:** Compare Evidential vs MC Dropout uncertainty estimates.
+Visualize the Dirichlet concentration parameters. Show that evidential
+uncertainty is high for OOD inputs without needing multiple forward passes.
+
+### 47. `meta_learning_advanced.livemd`
+
+**Atoms:** `:hypernetwork`, `:capsule`, `:mixture_of_agents`,
+`:mixture_of_tokenizers`, `:distillation_head`
+**What it covers:** Advanced meta-learning and composition patterns.
+**Task:** Hypernetwork generating weights for a tiny target network. Capsule
+dynamic routing on simple shapes. MoA ensemble. Distillation from a larger
+to smaller model.
+**Key demo:** Hypernetwork's weight generation visualized (one network
+controls another). Capsule routing coefficients showing part-whole
+relationships. MoA's proposer-aggregator pipeline. Knowledge distillation
+loss curves (student approaching teacher quality).
+
+---
+
+## Original Ideas Archive
+
+These ideas were in the original TODO.md and are preserved here. Many are
+now covered by the tiered plan above, but keeping them for reference and
+any unique details.
+
+### Architecture Walkthroughs (original list)
+
+- [ ] World Model — Encode observations, learn latent dynamics (MLP vs NeuralODE vs GRU), predict rewards. Train on a simple grid-world or CartPole-like environment, visualize latent trajectories and imagined rollouts
+- [ ] RL PolicyValue + Environment — Build a policy-value network, implement the Environment behaviour, run PPO-style training on a toy environment (e.g. bandit or cliff-walking). Show policy improvement over episodes
+- [ ] Lightning Attention — Compare standard softmax attention vs Lightning Attention on a sequence task, benchmark the speed/memory tradeoff, visualize intra-block vs inter-block attention contributions
+- [ ] Sparse Autoencoder — Train an SAE on activations from a pre-trained model, visualize the learned dictionary features, show top-k sparsity in action, demonstrate how L1 coefficient affects feature quality
+- [ ] Transcoder — Train a cross-layer transcoder, show how representations transform between layers, compare to a regular SAE
+- [ ] Temporal JEPA (V-JEPA) — Mask timesteps from a sequence, predict masked representations, show EMA target divergence, compare to pixel-level reconstruction (MAE-style)
+- [ ] iRoPE — Compare standard RoPE vs interleaved RoPE (odd/even layers) on a language modeling task, show how NoPE layers learn different attention patterns
+- [ ] Aux-loss-free MoE — Visualize expert utilization with and without the load-balance bias, show how the bias corrects routing imbalance without auxiliary loss
+- [ ] Image Generation Paradigms — VAR vs DiT vs consistency model vs flow matching on 2D data
+- [ ] Self-Supervised Vision — DINOv2 vs MAE vs SimCLR vs JEPA feature quality comparison
+- [ ] RLHF Without Tears — DPO vs GRPO vs KTO on simple preference tasks
+- [ ] Audio from Scratch — EnCodec tokenization + VALL-E generation pipeline
+- [ ] Unified Multimodal — Transfusion: one model for text + images
+- [ ] Scientific ML — FNO for solving simple PDEs vs neural ODE
+
+### Other Module Candidates (original list)
+
+- [ ] Mechanistic interpretability pipeline — End-to-end: train a small transformer, extract activations, train SAE, identify interpretable features, ablate them to confirm causal role
+- [ ] Model-based RL loop — Full Dreamer-style pipeline: train world model on environment interactions, plan in latent space, compare model-based vs model-free sample efficiency
+- [ ] Contrastive learning evolution — SimCLR -> BYOL -> BarlowTwins -> VICReg -> JEPA -> Temporal JEPA, the progression from contrastive to non-contrastive to predictive
+- [ ] Hybrid attention architectures — Combine Lightning Attention with Mamba blocks (like Jamba/Hymba), show how hybrid models get the best of both worlds
+
+### Language Model Deep-Dives (original list)
+
+- [ ] Tokenization matters — Compare char-level vs word-level vs BPE on the same corpus, show how tokenization affects context window and generation quality
+- [ ] Temperature and sampling — Explore greedy, top-k, top-p (nucleus), and temperature sampling side by side, visualize probability distributions
+- [ ] Attention visualization — Show what attention heads actually look at, plot attention heatmaps for different layers/heads on example sentences
+- [ ] Scaling laws — Train the same architecture at 3-4 different sizes, plot loss vs parameters vs data size, demonstrate when more data beats more parameters
+- [ ] Context window and memory — Demonstrate how sequence length affects what the model can learn, show failure modes when context is too short
+- [ ] Perplexity and evaluation — Explain perplexity as a metric, compare models by perplexity vs accuracy, show how to evaluate generation quality
