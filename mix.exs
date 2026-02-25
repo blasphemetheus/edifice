@@ -275,7 +275,8 @@ defmodule Edifice.MixProject do
         "CHANGELOG.md",
         "LICENSE",
         "guides"
-      ]
+      ],
+      exclude_patterns: [~r/\.bak$/]
     ]
   end
 
