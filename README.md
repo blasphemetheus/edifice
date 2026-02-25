@@ -398,7 +398,7 @@ Conceptual guides covering theory, architecture evolution, and decision tables f
 
 ## Examples
 
-See [`examples/`](examples/) for runnable scripts including `mlp_basics.exs`, `sequence_comparison.exs`, `graph_classification.exs`, `vae_generation.exs`, and `architecture_tour.exs`.
+See [`examples/`](https://github.com/blasphemetheus/edifice/tree/main/examples) for runnable scripts including `mlp_basics.exs`, `sequence_comparison.exs`, `graph_classification.exs`, `vae_generation.exs`, and `architecture_tour.exs`.
 
 ### Mamba for Sequence Modeling
 

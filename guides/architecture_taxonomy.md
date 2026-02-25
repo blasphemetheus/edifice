@@ -1833,7 +1833,7 @@ Missing architectures identified through survey of current research, organized b
 | **Native Recurrence** | Recurrent | Hardware-native recurrent implementations for specialized accelerators |
 | **State Space Transformer** | SSM/Transformer | Deeper SSM-attention integration (beyond simple interleaving) |
 
-See [ARCHITECTURE_ROADMAP.md](../ARCHITECTURE_ROADMAP.md) for implementation timeline and prioritization.
+See [ARCHITECTURE_ROADMAP.md](https://github.com/blasphemetheus/edifice/blob/main/ARCHITECTURE_ROADMAP.md) for implementation timeline and prioritization.
 
 ---
 

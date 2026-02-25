@@ -207,7 +207,7 @@ defmodule Edifice.Generative.MAR do
   ## Parameters
 
     - `model` - Axon model from `build/1`
-    - `params` - Initialised model state (from `Axon.init/2`)
+    - `params` - Initialised model state (from `Axon.build/2` init function)
 
   ## Options
 
