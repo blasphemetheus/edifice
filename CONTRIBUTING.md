@@ -152,3 +152,28 @@ mix run bench/scaling_profile.exs
 - One architecture per PR (unless closely related, e.g., MinGRU + MinLSTM)
 - Include the paper reference in the PR description
 - Tests must pass: `mix test && mix format --check-formatted && mix credo`
+
+## Releasing
+
+Checklist for publishing a new version to Hex:
+
+1. **Bump version** in `mix.exs` (`@version`)
+2. **Update CHANGELOG.md** with a new section for the version
+3. **Update README.md** install version (`{:edifice, "~> X.Y"}`)
+4. **Update mix.exs description** if architecture count changed
+5. **Run CI checks**:
+   ```bash
+   mix test
+   mix format --check-formatted
+   mix credo --strict
+   mix dialyzer
+   mix hex.build
+   mix docs
+   mix deps.unlock --check-unused
+   ```
+6. **Commit and tag**:
+   ```bash
+   git tag v0.X.0
+   git push origin main --tags
+   ```
+7. **Publish**: `mix hex.publish`
