@@ -54,7 +54,7 @@ defmodule Edifice.Sets.DeepSets do
       # Process a batch of sets
       # Input: {batch=4, set_size=20, element_dim=3}
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({4, 20, 3}, :f32), %{})
+      params = init_fn.(Nx.template({4, 20, 3}, :f32), Axon.ModelState.empty())
       output = predict_fn.(params, %{"input" => set_data})
 
   ## References

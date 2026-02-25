@@ -48,7 +48,7 @@ defmodule Edifice.Generative.VARTest do
         )
 
       {init_fn, predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({2, total_tokens, hidden_size}, :f32), %{})
+      params = init_fn.(Nx.template({2, total_tokens, hidden_size}, :f32), Axon.ModelState.empty())
 
       input = Nx.broadcast(0.1, {2, total_tokens, hidden_size})
       output = predict_fn.(params, %{"scale_embeddings" => input})
@@ -88,7 +88,7 @@ defmodule Edifice.Generative.VARTest do
         )
 
       {init_fn, predict_fn} = Axon.build(encoder)
-      params = init_fn.(Nx.template({2, 8, 8, 3}, :f32), %{})
+      params = init_fn.(Nx.template({2, 8, 8, 3}, :f32), Axon.ModelState.empty())
 
       input = Nx.broadcast(0.5, {2, 8, 8, 3})
       output = predict_fn.(params, %{"image" => input})

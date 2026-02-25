@@ -50,7 +50,7 @@ defmodule Edifice.Scientific.FNOTest do
       params =
         init_fn.(
           Nx.template({batch_size, grid_size, in_channels}, :f32),
-          %{}
+          Axon.ModelState.empty()
         )
 
       input = Nx.broadcast(0.1, {batch_size, grid_size, in_channels})
@@ -72,7 +72,7 @@ defmodule Edifice.Scientific.FNOTest do
       {init_fn, predict_fn} = Axon.build(model)
 
       # Test with grid size 32
-      params = init_fn.(Nx.template({2, 32, 1}, :f32), %{})
+      params = init_fn.(Nx.template({2, 32, 1}, :f32), Axon.ModelState.empty())
       input = Nx.broadcast(0.1, {2, 32, 1})
       output = predict_fn.(params, %{"input" => input})
       assert {2, 32, 1} = Nx.shape(output)

@@ -46,6 +46,7 @@ defmodule Edifice.Audio.EnCodecTest do
   end
 
   describe "EnCodec.build_decoder/1" do
+    @tag :slow
     test "produces correct output shape" do
       decoder = EnCodec.build_decoder(hidden_dim: @hidden_dim)
 

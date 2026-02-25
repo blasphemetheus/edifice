@@ -108,7 +108,7 @@ defmodule Edifice.RL.PPOTrainer do
 
     # Initialize model parameters
     {init_fn, predict_fn} = Axon.build(model, mode: :train)
-    params = init_fn.(Nx.template({1, obs_size}, :f32), %{})
+    params = init_fn.(Nx.template({1, obs_size}, :f32), Axon.ModelState.empty())
 
     # Initialize optimizer (Adam)
     {optimizer_init, optimizer_update} = Polaris.Optimizers.adam(learning_rate: learning_rate)
