@@ -24,7 +24,7 @@ defmodule Edifice do
   | Transformer | Decoder-Only (GPT-style), Multi-Token Prediction, Byte Latent Transformer, Nemotron-H |
   | Feedforward | MLP, KAN, KAT, TabNet, BitNet |
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
-  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, Reservoir (ESN), Native Recurrence |
+  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, Reservoir (ESN), Native Recurrence, TransformerLike |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
   | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, Dual Chunk Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision |
@@ -45,6 +45,7 @@ defmodule Edifice do
   | Inference | Medusa |
   | Robotics | ACT, OpenVLA |
   | Audio | SoundStorm, EnCodec, VALL-E |
+  | Detection | DETR |
   """
 
   @architecture_registry %{
@@ -82,6 +83,7 @@ defmodule Edifice do
     slstm: Edifice.Recurrent.SLSTM,
     xlstm_v2: Edifice.Recurrent.XLSTMv2,
     native_recurrence: Edifice.Recurrent.NativeRecurrence,
+    transformer_like: Edifice.Recurrent.TransformerLike,
     # SSM
     mamba: Edifice.SSM.Mamba,
     mamba_ssd: Edifice.SSM.MambaSSD,
@@ -153,6 +155,8 @@ defmodule Edifice do
     metaformer: Edifice.Vision.MetaFormer,
     caformer: {Edifice.Vision.MetaFormer, [variant: :caformer]},
     efficient_vit: Edifice.Vision.EfficientViT,
+    # Detection
+    detr: Edifice.Detection.DETR,
     # Multimodal
     multimodal_mlp_fusion: Edifice.Multimodal.Fusion,
     # Generative
@@ -309,7 +313,8 @@ defmodule Edifice do
         :reservoir,
         :slstm,
         :xlstm_v2,
-        :native_recurrence
+        :native_recurrence,
+        :transformer_like
       ],
       ssm: [
         :mamba,
@@ -449,7 +454,8 @@ defmodule Edifice do
       neuromorphic: [:snn, :ann2snn],
       inference: [:medusa],
       robotics: [:act, :openvla],
-      audio: [:soundstorm, :encodec, :valle]
+      audio: [:soundstorm, :encodec, :valle],
+      detection: [:detr]
     }
   end
 
@@ -499,6 +505,7 @@ defmodule Edifice do
     - `:speculative_head` — `Axon.container(%{pred_1: ..., pred_N: ...})`
     - `:act` — `{encoder, decoder}`
     - `:medusa` — `Axon.container(%{head_1: ..., head_K: ...})`
+    - `:detr` — `Axon.container(%{class_logits: ..., bbox_pred: ...})`
   """
   @spec build(atom(), keyword()) :: Axon.t() | tuple()
   def build(name, opts \\ []) do
