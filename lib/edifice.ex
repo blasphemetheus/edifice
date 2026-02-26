@@ -45,7 +45,7 @@ defmodule Edifice do
   | Inference | Medusa |
   | Robotics | ACT, OpenVLA |
   | Audio | SoundStorm, EnCodec, VALL-E |
-  | Detection | DETR |
+  | Detection | DETR, RT-DETR |
   """
 
   @architecture_registry %{
@@ -157,6 +157,7 @@ defmodule Edifice do
     efficient_vit: Edifice.Vision.EfficientViT,
     # Detection
     detr: Edifice.Detection.DETR,
+    rt_detr: Edifice.Detection.RTDETR,
     # Multimodal
     multimodal_mlp_fusion: Edifice.Multimodal.Fusion,
     # Generative
@@ -455,7 +456,7 @@ defmodule Edifice do
       inference: [:medusa],
       robotics: [:act, :openvla],
       audio: [:soundstorm, :encodec, :valle],
-      detection: [:detr]
+      detection: [:detr, :rt_detr]
     }
   end
 
@@ -506,6 +507,7 @@ defmodule Edifice do
     - `:act` — `{encoder, decoder}`
     - `:medusa` — `Axon.container(%{head_1: ..., head_K: ...})`
     - `:detr` — `Axon.container(%{class_logits: ..., bbox_pred: ...})`
+    - `:rt_detr` — `Axon.container(%{class_logits: ..., bbox_pred: ...})`
   """
   @spec build(atom(), keyword()) :: Axon.t() | tuple()
   def build(name, opts \\ []) do

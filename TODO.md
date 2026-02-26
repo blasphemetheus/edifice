@@ -98,8 +98,8 @@
 ## 2026 Wave 3 — New Families & Gap Fills
 
 ### Detection / Segmentation (new family)
-- [ ] **DETR** — DEtection TRansformer (set-based object detection with bipartite matching). Encoder-decoder transformer + learned object queries + Hungarian loss. Family: `detection`.
-- [ ] **RT-DETR** — Real-Time DETR (Baidu). Hybrid CNN+transformer encoder, anchor-free, NMS-free. 53-55% AP at 108 FPS. Practical real-time detection baseline.
+- [x] **DETR** — DEtection TRansformer (set-based object detection with bipartite matching). Encoder-decoder transformer + learned object queries + Hungarian loss. Family: `detection`.
+- [x] **RT-DETR** — Real-Time DETR (Baidu). Hybrid CNN+transformer encoder, anchor-free, NMS-free. 53-55% AP at 108 FPS. Practical real-time detection baseline.
 - [ ] **SAM 2** — Segment Anything Model 2 (Meta). Promptable segmentation for images + video. Image encoder + prompt encoder + mask decoder + memory attention for video. Major 2024/2025 release.
 
 ### Attention
