@@ -95,8 +95,39 @@
 - [x] **SoundStorm** — Parallel audio token generation
 - [x] **GGUF Export** — Model export to GGUF format
 
-## Remaining Candidates
-- [ ] **Mercury** — Discrete diffusion LM (Inception Labs, arXiv:2506.17298). Parallel token denoising instead of autoregressive generation. Transformer backbone + discrete noise process + iterative refinement. Related work: MDLM, SEDD, Plaid. New family: `diffusion_lm` or under `generative`.
+## 2026 Wave 3 — New Families & Gap Fills
+
+### Detection / Segmentation (new family)
+- [ ] **DETR** — DEtection TRansformer (set-based object detection with bipartite matching). Encoder-decoder transformer + learned object queries + Hungarian loss. Family: `detection`.
+- [ ] **RT-DETR** — Real-Time DETR (Baidu). Hybrid CNN+transformer encoder, anchor-free, NMS-free. 53-55% AP at 108 FPS. Practical real-time detection baseline.
+- [ ] **SAM 2** — Segment Anything Model 2 (Meta). Promptable segmentation for images + video. Image encoder + prompt encoder + mask decoder + memory attention for video. Major 2024/2025 release.
+
+### Attention
+- [ ] **Sigmoid Self-Attention** — Drop-in softmax replacement using properly normalized sigmoid (ICLR 2025). FlashSigmoid yields 17% kernel speedup over FlashAttention2 on H100. Eliminates token competition. Standalone mechanism, distinct from Gated Attention's post-SDPA sigmoid gate.
+
+### RL
+- [ ] **Decision Transformer** — Offline RL as conditional sequence generation (Chen et al. 2021). Frames RL as sequence modeling: conditions on desired return, state, action triples. Causal transformer predicts next action given (R, s, a) history. Directly relevant to ExPhil imitation learning pipeline.
+
+### Audio
+- [ ] **Whisper** — Encoder-decoder ASR (OpenAI). Log-mel spectrogram frontend + transformer encoder-decoder with multitask training (transcription, translation, timestamps, language ID). Fills the ASR gap — audio family has TTS but no recognition.
+
+### Generative
+- [ ] **Mercury/MDLM** — Discrete diffusion LM (Inception Labs, arXiv:2506.17298). Parallel token denoising instead of autoregressive generation. Transformer backbone + discrete noise process + iterative refinement. 10x decoding speedup. Related work: MDLM, SEDD, Plaid. New family: `diffusion_lm` or under `generative`.
+- [ ] **Rectified Flow** — Straight-trajectory flow matching variant. ODE paths trained to be straight lines, enabling 10-100x fewer inference steps than vanilla diffusion. Can be a variant/option on existing FlowMatching or standalone module.
+
+### Vision
+- [ ] **DINOv3** — Self-supervised vision backbone (Meta AI, Aug 2025). CLIP-like image-text alignment + axial RoPE + Gram anchoring, scaled to 7B params. Major upgrade over DINOv2.
+
+### Meta / Efficiency
+- [ ] **EAGLE-3** — Multi-level speculative draft head. Extracts low/mid/high features from target model for multi-step draft prediction. 4-6x decoding speedup. Scaling law for speculative decoding.
+- [ ] **ReMoE** — Fully differentiable MoE routing (ICLR 2025). Replaces discrete top-k with continuous relaxation via Gumbel-Softmax. Better gradient flow through routing.
+- [ ] **mHC** — Manifold Hyper-Connections (DeepSeek-V4). Multi-rate residual streams.
+
+### Graph
+- [ ] **DimeNet** — Directional message passing with angle information between atoms. Important for molecular property prediction.
+- [ ] **SE(3)-Transformer** — Equivariant transformer for structural biology.
+
+### Remaining Candidates
 - [ ] **Flash Attention** — IO-aware exact attention (requires EXLA backend work)
 - [ ] **SPLA** — Sparse + Linear Attention hybrid
 - [ ] **InfLLM-V2** — Block-partitioned KV cache selection
@@ -106,33 +137,32 @@
 - [ ] **Diffusion Policy** — Diffusion for robot action generation
 - [ ] **CausVid** — Causal video DiT distillation
 - [ ] **DeepONet** — Branch-trunk operator learning
-- [ ] **SE(3)-Transformer** — Equivariant transformer for structural biology
 - [ ] **MAGVIT-v2** — Lookup-free quantization for image/video tokens
-- [ ] **mHC** — Manifold Hyper-Connections (DeepSeek-V4)
 - [ ] **MIRAS** — Google's Titans extension framework
 - [ ] **MoR** — Mixture of Recursions
 - [ ] **MoED** — Mixture of Expert Depths
 - [ ] **Agent swarm patterns** — Multi-agent coordination framework
+- [ ] **PointNet++** — Hierarchical point cloud processing
+- [ ] **Wav2Vec 2.0** — Self-supervised speech backbone
+- [ ] **Janus Multimodal** — Decoupled visual encoding for understanding + generation (CVPR 2025)
+- [ ] **GPS** — General Powerful Scalable graph transformer
 
-## 🔍 Opus Review Pass — AI-Generated Architecture Implementations
+## 🔍 Opus Review Pass — AI-Generated Architecture Implementations (2026-02-26)
 
 All architectures added since Tier 1 (2026-02) were implemented by Claude Code (sonnet).
-**Bradley to review with Opus for correctness, math accuracy, and idiomatic Elixir.**
+Reviewed by Opus for correctness, math accuracy, and idiomatic Elixir.
 
-Priority review targets (most complex / most novel):
-- `lib/edifice/attention/nsa.ex` — NSA three-path sparse attention (complex)
-- `lib/edifice/generative/transfusion.ex` — mixed AR+diffusion mask logic
-- `lib/edifice/generative/var.ex` — next-scale VQ tokenizer
-- `lib/edifice/scientific/fno.ex` — spectral convolution via FFT
-- `lib/edifice/graph/egnn.ex` — equivariant coord update equations
-- `lib/edifice/memory/engram.ex` — LSH hash routing
-- `lib/edifice/attention/yarn.ex` — RoPE frequency band interpolation
-- `lib/edifice/meta/moe_v2.ex` — bias-based load balancing
+### Clean — no code changes needed (6/8)
+- `lib/edifice/attention/nsa.ex` — 3-path sparse attention correct, proper 6-arg Nx.dot batching
+- `lib/edifice/generative/transfusion.ex` — mixed AR+diffusion masking correct, dual heads + dual loss
+- `lib/edifice/graph/egnn.ex` — equivariant coord update equations correct, proper Nx.dot batching
+- `lib/edifice/memory/engram.ex` — LSH hashing via sign-based binary projection correct, EMA sound
+- `lib/edifice/attention/yarn.ex` — wavelength-based frequency scaling correct, norm-preserving RoPE
+- `lib/edifice/scientific/fno.ex` — spectral convolution correct; O(n^2) DFT matrix (Nx lacks FFT) known limitation
 
-Suggested process:
-1. Open each file + the reference paper
-2. Ask Opus: "Verify this Elixir implementation matches the paper's equations. Flag any math errors, missing features, or non-idiomatic patterns."
-3. Commit verified files with `verified: true` in @moduledoc metadata
+### Fixed (2/8)
+- `lib/edifice/meta/moe_v2.ex` — stack_fn fallback was broken for non-standard expert counts (3,5,6,7). Arity-1 generic closure incompatible with Axon.layer positional arg unpacking. Replaced with explicit cases for 2-8 experts.
+- `lib/edifice/generative/var.ex` — token embedding used deterministic Nx.iota projection instead of learnable weights. Replaced with Axon.nx (one_hot) + Axon.dense (no bias) for proper learnable embedding table. Note: decoder reshape has a separate pre-existing bug (not addressed here).
 
 ---
 

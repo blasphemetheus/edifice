@@ -210,12 +210,17 @@ defmodule Edifice.Meta.MoEv2 do
       end
 
     # Stack routed experts
+    # Axon.layer unpacks list elements as positional args + opts keyword,
+    # so the function arity must be num_routed + 1. Explicit cases required.
     stack_fn =
       case num_routed do
         2 -> fn a, b, _opts -> Nx.stack([a, b]) end
+        3 -> fn a, b, c, _opts -> Nx.stack([a, b, c]) end
         4 -> fn a, b, c, d, _opts -> Nx.stack([a, b, c, d]) end
+        5 -> fn a, b, c, d, e, _opts -> Nx.stack([a, b, c, d, e]) end
+        6 -> fn a, b, c, d, e, f, _opts -> Nx.stack([a, b, c, d, e, f]) end
+        7 -> fn a, b, c, d, e, f, g, _opts -> Nx.stack([a, b, c, d, e, f, g]) end
         8 -> fn a, b, c, d, e, f, g, h, _opts -> Nx.stack([a, b, c, d, e, f, g, h]) end
-        _ -> fn a, b, _opts -> Nx.stack([a, b]) end
       end
 
     routed_stacked =

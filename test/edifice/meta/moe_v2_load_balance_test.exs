@@ -57,6 +57,38 @@ defmodule Edifice.Meta.MoEv2LoadBalanceTest do
     end
   end
 
+  describe "build/1 with non-standard expert count" do
+    test "num_routed: 3 builds and runs correctly" do
+      model =
+        MoEv2.build(
+          @base_opts
+          |> Keyword.put(:num_routed_experts, 3)
+          |> Keyword.put(:load_balance, :none)
+        )
+
+      {init_fn, predict_fn} = Axon.build(model, mode: :inference)
+      params = init_fn.(template(), Axon.ModelState.empty())
+      output = predict_fn.(params, constant_input())
+      assert Nx.shape(output) == {@batch_size, @seq_len, @input_size}
+      assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
+    end
+
+    test "num_routed: 6 builds and runs correctly" do
+      model =
+        MoEv2.build(
+          @base_opts
+          |> Keyword.put(:num_routed_experts, 6)
+          |> Keyword.put(:load_balance, :none)
+        )
+
+      {init_fn, predict_fn} = Axon.build(model, mode: :inference)
+      params = init_fn.(template(), Axon.ModelState.empty())
+      output = predict_fn.(params, constant_input())
+      assert Nx.shape(output) == {@batch_size, @seq_len, @input_size}
+      assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
+    end
+  end
+
   describe "compute_utilization/2" do
     test "returns tensor of shape [num_experts]" do
       router_logits = Nx.broadcast(0.5, {@batch_size, @seq_len, 4})

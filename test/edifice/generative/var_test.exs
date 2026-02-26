@@ -62,6 +62,42 @@ defmodule Edifice.Generative.VARTest do
     end
   end
 
+  describe "token embedding is learnable" do
+    test "one_hot + dense pattern produces learnable embeddings" do
+      # Verifies the pattern used by VAR's build_token_embedding:
+      # Axon.nx (one_hot) -> Axon.dense (learnable projection)
+      codebook_size = 16
+      embed_dim = 8
+
+      input = Axon.input("tokens", shape: {nil, 4})
+
+      one_hot =
+        Axon.nx(
+          input,
+          fn indices ->
+            Nx.equal(
+              Nx.new_axis(Nx.as_type(indices, :s64), -1),
+              Nx.iota({1, 1, codebook_size})
+            )
+            |> Nx.as_type(:f32)
+          end,
+          name: "one_hot"
+        )
+
+      model = Axon.dense(one_hot, embed_dim, use_bias: false, name: "embed")
+
+      {init_fn, predict_fn} = Axon.build(model)
+      template = %{"tokens" => Nx.template({2, 4}, :f32)}
+      params = init_fn.(template, Axon.ModelState.empty())
+
+      input_data = %{"tokens" => Nx.tensor([[0, 1, 2, 3], [3, 2, 1, 0]], type: :f32)}
+      output = predict_fn.(params, input_data)
+
+      assert {2, 4, ^embed_dim} = Nx.shape(output)
+      assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
+    end
+  end
+
   describe "build_tokenizer/1" do
     test "builds encoder and decoder" do
       {encoder, decoder} =

@@ -525,35 +525,22 @@ defmodule Edifice.Generative.VAR do
   end
 
   defp build_token_embedding(input, codebook_size, embed_dim, name) do
-    # One-hot encode and project
-    Axon.layer(
-      &token_embed_impl/2,
-      [input],
-      name: "#{name}_embed",
-      codebook_size: codebook_size,
-      embed_dim: embed_dim,
-      op_name: :token_embed
-    )
-  end
-
-  defp token_embed_impl(indices, opts) do
-    codebook_size = opts[:codebook_size]
-    embed_dim = opts[:embed_dim]
-
-    # One-hot encoding
+    # One-hot encode indices
     one_hot =
-      Nx.equal(
-        Nx.new_axis(Nx.as_type(indices, :s64), -1),
-        Nx.iota({1, 1, codebook_size})
+      Axon.nx(
+        input,
+        fn indices ->
+          Nx.equal(
+            Nx.new_axis(Nx.as_type(indices, :s64), -1),
+            Nx.iota({1, 1, codebook_size})
+          )
+          |> Nx.as_type(:f32)
+        end,
+        name: "#{name}_one_hot"
       )
-      |> Nx.as_type(:f32)
 
-    # Simple linear projection (in practice would use learnable embedding table)
-    # Here we use a deterministic projection for the structure
-    proj = Nx.iota({codebook_size, embed_dim}, type: :f32)
-    proj = Nx.divide(proj, Nx.tensor(codebook_size * embed_dim, type: :f32))
-
-    Nx.dot(one_hot, proj)
+    # Learnable embedding table via dense projection (no bias)
+    Axon.dense(one_hot, embed_dim, use_bias: false, name: "#{name}_embed")
   end
 
   defp upsample_tokens(x, opts) do
