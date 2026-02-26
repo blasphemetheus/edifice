@@ -100,7 +100,7 @@
 ### Detection / Segmentation (new family)
 - [x] **DETR** — DEtection TRansformer (set-based object detection with bipartite matching). Encoder-decoder transformer + learned object queries + Hungarian loss. Family: `detection`.
 - [x] **RT-DETR** — Real-Time DETR (Baidu). Hybrid CNN+transformer encoder, anchor-free, NMS-free. 53-55% AP at 108 FPS. Practical real-time detection baseline.
-- [ ] **SAM 2** — Segment Anything Model 2 (Meta). Promptable segmentation for images + video. Image encoder + prompt encoder + mask decoder + memory attention for video. Major 2024/2025 release.
+- [x] **SAM 2** — Segment Anything Model 2 (Meta). Promptable segmentation for images + video. Image encoder + prompt encoder + mask decoder + memory attention for video. Major 2024/2025 release.
 
 ### Attention
 - [ ] **Sigmoid Self-Attention** — Drop-in softmax replacement using properly normalized sigmoid (ICLR 2025). FlashSigmoid yields 17% kernel speedup over FlashAttention2 on H100. Eliminates token competition. Standalone mechanism, distinct from Gated Attention's post-SDPA sigmoid gate.
