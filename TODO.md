@@ -106,10 +106,10 @@
 - [x] **Sigmoid Self-Attention** — Drop-in softmax replacement using properly normalized sigmoid (ICLR 2025). FlashSigmoid yields 17% kernel speedup over FlashAttention2 on H100. Eliminates token competition. Standalone mechanism, distinct from Gated Attention's post-SDPA sigmoid gate.
 
 ### RL
-- [ ] **Decision Transformer** — Offline RL as conditional sequence generation (Chen et al. 2021). Frames RL as sequence modeling: conditions on desired return, state, action triples. Causal transformer predicts next action given (R, s, a) history. Directly relevant to ExPhil imitation learning pipeline.
+- [x] **Decision Transformer** — Offline RL as conditional sequence generation (Chen et al. 2021). Frames RL as sequence modeling: conditions on desired return, state, action triples. Causal transformer predicts next action given (R, s, a) history. Directly relevant to ExPhil imitation learning pipeline.
 
 ### Audio
-- [ ] **Whisper** — Encoder-decoder ASR (OpenAI). Log-mel spectrogram frontend + transformer encoder-decoder with multitask training (transcription, translation, timestamps, language ID). Fills the ASR gap — audio family has TTS but no recognition.
+- [x] **Whisper** — Encoder-decoder ASR (OpenAI). Log-mel spectrogram frontend + transformer encoder-decoder with multitask training (transcription, translation, timestamps, language ID). Fills the ASR gap — audio family has TTS but no recognition.
 
 ### Generative
 - [ ] **Mercury/MDLM** — Discrete diffusion LM (Inception Labs, arXiv:2506.17298). Parallel token denoising instead of autoregressive generation. Transformer backbone + discrete noise process + iterative refinement. 10x decoding speedup. Related work: MDLM, SEDD, Plaid. New family: `diffusion_lm` or under `generative`.

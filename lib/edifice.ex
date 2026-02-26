@@ -40,11 +40,11 @@ defmodule Edifice do
   | Interpretability | Sparse Autoencoder, Transcoder |
   | World Model | World Model |
   | Multimodal | MLP Projection Fusion, Cross-Attention Fusion, Perceiver Resampler |
-  | RL | PolicyValue |
+  | RL | PolicyValue, Decision Transformer |
   | Neuromorphic | SNN, ANN2SNN |
   | Inference | Medusa |
   | Robotics | ACT, OpenVLA |
-  | Audio | SoundStorm, EnCodec, VALL-E |
+  | Audio | SoundStorm, EnCodec, VALL-E, Whisper |
   | Detection | DETR, RT-DETR, SAM 2 |
   """
 
@@ -248,6 +248,7 @@ defmodule Edifice do
     world_model: Edifice.WorldModel.WorldModel,
     # RL
     policy_value: Edifice.RL.PolicyValue,
+    decision_transformer: Edifice.RL.DecisionTransformer,
     # Lightning Attention
     lightning_attention: Edifice.Attention.LightningAttention,
     # Dual Chunk Attention
@@ -267,7 +268,8 @@ defmodule Edifice do
     # Audio
     soundstorm: Edifice.Audio.SoundStorm,
     encodec: Edifice.Audio.EnCodec,
-    valle: Edifice.Audio.VALLE
+    valle: Edifice.Audio.VALLE,
+    whisper: Edifice.Audio.Whisper
   }
 
   @doc """
@@ -452,13 +454,13 @@ defmodule Edifice do
       interpretability: [:sparse_autoencoder, :transcoder],
       world_model: [:world_model],
       multimodal: [:multimodal_mlp_fusion],
-      rl: [:policy_value],
+      rl: [:policy_value, :decision_transformer],
       liquid: [:liquid],
       scientific: [:fno],
       neuromorphic: [:snn, :ann2snn],
       inference: [:medusa],
       robotics: [:act, :openvla],
-      audio: [:soundstorm, :encodec, :valle],
+      audio: [:soundstorm, :encodec, :valle, :whisper],
       detection: [:detr, :rt_detr, :sam2]
     }
   end
