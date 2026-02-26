@@ -103,7 +103,7 @@
 - [x] **SAM 2** — Segment Anything Model 2 (Meta). Promptable segmentation for images + video. Image encoder + prompt encoder + mask decoder + memory attention for video. Major 2024/2025 release.
 
 ### Attention
-- [ ] **Sigmoid Self-Attention** — Drop-in softmax replacement using properly normalized sigmoid (ICLR 2025). FlashSigmoid yields 17% kernel speedup over FlashAttention2 on H100. Eliminates token competition. Standalone mechanism, distinct from Gated Attention's post-SDPA sigmoid gate.
+- [x] **Sigmoid Self-Attention** — Drop-in softmax replacement using properly normalized sigmoid (ICLR 2025). FlashSigmoid yields 17% kernel speedup over FlashAttention2 on H100. Eliminates token competition. Standalone mechanism, distinct from Gated Attention's post-SDPA sigmoid gate.
 
 ### RL
 - [ ] **Decision Transformer** — Offline RL as conditional sequence generation (Chen et al. 2021). Frames RL as sequence modeling: conditions on desired return, state, action triples. Causal transformer predicts next action given (R, s, a) history. Directly relevant to ExPhil imitation learning pipeline.

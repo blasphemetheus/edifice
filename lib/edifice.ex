@@ -26,7 +26,7 @@ defmodule Edifice do
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
   | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, Reservoir (ESN), Native Recurrence, TransformerLike |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
-  | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, Dual Chunk Attention |
+  | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Sigmoid Attention, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, Dual Chunk Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, SoFlow, Normalizing Flow, Transfusion, CogVideoX, TRELLIS |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
@@ -133,6 +133,7 @@ defmodule Edifice do
     flash_linear_attention: Edifice.Attention.FlashLinearAttention,
     kda: Edifice.Attention.KDA,
     gated_attention: Edifice.Attention.GatedAttention,
+    sigmoid_attention: Edifice.Attention.SigmoidAttention,
     ssmax: Edifice.Blocks.SSMax,
     softpick: Edifice.Blocks.Softpick,
     rnope_swa: Edifice.Attention.RNoPESWA,
@@ -368,6 +369,7 @@ defmodule Edifice do
         :flash_linear_attention,
         :kda,
         :gated_attention,
+        :sigmoid_attention,
         :ssmax,
         :softpick,
         :rnope_swa,
