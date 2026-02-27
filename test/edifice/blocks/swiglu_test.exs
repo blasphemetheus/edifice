@@ -57,11 +57,12 @@ defmodule Edifice.Blocks.SwiGLUTest do
     end
 
     test "default inner_size is multiple of 8" do
-      input = Axon.input("input", shape: {nil, @seq_len, 256})
-      model = SwiGLU.layer(input, hidden_size: 256, name: "test")
+      # Use small hidden_size=48 to keep BinaryBackend fast while still testing the rounding
+      input = Axon.input("input", shape: {nil, @seq_len, 48})
+      model = SwiGLU.layer(input, hidden_size: 48, name: "test")
 
       {init_fn, _predict_fn} = Axon.build(model)
-      params = init_fn.(Nx.template({@batch, @seq_len, 256}, :f32), Axon.ModelState.empty())
+      params = init_fn.(Nx.template({@batch, @seq_len, 48}, :f32), Axon.ModelState.empty())
 
       gate_kernel = params.data["test_gate"]["kernel"]
       {_, inner_size} = Nx.shape(gate_kernel)
