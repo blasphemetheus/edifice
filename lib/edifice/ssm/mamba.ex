@@ -97,6 +97,11 @@ defmodule Edifice.SSM.Mamba do
 
   ## Returns
     An Axon model that processes sequences and outputs the last hidden state.
+
+  ## Examples
+
+      iex> model = Edifice.SSM.Mamba.build(embed_dim: 32, hidden_size: 16, state_size: 4)
+      iex> %Axon{} = model
   """
   @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do

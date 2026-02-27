@@ -93,6 +93,11 @@ defmodule Edifice.Recurrent do
 
   ## Returns
     An Axon model that processes sequences and outputs hidden representations.
+
+  ## Examples
+
+      iex> model = Edifice.Recurrent.build(embed_dim: 32, hidden_size: 16, cell_type: :lstm)
+      iex> %Axon{} = model
   """
   @typedoc "Options for `build/1`."
   @type build_opt ::

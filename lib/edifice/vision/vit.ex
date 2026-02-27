@@ -118,6 +118,13 @@ defmodule Edifice.Vision.ViT do
 
     An Axon model. Without `:num_classes`, outputs `[batch, embed_dim]`.
     With `:num_classes`, outputs `[batch, num_classes]`.
+
+  ## Examples
+
+      iex> model = Edifice.Vision.ViT.build(
+      ...>   image_size: 32, patch_size: 8, embed_dim: 64, depth: 2, num_heads: 2
+      ...> )
+      iex> %Axon{} = model
   """
   @typedoc "Options for `build/1`."
   @type build_opt ::

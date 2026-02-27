@@ -42,6 +42,12 @@ defmodule Edifice.Blocks.FFN do
     - `:activation` - Activation function (default: :gelu)
     - `:dropout` - Dropout rate (default: 0.0)
     - `:name` - Layer name prefix (default: "ffn")
+
+  ## Examples
+
+      iex> input = Axon.input("x", shape: {nil, 32})
+      iex> output = Edifice.Blocks.FFN.layer(input, hidden_size: 32)
+      iex> %Axon{} = output
   """
   @spec layer(Axon.t(), keyword()) :: Axon.t()
   def layer(input, opts \\ []) do

@@ -1,6 +1,8 @@
 defmodule EdificeTest do
   use ExUnit.Case, async: true
 
+  doctest Edifice
+
   describe "list_architectures/0" do
     test "returns a sorted list of atoms" do
       archs = Edifice.list_architectures()

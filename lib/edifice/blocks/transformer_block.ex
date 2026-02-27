@@ -91,6 +91,15 @@ defmodule Edifice.Blocks.TransformerBlock do
     - `:norm_position` - Where to normalize: `:pre` or `:post` (default: :pre)
     - `:dropout` - Dropout rate (default: 0.0)
     - `:name` - Block name prefix (default: "transformer_block")
+
+  ## Examples
+
+      iex> input = Axon.input("x", shape: {nil, 4, 32})
+      iex> block = Edifice.Blocks.TransformerBlock.layer(input,
+      ...>   attention_fn: fn x, name -> Axon.dense(x, 32, name: name) end,
+      ...>   hidden_size: 32
+      ...> )
+      iex> %Axon{} = block
   """
   @spec layer(Axon.t(), keyword()) :: Axon.t()
   def layer(input, opts) do

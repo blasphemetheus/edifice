@@ -27,14 +27,14 @@ defmodule Edifice do
   | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, Reservoir (ESN), Native Recurrence, TransformerLike |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
   | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Sigmoid Attention, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, Dual Chunk Attention |
-  | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision |
+  | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision, DINOv3 |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Rectified Flow, SoFlow, Normalizing Flow, Transfusion, CogVideoX, TRELLIS, MDLM |
-  | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
+  | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, DimeNet, SE(3)-Transformer, Message Passing |
   | Sets | DeepSets, PointNet |
   | Energy | EBM, Hopfield, Neural ODE |
   | Probabilistic | Bayesian, MC Dropout, Evidential |
   | Memory | NTM, Memory Networks |
-  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, ReMoE, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, Distillation Head, QAT, Hybrid Builder |
+  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, ReMoE, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, EAGLE-3, Manifold HC, Distillation Head, QAT, Hybrid Builder |
   | Liquid | Liquid Neural Networks |
   | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA, Temporal JEPA |
   | Interpretability | Sparse Autoencoder, Transcoder |
@@ -153,6 +153,7 @@ defmodule Edifice do
     gaussian_splat: Edifice.Vision.GaussianSplat,
     mamba_vision: Edifice.Vision.MambaVision,
     dino_v2: Edifice.Vision.DINOv2,
+    dino_v3: Edifice.Vision.DINOv3,
     metaformer: Edifice.Vision.MetaFormer,
     caformer: {Edifice.Vision.MetaFormer, [variant: :caformer]},
     efficient_vit: Edifice.Vision.EfficientViT,
@@ -197,6 +198,8 @@ defmodule Edifice do
     schnet: Edifice.Graph.SchNet,
     gin_v2: Edifice.Graph.GINv2,
     egnn: Edifice.Graph.EGNN,
+    dimenet: Edifice.Graph.DimeNet,
+    se3_transformer: Edifice.Graph.SE3Transformer,
     # Sets
     deep_sets: Edifice.Sets.DeepSets,
     pointnet: Edifice.Sets.PointNet,
@@ -232,6 +235,8 @@ defmodule Edifice do
     test_time_compute: Edifice.Meta.TestTimeCompute,
     mixture_of_tokenizers: Edifice.Meta.MixtureOfTokenizers,
     speculative_head: Edifice.Meta.SpeculativeHead,
+    eagle3: Edifice.Meta.Eagle3,
+    manifold_hc: Edifice.Meta.ManifoldHC,
     distillation_head: Edifice.Meta.DistillationHead,
     qat: Edifice.Meta.QAT,
     remoe: Edifice.Meta.ReMoE,
@@ -293,12 +298,13 @@ defmodule Edifice do
 
   ## Examples
 
-      Edifice.list_families()
-      # => %{
-      #   feedforward: [:mlp, :kan],
-      #   ssm: [:mamba, :mamba_ssd, :s5, ...],
-      #   ...
-      # }
+      iex> families = Edifice.list_families()
+      iex> is_map(families)
+      true
+
+      iex> families = Edifice.list_families()
+      iex> :mamba in families.ssm
+      true
   """
   @spec list_families() :: %{atom() => [atom()]}
   def list_families do
@@ -396,6 +402,7 @@ defmodule Edifice do
         :gaussian_splat,
         :mamba_vision,
         :dino_v2,
+        :dino_v3,
         :metaformer,
         :caformer,
         :efficient_vit
@@ -426,7 +433,7 @@ defmodule Edifice do
         :mdlm,
         :rectified_flow
       ],
-      graph: [:gcn, :gat, :graph_sage, :gin, :gin_v2, :pna, :graph_transformer, :schnet, :egnn],
+      graph: [:gcn, :gat, :graph_sage, :gin, :gin_v2, :pna, :graph_transformer, :schnet, :egnn, :dimenet, :se3_transformer],
       sets: [:deep_sets, :pointnet],
       energy: [:ebm, :hopfield, :neural_ode],
       probabilistic: [:bayesian, :mc_dropout, :evidential],
@@ -451,6 +458,8 @@ defmodule Edifice do
         :test_time_compute,
         :mixture_of_tokenizers,
         :speculative_head,
+        :eagle3,
+        :manifold_hc,
         :distillation_head,
         :qat,
         :remoe,
@@ -490,9 +499,10 @@ defmodule Edifice do
 
   ## Examples
 
-      model = Edifice.build(:mamba, embed_dim: 256, hidden_size: 512, num_layers: 4)
-      model = Edifice.build(:mlp, input_size: 256, hidden_sizes: [512, 256])
-      model = Edifice.build(:gcn, input_dim: 8, hidden_dims: [32, 32], num_classes: 10)
+      iex> model = Edifice.build(:mlp, input_size: 16, hidden_sizes: [32])
+      iex> %Axon{} = model
+      iex> true
+      true
 
   ## Returns
 
@@ -544,8 +554,11 @@ defmodule Edifice do
 
   ## Examples
 
-      Edifice.module_for(:mamba)
-      # => Edifice.SSM.Mamba
+      iex> Edifice.module_for(:mamba)
+      Edifice.SSM.Mamba
+
+      iex> Edifice.module_for(:mlp)
+      Edifice.Feedforward.MLP
   """
   @spec module_for(atom()) :: module()
   def module_for(name) do

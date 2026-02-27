@@ -69,6 +69,15 @@ defmodule Edifice.Feedforward.MLP do
 
   ## Returns
     An Axon model outputting `[batch, last_hidden_size]`.
+
+  ## Examples
+
+      iex> model = Edifice.Feedforward.MLP.build(input_size: 16, hidden_sizes: [32])
+      iex> {init_fn, predict_fn} = Axon.build(model)
+      iex> params = init_fn.(Nx.template({1, 16}, :f32), Axon.ModelState.empty())
+      iex> output = predict_fn.(params, Nx.broadcast(0.5, {1, 16}))
+      iex> Nx.shape(output)
+      {1, 32}
   """
   @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do

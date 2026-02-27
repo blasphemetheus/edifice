@@ -47,6 +47,14 @@ defmodule Edifice.Blocks.RoPE do
     - `:original_length` - Original trained context length (default: 4096)
     - `:beta_fast` - YaRN high-frequency boundary (default: 32.0)
     - `:beta_slow` - YaRN low-frequency boundary (default: 1.0)
+
+  ## Examples
+
+      iex> {cos, sin} = Edifice.Blocks.RoPE.precompute_freqs(8, 16)
+      iex> Nx.shape(cos)
+      {16, 4}
+      iex> Nx.shape(sin)
+      {16, 4}
   """
   @spec precompute_freqs(pos_integer(), pos_integer(), keyword()) ::
           {Nx.Tensor.t(), Nx.Tensor.t()}

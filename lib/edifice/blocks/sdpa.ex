@@ -20,6 +20,15 @@ defmodule Edifice.Blocks.SDPA do
       # With causal mask
       mask = CausalMask.causal(seq_len)
       output = SDPA.compute(q, k, v, num_heads, head_dim, mask)
+
+  ## Examples
+
+      iex> q = Nx.broadcast(0.5, {1, 4, 8})
+      iex> k = Nx.broadcast(0.5, {1, 4, 8})
+      iex> v = Nx.broadcast(0.5, {1, 4, 8})
+      iex> output = Edifice.Blocks.SDPA.compute(q, k, v, 2, 4)
+      iex> Nx.shape(output)
+      {1, 4, 8}
   """
 
   alias Edifice.Utils.FusedOps

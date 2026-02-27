@@ -225,7 +225,48 @@ defmodule Edifice.GradientSmokeTest do
     :nystromformer,
     :performer,
     :kan,
-    :liquid
+    :liquid,
+    # v0.2.0 additions — attention
+    :based,
+    :conformer,
+    :infini_attention,
+    :mega,
+    :hawk,
+    :retnet_v2,
+    :megalodon,
+    :gla_v2,
+    :hgrn_v2,
+    :flash_linear_attention,
+    :kda,
+    :gated_attention,
+    :sigmoid_attention,
+    :mla,
+    :diff_transformer,
+    :ring_attention,
+    :lightning_attention,
+    :nsa,
+    :dual_chunk_attention,
+    :rnope_swa,
+    :yarn,
+    :tmrope,
+    :attention,
+    :ssmax,
+    :softpick,
+    # v0.2.0 additions — SSM
+    :striped_hyena,
+    :mamba3,
+    :gss,
+    :hyena_v2,
+    :hymba,
+    :ss_transformer,
+    # v0.2.0 additions — recurrent
+    :gated_delta_net,
+    :ttt_e2e,
+    :slstm,
+    :xlstm_v2,
+    :mlstm,
+    :native_recurrence,
+    :transformer_like
   ]
 
   @sequence_opts [
@@ -894,6 +935,1136 @@ defmodule Edifice.GradientSmokeTest do
     input_map = %{
       "noisy_input" => random_tensor({@batch, @embed}),
       "sigma" => random_tensor({@batch})
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  # ── Transformer family ──────────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through decoder_only" do
+    model =
+      Edifice.build(:decoder_only,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_kv_heads: 2,
+        num_layers: @num_layers,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through nemotron_h" do
+    model =
+      Edifice.build(:nemotron_h,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        seq_len: @seq_len,
+        state_size: @state_size,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through multi_token_prediction" do
+    model =
+      Edifice.build(:multi_token_prediction,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        vocab_size: 32,
+        num_heads: 2,
+        num_kv_heads: 2,
+        num_layers: @num_layers,
+        num_predictions: 2,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through byte_latent_transformer encoder" do
+    {encoder, _latent, _decoder} =
+      Edifice.build(:byte_latent_transformer,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        max_byte_len: @seq_len,
+        num_patches: 2,
+        latent_dim: @hidden,
+        dropout: 0.0
+      )
+
+    # byte_ids are integer tokens
+    input = Nx.iota({@batch, @seq_len}, type: :s64)
+    check_gradients(encoder, %{"byte_ids" => input})
+  end
+
+  # ── Feedforward additions ──────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through bitnet" do
+    model =
+      Edifice.build(:bitnet,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_layers: @num_layers,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through kat" do
+    model =
+      Edifice.build(:kat,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_layers: @num_layers,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  # ── Vision additions ───────────────────────────────────────────
+
+  for arch <- [:focalnet, :poolformer, :metaformer, :caformer, :efficient_vit, :mamba_vision] do
+    @tag timeout: 120_000
+    @tag :slow
+    test "gradient flows through #{arch}" do
+      model =
+        Edifice.build(unquote(arch),
+          image_size: @image_size,
+          in_channels: @in_channels,
+          patch_size: 4,
+          embed_dim: @hidden,
+          hidden_size: @hidden,
+          depths: [1],
+          dims: [@hidden],
+          num_heads: [2],
+          depth: 1,
+          dropout: 0.0
+        )
+
+      input = random_tensor({@batch, @in_channels, @image_size, @image_size})
+      check_gradients(model, %{"image" => input})
+    end
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through nerf" do
+    model = Edifice.build(:nerf, coord_dim: 3, dir_dim: 3, hidden_size: @hidden)
+    coordinates = random_tensor({@batch, 3})
+    directions = random_tensor({@batch, 3})
+    check_gradients(model, %{"coordinates" => coordinates, "directions" => directions})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through gaussian_splat" do
+    model =
+      Edifice.build(:gaussian_splat,
+        num_gaussians: 4,
+        image_size: 8
+      )
+
+    input_map = %{
+      "camera_position" => random_tensor({@batch, 3}),
+      "view_matrix" => random_tensor({@batch, 4, 4}),
+      "proj_matrix" => random_tensor({@batch, 4, 4}),
+      "image_height" => random_tensor({@batch}),
+      "image_width" => random_tensor({@batch})
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through dino_v2 student" do
+    {student, _teacher} =
+      Edifice.build(:dino_v2,
+        image_size: @image_size,
+        in_channels: @in_channels,
+        patch_size: 4,
+        embed_dim: @hidden,
+        depth: 1,
+        num_heads: 2,
+        include_head: false,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @in_channels, @image_size, @image_size})
+    check_gradients(student, %{"image" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through dino_v3 student" do
+    {student, _teacher} =
+      Edifice.build(:dino_v3,
+        image_size: @image_size,
+        in_channels: @in_channels,
+        patch_size: 4,
+        embed_dim: @hidden,
+        depth: 1,
+        num_heads: 2,
+        include_head: false,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @in_channels, @image_size, @image_size})
+    check_gradients(student, %{"image" => input})
+  end
+
+  # ── Convolutional additions ────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through conv1d" do
+    model =
+      Edifice.build(:conv1d,
+        input_size: @embed,
+        hidden_size: @hidden,
+        num_layers: 2
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"input" => input})
+  end
+
+  @tag timeout: 120_000
+  @tag :exla_only
+  test "gradient flows through efficientnet" do
+    model = Edifice.build(:efficientnet, input_dim: @embed, hidden_dim: @hidden)
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"input" => input})
+  end
+
+  @tag timeout: 120_000
+  test "parameters are sensitive in efficientnet" do
+    model = Edifice.build(:efficientnet, input_dim: @embed, hidden_dim: @hidden)
+    input = random_tensor({@batch, @embed})
+    check_parameter_sensitivity(model, %{"input" => input})
+  end
+
+  # ── Graph additions ────────────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through gin_v2" do
+    model =
+      Edifice.build(:gin_v2,
+        input_dim: @node_dim,
+        edge_dim: 4,
+        hidden_size: @hidden,
+        num_classes: @num_classes,
+        num_layers: @num_layers,
+        dropout: 0.0
+      )
+
+    nodes = random_tensor({@batch, @num_nodes, @node_dim})
+    adj = random_tensor({@batch, @num_nodes, @num_nodes})
+    edge_features = random_tensor({@batch, @num_nodes, @num_nodes, 4})
+
+    check_gradients(model, %{
+      "nodes" => nodes,
+      "adjacency" => adj,
+      "edge_features" => edge_features
+    })
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through egnn" do
+    model =
+      Edifice.build(:egnn,
+        in_node_features: @node_dim,
+        hidden_size: @hidden,
+        num_layers: @num_layers
+      )
+
+    nodes = random_tensor({@batch, @num_nodes, @node_dim})
+    coords = random_tensor({@batch, @num_nodes, 3})
+    edge_index = Nx.iota({@batch, @num_nodes, 2}, type: :s64)
+
+    check_gradients(model, %{
+      "nodes" => nodes,
+      "coords" => coords,
+      "edge_index" => edge_index
+    })
+  end
+
+  # ── Detection family ───────────────────────────────────────────
+
+  for arch <- [:detr, :rt_detr] do
+    @tag timeout: 120_000
+    @tag :slow
+    test "gradient flows through #{arch}" do
+      model =
+        Edifice.build(unquote(arch),
+          image_size: @image_size,
+          in_channels: @in_channels,
+          hidden_dim: @hidden,
+          num_heads: 2,
+          num_encoder_layers: 1,
+          num_decoder_layers: 1,
+          ffn_dim: @hidden,
+          num_queries: 4,
+          num_classes: @num_classes,
+          dropout: 0.0
+        )
+
+      input = random_tensor({@batch, @image_size, @image_size, @in_channels})
+      check_gradients(model, %{"image" => input})
+    end
+  end
+
+  @tag timeout: 120_000
+  @tag :slow
+  test "gradient flows through sam2" do
+    model =
+      Edifice.build(:sam2,
+        image_size: @image_size,
+        in_channels: @in_channels,
+        hidden_dim: @hidden,
+        num_heads: 2,
+        dropout: 0.0
+      )
+
+    input_map = %{
+      "image" => random_tensor({@batch, @image_size, @image_size, @in_channels}),
+      "points" => random_tensor({@batch, 2, 2}),
+      "labels" => random_tensor({@batch, 2})
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  # ── Audio family ───────────────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through whisper encoder" do
+    {encoder, _decoder} =
+      Edifice.build(:whisper,
+        n_mels: @embed,
+        audio_len: @seq_len,
+        hidden_dim: @hidden,
+        num_heads: 2,
+        num_encoder_layers: 1,
+        num_decoder_layers: 1,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @embed, @seq_len})
+    check_gradients(encoder, %{"mel_spectrogram" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through encodec encoder" do
+    {encoder, _decoder} =
+      Edifice.build(:encodec,
+        hidden_dim: @hidden,
+        num_layers: @num_layers
+      )
+
+    input = random_tensor({@batch, 1, 64})
+    check_gradients(encoder, %{"waveform" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through soundstorm" do
+    model =
+      Edifice.build(:soundstorm,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        vocab_size: 32,
+        dropout: 0.0
+      )
+
+    # Integer tokens for embedding lookup
+    tokens = Nx.iota({@batch, @seq_len}, type: :s64)
+    tokens = Nx.remainder(tokens, 32)
+    check_gradients(model, %{"tokens" => tokens})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through valle AR model" do
+    {ar_model, _nar_model} =
+      Edifice.build(:valle,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        vocab_size: 32,
+        num_codebooks: 2,
+        dropout: 0.0
+      )
+
+    text_tokens = Nx.iota({@batch, @seq_len}, type: :s64) |> Nx.remainder(32)
+    prompt_tokens = Nx.iota({@batch, 2, @seq_len}, type: :s64) |> Nx.remainder(32)
+    audio_tokens = Nx.iota({@batch, @seq_len}, type: :s64) |> Nx.remainder(32)
+
+    check_gradients(ar_model, %{
+      "text_tokens" => text_tokens,
+      "prompt_tokens" => prompt_tokens,
+      "audio_tokens" => audio_tokens
+    })
+  end
+
+  # ── Robotics family ───────────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through act decoder" do
+    {_encoder, decoder} =
+      Edifice.build(:act,
+        obs_dim: @embed,
+        action_dim: @action_dim,
+        latent_dim: @latent_size,
+        chunk_size: @action_horizon,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        dropout: 0.0
+      )
+
+    input_map = %{
+      "obs" => random_tensor({@batch, @embed}),
+      "z" => random_tensor({@batch, @latent_size})
+    }
+
+    check_gradients(decoder, input_map)
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through openvla" do
+    model =
+      Edifice.build(:openvla,
+        image_size: @image_size,
+        in_channels: @in_channels,
+        hidden_dim: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        dropout: 0.0
+      )
+
+    input_map = %{
+      "image" => random_tensor({@batch, @in_channels, @image_size, @image_size}),
+      "text_tokens" => random_tensor({@batch, @seq_len, @hidden})
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  # ── RL family ──────────────────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through policy_value" do
+    model =
+      Edifice.build(:policy_value,
+        input_size: @embed,
+        action_size: @action_dim,
+        hidden_size: @hidden
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"observation" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through decision_transformer" do
+    model =
+      Edifice.build(:decision_transformer,
+        state_dim: @embed,
+        action_dim: @action_dim,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        context_len: @seq_len,
+        dropout: 0.0
+      )
+
+    input_map = %{
+      "returns" => random_tensor({@batch, @seq_len}),
+      "states" => random_tensor({@batch, @seq_len, @embed}),
+      "actions" => random_tensor({@batch, @seq_len, @action_dim}),
+      "timesteps" => Nx.iota({@batch, @seq_len}, type: :s64)
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  # ── Generative additions ───────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through dit_v2" do
+    model =
+      Edifice.build(:dit_v2,
+        input_dim: @embed,
+        hidden_size: @hidden,
+        depth: 1,
+        num_heads: 2,
+        dropout: 0.0
+      )
+
+    input_map = %{
+      "noisy_input" => random_tensor({@batch, @embed}),
+      "timestep" => random_tensor({@batch}),
+      "class_label" => random_tensor({@batch})
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through mmdit" do
+    model =
+      Edifice.build(:mmdit,
+        img_dim: @embed,
+        txt_dim: @embed,
+        hidden_size: @hidden,
+        depth: 1,
+        num_heads: 2,
+        dropout: 0.0
+      )
+
+    input_map = %{
+      "img_latent" => random_tensor({@batch, @seq_len, @embed}),
+      "txt_embed" => random_tensor({@batch, @seq_len, @embed}),
+      "timestep" => random_tensor({@batch}),
+      "pooled_text" => random_tensor({@batch, @embed})
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through soflow" do
+    model =
+      Edifice.build(:soflow,
+        obs_size: @embed,
+        action_dim: @action_dim,
+        action_horizon: @action_horizon,
+        hidden_size: @hidden,
+        num_layers: @num_layers,
+        dropout: 0.0
+      )
+
+    input_map = %{
+      "x_t" => random_tensor({@batch, @action_horizon, @action_dim}),
+      "current_time" => random_tensor({@batch}),
+      "target_time" => random_tensor({@batch}),
+      "observations" => random_tensor({@batch, @embed})
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through rectified_flow" do
+    model =
+      Edifice.build(:rectified_flow,
+        obs_size: @embed,
+        action_dim: @action_dim,
+        action_horizon: @action_horizon,
+        hidden_size: @hidden,
+        num_layers: @num_layers,
+        dropout: 0.0
+      )
+
+    input_map = %{
+      "x_t" => random_tensor({@batch, @action_horizon, @action_dim}),
+      "timestep" => random_tensor({@batch}),
+      "observations" => random_tensor({@batch, @embed})
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  for arch <- [:linear_dit, :sit] do
+    @tag timeout: 120_000
+    test "gradient flows through #{arch}" do
+      model =
+        Edifice.build(unquote(arch),
+          input_dim: @embed,
+          hidden_size: @hidden,
+          depth: 1,
+          num_heads: 2,
+          dropout: 0.0
+        )
+
+      input_map = %{
+        "noisy_input" => random_tensor({@batch, @embed}),
+        "timestep" => random_tensor({@batch}),
+        "class_label" => random_tensor({@batch})
+      }
+
+      check_gradients(model, input_map)
+    end
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through var" do
+    model =
+      Edifice.build(:var,
+        vocab_size: 32,
+        hidden_size: @hidden,
+        depth: 1,
+        num_heads: 2,
+        num_scales: 2,
+        dropout: 0.0
+      )
+
+    # VAR uses scale_embeddings as pre-embedded input
+    total_tokens = 4
+    input = random_tensor({@batch, total_tokens, @hidden})
+    check_gradients(model, %{"scale_embeddings" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through mar" do
+    model =
+      Edifice.build(:mar,
+        vocab_size: 32,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        depth: 1,
+        num_heads: 2,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    tokens = Nx.iota({@batch, @seq_len}, type: :s64) |> Nx.remainder(32)
+    check_gradients(model, %{"tokens" => tokens})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through mdlm" do
+    model =
+      Edifice.build(:mdlm,
+        vocab_size: 32,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        depth: 1,
+        num_heads: 2,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    tokens = Nx.iota({@batch, @seq_len}, type: :s64) |> Nx.remainder(32)
+    timestep = random_tensor({@batch})
+    check_gradients(model, %{"masked_tokens" => tokens, "timestep" => timestep})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through transfusion" do
+    model =
+      Edifice.build(:transfusion,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        depth: 1,
+        num_heads: 2,
+        vocab_size: 32,
+        dropout: 0.0
+      )
+
+    input_map = %{
+      "sequence" => random_tensor({@batch, @seq_len, @embed}),
+      "modality_mask" => random_tensor({@batch, @seq_len}),
+      "timestep" => random_tensor({@batch})
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  @tag timeout: 120_000
+  @tag :slow
+  test "gradient flows through cogvideox transformer" do
+    model =
+      Edifice.Generative.CogVideoX.build_transformer(
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        text_hidden_size: @hidden,
+        dropout: 0.0
+      )
+
+    input_map = %{
+      "video_latent" => random_tensor({@batch, 2, @in_channels, 4, 4}),
+      "text_embed" => random_tensor({@batch, @seq_len, @hidden}),
+      "timestep" => random_tensor({@batch})
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  @tag timeout: 120_000
+  @tag :slow
+  test "gradient flows through trellis" do
+    model =
+      Edifice.build(:trellis,
+        feature_dim: @node_dim,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        dropout: 0.0
+      )
+
+    input_map = %{
+      "sparse_features" => random_tensor({@batch, @num_nodes, @node_dim}),
+      "voxel_positions" => random_tensor({@batch, @num_nodes, 3}),
+      "occupancy_mask" => random_tensor({@batch, @num_nodes}),
+      "conditioning" => random_tensor({@batch, @seq_len, @hidden}),
+      "timestep" => random_tensor({@batch})
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  # ── MoE additions ──────────────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through moe_v2" do
+    model =
+      Edifice.build(:moe_v2,
+        input_size: @embed,
+        hidden_size: @hidden * 4,
+        output_size: @hidden,
+        num_experts: 2,
+        top_k: 1
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"moe_input" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through remoe" do
+    model =
+      Edifice.build(:remoe,
+        input_size: @embed,
+        hidden_size: @hidden * 4,
+        output_size: @hidden,
+        num_experts: 2,
+        top_k: 1
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"remoe_input" => input})
+  end
+
+  # ── Meta / PEFT additions ─────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through dora" do
+    model = Edifice.build(:dora, input_size: @embed, output_size: @hidden, rank: 4)
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"input" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through mixture_of_depths" do
+    model =
+      Edifice.build(:mixture_of_depths,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through mixture_of_agents" do
+    model =
+      Edifice.build(:mixture_of_agents,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        seq_len: @seq_len,
+        num_agents: 2,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through rlhf_head" do
+    model =
+      Edifice.build(:rlhf_head,
+        input_size: @embed,
+        hidden_size: @hidden
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  for arch <- [:dpo, :kto, :grpo] do
+    @tag timeout: 120_000
+    test "gradient flows through #{arch}" do
+      model =
+        Edifice.build(unquote(arch),
+          embed_dim: @embed,
+          hidden_size: @hidden,
+          vocab_size: 32,
+          num_heads: 2,
+          num_kv_heads: 2,
+          num_layers: @num_layers,
+          seq_len: @seq_len,
+          dropout: 0.0
+        )
+
+      tokens = Nx.iota({@batch, @seq_len}, type: :s64) |> Nx.remainder(32)
+      check_gradients(model, %{"tokens" => tokens})
+    end
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through distillation_head" do
+    model =
+      Edifice.build(:distillation_head,
+        embed_dim: @embed,
+        teacher_dim: @hidden,
+        hidden_size: @hidden
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through qat" do
+    model =
+      Edifice.build(:qat,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through eagle3" do
+    model =
+      Edifice.build(:eagle3,
+        hidden_size: @hidden,
+        vocab_size: 32,
+        num_heads: 2,
+        num_kv_heads: 2
+      )
+
+    input_map = %{
+      "token_embeddings" => random_tensor({@batch, @seq_len, @hidden}),
+      "features_low" => random_tensor({@batch, @seq_len, @hidden}),
+      "features_mid" => random_tensor({@batch, @seq_len, @hidden}),
+      "features_high" => random_tensor({@batch, @seq_len, @hidden})
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through manifold_hc" do
+    model =
+      Edifice.build(:manifold_hc,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through speculative_decoding draft model" do
+    {draft, _verifier} =
+      Edifice.build(:speculative_decoding,
+        embed_dim: @embed,
+        draft_type: :gqa,
+        verifier_type: :gqa,
+        draft_model_opts: [
+          hidden_size: @hidden,
+          num_layers: 1,
+          num_heads: 2,
+          seq_len: @seq_len,
+          dropout: 0.0
+        ],
+        verifier_model_opts: [
+          hidden_size: @hidden,
+          num_layers: 1,
+          num_heads: 2,
+          seq_len: @seq_len,
+          dropout: 0.0
+        ]
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(draft, %{"state_sequence" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through test_time_compute" do
+    model =
+      Edifice.build(:test_time_compute,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_kv_heads: 2,
+        num_layers: @num_layers,
+        scorer_hidden: @hidden,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through speculative_head" do
+    model =
+      Edifice.build(:speculative_head,
+        embed_dim: @embed,
+        vocab_size: 32,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_kv_heads: 2,
+        num_layers: @num_layers,
+        num_predictions: 2,
+        head_hidden: @hidden,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through medusa" do
+    model =
+      Edifice.build(:medusa,
+        base_hidden_dim: @embed,
+        vocab_size: 32,
+        num_medusa_heads: 2
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"hidden_states" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through mixture_of_tokenizers" do
+    model =
+      Edifice.build(:mixture_of_tokenizers,
+        hidden_size: @hidden,
+        num_tokenizers: 2,
+        tokenizer_vocab_sizes: [16, 32],
+        tokenizer_embed_dims: [8, 8],
+        num_heads: 2,
+        num_kv_heads: 2,
+        num_layers: @num_layers,
+        window_size: @seq_len,
+        dropout: 0.0
+      )
+
+    tokens = Nx.iota({@batch, @seq_len}, type: :s64) |> Nx.remainder(16)
+    check_gradients(model, %{"state_sequence" => tokens})
+  end
+
+  # ── Contrastive additions ──────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through jepa context_encoder" do
+    {context_encoder, _predictor} =
+      Edifice.build(:jepa,
+        input_dim: @embed,
+        embed_dim: @hidden,
+        predictor_embed_dim: @hidden,
+        encoder_depth: 1,
+        predictor_depth: 1,
+        num_heads: 2,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(context_encoder, %{"features" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through temporal_jepa context_encoder" do
+    {context_encoder, _predictor} =
+      Edifice.build(:temporal_jepa,
+        input_dim: @embed,
+        embed_dim: @hidden,
+        predictor_embed_dim: @hidden,
+        encoder_depth: 1,
+        predictor_depth: 1,
+        num_heads: 2,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(context_encoder, %{"state_sequence" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through siglip encoder" do
+    {encoder, _temp_param} =
+      Edifice.build(:siglip,
+        input_dim: @embed,
+        projection_dim: @hidden,
+        hidden_size: @hidden
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(encoder, %{"features" => input})
+  end
+
+  # ── Interpretability ───────────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through sparse_autoencoder" do
+    model =
+      Edifice.build(:sparse_autoencoder,
+        input_size: @embed,
+        hidden_size: @hidden * 4
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"sae_input" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through transcoder" do
+    model =
+      Edifice.build(:transcoder,
+        input_size: @embed,
+        output_size: @hidden,
+        hidden_size: @hidden * 4
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"transcoder_input" => input})
+  end
+
+  # ── World Model ────────────────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through world_model encoder" do
+    {encoder, _dynamics, _reward_head} =
+      Edifice.build(:world_model,
+        obs_size: @embed,
+        action_size: @action_dim,
+        latent_size: @latent_size,
+        hidden_size: @hidden
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(encoder, %{"observation" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through world_model dynamics" do
+    {_encoder, dynamics, _reward_head} =
+      Edifice.build(:world_model,
+        obs_size: @embed,
+        action_size: @action_dim,
+        latent_size: @latent_size,
+        hidden_size: @hidden
+      )
+
+    concat_size = @latent_size + @action_dim
+    input = random_tensor({@batch, concat_size})
+    check_gradients(dynamics, %{"state_action" => input})
+  end
+
+  # ── Multimodal ─────────────────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through multimodal_mlp_fusion" do
+    model =
+      Edifice.build(:multimodal_mlp_fusion,
+        vision_dim: @embed,
+        llm_dim: @hidden,
+        num_visual_tokens: 4,
+        text_seq_len: @seq_len
+      )
+
+    input_map = %{
+      "visual_tokens" => random_tensor({@batch, 4, @embed}),
+      "text_embeddings" => random_tensor({@batch, @seq_len, @hidden})
+    }
+
+    check_gradients(model, input_map)
+  end
+
+  # ── Scientific ─────────────────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through fno" do
+    model =
+      Edifice.build(:fno,
+        in_channels: @in_channels,
+        out_channels: @in_channels,
+        hidden_channels: @hidden,
+        num_layers: @num_layers,
+        modes: 4
+      )
+
+    input = random_tensor({@batch, @seq_len, @in_channels})
+    check_gradients(model, %{"input" => input})
+  end
+
+  # ── Memory addition ────────────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through engram" do
+    model =
+      Edifice.build(:engram,
+        key_dim: @embed,
+        value_dim: @hidden,
+        num_tables: 2,
+        num_buckets: 4
+      )
+
+    input_map = %{
+      "query" => random_tensor({@batch, @embed}),
+      "memory_slots" => random_tensor({2, 4, @hidden})
     }
 
     check_gradients(model, input_map)

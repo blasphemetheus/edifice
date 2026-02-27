@@ -50,6 +50,12 @@ defmodule Edifice.Generative.GAN do
 
   ## Returns
     Tuple of `{generator, discriminator}` Axon models.
+
+  ## Examples
+
+      iex> {generator, discriminator} = Edifice.Generative.GAN.build(output_size: 64)
+      iex> %Axon{} = generator
+      iex> %Axon{} = discriminator
   """
   @typedoc "Options for `build/1`."
   @type build_opt ::

@@ -38,6 +38,13 @@ defmodule Edifice.Blocks.CrossAttention do
     - `:num_heads` - Number of attention heads (default: 1)
     - `:dropout` - Dropout rate (default: 0.0)
     - `:name` - Layer name prefix (default: "cross_attn")
+
+  ## Examples
+
+      iex> q = Axon.input("q", shape: {nil, 4, 32})
+      iex> kv = Axon.input("kv", shape: {nil, 8, 32})
+      iex> output = Edifice.Blocks.CrossAttention.layer(q, kv, hidden_size: 32, num_heads: 4)
+      iex> %Axon{} = output
   """
   @spec layer(Axon.t(), Axon.t(), keyword()) :: Axon.t()
   def layer(query_input, kv_input, opts \\ []) do

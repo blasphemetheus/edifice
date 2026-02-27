@@ -32,6 +32,12 @@ defmodule Edifice.Blocks.SinusoidalPE do
   ## Options
     - `:max_len` - Maximum sequence length (default: 512)
     - `:dim` - Embedding dimension (required)
+
+  ## Examples
+
+      iex> table = Edifice.Blocks.SinusoidalPE.build_table(dim: 8, max_len: 16)
+      iex> Nx.shape(table)
+      {16, 8}
   """
   @spec build_table(keyword()) :: Nx.Tensor.t()
   def build_table(opts) do
