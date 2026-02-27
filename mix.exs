@@ -72,6 +72,7 @@ defmodule Edifice.MixProject do
         "guides/reading_edifice.md",
         "guides/learning_path.md",
         # Architecture Guides
+        "guides/architecture_index.md",
         "guides/architecture_taxonomy.md",
         "guides/state_space_models.md",
         "guides/attention_mechanisms.md",
@@ -95,6 +96,7 @@ defmodule Edifice.MixProject do
           "guides/learning_path.md"
         ],
         Reference: [
+          "guides/architecture_index.md",
           "guides/architecture_taxonomy.md"
         ],
         "Guides: Sequence Processing": [
