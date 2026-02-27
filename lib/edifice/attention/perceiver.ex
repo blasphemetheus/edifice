@@ -79,7 +79,7 @@ defmodule Edifice.Attention.Perceiver do
   """
 
   alias Edifice.Blocks.FFN
-  alias Edifice.Utils.FusedOps
+  alias Edifice.Blocks.SDPA
 
   # Default hyperparameters
   @default_latent_dim 256
@@ -322,33 +322,13 @@ defmodule Edifice.Attention.Perceiver do
     Axon.add(after_attn, ffn_out, name: "#{name}_ffn_residual")
   end
 
-  # Cross-attention: Q from one source, K/V from another (no causal mask)
+  # Cross/self-attention delegates to shared SDPA block (no causal mask)
   defp cross_attention_impl(q, k, v, opts) do
-    num_heads = opts[:num_heads]
-    head_dim = opts[:head_dim]
-
-    batch = Nx.axis_size(q, 0)
-    seq_q = Nx.axis_size(q, 1)
-    seq_kv = Nx.axis_size(k, 1)
-
-    # Reshape for multi-head: [batch, seq, heads, head_dim] -> [batch, heads, seq, head_dim]
-    q = q |> Nx.reshape({batch, seq_q, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    k = k |> Nx.reshape({batch, seq_kv, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    v = v |> Nx.reshape({batch, seq_kv, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-
-    # Scaled dot-product attention (no mask for cross-attention)
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-    scores = Nx.dot(q, [3], [0, 1], k, [3], [0, 1]) |> Nx.divide(scale)
-    weights = FusedOps.fused_softmax(scores)
-    output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
-
-    # Reshape back: [batch, seq_q, num_heads * head_dim]
-    output |> Nx.transpose(axes: [0, 2, 1, 3]) |> Nx.reshape({batch, seq_q, num_heads * head_dim})
+    SDPA.compute(q, k, v, opts[:num_heads], opts[:head_dim])
   end
 
-  # Self-attention without causal mask (latents are unordered)
   defp self_attention_impl(q, k, v, opts) do
-    cross_attention_impl(q, k, v, opts)
+    SDPA.compute(q, k, v, opts[:num_heads], opts[:head_dim])
   end
 
   # FFN delegated to Edifice.Blocks.FFN

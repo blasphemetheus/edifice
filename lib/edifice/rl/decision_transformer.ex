@@ -244,46 +244,11 @@ defmodule Edifice.RL.DecisionTransformer do
     Axon.dense(attn_out, hidden_size, name: "#{name}_out_proj")
   end
 
-  # Causal multi-head attention implementation
+  # Causal multi-head attention — delegates to shared SDPA block
   defp causal_attention_impl(q, k, v, opts) do
-    num_heads = opts[:num_heads]
-    head_dim = opts[:head_dim]
-
-    batch = Nx.axis_size(q, 0)
     seq_len = Nx.axis_size(q, 1)
-
-    # Reshape to [batch, seq, heads, head_dim] -> [batch, heads, seq, head_dim]
-    q = q |> Nx.reshape({batch, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    k = k |> Nx.reshape({batch, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    v = v |> Nx.reshape({batch, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-
-    # Scaled dot-product attention
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-    scores = Nx.dot(q, [3], [0, 1], k, [3], [0, 1])
-    scores = Nx.divide(scores, scale)
-
-    # Causal mask
-    rows = Nx.iota({seq_len, seq_len}, axis: 0)
-    cols = Nx.iota({seq_len, seq_len}, axis: 1)
-    causal_mask = Nx.greater_equal(rows, cols)
-
-    causal_mask =
-      causal_mask
-      |> Nx.reshape({1, 1, seq_len, seq_len})
-      |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
-
-    scores = Nx.select(causal_mask, scores, Nx.broadcast(-1.0e9, Nx.shape(scores)))
-
-    weights = Nx.exp(Nx.subtract(scores, Nx.reduce_max(scores, axes: [-1], keep_axes: true)))
-    weights = Nx.divide(weights, Nx.sum(weights, axes: [-1], keep_axes: true))
-
-    # Weighted sum: [batch, heads, seq, head_dim]
-    output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
-
-    # Reshape back: [batch, seq, hidden_size]
-    output
-    |> Nx.transpose(axes: [0, 2, 1, 3])
-    |> Nx.reshape({batch, seq_len, num_heads * head_dim})
+    mask = Edifice.Blocks.CausalMask.causal(seq_len)
+    Edifice.Blocks.SDPA.compute(q, k, v, opts[:num_heads], opts[:head_dim], mask)
   end
 
   defp maybe_dropout(x, rate, _name) when rate <= 0, do: x

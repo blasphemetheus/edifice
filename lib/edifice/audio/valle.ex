@@ -77,6 +77,9 @@ defmodule Edifice.Audio.VALLE do
 
   import Nx.Defn
 
+  alias Edifice.Blocks.SDPA
+  alias Edifice.Blocks.SinusoidalPE
+
   @default_text_vocab_size 256
   @default_audio_vocab_size 1024
   @default_hidden_dim 1024
@@ -192,7 +195,7 @@ defmodule Edifice.Audio.VALLE do
       )
 
     # Add positional embeddings
-    combined = add_positional_embedding(combined, hidden_dim, "ar_pos")
+    combined = SinusoidalPE.layer(combined, dim: hidden_dim, name: "ar_pos")
 
     # Transformer decoder layers (causal attention)
     x =
@@ -281,7 +284,7 @@ defmodule Edifice.Audio.VALLE do
       Axon.concatenate([text_embed, audio_combined], axis: 1, name: "nar_concat")
 
     # Add positional embeddings
-    combined = add_positional_embedding(combined, hidden_dim, "nar_pos")
+    combined = SinusoidalPE.layer(combined, dim: hidden_dim, name: "nar_pos")
 
     # Transformer layers (bidirectional - no causal mask)
     x =
@@ -335,46 +338,6 @@ defmodule Edifice.Audio.VALLE do
     )
   end
 
-  # Add sinusoidal positional embeddings
-  defp add_positional_embedding(input, hidden_dim, name) do
-    Axon.layer(
-      fn x, opts ->
-        dim = opts[:hidden_dim]
-        seq_len = Nx.axis_size(x, 1)
-
-        # Sinusoidal positional encoding
-        pos = Nx.iota({seq_len, 1}, type: :f32)
-        dim_idx = Nx.iota({1, dim}, type: :f32)
-
-        # angle_rates = 1 / (10000 ^ (2i / d))
-        # Using the formula: exp(-log(10000) * 2i / d)
-        angle_rates =
-          Nx.exp(
-            Nx.multiply(
-              Nx.negate(Nx.log(Nx.tensor(10_000.0))),
-              Nx.divide(Nx.multiply(Nx.floor(Nx.divide(dim_idx, 2)), 2.0), dim)
-            )
-          )
-
-        angles = Nx.multiply(pos, angle_rates)
-
-        # Apply sin to even indices (0, 2, 4, ...), cos to odd indices (1, 3, 5, ...)
-        even_mask =
-          Nx.remainder(dim_idx, 2)
-          |> Nx.equal(0)
-          |> Nx.broadcast({seq_len, dim})
-
-        pe = Nx.select(even_mask, Nx.sin(angles), Nx.cos(angles))
-
-        Nx.add(x, pe)
-      end,
-      [input],
-      name: name,
-      hidden_dim: hidden_dim,
-      op_name: :positional_encoding
-    )
-  end
-
   # Transformer decoder block
   defp decoder_block(input, hidden_dim, num_heads, dropout, name, opts) do
     causal = Keyword.get(opts, :causal, true)
@@ -391,7 +354,7 @@ defmodule Edifice.Audio.VALLE do
     Axon.add(x, ffn_out, name: "#{name}_ffn_residual")
   end
 
-  # Multi-head self-attention
+  # Multi-head self-attention (delegates math to shared SDPA block)
   defp multi_head_attention(input, hidden_dim, num_heads, causal, name) do
     head_dim = div(hidden_dim, num_heads)
 
@@ -401,53 +364,14 @@ defmodule Edifice.Audio.VALLE do
       Axon.nx(
         qkv,
         fn qkv_tensor ->
-          {batch, seq_len, _} = Nx.shape(qkv_tensor)
+          {_batch, seq_len, _} = Nx.shape(qkv_tensor)
 
           query = Nx.slice_along_axis(qkv_tensor, 0, hidden_dim, axis: 2)
           key = Nx.slice_along_axis(qkv_tensor, hidden_dim, hidden_dim, axis: 2)
           value = Nx.slice_along_axis(qkv_tensor, hidden_dim * 2, hidden_dim, axis: 2)
 
-          # Reshape to heads
-          query = reshape_to_heads(query, batch, seq_len, num_heads, head_dim)
-          key = reshape_to_heads(key, batch, seq_len, num_heads, head_dim)
-          value = reshape_to_heads(value, batch, seq_len, num_heads, head_dim)
-
-          # Scaled dot-product attention
-          scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(query)))
-          scores = Nx.dot(query, [3], [0, 1], key, [3], [0, 1])
-          scores = Nx.divide(scores, scale)
-
-          # Apply causal mask if needed
-          scores =
-            if causal do
-              mask =
-                Edifice.Blocks.CausalMask.causal(seq_len)
-                |> Nx.reshape({1, 1, seq_len, seq_len})
-                |> Nx.broadcast(Nx.shape(scores))
-
-              Nx.select(
-                mask,
-                scores,
-                Nx.broadcast(Nx.tensor(-1.0e9, type: Nx.type(scores)), Nx.shape(scores))
-              )
-            else
-              scores
-            end
-
-          # Softmax
-          max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
-          exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-
-          weights =
-            Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
-
-          # Apply attention
-          output = Nx.dot(weights, [3], [0, 1], value, [2], [0, 1])
-
-          # Reshape back
-          output
-          |> Nx.transpose(axes: [0, 2, 1, 3])
-          |> Nx.reshape({batch, seq_len, num_heads * head_dim})
+          mask = if causal, do: Edifice.Blocks.CausalMask.causal(seq_len), else: nil
+          SDPA.compute(query, key, value, num_heads, head_dim, mask)
         end,
         name: "#{name}_compute"
       )
@@ -472,12 +396,6 @@ defmodule Edifice.Audio.VALLE do
     gated
     |> Axon.dropout(rate: dropout, name: "#{name}_dropout")
     |> Axon.dense(hidden_dim, name: "#{name}_down")
-  end
-
-  defp reshape_to_heads(x, batch, seq_len, num_heads, head_dim) do
-    x
-    |> Nx.reshape({batch, seq_len, num_heads, head_dim})
-    |> Nx.transpose(axes: [0, 2, 1, 3])
   end
 
   # ============================================================================

@@ -194,12 +194,13 @@ Reviewed by Opus for correctness, math accuracy, and idiomatic Elixir.
 
 Full audit in `docs/composability-audit.md`.
 
-### Remaining
+### Remaining — evaluated, no further extraction needed
 
-- [ ] **PatchEmbed block** — ViT, DeiT, Swin, MambaVision all have near-identical patch embedding (conv + reshape). Extract to `Blocks.PatchEmbed`.
-- [ ] **VALLE decoder refactor** — AR/NAR modes use inline attention with manual softmax; could adopt SDPA + TransformerBlock but the causal/bidirectional switching is complex.
-- [ ] **Perceiver/Fusion cross-attention** — different signature (`opts` keyword) from SDPA; evaluate whether to unify or leave as-is.
-- [ ] **Learned positional embedding** — Whisper decoder, VALLE, Decision Transformer all build `Axon.param` + broadcast for learned PE. Could extract to `Blocks.LearnedPE`.
+- [x] **PatchEmbed block** — Already extracted; all 11 vision modules use `Blocks.PatchEmbed`.
+- [x] **VALLE decoder** — Adopted `SDPA.compute` (replaced inline attention math) and `SinusoidalPE.layer` (replaced inline PE). TransformerBlock adoption skipped (sigmoid-gated FFN, different dropout placement).
+- [x] **Perceiver cross-attention** — Adopted `SDPA.compute` (replaced 22-line inline math). Fusion left as-is (single-head pattern, different semantics).
+- [x] **Decision Transformer** — Adopted `SDPA.compute` + `CausalMask.causal` (replaced 35-line inline causal attention).
+- [x] **Learned PE** — Only Whisper uses it (single instance). VALLE was sinusoidal (now uses shared block). No `Blocks.LearnedPE` needed.
 
 ---
 
