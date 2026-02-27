@@ -51,8 +51,11 @@ defmodule Edifice.Blocks.CrossAttention do
   @spec layer(Axon.t(), Axon.t(), keyword()) :: Axon.t()
   def layer(query_input, kv_input, opts \\ []) do
     hidden_size = Keyword.fetch!(opts, :hidden_size)
+    num_heads = Keyword.get(opts, :num_heads, 1)
     dropout = Keyword.get(opts, :dropout, 0.0)
     name = Keyword.get(opts, :name, "cross_attn")
+
+    head_dim = div(hidden_size, num_heads)
 
     # Project queries from query input
     query_proj = Axon.dense(query_input, hidden_size, name: "#{name}_q_proj")
@@ -61,10 +64,12 @@ defmodule Edifice.Blocks.CrossAttention do
     key_proj = Axon.dense(kv_input, hidden_size, name: "#{name}_k_proj")
     value_proj = Axon.dense(kv_input, hidden_size, name: "#{name}_v_proj")
 
-    # Compute cross-attention
+    # Compute multi-head cross-attention
     attended =
       Axon.layer(
-        &cross_attention_impl/4,
+        fn q, k, v, _opts ->
+          cross_attention_impl(q, k, v, num_heads, head_dim)
+        end,
         [query_proj, key_proj, value_proj],
         name: "#{name}_compute",
         op_name: :cross_attention
@@ -80,18 +85,33 @@ defmodule Edifice.Blocks.CrossAttention do
     end
   end
 
-  defp cross_attention_impl(query, key, value, _opts) do
-    d_k = Nx.axis_size(key, -1)
-    scale = Nx.sqrt(d_k) |> Nx.as_type(Nx.type(query))
+  defp cross_attention_impl(query, key, value, num_heads, head_dim) do
+    {batch, q_len, _} = Nx.shape(query)
+    {_, kv_len, _} = Nx.shape(key)
 
-    # scores: [batch, seq_q, seq_kv]
-    scores = Nx.dot(query, [2], [0], key, [2], [0])
-    scores = Nx.divide(scores, scale)
+    # Reshape to [batch, heads, seq, head_dim]
+    q =
+      query |> Nx.reshape({batch, q_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
 
-    # softmax over keys
+    k =
+      key |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    v =
+      value
+      |> Nx.reshape({batch, kv_len, num_heads, head_dim})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+
+    # Scaled dot-product attention
+    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
+    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
     weights = FusedOps.fused_softmax(scores)
 
-    # weighted sum of values: [batch, seq_q, hidden_size]
-    Nx.dot(weights, [2], [0], value, [1], [0])
+    # Apply to values: [batch, heads, q_len, head_dim]
+    output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
+
+    # Reshape back: [batch, q_len, hidden_size]
+    output
+    |> Nx.transpose(axes: [0, 2, 1, 3])
+    |> Nx.reshape({batch, q_len, num_heads * head_dim})
   end
 end

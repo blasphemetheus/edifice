@@ -73,6 +73,7 @@ defmodule Edifice.Detection.DETR do
     https://arxiv.org/abs/2005.12872
   """
 
+  alias Edifice.Blocks.TransformerBlock
   alias Edifice.Utils.FusedOps
 
   @default_image_size 512
@@ -158,7 +159,9 @@ defmodule Edifice.Detection.DETR do
         fn t ->
           {batch, h, w, d} = Nx.shape(t)
           Nx.reshape(t, {batch, h * w, d})
-        end, name: "flatten_spatial")
+        end,
+        name: "flatten_spatial"
+      )
 
     # 2D sinusoidal positional encoding (added at each encoder layer)
     spatial_pe =
@@ -167,7 +170,9 @@ defmodule Edifice.Detection.DETR do
         fn t ->
           {_batch, seq_len, dim} = Nx.shape(t)
           build_2d_sinusoidal_pe(seq_len, dim)
-        end, name: "spatial_pe")
+        end,
+        name: "spatial_pe"
+      )
 
     # Transformer encoder
     memory =
@@ -197,23 +202,30 @@ defmodule Edifice.Detection.DETR do
         queries,
         fn q ->
           Nx.broadcast(Nx.tensor(0.0, type: Nx.type(q)), Nx.shape(q))
-        end, name: "decoder_target_init")
+        end,
+        name: "decoder_target_init"
+      )
 
     # Transformer decoder
     decoded =
-      Enum.reduce(1..num_decoder_layers, target, fn i, acc ->
-        decoder_layer(
-          acc,
-          memory,
-          queries,
-          spatial_pe,
-          hidden_dim,
-          num_heads,
-          ffn_dim,
-          dropout,
-          "dec_#{i}"
-        )
-      end)
+      TransformerBlock.stack(target, memory, num_decoder_layers,
+        attention_fn: fn x_norm, name ->
+          attention_with_pe(x_norm, x_norm, x_norm, queries, queries, hidden_dim, num_heads, name)
+        end,
+        cross_attention_fn: fn q_norm, mem, name ->
+          attention_with_pe(q_norm, mem, mem, queries, spatial_pe, hidden_dim, num_heads, name)
+        end,
+        hidden_size: hidden_dim,
+        custom_ffn: fn x_norm, name ->
+          x_norm
+          |> Axon.dense(ffn_dim, name: "#{name}_up")
+          |> Axon.activation(:relu, name: "#{name}_act")
+          |> maybe_dropout(dropout, "#{name}_drop1")
+          |> Axon.dense(hidden_dim, name: "#{name}_down")
+        end,
+        dropout: dropout,
+        name: "dec"
+      )
 
     # Prediction heads
     # Class head: [batch, num_queries, num_classes + 1]
@@ -311,85 +323,6 @@ defmodule Edifice.Detection.DETR do
     x = Axon.add(x, self_attn, name: "#{name}_self_attn_residual")
 
     # Pre-norm FFN
-    x_norm = Axon.layer_norm(x, name: "#{name}_ffn_norm")
-
-    ffn_out =
-      x_norm
-      |> Axon.dense(ffn_dim, name: "#{name}_ffn_up")
-      |> Axon.activation(:relu, name: "#{name}_ffn_act")
-      |> maybe_dropout(dropout, "#{name}_ffn_drop1")
-      |> Axon.dense(hidden_dim, name: "#{name}_ffn_down")
-      |> maybe_dropout(dropout, "#{name}_ffn_drop2")
-
-    Axon.add(x, ffn_out, name: "#{name}_ffn_residual")
-  end
-
-  # ============================================================================
-  # Transformer Decoder Layer
-  # ============================================================================
-
-  # Decoder layer: self-attention among queries, then cross-attention to memory.
-  # Object query PE added to Q/K in self-attention and to Q in cross-attention.
-  # Spatial PE added to K in cross-attention (so queries attend to positions).
-  @spec decoder_layer(
-          Axon.t(),
-          Axon.t(),
-          Axon.t(),
-          Axon.t(),
-          pos_integer(),
-          pos_integer(),
-          pos_integer(),
-          float(),
-          String.t()
-        ) :: Axon.t()
-  defp decoder_layer(
-         x,
-         memory,
-         query_pe,
-         spatial_pe,
-         hidden_dim,
-         num_heads,
-         ffn_dim,
-         dropout,
-         name
-       ) do
-    # Self-attention among object queries (query PE on both Q and K)
-    x_norm = Axon.layer_norm(x, name: "#{name}_self_attn_norm")
-
-    self_attn =
-      attention_with_pe(
-        x_norm,
-        x_norm,
-        x_norm,
-        query_pe,
-        query_pe,
-        hidden_dim,
-        num_heads,
-        "#{name}_self_attn"
-      )
-
-    self_attn = maybe_dropout(self_attn, dropout, "#{name}_self_attn_drop")
-    x = Axon.add(x, self_attn, name: "#{name}_self_attn_residual")
-
-    # Cross-attention to encoder memory (query PE on Q, spatial PE on K)
-    x_norm = Axon.layer_norm(x, name: "#{name}_cross_attn_norm")
-
-    cross_attn =
-      attention_with_pe(
-        x_norm,
-        memory,
-        memory,
-        query_pe,
-        spatial_pe,
-        hidden_dim,
-        num_heads,
-        "#{name}_cross_attn"
-      )
-
-    cross_attn = maybe_dropout(cross_attn, dropout, "#{name}_cross_attn_drop")
-    x = Axon.add(x, cross_attn, name: "#{name}_cross_attn_residual")
-
-    # FFN
     x_norm = Axon.layer_norm(x, name: "#{name}_ffn_norm")
 
     ffn_out =

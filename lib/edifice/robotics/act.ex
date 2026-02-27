@@ -75,6 +75,8 @@ defmodule Edifice.Robotics.ACT do
 
   import Nx.Defn
 
+  alias Edifice.Blocks.TransformerBlock
+
   @default_chunk_size 100
   @default_hidden_dim 256
   @default_num_heads 8
@@ -254,67 +256,32 @@ defmodule Edifice.Robotics.ACT do
 
     # Transformer decoder layers with cross-attention to context
     decoded =
-      Enum.reduce(1..num_layers, queries, fn layer_idx, acc ->
-        decoder_layer(acc, context, hidden_dim, num_heads, dropout, "decoder_layer_#{layer_idx}")
-      end)
+      TransformerBlock.stack(queries, context, num_layers,
+        attention_fn: fn x_norm, name ->
+          multi_head_attention(x_norm, x_norm, x_norm, hidden_dim, num_heads, name)
+        end,
+        cross_attention_fn: fn q_norm, ctx, name ->
+          multi_head_attention(q_norm, ctx, ctx, hidden_dim, num_heads, name)
+        end,
+        hidden_size: hidden_dim,
+        custom_ffn: fn x_norm, name ->
+          x_norm
+          |> Axon.dense(hidden_dim * 4, name: "#{name}_up")
+          |> Axon.activation(:gelu, name: "#{name}_act")
+          |> Axon.dense(hidden_dim, name: "#{name}_down")
+        end,
+        dropout: dropout,
+        name: "decoder_layer"
+      )
 
     # Final projection to action space
     Axon.dense(decoded, action_dim, name: "action_head")
   end
 
-  # Single decoder layer: self-attention + cross-attention + FFN
-  defp decoder_layer(x, context, hidden_dim, num_heads, dropout, name) do
+  # Multi-head attention helper
+  defp multi_head_attention(query, key, value, hidden_dim, num_heads, name) do
     head_dim = div(hidden_dim, num_heads)
 
-    # Self-attention (causal not strictly needed for chunk prediction, but helps)
-    x_norm = Axon.layer_norm(x, name: "#{name}_self_attn_norm")
-
-    self_attn =
-      multi_head_attention(
-        x_norm,
-        x_norm,
-        x_norm,
-        hidden_dim,
-        num_heads,
-        head_dim,
-        "#{name}_self_attn"
-      )
-
-    self_attn = Axon.dropout(self_attn, rate: dropout, name: "#{name}_self_attn_drop")
-    x = Axon.add(x, self_attn, name: "#{name}_self_attn_residual")
-
-    # Cross-attention to context (obs + z)
-    x_norm = Axon.layer_norm(x, name: "#{name}_cross_attn_norm")
-
-    cross_attn =
-      multi_head_attention(
-        x_norm,
-        context,
-        context,
-        hidden_dim,
-        num_heads,
-        head_dim,
-        "#{name}_cross_attn"
-      )
-
-    cross_attn = Axon.dropout(cross_attn, rate: dropout, name: "#{name}_cross_attn_drop")
-    x = Axon.add(x, cross_attn, name: "#{name}_cross_attn_residual")
-
-    # FFN
-    x_norm = Axon.layer_norm(x, name: "#{name}_ffn_norm")
-
-    ffn_out =
-      x_norm
-      |> Axon.dense(hidden_dim * 4, name: "#{name}_ffn_up")
-      |> Axon.activation(:gelu, name: "#{name}_ffn_act")
-      |> Axon.dense(hidden_dim, name: "#{name}_ffn_down")
-      |> Axon.dropout(rate: dropout, name: "#{name}_ffn_drop")
-
-    Axon.add(x, ffn_out, name: "#{name}_ffn_residual")
-  end
-
-  # Multi-head attention helper
-  defp multi_head_attention(query, key, value, hidden_dim, num_heads, head_dim, name) do
     q = Axon.dense(query, hidden_dim, name: "#{name}_q")
     k = Axon.dense(key, hidden_dim, name: "#{name}_k")
     v = Axon.dense(value, hidden_dim, name: "#{name}_v")
@@ -465,9 +432,23 @@ defmodule Edifice.Robotics.ACT do
       )
 
     decoded =
-      Enum.reduce(1..num_layers, queries, fn layer_idx, acc ->
-        decoder_layer(acc, context, hidden_dim, num_heads, dropout, "decode_layer_#{layer_idx}")
-      end)
+      TransformerBlock.stack(queries, context, num_layers,
+        attention_fn: fn x_norm, name ->
+          multi_head_attention(x_norm, x_norm, x_norm, hidden_dim, num_heads, name)
+        end,
+        cross_attention_fn: fn q_norm, ctx, name ->
+          multi_head_attention(q_norm, ctx, ctx, hidden_dim, num_heads, name)
+        end,
+        hidden_size: hidden_dim,
+        custom_ffn: fn x_norm, name ->
+          x_norm
+          |> Axon.dense(hidden_dim * 4, name: "#{name}_up")
+          |> Axon.activation(:gelu, name: "#{name}_act")
+          |> Axon.dense(hidden_dim, name: "#{name}_down")
+        end,
+        dropout: dropout,
+        name: "decode_layer"
+      )
 
     Axon.dense(decoded, action_dim, name: "decode_action_head")
   end

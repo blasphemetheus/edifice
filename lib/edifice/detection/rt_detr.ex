@@ -81,6 +81,7 @@ defmodule Edifice.Detection.RTDETR do
     https://arxiv.org/abs/2304.08069
   """
 
+  alias Edifice.Blocks.TransformerBlock
   alias Edifice.Utils.FusedOps
 
   @default_image_size 640
@@ -275,7 +276,9 @@ defmodule Edifice.Detection.RTDETR do
         fn t ->
           {b, h, w, d} = Nx.shape(t)
           Nx.reshape(t, {b, h * w, d})
-        end, name: "#{name}_flatten")
+        end,
+        name: "#{name}_flatten"
+      )
 
     # 2D positional encoding
     pe =
@@ -284,7 +287,9 @@ defmodule Edifice.Detection.RTDETR do
         fn t ->
           {_b, seq_len, dim} = Nx.shape(t)
           build_2d_sinusoidal_pe(seq_len, dim)
-        end, name: "#{name}_pe")
+        end,
+        name: "#{name}_pe"
+      )
 
     # Single encoder layer
     encoded = encoder_layer(flat, pe, hidden_dim, num_heads, ffn_dim, dropout, name)
@@ -348,7 +353,9 @@ defmodule Edifice.Detection.RTDETR do
         |> Nx.reshape({b, h, 1, w, 1, c})
         |> Nx.broadcast({b, h, 2, w, 2, c})
         |> Nx.reshape({b, h * 2, w * 2, c})
-      end, name: name)
+      end,
+      name: name
+    )
   end
 
   # Stride-2 downsample via conv (channels-last)
@@ -394,7 +401,9 @@ defmodule Edifice.Detection.RTDETR do
           fn t ->
             {b, h, w, d} = Nx.shape(t)
             Nx.reshape(t, {b, h * w, d})
-          end, name: "#{name}_flat_#{i}")
+          end,
+          name: "#{name}_flat_#{i}"
+        )
       end)
 
     Axon.concatenate(flattened, axis: 1, name: "#{name}_concat")
@@ -479,7 +488,24 @@ defmodule Edifice.Detection.RTDETR do
        ) do
     Enum.reduce(1..num_layers, {queries, ref_bboxes}, fn i, {hidden, ref_bbox} ->
       new_hidden =
-        decoder_layer(hidden, memory, hidden_dim, num_heads, ffn_dim, dropout, "#{name}_#{i}")
+        TransformerBlock.layer(hidden, memory,
+          attention_fn: fn x_norm, attn_name ->
+            multi_head_attention(x_norm, x_norm, x_norm, hidden_dim, num_heads, attn_name)
+          end,
+          cross_attention_fn: fn q_norm, mem, ca_name ->
+            multi_head_attention(q_norm, mem, mem, hidden_dim, num_heads, ca_name)
+          end,
+          hidden_size: hidden_dim,
+          custom_ffn: fn x_norm, ffn_name ->
+            x_norm
+            |> Axon.dense(ffn_dim, name: "#{ffn_name}_up")
+            |> Axon.activation(:relu, name: "#{ffn_name}_act")
+            |> maybe_dropout(dropout, "#{ffn_name}_drop1")
+            |> Axon.dense(hidden_dim, name: "#{ffn_name}_down")
+          end,
+          dropout: dropout,
+          name: "#{name}_#{i}"
+        )
 
       # Iterative box refinement: predict delta, add to previous, apply sigmoid
       bbox_delta = bbox_mlp(new_hidden, hidden_dim, "#{name}_#{i}_bbox")
@@ -503,58 +529,6 @@ defmodule Edifice.Detection.RTDETR do
   end
 
   # ============================================================================
-  # Decoder Layer
-  # ============================================================================
-
-  # Standard decoder layer: self-attention + cross-attention + FFN.
-  # Uses dense cross-attention (simplified from multi-scale deformable attention,
-  # which requires custom CUDA kernels for bilinear sampling).
-  @spec decoder_layer(
-          Axon.t(),
-          Axon.t(),
-          pos_integer(),
-          pos_integer(),
-          pos_integer(),
-          float(),
-          String.t()
-        ) ::
-          Axon.t()
-  defp decoder_layer(x, memory, hidden_dim, num_heads, ffn_dim, dropout, name) do
-    head_dim = div(hidden_dim, num_heads)
-
-    # Self-attention among queries
-    x_norm = Axon.layer_norm(x, name: "#{name}_sa_norm")
-
-    sa =
-      multi_head_attention(x_norm, x_norm, x_norm, hidden_dim, num_heads, head_dim, "#{name}_sa")
-
-    sa = maybe_dropout(sa, dropout, "#{name}_sa_drop")
-    x = Axon.add(x, sa, name: "#{name}_sa_res")
-
-    # Cross-attention to encoder memory
-    x_norm = Axon.layer_norm(x, name: "#{name}_ca_norm")
-
-    ca =
-      multi_head_attention(x_norm, memory, memory, hidden_dim, num_heads, head_dim, "#{name}_ca")
-
-    ca = maybe_dropout(ca, dropout, "#{name}_ca_drop")
-    x = Axon.add(x, ca, name: "#{name}_ca_res")
-
-    # FFN
-    x_norm = Axon.layer_norm(x, name: "#{name}_ffn_norm")
-
-    ffn =
-      x_norm
-      |> Axon.dense(ffn_dim, name: "#{name}_ffn_up")
-      |> Axon.activation(:relu, name: "#{name}_ffn_act")
-      |> maybe_dropout(dropout, "#{name}_ffn_drop1")
-      |> Axon.dense(hidden_dim, name: "#{name}_ffn_down")
-      |> maybe_dropout(dropout, "#{name}_ffn_drop2")
-
-    Axon.add(x, ffn, name: "#{name}_ffn_res")
-  end
-
-  # ============================================================================
   # Multi-Head Attention
   # ============================================================================
 
@@ -564,11 +538,11 @@ defmodule Edifice.Detection.RTDETR do
           Axon.t(),
           pos_integer(),
           pos_integer(),
-          pos_integer(),
           String.t()
         ) ::
           Axon.t()
-  defp multi_head_attention(query, key, value, hidden_dim, num_heads, head_dim, name) do
+  defp multi_head_attention(query, key, value, hidden_dim, num_heads, name) do
+    head_dim = div(hidden_dim, num_heads)
     q = Axon.dense(query, hidden_dim, name: "#{name}_q")
     k = Axon.dense(key, hidden_dim, name: "#{name}_k")
     v = Axon.dense(value, hidden_dim, name: "#{name}_v")

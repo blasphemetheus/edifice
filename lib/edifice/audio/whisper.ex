@@ -223,7 +223,9 @@ defmodule Edifice.Audio.Whisper do
 
             Nx.iota({1, seq_len}, axis: 1, type: :s64)
             |> Nx.broadcast({Nx.axis_size(t, 0), seq_len})
-          end, name: "dec_pos_indices"),
+          end,
+          name: "dec_pos_indices"
+        ),
         max_dec_len,
         hidden_dim,
         name: "dec_pos_embed"
@@ -233,17 +235,28 @@ defmodule Edifice.Audio.Whisper do
 
     # Decoder transformer blocks (self-attn + cross-attn + FFN)
     x =
-      Enum.reduce(1..decoder_layers, x, fn i, acc ->
-        decoder_block(
-          acc,
-          encoder_output,
-          hidden_dim,
-          num_heads,
-          ffn_dim,
-          dropout,
-          "dec_block_#{i}"
-        )
-      end)
+      TransformerBlock.stack(x, encoder_output, decoder_layers,
+        attention_fn: fn input_node, name ->
+          causal_self_attention(input_node, hidden_dim, num_heads, name)
+        end,
+        cross_attention_fn: fn q_normed, enc_out, name ->
+          CrossAttention.layer(q_normed, enc_out,
+            hidden_size: hidden_dim,
+            num_heads: num_heads,
+            name: name
+          )
+        end,
+        hidden_size: hidden_dim,
+        custom_ffn: fn input_node, name ->
+          FFN.layer(input_node,
+            hidden_size: hidden_dim,
+            inner_size: ffn_dim,
+            name: name
+          )
+        end,
+        dropout: dropout,
+        name: "dec"
+      )
 
     # Final layer norm + projection to vocab
     x
@@ -260,57 +273,6 @@ defmodule Edifice.Audio.Whisper do
   @spec output_size(keyword()) :: pos_integer()
   def output_size(opts \\ []) do
     Keyword.get(opts, :vocab_size, @default_vocab_size)
-  end
-
-  # ============================================================================
-  # Decoder Block
-  # ============================================================================
-
-  # Three-sublayer decoder block: causal self-attention, cross-attention, FFN.
-  # Each sublayer uses pre-norm (LayerNorm → sublayer → residual).
-  @spec decoder_block(
-          Axon.t(),
-          Axon.t(),
-          pos_integer(),
-          pos_integer(),
-          pos_integer(),
-          float(),
-          String.t()
-        ) ::
-          Axon.t()
-  defp decoder_block(x, encoder_out, hidden_dim, num_heads, ffn_dim, dropout, name) do
-    # 1. Causal self-attention
-    x_norm = Axon.layer_norm(x, name: "#{name}_self_attn_norm")
-
-    self_attn_out = causal_self_attention(x_norm, hidden_dim, num_heads, "#{name}_self_attn")
-    self_attn_out = maybe_dropout(self_attn_out, dropout, "#{name}_self_attn_drop")
-    x = Axon.add(x, self_attn_out, name: "#{name}_self_attn_residual")
-
-    # 2. Cross-attention to encoder output
-    x_norm = Axon.layer_norm(x, name: "#{name}_cross_attn_norm")
-
-    cross_attn_out =
-      CrossAttention.layer(x_norm, encoder_out,
-        hidden_size: hidden_dim,
-        num_heads: num_heads,
-        dropout: dropout,
-        name: "#{name}_cross_attn"
-      )
-
-    x = Axon.add(x, cross_attn_out, name: "#{name}_cross_attn_residual")
-
-    # 3. Feed-forward network
-    x_norm = Axon.layer_norm(x, name: "#{name}_ffn_norm")
-
-    ffn_out =
-      FFN.layer(x_norm,
-        hidden_size: hidden_dim,
-        inner_size: ffn_dim,
-        dropout: dropout,
-        name: "#{name}_ffn"
-      )
-
-    Axon.add(x, ffn_out, name: "#{name}_ffn_residual")
   end
 
   # ============================================================================
@@ -412,14 +374,4 @@ defmodule Edifice.Audio.Whisper do
     |> Nx.transpose(axes: [0, 2, 1, 3])
     |> Nx.reshape({batch, q_len, num_heads * head_dim})
   end
-
-  # ============================================================================
-  # Helpers
-  # ============================================================================
-
-  defp maybe_dropout(input, rate, name) when rate > 0.0 do
-    Axon.dropout(input, rate: rate, name: name)
-  end
-
-  defp maybe_dropout(input, _rate, _name), do: input
 end
