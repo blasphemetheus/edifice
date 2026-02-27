@@ -161,8 +161,13 @@ defmodule Edifice.Interpretability.SparseAutoencoder do
     recon_loss + l1_coeff * l1_loss
   end
 
-  # Top-k sparsification: keep only top-k activations, zero out the rest
-  defnp top_k_sparsify(activations, k) do
+  @doc """
+  Top-k sparsification: keep only the top-k activations, zero out the rest.
+
+  Shared by `SparseAutoencoder` and `Transcoder`.
+  """
+  @spec top_k_sparsify(Nx.Tensor.t(), non_neg_integer()) :: Nx.Tensor.t()
+  defn top_k_sparsify(activations, k) do
     {top_values, _top_indices} = Nx.top_k(activations, k: k)
 
     # Threshold: the k-th largest value per sample

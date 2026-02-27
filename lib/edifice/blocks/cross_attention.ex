@@ -24,7 +24,7 @@ defmodule Edifice.Blocks.CrossAttention do
   ## References
   - "Attention Is All You Need" (Vaswani et al., 2017)
   """
-  alias Edifice.Utils.FusedOps
+  alias Edifice.Blocks.SDPA
 
   @doc """
   Build a cross-attention Axon layer.
@@ -59,7 +59,7 @@ defmodule Edifice.Blocks.CrossAttention do
     attended =
       Axon.layer(
         fn q, k, v, _opts ->
-          cross_attention_impl(q, k, v, num_heads, head_dim)
+          SDPA.compute(q, k, v, num_heads, head_dim)
         end,
         [query_proj, key_proj, value_proj],
         name: "#{name}_compute",
@@ -106,7 +106,7 @@ defmodule Edifice.Blocks.CrossAttention do
     attended =
       Axon.layer(
         fn q, k, v, _opts ->
-          cross_attention_impl(q, k, v, num_heads, head_dim)
+          SDPA.compute(q, k, v, num_heads, head_dim)
         end,
         [query_proj, key_proj, value_proj],
         name: "#{name}_compute",
@@ -120,35 +120,5 @@ defmodule Edifice.Blocks.CrossAttention do
     else
       output
     end
-  end
-
-  defp cross_attention_impl(query, key, value, num_heads, head_dim) do
-    {batch, q_len, _} = Nx.shape(query)
-    {_, kv_len, _} = Nx.shape(key)
-
-    # Reshape to [batch, heads, seq, head_dim]
-    q =
-      query |> Nx.reshape({batch, q_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-
-    k =
-      key |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-
-    v =
-      value
-      |> Nx.reshape({batch, kv_len, num_heads, head_dim})
-      |> Nx.transpose(axes: [0, 2, 1, 3])
-
-    # Scaled dot-product attention
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
-    weights = FusedOps.fused_softmax(scores)
-
-    # Apply to values: [batch, heads, q_len, head_dim]
-    output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
-
-    # Reshape back: [batch, q_len, hidden_size]
-    output
-    |> Nx.transpose(axes: [0, 2, 1, 3])
-    |> Nx.reshape({batch, q_len, num_heads * head_dim})
   end
 end

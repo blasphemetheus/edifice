@@ -38,6 +38,8 @@ defmodule Edifice.Interpretability.Transcoder do
 
   import Nx.Defn
 
+  alias Edifice.Interpretability.SparseAutoencoder
+
   @default_dict_size 4096
   @default_top_k 32
 
@@ -78,7 +80,7 @@ defmodule Edifice.Interpretability.Transcoder do
     # Top-k sparsify
     hidden =
       Axon.layer(
-        fn acts, _opts -> top_k_sparsify(acts, top_k) end,
+        fn acts, _opts -> SparseAutoencoder.top_k_sparsify(acts, top_k) end,
         [hidden],
         name: "transcoder_top_k",
         op_name: :top_k_sparsify
@@ -111,13 +113,6 @@ defmodule Edifice.Interpretability.Transcoder do
     l1_loss = Nx.mean(Nx.abs(hidden_acts))
 
     recon_loss + l1_coeff * l1_loss
-  end
-
-  defnp top_k_sparsify(activations, k) do
-    {top_values, _top_indices} = Nx.top_k(activations, k: k)
-    threshold = Nx.slice_along_axis(top_values, k - 1, 1, axis: 1)
-    mask = Nx.greater_equal(activations, threshold)
-    Nx.select(mask, activations, Nx.tensor(0.0, type: Nx.type(activations)))
   end
 
   @doc "Get the output size of the transcoder."

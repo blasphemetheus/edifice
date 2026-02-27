@@ -420,7 +420,10 @@ defmodule Edifice.Audio.VALLE do
           # Apply causal mask if needed
           scores =
             if causal do
-              mask = create_causal_mask(seq_len) |> Nx.broadcast(Nx.shape(scores))
+              mask =
+                Edifice.Blocks.CausalMask.causal(seq_len)
+                |> Nx.reshape({1, 1, seq_len, seq_len})
+                |> Nx.broadcast(Nx.shape(scores))
 
               Nx.select(
                 mask,
@@ -475,14 +478,6 @@ defmodule Edifice.Audio.VALLE do
     x
     |> Nx.reshape({batch, seq_len, num_heads, head_dim})
     |> Nx.transpose(axes: [0, 2, 1, 3])
-  end
-
-  defp create_causal_mask(seq_len) do
-    # Lower triangular mask (including diagonal)
-    # Shape {1, 1, seq_len, seq_len} for broadcasting with {batch, heads, seq, seq}
-    rows = Nx.iota({seq_len, 1})
-    cols = Nx.iota({1, seq_len})
-    Nx.greater_equal(rows, cols) |> Nx.reshape({1, 1, seq_len, seq_len})
   end
 
   # ============================================================================

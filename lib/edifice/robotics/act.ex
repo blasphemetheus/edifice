@@ -75,7 +75,7 @@ defmodule Edifice.Robotics.ACT do
 
   import Nx.Defn
 
-  alias Edifice.Blocks.TransformerBlock
+  alias Edifice.Blocks.{SDPA, TransformerBlock}
 
   @default_chunk_size 100
   @default_hidden_dim 256
@@ -289,7 +289,7 @@ defmodule Edifice.Robotics.ACT do
     attended =
       Axon.layer(
         fn q_t, k_t, v_t, _opts ->
-          compute_attention(q_t, k_t, v_t, num_heads, head_dim)
+          SDPA.compute(q_t, k_t, v_t, num_heads, head_dim)
         end,
         [q, k, v],
         name: "#{name}_compute",
@@ -297,35 +297,6 @@ defmodule Edifice.Robotics.ACT do
       )
 
     Axon.dense(attended, hidden_dim, name: "#{name}_out")
-  end
-
-  defp compute_attention(q, k, v, num_heads, head_dim) do
-    {batch, q_len, _} = Nx.shape(q)
-    {_, kv_len, _} = Nx.shape(k)
-
-    # Reshape to [batch, heads, seq, head_dim]
-    q = q |> Nx.reshape({batch, q_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    k = k |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    v = v |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-
-    # Scaled dot-product attention
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
-
-    # Softmax
-    max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
-    exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-
-    weights =
-      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
-
-    # Apply to values
-    output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
-
-    # Reshape back: [batch, heads, q_len, head_dim] -> [batch, q_len, hidden]
-    output
-    |> Nx.transpose(axes: [0, 2, 1, 3])
-    |> Nx.reshape({batch, q_len, num_heads * head_dim})
   end
 
   @doc """

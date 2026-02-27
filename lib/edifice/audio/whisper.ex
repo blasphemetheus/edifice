@@ -81,8 +81,7 @@ defmodule Edifice.Audio.Whisper do
     (OpenAI, 2023) — https://arxiv.org/abs/2212.04356
   """
 
-  alias Edifice.Blocks.{CrossAttention, FFN, SinusoidalPE, TransformerBlock}
-  alias Edifice.Utils.FusedOps
+  alias Edifice.Blocks.{CrossAttention, FFN, SDPA, SinusoidalPE, TransformerBlock}
 
   # Whisper base defaults
   @default_n_mels 80
@@ -291,7 +290,7 @@ defmodule Edifice.Audio.Whisper do
     attended =
       Axon.layer(
         fn q_t, k_t, v_t, _opts ->
-          compute_mha(q_t, k_t, v_t, num_heads, head_dim, nil)
+          SDPA.compute(q_t, k_t, v_t, num_heads, head_dim)
         end,
         [q, k, v],
         name: "#{name}_compute",
@@ -315,7 +314,7 @@ defmodule Edifice.Audio.Whisper do
         fn q_t, k_t, v_t, _opts ->
           seq_len = Nx.axis_size(q_t, 1)
           mask = Edifice.Blocks.CausalMask.causal(seq_len)
-          compute_mha(q_t, k_t, v_t, num_heads, head_dim, mask)
+          SDPA.compute(q_t, k_t, v_t, num_heads, head_dim, mask)
         end,
         [q, k, v],
         name: "#{name}_compute",
@@ -323,55 +322,5 @@ defmodule Edifice.Audio.Whisper do
       )
 
     Axon.dense(attended, hidden_dim, name: "#{name}_out")
-  end
-
-  # Shared multi-head attention computation. Handles reshaping to heads,
-  # scaled dot-product attention with optional mask, and reshaping back.
-  @spec compute_mha(
-          Nx.Tensor.t(),
-          Nx.Tensor.t(),
-          Nx.Tensor.t(),
-          pos_integer(),
-          pos_integer(),
-          Nx.Tensor.t() | nil
-        ) ::
-          Nx.Tensor.t()
-  defp compute_mha(q, k, v, num_heads, head_dim, mask) do
-    {batch, q_len, _} = Nx.shape(q)
-    {_, kv_len, _} = Nx.shape(k)
-
-    # Reshape to [batch, heads, seq, head_dim]
-    q = q |> Nx.reshape({batch, q_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    k = k |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    v = v |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-
-    # Scaled dot-product attention
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
-
-    # Apply causal mask if provided
-    scores =
-      if mask do
-        # mask: [q_len, kv_len] → broadcast to [batch, heads, q_len, kv_len]
-        mask =
-          mask
-          |> Nx.reshape({1, 1, q_len, kv_len})
-          |> Nx.broadcast({batch, num_heads, q_len, kv_len})
-
-        neg_inf = Nx.Constants.neg_infinity(Nx.type(scores))
-        Nx.select(mask, scores, neg_inf)
-      else
-        scores
-      end
-
-    weights = FusedOps.fused_softmax(scores)
-
-    # Apply to values: [batch, heads, q_len, head_dim]
-    output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
-
-    # Reshape back: [batch, q_len, hidden_dim]
-    output
-    |> Nx.transpose(axes: [0, 2, 1, 3])
-    |> Nx.reshape({batch, q_len, num_heads * head_dim})
   end
 end

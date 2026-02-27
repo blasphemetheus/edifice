@@ -73,8 +73,7 @@ defmodule Edifice.Detection.DETR do
     https://arxiv.org/abs/2005.12872
   """
 
-  alias Edifice.Blocks.TransformerBlock
-  alias Edifice.Utils.FusedOps
+  alias Edifice.Blocks.{BBoxHead, SDPA, SinusoidalPE2D, TransformerBlock}
 
   @default_image_size 512
   @default_in_channels 3
@@ -169,7 +168,7 @@ defmodule Edifice.Detection.DETR do
         features,
         fn t ->
           {_batch, seq_len, dim} = Nx.shape(t)
-          build_2d_sinusoidal_pe(seq_len, dim)
+          SinusoidalPE2D.build_table(seq_len, dim)
         end,
         name: "spatial_pe"
       )
@@ -232,14 +231,7 @@ defmodule Edifice.Detection.DETR do
     class_logits = Axon.dense(decoded, num_classes + 1, name: "class_head")
 
     # BBox head: 3-layer MLP with ReLU + sigmoid output → [batch, num_queries, 4]
-    bbox_pred =
-      decoded
-      |> Axon.dense(hidden_dim, name: "bbox_mlp_1")
-      |> Axon.activation(:relu, name: "bbox_act_1")
-      |> Axon.dense(hidden_dim, name: "bbox_mlp_2")
-      |> Axon.activation(:relu, name: "bbox_act_2")
-      |> Axon.dense(4, name: "bbox_mlp_3")
-      |> Axon.activation(:sigmoid, name: "bbox_sigmoid")
+    bbox_pred = BBoxHead.layer(decoded, hidden_dim, "bbox")
 
     Axon.container(%{class_logits: class_logits, bbox_pred: bbox_pred})
   end
@@ -366,7 +358,7 @@ defmodule Edifice.Detection.DETR do
     attended =
       Axon.layer(
         fn q_t, k_t, v_t, _opts ->
-          compute_attention(q_t, k_t, v_t, num_heads, head_dim)
+          SDPA.compute(q_t, k_t, v_t, num_heads, head_dim)
         end,
         [q, k, v],
         name: "#{name}_compute",
@@ -374,87 +366,6 @@ defmodule Edifice.Detection.DETR do
       )
 
     Axon.dense(attended, hidden_dim, name: "#{name}_out")
-  end
-
-  @spec compute_attention(
-          Nx.Tensor.t(),
-          Nx.Tensor.t(),
-          Nx.Tensor.t(),
-          pos_integer(),
-          pos_integer()
-        ) ::
-          Nx.Tensor.t()
-  defp compute_attention(q, k, v, num_heads, head_dim) do
-    {batch, q_len, _} = Nx.shape(q)
-    {_, kv_len, _} = Nx.shape(k)
-
-    # Reshape to [batch, heads, seq, head_dim]
-    q = q |> Nx.reshape({batch, q_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    k = k |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    v = v |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-
-    # Scaled dot-product attention
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
-    weights = FusedOps.fused_softmax(scores)
-
-    # Apply to values: [batch, heads, q_len, head_dim]
-    output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
-
-    # Reshape back: [batch, q_len, hidden_dim]
-    output
-    |> Nx.transpose(axes: [0, 2, 1, 3])
-    |> Nx.reshape({batch, q_len, num_heads * head_dim})
-  end
-
-  # ============================================================================
-  # 2D Sinusoidal Positional Encoding
-  # ============================================================================
-
-  # Builds 2D sinusoidal positional encoding for a flattened spatial grid.
-  # Assumes the spatial tokens come from a roughly square feature map.
-  # Encodes x and y positions independently, then concatenates.
-  @spec build_2d_sinusoidal_pe(pos_integer(), pos_integer()) :: Nx.Tensor.t()
-  defp build_2d_sinusoidal_pe(seq_len, dim) do
-    # Approximate grid dimensions (assume roughly square)
-    h = seq_len |> :math.sqrt() |> ceil() |> trunc()
-    w = ceil(seq_len / h) |> trunc()
-
-    half_dim = div(dim, 2)
-    quarter_dim = div(half_dim, 2)
-
-    # Frequency bands
-    freq_indices = Nx.iota({quarter_dim})
-
-    inv_freq =
-      Nx.exp(
-        Nx.negate(Nx.multiply(freq_indices, Nx.divide(Nx.log(Nx.tensor(10_000.0)), quarter_dim)))
-      )
-
-    # Y positions (rows)
-    y_pos = Nx.iota({h, 1}) |> Nx.broadcast({h, w}) |> Nx.reshape({h * w, 1})
-    y_pos = Nx.divide(y_pos, Nx.tensor(max(h - 1, 1), type: :f32))
-
-    # X positions (cols)
-    x_pos = Nx.iota({1, w}) |> Nx.broadcast({h, w}) |> Nx.reshape({h * w, 1})
-    x_pos = Nx.divide(x_pos, Nx.tensor(max(w - 1, 1), type: :f32))
-
-    # Sinusoidal encoding for y: [h*w, quarter_dim] each
-    y_angles = Nx.dot(y_pos, Nx.reshape(inv_freq, {1, quarter_dim}))
-    y_pe = Nx.concatenate([Nx.sin(y_angles), Nx.cos(y_angles)], axis: 1)
-
-    # Sinusoidal encoding for x: [h*w, quarter_dim] each
-    x_angles = Nx.dot(x_pos, Nx.reshape(inv_freq, {1, quarter_dim}))
-    x_pe = Nx.concatenate([Nx.sin(x_angles), Nx.cos(x_angles)], axis: 1)
-
-    # Concatenate: [h*w, dim]
-    pe = Nx.concatenate([y_pe, x_pe], axis: 1)
-
-    # Truncate or pad to exact seq_len (in case h*w > seq_len)
-    pe = Nx.slice_along_axis(pe, 0, seq_len, axis: 0)
-
-    # Add batch dimension: [1, seq_len, dim]
-    Nx.reshape(pe, {1, seq_len, dim})
   end
 
   # ============================================================================

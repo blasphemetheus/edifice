@@ -534,11 +534,11 @@ defmodule Edifice.Detection.SAM2 do
 
     # 4x upscale: two stages of 2x upsample + conv
     spatial
-    |> upsample_2x("#{name}_up1")
+    |> Upsample2x.layer("#{name}_up1")
     |> Axon.conv(half_dim, kernel_size: {3, 3}, padding: :same, name: "#{name}_conv1")
     |> Axon.layer_norm(name: "#{name}_ln1")
     |> Axon.activation(:gelu, name: "#{name}_act1")
-    |> upsample_2x("#{name}_up2")
+    |> Upsample2x.layer("#{name}_up2")
     |> Axon.conv(quarter_dim, kernel_size: {3, 3}, padding: :same, name: "#{name}_conv2")
     |> Axon.activation(:gelu, name: "#{name}_act2")
   end
@@ -557,7 +557,7 @@ defmodule Edifice.Detection.SAM2 do
     attended =
       Axon.layer(
         fn q_t, k_t, v_t, _opts ->
-          compute_attention(q_t, k_t, v_t, num_heads, head_dim)
+          SDPA.compute(q_t, k_t, v_t, num_heads, head_dim)
         end,
         [q, k, v],
         name: "#{name}_compute",
@@ -567,87 +567,9 @@ defmodule Edifice.Detection.SAM2 do
     Axon.dense(attended, hidden_dim, name: "#{name}_out")
   end
 
-  @spec compute_attention(
-          Nx.Tensor.t(),
-          Nx.Tensor.t(),
-          Nx.Tensor.t(),
-          pos_integer(),
-          pos_integer()
-        ) :: Nx.Tensor.t()
-  defp compute_attention(q, k, v, num_heads, head_dim) do
-    {batch, q_len, _} = Nx.shape(q)
-    {_, kv_len, _} = Nx.shape(k)
-
-    q = q |> Nx.reshape({batch, q_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    k = k |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    v = v |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
-    weights = FusedOps.fused_softmax(scores)
-    output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
-
-    output
-    |> Nx.transpose(axes: [0, 2, 1, 3])
-    |> Nx.reshape({batch, q_len, num_heads * head_dim})
-  end
-
-  # ============================================================================
-  # 2D Sinusoidal Positional Encoding
-  # ============================================================================
-
-  @spec SinusoidalPE2D.build_table(pos_integer(), pos_integer()) :: Nx.Tensor.t()
-  defp SinusoidalPE2D.build_table(seq_len, dim) do
-    h = seq_len |> :math.sqrt() |> ceil() |> trunc()
-    w = ceil(seq_len / h) |> trunc()
-
-    half_dim = div(dim, 2)
-    quarter_dim = div(half_dim, 2)
-
-    freq_indices = Nx.iota({quarter_dim})
-
-    inv_freq =
-      Nx.exp(
-        Nx.negate(Nx.multiply(freq_indices, Nx.divide(Nx.log(Nx.tensor(10_000.0)), quarter_dim)))
-      )
-
-    y_pos = Nx.iota({h, 1}) |> Nx.broadcast({h, w}) |> Nx.reshape({h * w, 1})
-    y_pos = Nx.divide(y_pos, Nx.tensor(max(h - 1, 1), type: :f32))
-
-    x_pos = Nx.iota({1, w}) |> Nx.broadcast({h, w}) |> Nx.reshape({h * w, 1})
-    x_pos = Nx.divide(x_pos, Nx.tensor(max(w - 1, 1), type: :f32))
-
-    y_angles = Nx.dot(y_pos, Nx.reshape(inv_freq, {1, quarter_dim}))
-    y_pe = Nx.concatenate([Nx.sin(y_angles), Nx.cos(y_angles)], axis: 1)
-
-    x_angles = Nx.dot(x_pos, Nx.reshape(inv_freq, {1, quarter_dim}))
-    x_pe = Nx.concatenate([Nx.sin(x_angles), Nx.cos(x_angles)], axis: 1)
-
-    pe = Nx.concatenate([y_pe, x_pe], axis: 1)
-    pe = Nx.slice_along_axis(pe, 0, seq_len, axis: 0)
-    Nx.reshape(pe, {1, seq_len, dim})
-  end
-
   # ============================================================================
   # Helpers
   # ============================================================================
-
-  # Nearest-neighbor 2x upsample (channels-last).
-  @spec upsample_2x(Axon.t(), String.t()) :: Axon.t()
-  defp upsample_2x(input, name) do
-    Axon.nx(
-      input,
-      fn t ->
-        {b, h, w, c} = Nx.shape(t)
-
-        t
-        |> Nx.reshape({b, h, 1, w, 1, c})
-        |> Nx.broadcast({b, h, 2, w, 2, c})
-        |> Nx.reshape({b, h * 2, w * 2, c})
-      end,
-      name: name
-    )
-  end
 
   @spec maybe_dropout(Axon.t(), float(), String.t()) :: Axon.t()
   defp maybe_dropout(input, rate, name) when rate > 0.0 do

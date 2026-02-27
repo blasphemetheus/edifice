@@ -456,7 +456,9 @@ defmodule Edifice.Recurrent.XLSTM do
     log_d = Nx.add(log_i_expanded, Nx.subtract(cum_f_t, cum_f_i))
 
     # Apply causal mask (t >= i only)
-    causal_mask = create_causal_mask(seq_len)
+    causal_mask =
+      Edifice.Blocks.CausalMask.causal(seq_len) |> Nx.reshape({1, 1, seq_len, seq_len})
+
     neg_inf = Nx.Constants.neg_infinity(Nx.type(log_d))
     log_d = Nx.select(Nx.broadcast(causal_mask, Nx.shape(log_d)), log_d, neg_inf)
 
@@ -506,12 +508,6 @@ defmodule Edifice.Recurrent.XLSTM do
     tensor
     |> Nx.reshape({batch_size, seq_len, num_heads, head_dim})
     |> Nx.transpose(axes: [0, 2, 1, 3])
-  end
-
-  defp create_causal_mask(seq_len) do
-    rows = Nx.iota({seq_len, 1})
-    cols = Nx.iota({1, seq_len})
-    Nx.greater_equal(rows, cols) |> Nx.reshape({1, 1, seq_len, seq_len})
   end
 
   # ============================================================================
