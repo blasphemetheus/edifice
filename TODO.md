@@ -112,7 +112,7 @@
 - [x] **Whisper** — Encoder-decoder ASR (OpenAI). Log-mel spectrogram frontend + transformer encoder-decoder with multitask training (transcription, translation, timestamps, language ID). Fills the ASR gap — audio family has TTS but no recognition.
 
 ### Generative
-- [ ] **Mercury/MDLM** — Discrete diffusion LM (Inception Labs, arXiv:2506.17298). Parallel token denoising instead of autoregressive generation. Transformer backbone + discrete noise process + iterative refinement. 10x decoding speedup. Related work: MDLM, SEDD, Plaid. New family: `diffusion_lm` or under `generative`.
+- [x] **Mercury/MDLM** — Discrete diffusion LM (Inception Labs, arXiv:2506.17298). Parallel token denoising instead of autoregressive generation. Transformer backbone + discrete noise process + iterative refinement. 10x decoding speedup. Related work: MDLM, SEDD, Plaid. New family: `diffusion_lm` or under `generative`.
 - [ ] **Rectified Flow** — Straight-trajectory flow matching variant. ODE paths trained to be straight lines, enabling 10-100x fewer inference steps than vanilla diffusion. Can be a variant/option on existing FlowMatching or standalone module.
 
 ### Vision
@@ -163,6 +163,60 @@ Reviewed by Opus for correctness, math accuracy, and idiomatic Elixir.
 ### Fixed (2/8)
 - `lib/edifice/meta/moe_v2.ex` — stack_fn fallback was broken for non-standard expert counts (3,5,6,7). Arity-1 generic closure incompatible with Axon.layer positional arg unpacking. Replaced with explicit cases for 2-8 experts.
 - `lib/edifice/generative/var.ex` — token embedding used deterministic Nx.iota projection instead of learnable weights. Replaced with Axon.nx (one_hot) + Axon.dense (no bias) for proper learnable embedding table. Note: decoder reshape has a separate pre-existing bug (not addressed here).
+
+---
+
+## TransformerBlock Composability — Encoder-Decoder Support
+
+**Problem:** `TransformerBlock.layer/2` only supports 2 sublayers (attention + FFN). Every encoder-decoder model in the codebase reimplements its own 3-sublayer decoder block (self-attn + cross-attn + FFN) with duplicated residual/norm/dropout wiring. This is the single largest composability gap in Edifice.
+
+**Affected modules (6 modules, ~300 lines of duplicated block structure):**
+- `audio/whisper.ex` — `decoder_block/7` (self-attn + cross-attn + FFN)
+- `robotics/act.ex` — `decoder_layer/6` (self-attn + cross-attn + FFN)
+- `detection/detr.ex` — `decoder_layer/9` (self-attn + cross-attn + FFN, with per-layer PE)
+- `detection/rt_detr.ex` — decoder with iterative bbox refinement
+- `audio/valle.ex` — `decoder_block/6` (AR causal / NAR bidirectional modes)
+- `detection/sam2.ex` — `two_way_block/8` (4 sublayers: self-attn + cross-attn + MLP + reverse cross-attn)
+
+**Secondary issue — CrossAttention.layer adoption:** Only Whisper uses `CrossAttention.layer/3`. DETR, ACT, SAM2, Perceiver, and Fusion all implement custom inline cross-attention. These custom versions add module-specific features (per-layer PE, bidirectional conditioning, gated cross-attention) that `CrossAttention.layer/3` doesn't support.
+
+**Proposed solution — extend TransformerBlock with optional cross-attention sublayer:**
+
+```
+TransformerBlock.layer(input, opts)                    # 2-sublayer (encoder, existing)
+TransformerBlock.layer(input, memory, opts)             # 3-sublayer (decoder, new)
+```
+
+New `:cross_attention_fn` callback option (same pattern as existing `:attention_fn`):
+```elixir
+TransformerBlock.layer(x, memory,
+  attention_fn: fn x, name -> causal_self_attn(x, name) end,
+  cross_attention_fn: fn x, mem, name -> cross_attn(x, mem, name) end,
+  hidden_size: 512,
+  name: "dec_block_1"
+)
+```
+
+When `cross_attention_fn` is provided, the block becomes:
+```
+norm → attention_fn → residual → norm → cross_attention_fn(x, memory) → residual → norm → FFN → residual
+```
+
+**Design considerations:**
+- Backward compatible: 2-arg `layer/2` unchanged, 3-arg `layer/3` adds memory input
+- `stack/3` gets a `stack/4` sibling for decoder stacking with shared memory
+- Callback approach handles DETR's per-layer PE, SAM2's bidirectional, etc. — each module supplies its own cross-attention function
+- `CrossAttention.layer/3` could gain `:num_heads` multi-head support (currently single-head despite taking `:num_heads`) to make the default callback more useful
+- SAM2's 4-sublayer block (reverse cross-attn) stays custom — don't over-generalize
+
+**Files to modify:**
+- `lib/edifice/blocks/transformer_block.ex` — add `layer/3`, `stack/4`, cross-attention sublayer
+- `lib/edifice/blocks/cross_attention.ex` — audit multi-head support, add callback-friendly API
+- `lib/edifice/audio/whisper.ex` — refactor to use new `layer/3`
+- `lib/edifice/robotics/act.ex` — refactor to use new `layer/3`
+- `lib/edifice/detection/detr.ex` — refactor (PE callback captures positional encoding)
+- `lib/edifice/audio/valle.ex` — evaluate refactor feasibility (AR/NAR split may need to stay custom)
+- `test/edifice/blocks/transformer_block_test.exs` — add 3-sublayer tests
 
 ---
 

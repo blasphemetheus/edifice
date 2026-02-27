@@ -28,7 +28,7 @@ defmodule Edifice do
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
   | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Sigmoid Attention, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, Dual Chunk Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision |
-  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, SoFlow, Normalizing Flow, Transfusion, CogVideoX, TRELLIS |
+  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, SoFlow, Normalizing Flow, Transfusion, CogVideoX, TRELLIS, MDLM |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, Message Passing |
   | Sets | DeepSets, PointNet |
   | Energy | EBM, Hopfield, Neural ODE |
@@ -185,6 +185,7 @@ defmodule Edifice do
     mar: Edifice.Generative.MAR,
     cogvideox: Edifice.Generative.CogVideoX,
     trellis: Edifice.Generative.TRELLIS,
+    mdlm: Edifice.Generative.MDLM,
     # Graph
     gcn: Edifice.Graph.GCN,
     gat: Edifice.Graph.GAT,
@@ -419,7 +420,8 @@ defmodule Edifice do
         :transfusion,
         :mar,
         :cogvideox,
-        :trellis
+        :trellis,
+        :mdlm
       ],
       graph: [:gcn, :gat, :graph_sage, :gin, :gin_v2, :pna, :graph_transformer, :schnet, :egnn],
       sets: [:deep_sets, :pointnet],
