@@ -63,6 +63,57 @@ defmodule Edifice.Blocks.SinusoidalPE do
   end
 
   @doc """
+  Build an Axon layer that computes sinusoidal timestep embedding.
+
+  Takes a scalar timestep `[batch]` or `[batch, 1]` and produces an embedding
+  `[batch, hidden_size]`. Used for diffusion model conditioning.
+
+  ## Options
+    - `:hidden_size` - Output embedding dimension (required)
+    - `:num_steps` - If provided, normalizes timestep by dividing (default: nil)
+    - `:name` - Layer name prefix (default: "time_sinusoidal")
+  """
+  @spec timestep_layer(Axon.t(), keyword()) :: Axon.t()
+  def timestep_layer(timestep, opts) do
+    hidden_size = Keyword.fetch!(opts, :hidden_size)
+    num_steps = Keyword.get(opts, :num_steps, nil)
+    name = Keyword.get(opts, :name, "time_sinusoidal")
+
+    Axon.layer(
+      &timestep_embed_impl/2,
+      [timestep],
+      name: name,
+      hidden_size: hidden_size,
+      num_steps: num_steps,
+      op_name: :sinusoidal_embed
+    )
+  end
+
+  defp timestep_embed_impl(t, opts) do
+    hidden_size = opts[:hidden_size]
+    num_steps = opts[:num_steps]
+    half_dim = div(hidden_size, 2)
+
+    t_f =
+      if num_steps do
+        Nx.divide(Nx.as_type(t, :f32), num_steps)
+      else
+        Nx.as_type(t, :f32)
+      end
+
+    freqs =
+      Nx.exp(
+        Nx.multiply(
+          Nx.negate(Nx.log(Nx.tensor(10_000.0))),
+          Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
+        )
+      )
+
+    angles = Nx.multiply(Nx.new_axis(t_f, 1), Nx.reshape(freqs, {1, half_dim}))
+    Nx.concatenate([Nx.sin(angles), Nx.cos(angles)], axis: 1)
+  end
+
+  @doc """
   Build an Axon layer that adds sinusoidal positional encoding to the input.
 
   ## Options

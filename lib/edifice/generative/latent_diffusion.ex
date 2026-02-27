@@ -178,13 +178,10 @@ defmodule Edifice.Generative.LatentDiffusion do
 
     # Timestep embedding
     time_embed =
-      Axon.layer(
-        &sinusoidal_embed_impl/2,
-        [timestep],
-        name: "time_embed",
+      Edifice.Blocks.SinusoidalPE.timestep_layer(timestep,
         hidden_size: hidden_size,
         num_steps: num_steps,
-        op_name: :sinusoidal_embed
+        name: "time_embed"
       )
 
     time_mlp =
@@ -212,26 +209,6 @@ defmodule Edifice.Generative.LatentDiffusion do
     x = Axon.activation(x, :silu, name: "#{name}_silu")
     x = Axon.dense(x, hidden_size, name: "#{name}_down")
     Axon.add(input, x, name: "#{name}_residual")
-  end
-
-  defp sinusoidal_embed_impl(t, opts) do
-    hidden_size = opts[:hidden_size]
-    num_steps = opts[:num_steps]
-    half_dim = div(hidden_size, 2)
-
-    t_norm = Nx.divide(Nx.as_type(t, :f32), num_steps)
-
-    freqs =
-      Nx.exp(
-        Nx.multiply(
-          Nx.negate(Nx.log(Nx.tensor(10_000.0))),
-          Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
-        )
-      )
-
-    t_expanded = Nx.new_axis(t_norm, 1)
-    angles = Nx.multiply(t_expanded, Nx.reshape(freqs, {1, half_dim}))
-    Nx.concatenate([Nx.sin(angles), Nx.cos(angles)], axis: 1)
   end
 
   # ============================================================================

@@ -520,36 +520,10 @@ defmodule Edifice.Generative.Transfusion do
   # ============================================================================
 
   defp build_timestep_embed(timestep, hidden_size) do
-    embed =
-      Axon.layer(
-        &sinusoidal_embed_impl/2,
-        [timestep],
-        name: "time_sinusoidal",
-        hidden_size: hidden_size,
-        op_name: :sinusoidal_embed
-      )
-
-    embed
+    Edifice.Blocks.SinusoidalPE.timestep_layer(timestep, hidden_size: hidden_size)
     |> Axon.dense(hidden_size, name: "time_mlp_1")
     |> Axon.activation(:silu, name: "time_mlp_silu")
     |> Axon.dense(hidden_size, name: "time_mlp_2")
-  end
-
-  defp sinusoidal_embed_impl(t, opts) do
-    hidden_size = opts[:hidden_size]
-    half_dim = div(hidden_size, 2)
-
-    freqs =
-      Nx.exp(
-        Nx.multiply(
-          Nx.negate(Nx.log(Nx.tensor(10_000.0))),
-          Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
-        )
-      )
-
-    t_f = Nx.as_type(t, :f32)
-    angles = Nx.multiply(Nx.new_axis(t_f, 1), Nx.reshape(freqs, {1, half_dim}))
-    Nx.concatenate([Nx.sin(angles), Nx.cos(angles)], axis: 1)
   end
 
   defp maybe_dropout(x, rate, _name) when rate <= 0, do: x

@@ -548,13 +548,10 @@ defmodule Edifice.Robotics.OpenVLA do
     x_normed = Axon.layer_norm(x, name: "action_cross_attn_norm")
 
     cross_attn =
-      build_cross_attention(
-        x_normed,
-        encoded_seq,
-        hidden_dim,
-        num_heads,
-        head_dim,
-        "action_cross_attn"
+      Edifice.Blocks.CrossAttention.layer(x_normed, encoded_seq,
+        hidden_size: hidden_dim,
+        num_heads: num_heads,
+        name: "action_cross_attn"
       )
 
     cross_attn = maybe_dropout(cross_attn, dropout, "action_cross_attn_dropout")
@@ -611,53 +608,6 @@ defmodule Edifice.Robotics.OpenVLA do
     output
     |> Nx.transpose(axes: [0, 2, 1, 3])
     |> Nx.reshape({batch, seq_len, num_heads * head_dim})
-  end
-
-  # Cross-attention: queries attend to keys/values from another sequence
-  defp build_cross_attention(queries, context, hidden_dim, num_heads, head_dim, name) do
-    q = Axon.dense(queries, hidden_dim, name: "#{name}_q")
-    k = Axon.dense(context, hidden_dim, name: "#{name}_k")
-    v = Axon.dense(context, hidden_dim, name: "#{name}_v")
-
-    attended =
-      Axon.layer(
-        &cross_attention_impl/4,
-        [q, k, v],
-        name: "#{name}_compute",
-        num_heads: num_heads,
-        head_dim: head_dim,
-        op_name: :action_cross_attn
-      )
-
-    Axon.dense(attended, hidden_dim, name: "#{name}_out")
-  end
-
-  defp cross_attention_impl(q, k, v, opts) do
-    num_heads = opts[:num_heads]
-    head_dim = opts[:head_dim]
-
-    batch = Nx.axis_size(q, 0)
-    q_len = Nx.axis_size(q, 1)
-    kv_len = Nx.axis_size(k, 1)
-
-    q = q |> Nx.reshape({batch, q_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    k = k |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    v = v |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
-
-    max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
-    exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-
-    weights =
-      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
-
-    output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
-
-    output
-    |> Nx.transpose(axes: [0, 2, 1, 3])
-    |> Nx.reshape({batch, q_len, num_heads * head_dim})
   end
 
   defp maybe_dropout(x, rate, _name) when rate <= 0, do: x

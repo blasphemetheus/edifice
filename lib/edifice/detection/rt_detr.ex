@@ -81,8 +81,7 @@ defmodule Edifice.Detection.RTDETR do
     https://arxiv.org/abs/2304.08069
   """
 
-  alias Edifice.Blocks.TransformerBlock
-  alias Edifice.Utils.FusedOps
+  alias Edifice.Blocks.{BBoxHead, SDPA, SinusoidalPE2D, TransformerBlock, Upsample2x}
 
   @default_image_size 640
   @default_in_channels 3
@@ -164,7 +163,7 @@ defmodule Edifice.Detection.RTDETR do
 
     # Encoder prediction heads for query selection
     enc_class = Axon.dense(memory, num_classes, name: "enc_score_head")
-    enc_bbox = bbox_mlp(memory, hidden_dim, "enc_bbox")
+    enc_bbox = BBoxHead.layer(memory, hidden_dim, "enc_bbox")
 
     # Top-K query selection: select top-K by max class score
     {selected_features, selected_bboxes} =
@@ -286,7 +285,7 @@ defmodule Edifice.Detection.RTDETR do
         flat,
         fn t ->
           {_b, seq_len, dim} = Nx.shape(t)
-          build_2d_sinusoidal_pe(seq_len, dim)
+          SinusoidalPE2D.build_table(seq_len, dim)
         end,
         name: "#{name}_pe"
       )
@@ -318,12 +317,12 @@ defmodule Edifice.Detection.RTDETR do
   defp ccfm_fusion(s3, s4, f5, hidden_dim, name) do
     # Top-down pathway
     # Upsample F5 and fuse with S4
-    f5_up = upsample_2x(f5, "#{name}_f5_up")
+    f5_up = Upsample2x.layer(f5, "#{name}_f5_up")
     p4_cat = concat_features(f5_up, s4, "#{name}_p4_cat")
     p4 = fusion_block(p4_cat, hidden_dim, "#{name}_p4_fuse")
 
     # Upsample P4 and fuse with S3
-    p4_up = upsample_2x(p4, "#{name}_p4_up")
+    p4_up = Upsample2x.layer(p4, "#{name}_p4_up")
     p3_cat = concat_features(p4_up, s3, "#{name}_p3_cat")
     p3 = fusion_block(p3_cat, hidden_dim, "#{name}_p3_fuse")
 
@@ -339,23 +338,6 @@ defmodule Edifice.Detection.RTDETR do
     n5 = fusion_block(n5_cat, hidden_dim, "#{name}_n5_fuse")
 
     {p3, n4, n5}
-  end
-
-  # Nearest-neighbor 2x upsample (channels-last)
-  @spec upsample_2x(Axon.t(), String.t()) :: Axon.t()
-  defp upsample_2x(input, name) do
-    Axon.nx(
-      input,
-      fn t ->
-        {b, h, w, c} = Nx.shape(t)
-
-        t
-        |> Nx.reshape({b, h, 1, w, 1, c})
-        |> Nx.broadcast({b, h, 2, w, 2, c})
-        |> Nx.reshape({b, h * 2, w * 2, c})
-      end,
-      name: name
-    )
   end
 
   # Stride-2 downsample via conv (channels-last)
@@ -493,7 +475,11 @@ defmodule Edifice.Detection.RTDETR do
             multi_head_attention(x_norm, x_norm, x_norm, hidden_dim, num_heads, attn_name)
           end,
           cross_attention_fn: fn q_norm, mem, ca_name ->
-            multi_head_attention(q_norm, mem, mem, hidden_dim, num_heads, ca_name)
+            Edifice.Blocks.CrossAttention.layer(q_norm, mem,
+              hidden_size: hidden_dim,
+              num_heads: num_heads,
+              name: ca_name
+            )
           end,
           hidden_size: hidden_dim,
           custom_ffn: fn x_norm, ffn_name ->
@@ -508,7 +494,7 @@ defmodule Edifice.Detection.RTDETR do
         )
 
       # Iterative box refinement: predict delta, add to previous, apply sigmoid
-      bbox_delta = bbox_mlp(new_hidden, hidden_dim, "#{name}_#{i}_bbox")
+      bbox_delta = BBoxHead.layer(new_hidden, hidden_dim, "#{name}_#{i}_bbox")
 
       # inv_sigmoid(prev) + delta → sigmoid → new reference
       refined =
@@ -550,7 +536,7 @@ defmodule Edifice.Detection.RTDETR do
     attended =
       Axon.layer(
         fn q_t, k_t, v_t, _opts ->
-          compute_attention(q_t, k_t, v_t, num_heads, head_dim)
+          SDPA.compute(q_t, k_t, v_t, num_heads, head_dim)
         end,
         [q, k, v],
         name: "#{name}_compute",
@@ -558,48 +544,6 @@ defmodule Edifice.Detection.RTDETR do
       )
 
     Axon.dense(attended, hidden_dim, name: "#{name}_out")
-  end
-
-  @spec compute_attention(
-          Nx.Tensor.t(),
-          Nx.Tensor.t(),
-          Nx.Tensor.t(),
-          pos_integer(),
-          pos_integer()
-        ) ::
-          Nx.Tensor.t()
-  defp compute_attention(q, k, v, num_heads, head_dim) do
-    {batch, q_len, _} = Nx.shape(q)
-    {_, kv_len, _} = Nx.shape(k)
-
-    q = q |> Nx.reshape({batch, q_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    k = k |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-    v = v |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
-
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
-    weights = FusedOps.fused_softmax(scores)
-    output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
-
-    output
-    |> Nx.transpose(axes: [0, 2, 1, 3])
-    |> Nx.reshape({batch, q_len, num_heads * head_dim})
-  end
-
-  # ============================================================================
-  # Shared Helpers
-  # ============================================================================
-
-  # 3-layer bbox MLP: hidden → hidden → hidden → 4, with sigmoid output.
-  @spec bbox_mlp(Axon.t(), pos_integer(), String.t()) :: Axon.t()
-  defp bbox_mlp(input, hidden_dim, name) do
-    input
-    |> Axon.dense(hidden_dim, name: "#{name}_mlp1")
-    |> Axon.activation(:relu, name: "#{name}_act1")
-    |> Axon.dense(hidden_dim, name: "#{name}_mlp2")
-    |> Axon.activation(:relu, name: "#{name}_act2")
-    |> Axon.dense(4, name: "#{name}_mlp3")
-    |> Axon.activation(:sigmoid, name: "#{name}_sig")
   end
 
   # Encoder layer: pre-norm self-attention + FFN with PE on Q/K.
@@ -627,7 +571,7 @@ defmodule Edifice.Detection.RTDETR do
     sa =
       Axon.layer(
         fn q_t, k_t, v_t, _opts ->
-          compute_attention(q_t, k_t, v_t, num_heads, head_dim)
+          SDPA.compute(q_t, k_t, v_t, num_heads, head_dim)
         end,
         [q, k, v],
         name: "#{name}_sa_compute",
@@ -649,39 +593,6 @@ defmodule Edifice.Detection.RTDETR do
       |> maybe_dropout(dropout, "#{name}_ffn_drop2")
 
     Axon.add(x, ffn, name: "#{name}_ffn_res")
-  end
-
-  # 2D sinusoidal positional encoding for a flattened spatial grid.
-  @spec build_2d_sinusoidal_pe(pos_integer(), pos_integer()) :: Nx.Tensor.t()
-  defp build_2d_sinusoidal_pe(seq_len, dim) do
-    h = seq_len |> :math.sqrt() |> ceil() |> trunc()
-    w = ceil(seq_len / h) |> trunc()
-
-    half_dim = div(dim, 2)
-    quarter_dim = div(half_dim, 2)
-
-    freq_indices = Nx.iota({quarter_dim})
-
-    inv_freq =
-      Nx.exp(
-        Nx.negate(Nx.multiply(freq_indices, Nx.divide(Nx.log(Nx.tensor(10_000.0)), quarter_dim)))
-      )
-
-    y_pos = Nx.iota({h, 1}) |> Nx.broadcast({h, w}) |> Nx.reshape({h * w, 1})
-    y_pos = Nx.divide(y_pos, Nx.tensor(max(h - 1, 1), type: :f32))
-
-    x_pos = Nx.iota({1, w}) |> Nx.broadcast({h, w}) |> Nx.reshape({h * w, 1})
-    x_pos = Nx.divide(x_pos, Nx.tensor(max(w - 1, 1), type: :f32))
-
-    y_angles = Nx.dot(y_pos, Nx.reshape(inv_freq, {1, quarter_dim}))
-    y_pe = Nx.concatenate([Nx.sin(y_angles), Nx.cos(y_angles)], axis: 1)
-
-    x_angles = Nx.dot(x_pos, Nx.reshape(inv_freq, {1, quarter_dim}))
-    x_pe = Nx.concatenate([Nx.sin(x_angles), Nx.cos(x_angles)], axis: 1)
-
-    pe = Nx.concatenate([y_pe, x_pe], axis: 1)
-    pe = Nx.slice_along_axis(pe, 0, seq_len, axis: 0)
-    Nx.reshape(pe, {1, seq_len, dim})
   end
 
   defp maybe_dropout(input, rate, name) when rate > 0.0 do

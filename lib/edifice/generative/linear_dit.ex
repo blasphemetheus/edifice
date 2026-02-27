@@ -159,55 +159,49 @@ defmodule Edifice.Generative.LinearDiT do
   """
   @spec build_linear_dit_block(Axon.t(), Axon.t(), keyword()) :: Axon.t()
   def build_linear_dit_block(input, condition, opts) do
+    alias Edifice.Blocks.AdaptiveNorm
+
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_heads = Keyword.get(opts, :num_heads, @default_num_heads)
     mlp_ratio = Keyword.get(opts, :mlp_ratio, @default_mlp_ratio)
     name = Keyword.get(opts, :name, "linear_dit_block")
     mlp_dim = round(hidden_size * mlp_ratio)
 
-    # AdaLN parameters for attention sub-layer
+    # AdaLN parameters for attention sub-layer: shift1, scale1, gate1
     adaln_attn = Axon.dense(condition, hidden_size * 3, name: "#{name}_adaln_attn")
 
     # AdaLN-Zero modulated attention
-    x_norm = Axon.layer_norm(input, name: "#{name}_attn_norm")
-
     x_modulated =
-      Axon.layer(
-        &adaln_modulate_impl/3,
-        [x_norm, adaln_attn],
-        name: "#{name}_attn_mod",
+      input
+      |> Axon.layer_norm(name: "#{name}_attn_norm")
+      |> AdaptiveNorm.modulate(adaln_attn,
         hidden_size: hidden_size,
-        op_name: :adaln_modulate
+        offset: 0,
+        name: "#{name}_attn_mod"
       )
 
     # Linear self-attention (the key difference from standard DiT)
     attn_out = build_linear_attention(x_modulated, hidden_size, num_heads, "#{name}_attn")
 
-    # Scale by alpha (gating)
-    alpha_attn =
-      Axon.nx(
-        adaln_attn,
-        fn params ->
-          Nx.slice_along_axis(params, hidden_size * 2, hidden_size, axis: 1)
-        end,
-        name: "#{name}_alpha_attn"
+    attn_out =
+      AdaptiveNorm.gate(attn_out, adaln_attn,
+        hidden_size: hidden_size,
+        gate_index: 2,
+        name: "#{name}_attn_gate"
       )
 
-    attn_out = Axon.multiply(attn_out, alpha_attn, name: "#{name}_attn_gate")
     x = Axon.add(input, attn_out, name: "#{name}_attn_residual")
 
-    # AdaLN parameters for MLP sub-layer
+    # AdaLN parameters for MLP sub-layer: shift2, scale2, gate2
     adaln_mlp = Axon.dense(condition, hidden_size * 3, name: "#{name}_adaln_mlp")
 
-    x_norm2 = Axon.layer_norm(x, name: "#{name}_mlp_norm")
-
     x_modulated2 =
-      Axon.layer(
-        &adaln_modulate_impl/3,
-        [x_norm2, adaln_mlp],
-        name: "#{name}_mlp_mod",
+      x
+      |> Axon.layer_norm(name: "#{name}_mlp_norm")
+      |> AdaptiveNorm.modulate(adaln_mlp,
         hidden_size: hidden_size,
-        op_name: :adaln_modulate
+        offset: 0,
+        name: "#{name}_mlp_mod"
       )
 
     # MLP
@@ -215,17 +209,12 @@ defmodule Edifice.Generative.LinearDiT do
     mlp_out = Axon.activation(mlp_out, :gelu, name: "#{name}_mlp_gelu")
     mlp_out = Axon.dense(mlp_out, hidden_size, name: "#{name}_mlp_down")
 
-    # Scale by alpha
-    alpha_mlp =
-      Axon.nx(
-        adaln_mlp,
-        fn params ->
-          Nx.slice_along_axis(params, hidden_size * 2, hidden_size, axis: 1)
-        end,
-        name: "#{name}_alpha_mlp"
+    mlp_out =
+      AdaptiveNorm.gate(mlp_out, adaln_mlp,
+        hidden_size: hidden_size,
+        gate_index: 2,
+        name: "#{name}_mlp_gate"
       )
-
-    mlp_out = Axon.multiply(mlp_out, alpha_mlp, name: "#{name}_mlp_gate")
 
     Axon.add(x, mlp_out, name: "#{name}_mlp_residual")
   end
@@ -321,58 +310,17 @@ defmodule Edifice.Generative.LinearDiT do
   end
 
   # ============================================================================
-  # AdaLN-Zero Conditioning
-  # ============================================================================
-
-  defp adaln_modulate_impl(x, adaln_params, opts) do
-    hidden_size = opts[:hidden_size]
-
-    gamma = Nx.slice_along_axis(adaln_params, 0, hidden_size, axis: 1)
-    beta = Nx.slice_along_axis(adaln_params, hidden_size, hidden_size, axis: 1)
-
-    # gamma acts as scale (1 + gamma for stability)
-    Nx.add(Nx.multiply(Nx.add(1.0, gamma), x), beta)
-  end
-
-  # ============================================================================
   # Timestep and Class Conditioning
   # ============================================================================
 
   defp build_timestep_mlp(timestep, hidden_size, num_steps) do
-    embed =
-      Axon.layer(
-        &sinusoidal_embed_impl/2,
-        [timestep],
-        name: "time_sinusoidal",
-        hidden_size: hidden_size,
-        num_steps: num_steps,
-        op_name: :sinusoidal_embed
-      )
-
-    embed
+    Edifice.Blocks.SinusoidalPE.timestep_layer(timestep,
+      hidden_size: hidden_size,
+      num_steps: num_steps
+    )
     |> Axon.dense(hidden_size, name: "time_mlp_1")
     |> Axon.activation(:silu, name: "time_mlp_silu")
     |> Axon.dense(hidden_size, name: "time_mlp_2")
-  end
-
-  defp sinusoidal_embed_impl(t, opts) do
-    hidden_size = opts[:hidden_size]
-    num_steps = opts[:num_steps]
-    half_dim = div(hidden_size, 2)
-
-    t_norm = Nx.divide(Nx.as_type(t, :f32), num_steps)
-
-    freqs =
-      Nx.exp(
-        Nx.multiply(
-          Nx.negate(Nx.log(Nx.tensor(10_000.0))),
-          Nx.divide(Nx.iota({half_dim}, type: :f32), max(half_dim - 1, 1))
-        )
-      )
-
-    t_expanded = Nx.new_axis(t_norm, 1)
-    angles = Nx.multiply(t_expanded, Nx.reshape(freqs, {1, half_dim}))
-    Nx.concatenate([Nx.sin(angles), Nx.cos(angles)], axis: 1)
   end
 
   defp build_class_embedding(class_label, hidden_size, num_classes) do

@@ -172,6 +172,32 @@ defmodule Edifice.Blocks.RoPE do
     {q_rotated, k_rotated}
   end
 
+  @doc """
+  Apply rotary position embedding to Q and K in multi-head shape.
+
+  Handles 4D tensors `[batch, heads, seq_len, head_dim]` by flattening
+  to 3D, applying RoPE, and reshaping back.
+
+  ## Parameters
+    - `query` - Query tensor [batch, heads, seq_len, head_dim]
+    - `key` - Key tensor [batch, heads, seq_len, head_dim]
+
+  ## Returns
+    `{rotated_query, rotated_key}` with same shapes as input.
+  """
+  defn apply_rotary_4d(query, key, _opts \\ []) do
+    {batch, heads, seq_len, head_dim} = Nx.shape(query)
+    {_, k_heads, _, _} = Nx.shape(key)
+
+    q_flat = Nx.reshape(query, {batch * heads, seq_len, head_dim})
+    k_flat = Nx.reshape(key, {batch * k_heads, seq_len, head_dim})
+
+    {q_rot, k_rot} = apply_rotary(q_flat, k_flat)
+
+    {Nx.reshape(q_rot, {batch, heads, seq_len, head_dim}),
+     Nx.reshape(k_rot, {batch, k_heads, seq_len, head_dim})}
+  end
+
   defnp rotate_half(x, cos_table, sin_table, half_dim) do
     x1 = Nx.slice_along_axis(x, 0, half_dim, axis: 2)
     x2 = Nx.slice_along_axis(x, half_dim, half_dim, axis: 2)

@@ -176,7 +176,9 @@ defmodule Edifice.Generative.MDLM do
             Nx.iota({vocab_size})
           )
           |> Nx.as_type(:f32)
-        end, name: "token_one_hot")
+        end,
+        name: "token_one_hot"
+      )
 
     Axon.dense(one_hot, hidden_size, name: "token_embed")
   end
@@ -231,6 +233,8 @@ defmodule Edifice.Generative.MDLM do
   # ===========================================================================
 
   defp build_ddit_block(input, condition, opts) do
+    alias Edifice.Blocks.AdaptiveNorm
+
     hidden_size = opts[:hidden_size]
     num_heads = opts[:num_heads]
     mlp_ratio = opts[:mlp_ratio]
@@ -245,82 +249,56 @@ defmodule Edifice.Generative.MDLM do
       |> Axon.dense(hidden_size * 6, name: "#{name}_adaln_proj")
 
     # --- Attention sub-layer ---
-    x_norm = build_layer_norm(input, "#{name}_attn_norm")
-
-    # Modulate with shift1, scale1
     x_mod =
-      Axon.layer(
-        &adaln_modulate_impl/3,
-        [x_norm, adaln_params],
-        name: "#{name}_attn_mod",
+      input
+      |> build_layer_norm("#{name}_attn_norm")
+      |> AdaptiveNorm.modulate(adaln_params,
         hidden_size: hidden_size,
         offset: 0,
-        op_name: :adaln_modulate
+        name: "#{name}_attn_mod"
       )
 
     # Self-attention with RoPE
-    attn_out =
-      build_rope_attention(x_mod, hidden_size, num_heads, "#{name}_attn")
-
+    attn_out = build_rope_attention(x_mod, hidden_size, num_heads, "#{name}_attn")
     attn_out = maybe_dropout(attn_out, dropout, "#{name}_attn_drop")
 
-    # Gate with gate1: [batch, hidden] → [batch, 1, hidden] for seq broadcast
-    gate_attn =
-      Axon.nx(
-        adaln_params,
-        fn params ->
-          Nx.slice_along_axis(params, hidden_size * 2, hidden_size, axis: -1)
-          |> Nx.new_axis(1)
-        end, name: "#{name}_gate_attn")
+    attn_out =
+      AdaptiveNorm.gate(attn_out, adaln_params,
+        hidden_size: hidden_size,
+        gate_index: 2,
+        name: "#{name}_attn_gated"
+      )
 
-    attn_out = Axon.multiply(attn_out, gate_attn, name: "#{name}_attn_gated")
     x = Axon.add(input, attn_out, name: "#{name}_attn_residual")
 
     # --- MLP sub-layer ---
-    x_norm2 = build_layer_norm(x, "#{name}_mlp_norm")
-
-    # Modulate with shift2, scale2
     x_mod2 =
-      Axon.layer(
-        &adaln_modulate_impl/3,
-        [x_norm2, adaln_params],
-        name: "#{name}_mlp_mod",
+      x
+      |> build_layer_norm("#{name}_mlp_norm")
+      |> AdaptiveNorm.modulate(adaln_params,
         hidden_size: hidden_size,
         offset: 3,
-        op_name: :adaln_modulate
+        name: "#{name}_mlp_mod"
       )
 
     # SwiGLU FFN
-    mlp_out = build_swiglu_ffn(x_mod2, hidden_size, mlp_dim, "#{name}_ffn")
+    mlp_out =
+      Edifice.Blocks.SwiGLU.layer(x_mod2,
+        hidden_size: hidden_size,
+        inner_size: mlp_dim,
+        name: "#{name}_ffn"
+      )
+
     mlp_out = maybe_dropout(mlp_out, dropout, "#{name}_mlp_drop")
 
-    # Gate with gate2: [batch, hidden] → [batch, 1, hidden] for seq broadcast
-    gate_mlp =
-      Axon.nx(
-        adaln_params,
-        fn params ->
-          Nx.slice_along_axis(params, hidden_size * 5, hidden_size, axis: -1)
-          |> Nx.new_axis(1)
-        end, name: "#{name}_gate_mlp")
+    mlp_out =
+      AdaptiveNorm.gate(mlp_out, adaln_params,
+        hidden_size: hidden_size,
+        gate_index: 5,
+        name: "#{name}_mlp_gated"
+      )
 
-    mlp_out = Axon.multiply(mlp_out, gate_mlp, name: "#{name}_mlp_gated")
     Axon.add(x, mlp_out, name: "#{name}_mlp_residual")
-  end
-
-  # AdaLN modulation: (1 + scale) * x + shift
-  # offset=0 → attn (shift1, scale1), offset=3 → MLP (shift2, scale2)
-  defp adaln_modulate_impl(x, adaln_params, opts) do
-    hidden_size = opts[:hidden_size]
-    offset = opts[:offset]
-
-    shift = Nx.slice_along_axis(adaln_params, offset * hidden_size, hidden_size, axis: -1)
-    scale = Nx.slice_along_axis(adaln_params, (offset + 1) * hidden_size, hidden_size, axis: -1)
-
-    # Expand [batch, hidden] → [batch, 1, hidden] for seq dim broadcast
-    shift = Nx.new_axis(shift, 1)
-    scale = Nx.new_axis(scale, 1)
-
-    Nx.add(Nx.multiply(Nx.add(1.0, scale), x), shift)
   end
 
   # ===========================================================================
@@ -358,8 +336,7 @@ defmodule Edifice.Generative.MDLM do
     v = v |> Nx.reshape({batch, seq_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
 
     # Apply RoPE to Q and K
-    q = apply_rope(q, head_dim, seq_len)
-    k = apply_rope(k, head_dim, seq_len)
+    {q, k} = Edifice.Blocks.RoPE.apply_rotary_4d(q, k)
 
     # Scaled dot-product attention (bidirectional, no causal mask)
     scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
@@ -379,88 +356,30 @@ defmodule Edifice.Generative.MDLM do
     |> Nx.reshape({batch, seq_len, num_heads * head_dim})
   end
 
-  # Apply RoPE to tensor [batch, heads, seq, head_dim]
-  defp apply_rope(x, head_dim, seq_len) do
-    half_dim = div(head_dim, 2)
-
-    # Frequencies: theta_i = 10000^(-2i/d)
-    freqs =
-      Nx.pow(
-        10_000.0,
-        Nx.negate(Nx.divide(Nx.multiply(2, Nx.iota({half_dim})), head_dim))
-      )
-      |> Nx.as_type(Nx.type(x))
-
-    # Positions × frequencies → angles [seq, half_dim]
-    positions = Nx.iota({seq_len}) |> Nx.as_type(Nx.type(x))
-    angles = Nx.outer(positions, freqs)
-
-    # [1, 1, seq, half_dim] for broadcasting
-    cos_t = Nx.cos(angles) |> Nx.reshape({1, 1, seq_len, half_dim})
-    sin_t = Nx.sin(angles) |> Nx.reshape({1, 1, seq_len, half_dim})
-
-    # Split last dim into two halves and rotate
-    x1 = Nx.slice_along_axis(x, 0, half_dim, axis: 3)
-    x2 = Nx.slice_along_axis(x, half_dim, half_dim, axis: 3)
-
-    rotated1 = Nx.subtract(Nx.multiply(x1, cos_t), Nx.multiply(x2, sin_t))
-    rotated2 = Nx.add(Nx.multiply(x1, sin_t), Nx.multiply(x2, cos_t))
-
-    Nx.concatenate([rotated1, rotated2], axis: 3)
-  end
-
-  # ===========================================================================
-  # SwiGLU FFN
-  # ===========================================================================
-
-  defp build_swiglu_ffn(input, hidden_size, mlp_dim, name) do
-    # Gate and up projections
-    gate = Axon.dense(input, mlp_dim, name: "#{name}_gate")
-    gate = Axon.activation(gate, :silu, name: "#{name}_silu")
-    up = Axon.dense(input, mlp_dim, name: "#{name}_up")
-
-    # Gated output
-    gated = Axon.multiply(gate, up, name: "#{name}_gated")
-    Axon.dense(gated, hidden_size, name: "#{name}_down")
-  end
-
   # ===========================================================================
   # Final Layer (AdaLN + output projection)
   # ===========================================================================
 
   defp build_final_layer(input, condition, hidden_size, vocab_size) do
+    alias Edifice.Blocks.AdaptiveNorm
+
     # Final AdaLN: 2 params (shift, scale)
     final_adaln =
       condition
       |> Axon.activation(:silu, name: "final_adaln_silu")
       |> Axon.dense(hidden_size * 2, name: "final_adaln_proj")
 
-    x_norm = build_layer_norm(input, "final_norm")
-
-    # Modulate
     x_mod =
-      Axon.layer(
-        &final_adaln_modulate_impl/3,
-        [x_norm, final_adaln],
-        name: "final_mod",
+      input
+      |> build_layer_norm("final_norm")
+      |> AdaptiveNorm.modulate(final_adaln,
         hidden_size: hidden_size,
-        op_name: :final_adaln_modulate
+        offset: 0,
+        name: "final_mod"
       )
 
     # Project to vocab logits: [batch, seq_len, vocab_size]
     Axon.dense(x_mod, vocab_size, name: "output_proj")
-  end
-
-  defp final_adaln_modulate_impl(x, adaln_params, opts) do
-    hidden_size = opts[:hidden_size]
-
-    shift = Nx.slice_along_axis(adaln_params, 0, hidden_size, axis: -1)
-    scale = Nx.slice_along_axis(adaln_params, hidden_size, hidden_size, axis: -1)
-
-    shift = Nx.new_axis(shift, 1)
-    scale = Nx.new_axis(scale, 1)
-
-    Nx.add(Nx.multiply(Nx.add(1.0, scale), x), shift)
   end
 
   # ===========================================================================

@@ -114,7 +114,7 @@ defmodule Edifice.Recurrent.TransformerLike do
       end)
 
     # Final layer norm
-    x = apply_norm(x, norm, "final_norm")
+    x = apply_norm(x, norm, hidden_size, "final_norm")
 
     # Extract last timestep: [batch, seq_len, hidden] -> [batch, hidden]
     Axon.nx(
@@ -131,7 +131,7 @@ defmodule Edifice.Recurrent.TransformerLike do
   defp recurrent_block(x, hidden_size, cell_type, dropout, norm, recurrent_norm, layer_idx) do
     rnn_input =
       if recurrent_norm do
-        apply_norm(x, norm, "rnn_#{layer_idx}_prenorm")
+        apply_norm(x, norm, hidden_size, "rnn_#{layer_idx}_prenorm")
       else
         x
       end
@@ -154,7 +154,7 @@ defmodule Edifice.Recurrent.TransformerLike do
 
   # Block 2: norm -> FFN(up -> act -> down) -> dropout -> residual add
   defp ffn_block(x, hidden_size, ffn_multiplier, activation, dropout, norm, layer_idx) do
-    normed = apply_norm(x, norm, "ffn_#{layer_idx}_prenorm")
+    normed = apply_norm(x, norm, hidden_size, "ffn_#{layer_idx}_prenorm")
 
     ffn_out =
       FFN.layer(normed,
@@ -168,8 +168,11 @@ defmodule Edifice.Recurrent.TransformerLike do
     Axon.add(x, ffn_out, name: "ffn_#{layer_idx}_residual")
   end
 
-  defp apply_norm(x, :layer_norm, name), do: Axon.layer_norm(x, name: name, epsilon: 1.0e-6)
-  defp apply_norm(x, :rms_norm, name), do: Axon.layer_norm(x, name: name, epsilon: 1.0e-6)
+  defp apply_norm(x, :layer_norm, _hidden_size, name),
+    do: Axon.layer_norm(x, name: name, epsilon: 1.0e-6)
+
+  defp apply_norm(x, :rms_norm, hidden_size, name),
+    do: Edifice.Blocks.RMSNorm.layer(x, hidden_size: hidden_size, name: name)
 
   @doc "Get the output size of the model."
   @spec output_size(keyword()) :: pos_integer()

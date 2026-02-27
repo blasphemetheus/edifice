@@ -242,15 +242,10 @@ defmodule Edifice.Attention.MLA do
     # Apply RoPE to rope dimensions
     # q_rope: [batch, seq, num_heads * rope_dim] -> [batch, num_heads, seq, rope_dim]
     q_r = reshape_to_heads(q_rope, batch, seq_len, num_heads, rope_dim)
-    q_r = apply_rope(q_r, seq_len, rope_dim)
+    k_r = Nx.reshape(k_rope, {batch, 1, seq_len, rope_dim})
 
-    # k_rope: [batch, seq, rope_dim] -> apply RoPE -> broadcast to all heads
-    # [batch, 1, seq, rope_dim]
-    k_r =
-      k_rope
-      |> Nx.reshape({batch, 1, seq_len, rope_dim})
-      |> apply_rope(seq_len, rope_dim)
-      |> Nx.broadcast({batch, num_heads, seq_len, rope_dim})
+    {q_r, k_r} = Edifice.Blocks.RoPE.apply_rotary_4d(q_r, k_r)
+    k_r = Nx.broadcast(k_r, {batch, num_heads, seq_len, rope_dim})
 
     # Concatenate content and RoPE: Q = [Q_c ; Q_r], K = [K_c ; K_r]
     # [batch, num_heads, seq, head_dim + rope_dim]
@@ -291,34 +286,6 @@ defmodule Edifice.Attention.MLA do
 
     # Reshape back: [batch, seq, num_heads * head_dim]
     reshape_from_heads(output, batch, seq_len, num_heads, head_dim)
-  end
-
-  # Apply RoPE to tensor with shape [..., seq_len, dim]
-  # Works on any leading dimensions (batch, heads, etc.)
-  defp apply_rope(tensor, seq_len, dim) do
-    half_dim = div(dim, 2)
-
-    freqs =
-      Nx.pow(
-        10_000.0,
-        Nx.negate(Nx.divide(Nx.multiply(2, Nx.iota({half_dim})), dim))
-      )
-      |> Nx.as_type(Nx.type(tensor))
-
-    positions = Nx.iota({seq_len}) |> Nx.as_type(Nx.type(tensor))
-    angles = Nx.outer(positions, freqs)
-
-    # Reshape for broadcasting: [1, 1, seq_len, half_dim]
-    cos_t = Nx.cos(angles) |> Nx.reshape({1, 1, seq_len, half_dim})
-    sin_t = Nx.sin(angles) |> Nx.reshape({1, 1, seq_len, half_dim})
-
-    x1 = Nx.slice_along_axis(tensor, 0, half_dim, axis: 3)
-    x2 = Nx.slice_along_axis(tensor, half_dim, half_dim, axis: 3)
-
-    r1 = Nx.subtract(Nx.multiply(x1, cos_t), Nx.multiply(x2, sin_t))
-    r2 = Nx.add(Nx.multiply(x1, sin_t), Nx.multiply(x2, cos_t))
-
-    Nx.concatenate([r1, r2], axis: 3)
   end
 
   # Reshape [batch, seq, num_heads * dim] -> [batch, num_heads, seq, dim]

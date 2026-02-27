@@ -69,7 +69,7 @@ defmodule Edifice.Detection.SAM2 do
     https://arxiv.org/abs/2408.00714
   """
 
-  alias Edifice.Utils.FusedOps
+  alias Edifice.Blocks.{CrossAttention, SDPA, SinusoidalPE2D, Upsample2x}
 
   @default_image_size 1024
   @default_in_channels 3
@@ -314,7 +314,7 @@ defmodule Edifice.Detection.SAM2 do
         image_flat,
         fn t ->
           {_b, seq_len, dim} = Nx.shape(t)
-          build_2d_sinusoidal_pe(seq_len, dim)
+          SinusoidalPE2D.build_table(seq_len, dim)
         end,
         name: "#{name}_image_pe"
       )
@@ -353,13 +353,10 @@ defmodule Edifice.Detection.SAM2 do
     img_with_pe = Axon.add(image_flat, image_pe, name: "#{name}_final_img_pe")
 
     final_ca =
-      cross_attention(
-        tok_norm,
-        img_with_pe,
-        image_flat,
-        hidden_dim,
-        num_heads,
-        "#{name}_final_ca"
+      CrossAttention.layer(tok_norm, img_with_pe, image_flat,
+        hidden_size: hidden_dim,
+        num_heads: num_heads,
+        name: "#{name}_final_ca"
       )
 
     tokens = Axon.add(tokens, final_ca, name: "#{name}_final_ca_res")
@@ -403,7 +400,14 @@ defmodule Edifice.Detection.SAM2 do
     # 2. Cross-attention: tokens → image (PE added to image keys)
     tok_norm = Axon.layer_norm(tokens, name: "#{name}_t2i_norm")
     img_with_pe = Axon.add(image, image_pe, name: "#{name}_t2i_pe")
-    t2i = cross_attention(tok_norm, img_with_pe, image, hidden_dim, num_heads, "#{name}_t2i")
+
+    t2i =
+      CrossAttention.layer(tok_norm, img_with_pe, image,
+        hidden_size: hidden_dim,
+        num_heads: num_heads,
+        name: "#{name}_t2i"
+      )
+
     t2i = maybe_dropout(t2i, dropout, "#{name}_t2i_drop")
     tokens = Axon.add(tokens, t2i, name: "#{name}_t2i_res")
 
@@ -423,7 +427,14 @@ defmodule Edifice.Detection.SAM2 do
     # 4. Cross-attention: image → tokens
     img_norm = Axon.layer_norm(image, name: "#{name}_i2t_inorm")
     tok_keys = Axon.layer_norm(tokens, name: "#{name}_i2t_tnorm")
-    i2t = cross_attention(img_norm, tok_keys, tokens, hidden_dim, num_heads, "#{name}_i2t")
+
+    i2t =
+      CrossAttention.layer(img_norm, tok_keys, tokens,
+        hidden_size: hidden_dim,
+        num_heads: num_heads,
+        name: "#{name}_i2t"
+      )
+
     i2t = maybe_dropout(i2t, dropout, "#{name}_i2t_drop")
     image = Axon.add(image, i2t, name: "#{name}_i2t_res")
 
@@ -556,27 +567,6 @@ defmodule Edifice.Detection.SAM2 do
     Axon.dense(attended, hidden_dim, name: "#{name}_out")
   end
 
-  @spec cross_attention(Axon.t(), Axon.t(), Axon.t(), pos_integer(), pos_integer(), String.t()) ::
-          Axon.t()
-  defp cross_attention(query, key, value, hidden_dim, num_heads, name) do
-    head_dim = div(hidden_dim, num_heads)
-    q = Axon.dense(query, hidden_dim, name: "#{name}_q")
-    k = Axon.dense(key, hidden_dim, name: "#{name}_k")
-    v = Axon.dense(value, hidden_dim, name: "#{name}_v")
-
-    attended =
-      Axon.layer(
-        fn q_t, k_t, v_t, _opts ->
-          compute_attention(q_t, k_t, v_t, num_heads, head_dim)
-        end,
-        [q, k, v],
-        name: "#{name}_compute",
-        op_name: :mha_compute
-      )
-
-    Axon.dense(attended, hidden_dim, name: "#{name}_out")
-  end
-
   @spec compute_attention(
           Nx.Tensor.t(),
           Nx.Tensor.t(),
@@ -606,8 +596,8 @@ defmodule Edifice.Detection.SAM2 do
   # 2D Sinusoidal Positional Encoding
   # ============================================================================
 
-  @spec build_2d_sinusoidal_pe(pos_integer(), pos_integer()) :: Nx.Tensor.t()
-  defp build_2d_sinusoidal_pe(seq_len, dim) do
+  @spec SinusoidalPE2D.build_table(pos_integer(), pos_integer()) :: Nx.Tensor.t()
+  defp SinusoidalPE2D.build_table(seq_len, dim) do
     h = seq_len |> :math.sqrt() |> ceil() |> trunc()
     w = ceil(seq_len / h) |> trunc()
 

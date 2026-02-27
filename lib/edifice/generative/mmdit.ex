@@ -178,6 +178,8 @@ defmodule Edifice.Generative.MMDiT do
   # ============================================================================
 
   defp build_double_stream_block(img, txt, vec, opts) do
+    alias Edifice.Blocks.AdaptiveNorm
+
     hidden_size = Keyword.fetch!(opts, :hidden_size)
     num_heads = Keyword.fetch!(opts, :num_heads)
     mlp_ratio = Keyword.fetch!(opts, :mlp_ratio)
@@ -193,9 +195,23 @@ defmodule Edifice.Generative.MMDiT do
     txt_mod = build_modulation(vec, hidden_size, "#{name}_txt_mod")
 
     # ---- Attention sub-block ----
-    # Modulated layer norm (no learned affine): (1 + scale) * LN(x) + shift
-    img_normed = build_adaln(img, img_mod, :attn, "#{name}_img_attn_norm")
-    txt_normed = build_adaln(txt, txt_mod, :attn, "#{name}_txt_attn_norm")
+    img_normed =
+      img
+      |> Axon.layer_norm(name: "#{name}_img_attn_norm_ln")
+      |> AdaptiveNorm.modulate(img_mod,
+        hidden_size: hidden_size,
+        offset: 0,
+        name: "#{name}_img_attn_norm"
+      )
+
+    txt_normed =
+      txt
+      |> Axon.layer_norm(name: "#{name}_txt_attn_norm_ln")
+      |> AdaptiveNorm.modulate(txt_mod,
+        hidden_size: hidden_size,
+        offset: 0,
+        name: "#{name}_txt_attn_norm"
+      )
 
     # Per-stream QKV projections
     img_qkv = Axon.dense(img_normed, hidden_size * 3, name: "#{name}_img_qkv")
@@ -220,16 +236,42 @@ defmodule Edifice.Generative.MMDiT do
     img_attn_proj = Axon.dense(img_attn_out, hidden_size, name: "#{name}_img_attn_proj")
     txt_attn_proj = Axon.dense(txt_attn_out, hidden_size, name: "#{name}_txt_attn_proj")
 
-    img_attn_gated = apply_gate(img_attn_proj, img_mod, :attn, "#{name}_img_attn_gate")
-    txt_attn_gated = apply_gate(txt_attn_proj, txt_mod, :attn, "#{name}_txt_attn_gate")
+    img_attn_gated =
+      AdaptiveNorm.gate(img_attn_proj, img_mod,
+        hidden_size: hidden_size,
+        gate_index: 2,
+        name: "#{name}_img_attn_gate"
+      )
+
+    txt_attn_gated =
+      AdaptiveNorm.gate(txt_attn_proj, txt_mod,
+        hidden_size: hidden_size,
+        gate_index: 2,
+        name: "#{name}_txt_attn_gate"
+      )
 
     # Residual
     img = Axon.add(img, img_attn_gated, name: "#{name}_img_attn_res")
     txt = Axon.add(txt, txt_attn_gated, name: "#{name}_txt_attn_res")
 
     # ---- MLP sub-block ----
-    img_mlp_in = build_adaln(img, img_mod, :mlp, "#{name}_img_mlp_norm")
-    txt_mlp_in = build_adaln(txt, txt_mod, :mlp, "#{name}_txt_mlp_norm")
+    img_mlp_in =
+      img
+      |> Axon.layer_norm(name: "#{name}_img_mlp_norm_ln")
+      |> AdaptiveNorm.modulate(img_mod,
+        hidden_size: hidden_size,
+        offset: 3,
+        name: "#{name}_img_mlp_norm"
+      )
+
+    txt_mlp_in =
+      txt
+      |> Axon.layer_norm(name: "#{name}_txt_mlp_norm_ln")
+      |> AdaptiveNorm.modulate(txt_mod,
+        hidden_size: hidden_size,
+        offset: 3,
+        name: "#{name}_txt_mlp_norm"
+      )
 
     img_mlp =
       img_mlp_in
@@ -243,8 +285,19 @@ defmodule Edifice.Generative.MMDiT do
       |> Axon.gelu()
       |> Axon.dense(hidden_size, name: "#{name}_txt_mlp_down")
 
-    img_mlp_gated = apply_gate(img_mlp, img_mod, :mlp, "#{name}_img_mlp_gate")
-    txt_mlp_gated = apply_gate(txt_mlp, txt_mod, :mlp, "#{name}_txt_mlp_gate")
+    img_mlp_gated =
+      AdaptiveNorm.gate(img_mlp, img_mod,
+        hidden_size: hidden_size,
+        gate_index: 5,
+        name: "#{name}_img_mlp_gate"
+      )
+
+    txt_mlp_gated =
+      AdaptiveNorm.gate(txt_mlp, txt_mod,
+        hidden_size: hidden_size,
+        gate_index: 5,
+        name: "#{name}_txt_mlp_gate"
+      )
 
     img = Axon.add(img, img_mlp_gated, name: "#{name}_img_mlp_res")
     txt = Axon.add(txt, txt_mlp_gated, name: "#{name}_txt_mlp_res")
@@ -252,81 +305,11 @@ defmodule Edifice.Generative.MMDiT do
     {img, txt}
   end
 
-  # ============================================================================
-  # AdaLN Modulation
-  # ============================================================================
-
   # Build modulation: vec -> SiLU -> Linear -> 6 * hidden_size
-  # Returns a tensor of shape [batch, 6 * hidden_size]
   defp build_modulation(vec, hidden_size, name) do
     vec
     |> Axon.activation(:silu, name: "#{name}_silu")
     |> Axon.dense(hidden_size * 6, name: "#{name}_proj")
-  end
-
-  # Apply AdaLN: (1 + scale) * LayerNorm(x) + shift
-  # mod_type is :attn (uses params 0-2) or :mlp (uses params 3-5)
-  defp build_adaln(x, mod, mod_type, name) do
-    normed = Axon.layer_norm(x, name: "#{name}_ln")
-
-    Axon.layer(
-      &adaln_modulate_impl/3,
-      [normed, mod],
-      name: name,
-      mod_type: mod_type,
-      op_name: :adaln_modulate
-    )
-  end
-
-  defp adaln_modulate_impl(normed, mod, opts) do
-    mod_type = opts[:mod_type]
-    hidden_size = Nx.axis_size(normed, 2)
-
-    # mod: [batch, 6 * hidden_size] -> chunk into 6 parts
-    # :attn uses indices 0,1 for shift,scale; :mlp uses indices 3,4
-    offset =
-      case mod_type do
-        :attn -> 0
-        :mlp -> 3
-      end
-
-    shift = Nx.slice_along_axis(mod, offset * hidden_size, hidden_size, axis: 1)
-    scale = Nx.slice_along_axis(mod, (offset + 1) * hidden_size, hidden_size, axis: 1)
-
-    # Broadcast [batch, hidden] -> [batch, 1, hidden] for seq dim
-    shift = Nx.new_axis(shift, 1)
-    scale = Nx.new_axis(scale, 1)
-
-    # (1 + scale) * normed + shift
-    Nx.add(Nx.multiply(Nx.add(1.0, scale), normed), shift)
-  end
-
-  # Apply gating: gate * x
-  defp apply_gate(x, mod, mod_type, name) do
-    Axon.layer(
-      &gate_impl/3,
-      [x, mod],
-      name: name,
-      mod_type: mod_type,
-      op_name: :adaln_gate
-    )
-  end
-
-  defp gate_impl(x, mod, opts) do
-    mod_type = opts[:mod_type]
-    hidden_size = Nx.axis_size(x, 2)
-
-    # gate is at index 2 (attn) or 5 (mlp)
-    offset =
-      case mod_type do
-        :attn -> 2
-        :mlp -> 5
-      end
-
-    gate = Nx.slice_along_axis(mod, offset * hidden_size, hidden_size, axis: 1)
-    gate = Nx.new_axis(gate, 1)
-
-    Nx.multiply(gate, x)
   end
 
   # ============================================================================

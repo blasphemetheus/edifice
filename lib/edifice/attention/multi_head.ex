@@ -287,8 +287,7 @@ defmodule Edifice.Attention.MultiHead do
     {final_output, _final_max, final_sum} =
       Enum.reduce(0..(num_kv_chunks - 1), {init_output, init_max, init_sum}, fn chunk_idx,
                                                                                 {acc_output,
-                                                                                 acc_max,
-                                                                                 acc_sum} ->
+                                                                                 acc_max, acc_sum} ->
         # Extract K/V chunk
         k_start = chunk_idx * chunk_size
         actual_chunk_size = min(chunk_size, seq_k - k_start)
@@ -452,7 +451,7 @@ defmodule Edifice.Attention.MultiHead do
           # Q, K are [batch, heads, seq, head_dim]
           {query, key} =
             if use_rope do
-              apply_rope_to_heads(query, key, seq_len, head_dim)
+              Edifice.Blocks.RoPE.apply_rotary_4d(query, key)
             else
               {query, key}
             end
@@ -960,24 +959,6 @@ defmodule Edifice.Attention.MultiHead do
     |> Nx.reshape({batch, seq_len, num_heads * head_dim})
   end
 
-  # Apply RoPE to Q and K when they are in multi-head shape [batch, heads, seq, head_dim]
-  # Transposes to [batch*heads, seq, head_dim], applies RoPE, transposes back
-  defp apply_rope_to_heads(query, key, seq_len, head_dim) do
-    {batch, heads, _seq, _hd} = Nx.shape(query)
-
-    # Reshape to [batch*heads, seq, head_dim] for RoPE
-    q_flat = Nx.reshape(query, {batch * heads, seq_len, head_dim})
-    k_flat = Nx.reshape(key, {batch * heads, seq_len, head_dim})
-
-    # Apply rotary embeddings
-    {q_rotated, k_rotated} = Edifice.Blocks.RoPE.apply_rotary(q_flat, k_flat)
-
-    # Reshape back to [batch, heads, seq, head_dim]
-    q_out = Nx.reshape(q_rotated, {batch, heads, seq_len, head_dim})
-    k_out = Nx.reshape(k_rotated, {batch, heads, seq_len, head_dim})
-    {q_out, k_out}
-  end
-
   # Multi-head scaled dot-product attention
   # Q, K, V: [batch, heads, seq, head_dim]
   # Returns: [batch, heads, seq, head_dim]
@@ -1092,8 +1073,7 @@ defmodule Edifice.Attention.MultiHead do
     {final_output, _final_max, final_sum} =
       Enum.reduce(0..(num_kv_chunks - 1), {init_output, init_max, init_sum}, fn chunk_idx,
                                                                                 {acc_output,
-                                                                                 acc_max,
-                                                                                 acc_sum} ->
+                                                                                 acc_max, acc_sum} ->
         k_start = chunk_idx * chunk_size
         actual_chunk_size = min(chunk_size, seq_k - k_start)
 

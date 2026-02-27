@@ -159,7 +159,7 @@ defmodule Edifice.Generative.MDLMTest do
 
   describe "output_size/1" do
     test "returns vocab_size" do
-      assert MDLM.output_size(vocab_size: 50257) == 50257
+      assert MDLM.output_size(vocab_size: 50_257) == 50_257
       assert MDLM.output_size(vocab_size: 128) == 128
     end
   end

@@ -185,7 +185,7 @@ defmodule Edifice.Attention.RNoPESWA do
     # Optionally apply RoPE (default: off for RNoPE-SWA)
     {q, k} =
       if use_rope do
-        apply_rope(q, k, seq_len, head_dim)
+        Edifice.Blocks.RoPE.apply_rotary_4d(q, k)
       else
         {q, k}
       end
@@ -222,54 +222,6 @@ defmodule Edifice.Attention.RNoPESWA do
 
     # Reshape back
     reshape_from_heads(attn_out, batch, seq_len, num_heads, head_dim)
-  end
-
-  # Simple RoPE implementation for when use_rope: true
-  defp apply_rope(q, k, seq_len, head_dim) do
-    # Compute sinusoidal position embeddings
-    positions = Nx.iota({seq_len}) |> Nx.as_type(:f32)
-    half_dim = div(head_dim, 2)
-
-    # Frequency bands: 10000^(-2i/d) for i in 0..half_dim-1
-    freq_seq = Nx.iota({half_dim}) |> Nx.as_type(:f32)
-    inv_freq = Nx.exp(Nx.multiply(freq_seq, -2.0 * :math.log(10_000.0) / head_dim))
-
-    # Outer product: [seq_len, half_dim]
-    angles = Nx.outer(positions, inv_freq)
-
-    cos_angles = Nx.cos(angles)
-    sin_angles = Nx.sin(angles)
-
-    # Apply rotary embedding to q and k
-    q_rotated = rotate_half(q, cos_angles, sin_angles)
-    k_rotated = rotate_half(k, cos_angles, sin_angles)
-
-    {q_rotated, k_rotated}
-  end
-
-  # Rotate tensor by angle (RoPE)
-  defp rotate_half(x, cos, sin) do
-    # x: [batch, heads, seq, head_dim]
-    # cos, sin: [seq, head_dim/2]
-    {batch, heads, seq_len, head_dim} = Nx.shape(x)
-    half_dim = div(head_dim, 2)
-
-    # Split into two halves
-    x1 = Nx.slice_along_axis(x, 0, half_dim, axis: 3)
-    x2 = Nx.slice_along_axis(x, half_dim, half_dim, axis: 3)
-
-    # Broadcast cos/sin to [batch, heads, seq, half_dim]
-    cos =
-      Nx.broadcast(Nx.reshape(cos, {1, 1, seq_len, half_dim}), {batch, heads, seq_len, half_dim})
-
-    sin =
-      Nx.broadcast(Nx.reshape(sin, {1, 1, seq_len, half_dim}), {batch, heads, seq_len, half_dim})
-
-    # Rotate: [x1*cos - x2*sin, x1*sin + x2*cos]
-    rotated_x1 = Nx.subtract(Nx.multiply(x1, cos), Nx.multiply(x2, sin))
-    rotated_x2 = Nx.add(Nx.multiply(x1, sin), Nx.multiply(x2, cos))
-
-    Nx.concatenate([rotated_x1, rotated_x2], axis: 3)
   end
 
   defp reshape_to_heads(x, batch, seq_len, num_heads, head_dim) do
