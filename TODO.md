@@ -95,7 +95,7 @@
 - [x] **SoundStorm** — Parallel audio token generation
 - [x] **GGUF Export** — Model export to GGUF format
 
-## 2026 Wave 3 — New Families & Gap Fills
+## 2026 Wave 3 — New Families & Gap Fills (done)
 
 ### Detection / Segmentation (new family)
 - [x] **DETR** — DEtection TRansformer (set-based object detection with bipartite matching). Encoder-decoder transformer + learned object queries + Hungarian loss. Family: `detection`.
