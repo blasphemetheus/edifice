@@ -73,10 +73,10 @@ VALLE (SDPA + SinusoidalPE.layer), Perceiver (SDPA), Decision Transformer (SDPA 
 Full research notes in `notebooks/research/interpretability_architectures.md`.
 
 **Tier 1 — High value, straightforward:**
-- [ ] **Gated SAE** — Gated encoder decouples feature selection from magnitude (DeepMind, NeurIPS 2024). Near-drop-in SAE improvement, ~50% better reconstruction at same sparsity.
-- [ ] **JumpReLU SAE** — Per-feature learned threshold replaces TopK (DeepMind/Gemma Scope, 2024). Adaptive sparsity without rigid k constraint.
-- [ ] **BatchTopK SAE** — Batch-global top-k instead of per-sample (Bussmann, ICLR 2025). Variable per-sample sparsity within batch budget.
-- [ ] **Linear Probe** — Single linear layer for concept detection in frozen activations (Alain & Bengio 2016). Foundational interpretability tool, trivial architecture.
+- [x] **Gated SAE** — Gated encoder decouples feature selection from magnitude (DeepMind, NeurIPS 2024). Near-drop-in SAE improvement, ~50% better reconstruction at same sparsity.
+- [x] **JumpReLU SAE** — Per-feature learned threshold replaces TopK (DeepMind/Gemma Scope, 2024). Adaptive sparsity without rigid k constraint.
+- [x] **BatchTopK SAE** — Batch-global top-k instead of per-sample (Bussmann, ICLR 2025). Variable per-sample sparsity within batch budget.
+- [x] **Linear Probe** — Single linear layer for concept detection in frozen activations (Alain & Bengio 2016). Foundational interpretability tool, trivial architecture.
 - [ ] **Crosscoder** — Joint SAE across multiple model checkpoints/layers with shared dictionary (Anthropic, Dec 2024). Finds features shared across training stages.
 
 **Tier 2 — Moderate complexity:**
@@ -138,10 +138,10 @@ have dedicated test files. Remaining gaps are leaf modules or minor variants.
 
 ### Testing — Test Depth Improvements (Priority: Medium)
 
-- [ ] **Add batch=1 edge cases** — Only 27% of test files check batch_size=1. Add `test "handles batch_size=1"` to all architecture test files. Batch=1 is the inference case and frequently exposes broadcasting bugs.
-- [ ] **Add Edifice.build/2 integration tests** — Only 14% of test files verify registry access. Each test file should include a `describe "Edifice.build/2"` block confirming the module is reachable via the registry.
-- [ ] **Add output_size/1 tests** — Modules exposing `output_size/1` should test it returns the expected value for default and custom options.
-- [ ] **ExCoveralls integration** — Add `excoveralls` to CI pipeline. Track line coverage, set minimum threshold (70% initially, increase over time). Add coverage badge to README.
+- [x] **Batch=1 edge cases** — Covered centrally by `registry_sweep_test.exs` which tests batch=1, 4, 16 for every architecture via `Edifice.build/2`. Catches broadcasting bugs across all 200+ architectures without per-file duplication.
+- [x] **Edifice.build/2 integration tests** — Covered centrally by `registry_integrity_test.exs` (build-only) and `registry_sweep_test.exs` (build + forward pass) for every registered architecture. Per-file tests would duplicate centralized coverage.
+- [x] **output_size/1 tests** — Covered by `output_size_sweep_test.exs` which discovers and validates all modules exporting `output_size/1`.
+- [x] **ExCoveralls integration** — `excoveralls` dep added, `coveralls.json` configured (70% minimum), CI calls `mix coveralls.github`, coverage + CI badges in README.
 
 ### Documentation — Doctests (Priority: High) ✓
 

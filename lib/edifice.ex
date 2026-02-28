@@ -256,6 +256,10 @@ defmodule Edifice do
     # Interpretability
     sparse_autoencoder: Edifice.Interpretability.SparseAutoencoder,
     transcoder: Edifice.Interpretability.Transcoder,
+    gated_sae: Edifice.Interpretability.GatedSAE,
+    linear_probe: Edifice.Interpretability.LinearProbe,
+    jump_relu_sae: Edifice.Interpretability.JumpReluSAE,
+    batch_top_k_sae: Edifice.Interpretability.BatchTopKSAE,
     # World Model
     world_model: Edifice.WorldModel.WorldModel,
     # RL
@@ -486,7 +490,14 @@ defmodule Edifice do
         :hybrid_builder
       ],
       contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg, :jepa, :temporal_jepa, :siglip],
-      interpretability: [:sparse_autoencoder, :transcoder],
+      interpretability: [
+        :sparse_autoencoder,
+        :transcoder,
+        :gated_sae,
+        :linear_probe,
+        :jump_relu_sae,
+        :batch_top_k_sae
+      ],
       world_model: [:world_model],
       multimodal: [:multimodal_mlp_fusion],
       rl: [:policy_value, :decision_transformer],

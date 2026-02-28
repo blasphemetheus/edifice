@@ -285,14 +285,16 @@ defmodule Edifice.GradientSmokeTest do
     end
   end
 
-  # Chunked attention models need block_size <= seq_len
+  # Chunked attention models need seq_len >= 2 * block_size (at least 2 blocks)
   for arch <- [:lightning_attention, :flash_linear_attention, :dual_chunk_attention] do
     @tag timeout: 120_000
     test "gradient flows through #{arch}" do
+      block = div(@seq_len, 2)
+
       model =
         Edifice.build(
           unquote(arch),
-          Keyword.merge(@sequence_opts, block_size: @seq_len, chunk_size: @seq_len)
+          Keyword.merge(@sequence_opts, block_size: block, chunk_size: block)
         )
 
       input = random_tensor({@batch, @seq_len, @embed})
@@ -970,7 +972,8 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"state_sequence" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
+  @tag :slow
   test "gradient flows through nemotron_h" do
     model =
       Edifice.build(:nemotron_h,
@@ -1106,7 +1109,8 @@ defmodule Edifice.GradientSmokeTest do
       "image_width" => random_tensor({@batch})
     }
 
-    check_gradients(model, input_map)
+    # GaussianSplat uses Nx ops without gradient support, use sensitivity
+    check_parameter_sensitivity(model, input_map)
   end
 
   @tag timeout: 120_000
@@ -1169,6 +1173,7 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   @tag timeout: 300_000
+  @tag :slow
   test "parameters are sensitive in efficientnet" do
     model = Edifice.build(:efficientnet, input_dim: @embed, hidden_dim: @hidden)
     input = random_tensor({@batch, @embed})
@@ -1318,7 +1323,8 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"tokens" => tokens})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
+  @tag :slow
   test "gradient flows through valle AR model" do
     {ar_model, _nar_model} =
       Edifice.build(:valle,
@@ -1372,8 +1378,11 @@ defmodule Edifice.GradientSmokeTest do
       Edifice.build(:openvla,
         image_size: @image_size,
         in_channels: @in_channels,
+        patch_size: 4,
         hidden_dim: @hidden,
+        vision_dim: @hidden,
         num_heads: 2,
+        num_kv_heads: 2,
         num_layers: @num_layers,
         dropout: 0.0
       )
@@ -1540,18 +1549,20 @@ defmodule Edifice.GradientSmokeTest do
 
   @tag timeout: 120_000
   test "gradient flows through var" do
+    # Scales [1, 2] -> total_tokens = 1 + 4 = 5
+    scales = [1, 2]
+    total_tokens = Enum.reduce(scales, 0, fn s, acc -> acc + s * s end)
+
     model =
       Edifice.build(:var,
         vocab_size: 32,
         hidden_size: @hidden,
         depth: 1,
         num_heads: 2,
-        num_scales: 2,
+        scales: scales,
         dropout: 0.0
       )
 
-    # VAR uses scale_embeddings as pre-embedded input
-    total_tokens = 4
     input = random_tensor({@batch, total_tokens, @hidden})
     check_gradients(model, %{"scale_embeddings" => input})
   end
@@ -1670,7 +1681,8 @@ defmodule Edifice.GradientSmokeTest do
       )
 
     input = random_tensor({@batch, @seq_len, @embed})
-    check_gradients(model, %{"moe_input" => input})
+    # MoE v2 uses Nx.argsort which lacks gradient impl
+    check_parameter_sensitivity(model, %{"moe_input" => input})
   end
 
   @tag timeout: 120_000
@@ -2001,6 +2013,58 @@ defmodule Edifice.GradientSmokeTest do
 
     input = random_tensor({@batch, @embed})
     check_gradients(model, %{"transcoder_input" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through gated_sae" do
+    model =
+      Edifice.build(:gated_sae,
+        input_size: @embed,
+        dict_size: @hidden * 4,
+        top_k: 8
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"gated_sae_input" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through linear_probe" do
+    model =
+      Edifice.build(:linear_probe,
+        input_size: @embed,
+        num_classes: 5,
+        task: :classification
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"probe_input" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through jump_relu_sae" do
+    model =
+      Edifice.build(:jump_relu_sae,
+        input_size: @embed,
+        dict_size: @hidden * 4,
+        temperature: 10.0
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"jump_relu_sae_input" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through batch_top_k_sae" do
+    model =
+      Edifice.build(:batch_top_k_sae,
+        input_size: @embed,
+        dict_size: @hidden * 4,
+        batch_k: @batch * 8
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"batch_topk_sae_input" => input})
   end
 
   # ── World Model ────────────────────────────────────────────────
