@@ -2319,4 +2319,110 @@ defmodule Edifice.GradientSmokeTest do
     input = random_tensor({@batch, @seq_len, @embed})
     check_gradients(model, %{"state_sequence" => input})
   end
+
+  # ── Wave 5: LASER attention ────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through laser" do
+    model =
+      Edifice.build(:laser,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: 2,
+        dropout: 0.0,
+        seq_len: @seq_len
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  # ── Wave 5: Longhorn SSM ───────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through longhorn" do
+    model =
+      Edifice.build(:longhorn,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        state_size: 4,
+        num_layers: 2,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  # ── Wave 5: VeRA PEFT ─────────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through vera" do
+    model = Edifice.build(:vera, input_size: @embed, output_size: @hidden, rank: 8)
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"input" => input})
+  end
+
+  # ── Wave 5: MoBA Attention ──────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through moba" do
+    model =
+      Edifice.build(:moba,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        block_size: 2,
+        topk: 1,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  # ── Wave 5: DeltaProduct Recurrence ─────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through delta_product" do
+    model =
+      Edifice.build(:delta_product,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_householder: 2,
+        num_layers: @num_layers,
+        dropout: 0.0,
+        seq_len: @seq_len
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  # ── Wave 5: Vision KAN ─────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through vision_kan" do
+    model =
+      Edifice.build(:vision_kan,
+        image_size: @image_size,
+        in_channels: @in_channels,
+        channels: [8, 16],
+        depths: [1, 1],
+        patch_size: 4,
+        num_rbf_centers: 3,
+        kan_patch_size: 4,
+        dw_kernel_size: 3,
+        global_reduction: 2,
+        dropout: 0.0,
+        ffn_expansion: 2
+      )
+
+    input = random_tensor({@batch, @in_channels, @image_size, @image_size})
+    check_gradients(model, %{"image" => input})
+  end
 end

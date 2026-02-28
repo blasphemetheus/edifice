@@ -27,7 +27,7 @@ defmodule Edifice do
   | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, DeltaProduct, TTT, TTT-E2E, Titans, MIRAS, Reservoir (ESN), Native Recurrence, TransformerLike, DeepResLSTM |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer, Longhorn |
   | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Sigmoid Attention, FoX (Forgetting Transformer), Log-Linear, NHA (Native Hybrid Attention), LASER, MoBA, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, SPLA, InfLLM-V2, Dual Chunk Attention |
-  | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision, DINOv3, Janus |
+  | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision, DINOv3, Janus, Vision KAN |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Rectified Flow, SoFlow, Normalizing Flow, TarFlow, STARFlow, Transfusion, CogVideoX, TRELLIS, MDLM, LLaDA, CaDDi, DeepFlow, Meissonic, MAGVIT-v2, Show-o, JanusFlow |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, DimeNet, SE(3)-Transformer, GPS, KA-GNN, Message Passing |
   | Sets | DeepSets, PointNet, PointNet++ |
@@ -174,6 +174,7 @@ defmodule Edifice do
     caformer: {Edifice.Vision.MetaFormer, [variant: :caformer]},
     efficient_vit: Edifice.Vision.EfficientViT,
     janus: Edifice.Vision.Janus,
+    vision_kan: Edifice.Vision.VisionKAN,
     # Detection
     detr: Edifice.Detection.DETR,
     rt_detr: Edifice.Detection.RTDETR,
@@ -475,7 +476,8 @@ defmodule Edifice do
         :metaformer,
         :caformer,
         :efficient_vit,
-        :janus
+        :janus,
+        :vision_kan
       ],
       generative: [
         :diffusion,

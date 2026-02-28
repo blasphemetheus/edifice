@@ -238,10 +238,14 @@ defmodule Edifice.Transformer.FreeTransformer do
     # KL(Bernoulli(p) || Bernoulli(0.5)) per bit
     # = p*log(2p) + (1-p)*log(2(1-p))
     eps = 1.0e-7
+
     kl_per_bit =
       Nx.add(
         Nx.multiply(probs, Nx.log(Nx.add(Nx.multiply(probs, 2.0), eps))),
-        Nx.multiply(Nx.subtract(1.0, probs), Nx.log(Nx.add(Nx.multiply(Nx.subtract(1.0, probs), 2.0), eps)))
+        Nx.multiply(
+          Nx.subtract(1.0, probs),
+          Nx.log(Nx.add(Nx.multiply(Nx.subtract(1.0, probs), 2.0), eps))
+        )
       )
 
     # Sum over bits, mean over batch and seq

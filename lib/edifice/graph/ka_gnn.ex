@@ -148,15 +148,17 @@ defmodule Edifice.Graph.KAGNN do
 
     # Fourier features: compute cos(k*x), sin(k*x) for k=1..K
     fourier_feats =
-      Axon.nx(input, fn x ->
-        feats =
-          Enum.map(1..num_harmonics, fn k ->
-            scaled = Nx.multiply(x, k)
-            Nx.concatenate([Nx.cos(scaled), Nx.sin(scaled)], axis: -1)
-          end)
+      Axon.nx(
+        input,
+        fn x ->
+          feats =
+            Enum.map(1..num_harmonics, fn k ->
+              scaled = Nx.multiply(x, k)
+              Nx.concatenate([Nx.cos(scaled), Nx.sin(scaled)], axis: -1)
+            end)
 
-        Nx.concatenate(feats, axis: -1)
-      end, name: "#{name}_fourier_feats")
+          Nx.concatenate(feats, axis: -1)
+        end, name: "#{name}_fourier_feats")
 
     # Project fourier features to output_dim via learned weights
     fourier_proj = Axon.dense(fourier_feats, output_dim, name: "#{name}_fourier_proj")

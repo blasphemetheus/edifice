@@ -156,23 +156,17 @@ defmodule Edifice.Memory.MemoryLayer do
 
     # Product key parameters (two sets of half-keys)
     keys1 =
-      Axon.param("#{name}_keys1", {half_keys, div(key_dim, 2)},
-        initializer: :glorot_uniform
-      )
+      Axon.param("#{name}_keys1", {half_keys, div(key_dim, 2)}, initializer: :glorot_uniform)
 
     keys2 =
-      Axon.param("#{name}_keys2", {half_keys, div(key_dim, 2)},
-        initializer: :glorot_uniform
-      )
+      Axon.param("#{name}_keys2", {half_keys, div(key_dim, 2)}, initializer: :glorot_uniform)
 
     # Values: [memory_size, hidden_size]
     # For tractability, we use half_keys^2 capped at memory_size
     actual_memory = min(half_keys * half_keys, memory_size)
 
     values =
-      Axon.param("#{name}_values", {actual_memory, hidden_size},
-        initializer: :glorot_uniform
-      )
+      Axon.param("#{name}_values", {actual_memory, hidden_size}, initializer: :glorot_uniform)
 
     # Gate for gated residual
     gate_proj = Axon.dense(normed, hidden_size, name: "#{name}_gate")
@@ -272,7 +266,9 @@ defmodule Edifice.Memory.MemoryLayer do
     gathered = Nx.reshape(gathered, {batch, seq_len, final_k, hidden_size})
 
     # Softmax attention over retrieved values
-    weights = Nx.exp(Nx.subtract(top_scores, Nx.reduce_max(top_scores, axes: [-1], keep_axes: true)))
+    weights =
+      Nx.exp(Nx.subtract(top_scores, Nx.reduce_max(top_scores, axes: [-1], keep_axes: true)))
+
     weights = Nx.divide(weights, Nx.add(Nx.sum(weights, axes: [-1], keep_axes: true), 1.0e-8))
 
     # Weighted sum: [batch, seq, hidden_size]

@@ -98,15 +98,39 @@ defmodule Edifice.Generative.STARFlow do
     dropout = Keyword.get(opts, :dropout, @default_dropout)
 
     encoder =
-      build_encoder(input_size, num_flows, deep_layers, shallow_layers, hidden_size, num_heads, dropout)
+      build_encoder(
+        input_size,
+        num_flows,
+        deep_layers,
+        shallow_layers,
+        hidden_size,
+        num_heads,
+        dropout
+      )
 
     decoder =
-      build_decoder(input_size, num_flows, deep_layers, shallow_layers, hidden_size, num_heads, dropout)
+      build_decoder(
+        input_size,
+        num_flows,
+        deep_layers,
+        shallow_layers,
+        hidden_size,
+        num_heads,
+        dropout
+      )
 
     {encoder, decoder}
   end
 
-  defp build_encoder(input_size, num_flows, deep_layers, shallow_layers, hidden_size, num_heads, dropout) do
+  defp build_encoder(
+         input_size,
+         num_flows,
+         deep_layers,
+         shallow_layers,
+         hidden_size,
+         num_heads,
+         dropout
+       ) do
     input = Axon.input("input", shape: {nil, nil, input_size})
 
     # Project input to hidden dimension
@@ -128,7 +152,14 @@ defmodule Edifice.Generative.STARFlow do
 
         # Transformer block predicts affine params
         params_pred =
-          build_flow_transformer(curr, hidden_size, num_heads, num_block_layers, dropout, "enc_flow_#{i}")
+          build_flow_transformer(
+            curr,
+            hidden_size,
+            num_heads,
+            num_block_layers,
+            dropout,
+            "enc_flow_#{i}"
+          )
 
         affine_params = Axon.dense(params_pred, input_size * 2, name: "enc_affine_#{i}")
 
@@ -154,7 +185,15 @@ defmodule Edifice.Generative.STARFlow do
     Axon.container(%{output: output, log_det: log_det})
   end
 
-  defp build_decoder(input_size, num_flows, deep_layers, shallow_layers, hidden_size, num_heads, dropout) do
+  defp build_decoder(
+         input_size,
+         num_flows,
+         deep_layers,
+         shallow_layers,
+         hidden_size,
+         num_heads,
+         dropout
+       ) do
     input = Axon.input("latent", shape: {nil, nil, input_size})
 
     x = Axon.dense(input, hidden_size, name: "dec_input_proj")
@@ -173,7 +212,14 @@ defmodule Edifice.Generative.STARFlow do
           end
 
         params_pred =
-          build_flow_transformer(curr, hidden_size, num_heads, num_block_layers, dropout, "dec_flow_#{i}")
+          build_flow_transformer(
+            curr,
+            hidden_size,
+            num_heads,
+            num_block_layers,
+            dropout,
+            "dec_flow_#{i}"
+          )
 
         affine_params = Axon.dense(params_pred, input_size * 2, name: "dec_affine_#{i}")
 
