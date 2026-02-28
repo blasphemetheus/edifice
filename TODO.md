@@ -120,7 +120,7 @@ VALLE (SDPA + SinusoidalPE.layer), Perceiver (SDPA), Decision Transformer (SDPA 
 - [x] **Vision KAN** — Hierarchical RBFKAN vision backbone without attention (arXiv:2601.21541). Patch-wise KAN + depthwise conv. Extends existing KAN module. Medium complexity.
 
 **Graph / Scientific:**
-- [ ] **Temporal Neural Operator (TNO)** — Temporal branch augmenting DeepONet for time-dependent PDEs (Nature Sci Reports 2025, arXiv:2504.20249). Extends existing DeepONet. Medium complexity.
+- [x] **Temporal Neural Operator (TNO)** — Temporal branch augmenting DeepONet for time-dependent PDEs (Nature Sci Reports 2025, arXiv:2504.20249). Extends existing DeepONet. Medium complexity.
 
 ### Graph
 - [x] **DimeNet** — Directional message passing (DimeNet++) with radial Bessel basis, Chebyshev angular basis, and Hadamard interaction blocks.

@@ -46,7 +46,7 @@ defmodule Edifice do
   | Robotics | ACT, Diffusion Policy, OpenVLA |
   | Audio | SoundStorm, EnCodec, F5-TTS, VALL-E, Whisper, Wav2Vec 2.0 |
   | Detection | DETR, RT-DETR, SAM 2 |
-  | Scientific | FNO, DeepONet |
+  | Scientific | FNO, DeepONet, TNO |
   """
 
   @architecture_registry %{
@@ -319,6 +319,7 @@ defmodule Edifice do
     # Scientific
     fno: Edifice.Scientific.FNO,
     deep_onet: Edifice.Scientific.DeepONet,
+    tno: Edifice.Scientific.TNO,
     # Neuromorphic
     snn: Edifice.Neuromorphic.SNN,
     ann2snn: Edifice.Neuromorphic.ANN2SNN,
@@ -607,7 +608,7 @@ defmodule Edifice do
       multimodal: [:multimodal_mlp_fusion],
       rl: [:policy_value, :decision_transformer],
       liquid: [:liquid],
-      scientific: [:fno, :deep_onet],
+      scientific: [:fno, :deep_onet, :tno],
       neuromorphic: [:snn, :ann2snn],
       inference: [:medusa],
       robotics: [:act, :diffusion_policy, :openvla],

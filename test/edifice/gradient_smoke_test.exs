@@ -2467,4 +2467,29 @@ defmodule Edifice.GradientSmokeTest do
     input = random_tensor({@batch, @seq_len, @embed})
     check_gradients(model, %{"state_sequence" => input})
   end
+
+  # ── Wave 5: TNO (Temporal Neural Operator) ──────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through tno" do
+    model =
+      Edifice.build(:tno,
+        num_sensors: 8,
+        history_dim: 6,
+        coord_dim: 1,
+        branch_hidden: [8],
+        temporal_hidden: [8],
+        trunk_hidden: [8],
+        output_hidden: [8],
+        latent_dim: 4
+      )
+
+    inputs = %{
+      "sensors" => random_tensor({@batch, 8}),
+      "history" => random_tensor({@batch, 6}),
+      "queries" => random_tensor({@batch, 4, 2})
+    }
+
+    check_gradients(model, inputs)
+  end
 end
