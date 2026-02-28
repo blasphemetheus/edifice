@@ -68,6 +68,24 @@ VALLE (SDPA + SinusoidalPE.layer), Perceiver (SDPA), Decision Transformer (SDPA 
 - [x] **DimeNet** — Directional message passing (DimeNet++) with radial Bessel basis, Chebyshev angular basis, and Hadamard interaction blocks.
 - [x] **SE(3)-Transformer** — 3D roto-translation equivariant attention with fiber features (type-0 scalars + type-1 vectors), invariant attention, and TFN-style direction messages.
 
+### Interpretability (Priority)
+
+Full research notes in `notebooks/research/interpretability_architectures.md`.
+
+**Tier 1 — High value, straightforward:**
+- [ ] **Gated SAE** — Gated encoder decouples feature selection from magnitude (DeepMind, NeurIPS 2024). Near-drop-in SAE improvement, ~50% better reconstruction at same sparsity.
+- [ ] **JumpReLU SAE** — Per-feature learned threshold replaces TopK (DeepMind/Gemma Scope, 2024). Adaptive sparsity without rigid k constraint.
+- [ ] **BatchTopK SAE** — Batch-global top-k instead of per-sample (Bussmann, ICLR 2025). Variable per-sample sparsity within batch budget.
+- [ ] **Linear Probe** — Single linear layer for concept detection in frozen activations (Alain & Bengio 2016). Foundational interpretability tool, trivial architecture.
+- [ ] **Crosscoder** — Joint SAE across multiple model checkpoints/layers with shared dictionary (Anthropic, Dec 2024). Finds features shared across training stages.
+
+**Tier 2 — Moderate complexity:**
+- [ ] **Concept Bottleneck** — Intermediate interpretable concept layer before task prediction (Koh et al., ICML 2020). Inherently interpretable, enables concept interventions.
+- [ ] **DAS Probe** — Distributed Alignment Search finds causal linear subspaces for concepts (Geiger et al., ICLR 2024). Stronger than linear probes, needs orthogonal parameterization.
+- [ ] **LEACE** — Least-squares concept erasure via projection (Belrose et al., ICML 2023). Closed-form, gold-standard concept removal.
+- [ ] **Matryoshka SAE** — Nested multi-scale SAE with ordered features (Bussmann, 2025). One model, multiple granularity levels.
+- [ ] **Cross-Layer Transcoder** — Extends Transcoder to all MLP layers simultaneously with shared dictionary (Anthropic, Feb 2025). Enables full circuit-level sparse analysis.
+
 ### Backlog
 - [ ] Flash Attention — IO-aware exact attention (requires EXLA backend work)
 - [ ] SPLA — Sparse + Linear Attention hybrid
@@ -77,15 +95,15 @@ VALLE (SDPA + SinusoidalPE.layer), Perceiver (SDPA), Decision Transformer (SDPA 
 - [ ] Show-o — AR + discrete diffusion
 - [ ] Diffusion Policy — Diffusion for robot action generation
 - [ ] CausVid — Causal video DiT distillation
-- [ ] DeepONet — Branch-trunk operator learning
+- [x] DeepONet — Branch-trunk operator learning (branch MLP + trunk MLP + dot-product combine)
 - [ ] MAGVIT-v2 — Lookup-free quantization for image/video tokens
 - [ ] MIRAS — Google's Titans extension framework
 - [ ] MoR — Mixture of Recursions
 - [ ] MoED — Mixture of Expert Depths
-- [ ] PointNet++ — Hierarchical point cloud processing
-- [ ] Wav2Vec 2.0 — Self-supervised speech backbone
+- [x] PointNet++ — Hierarchical point cloud processing (FPS + ball query + mini-PointNet SA layers)
+- [x] Wav2Vec 2.0 — Self-supervised speech backbone (7-layer CNN encoder + conv PE + Transformer + product quantizer)
 - [ ] Janus Multimodal — Decoupled visual encoding (CVPR 2025)
-- [ ] GPS — General Powerful Scalable graph transformer
+- [x] GPS — General Powerful Scalable graph transformer (GIN MPNN + global attention dual-branch with RWSE PE)
 - [ ] Agent swarm patterns — Multi-agent coordination framework
 
 ---
@@ -155,4 +173,4 @@ have dedicated test files. Remaining gaps are leaf modules or minor variants.
 - [ ] **Pretrained weight loading** — Support loading weights for 2-3 reference architectures (e.g., Whisper tiny, a small MLP). Even minimal weight support differentiates from "just architecture definitions." Investigate SafeTensors format for Elixir.
 - [ ] **ONNX integration guide** — Document workflow: Edifice.build → Axon model → axon_onnx export → inference in other runtimes. Even if axon_onnx is a separate package, showing the integration path is valuable.
 - [x] **Architecture visualization** — `mix edifice.viz mamba` prints layer structure as table (default), ASCII tree (`--format tree`), or Mermaid diagram (`--format mermaid`). Handles tuple-returning models via `--component`. See `Edifice.Display` module.
-- [ ] **Gradient smoke tests** — For each family, verify gradients flow through the model (non-zero grads on all params after a forward+backward pass). Catches dead layers and broken backward paths.
+- [x] **Gradient smoke tests** — 176 passing tests across all 26 families (analytical gradients via `value_and_grad` + parameter sensitivity fallback). Covers sequence models, transformers, vision, detection, audio, robotics, RL, generative, graph, meta/PEFT, contrastive, interpretability, world model, multimodal, scientific, and memory architectures.
