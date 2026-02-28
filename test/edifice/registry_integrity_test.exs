@@ -233,7 +233,12 @@ defmodule Edifice.RegistryIntegrityTest do
     # Inference
     medusa: [base_hidden_dim: 8, vocab_size: 32],
     # Robotics
-    diffusion_policy: [obs_dim: 16, action_dim: 4, action_horizon: 4]
+    diffusion_policy: [obs_dim: 16, action_dim: 4, action_horizon: 4],
+    # Contrastive
+    vjepa2: [patch_dim: 16],
+    # Wave 5 generative
+    deep_flow: [input_size: 8, patch_size: 2, in_channels: 1, num_branches: 2],
+    meissonic: [codebook_size: 32, num_image_tokens: 16, text_dim: 8, cond_dim: 8]
   }
 
   for arch <- Edifice.list_architectures() do

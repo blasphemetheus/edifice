@@ -24,17 +24,17 @@ defmodule Edifice do
   | Transformer | Decoder-Only (GPT-style), Multi-Token Prediction, Byte Latent Transformer, Nemotron-H, FreeTransformer |
   | Feedforward | MLP, KAN, KAT, TabNet, BitNet |
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
-  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, MIRAS, Reservoir (ESN), Native Recurrence, TransformerLike, DeepResLSTM |
-  | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
-  | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Sigmoid Attention, FoX (Forgetting Transformer), Log-Linear, NHA (Native Hybrid Attention), Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, SPLA, InfLLM-V2, Dual Chunk Attention |
+  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, DeltaProduct, TTT, TTT-E2E, Titans, MIRAS, Reservoir (ESN), Native Recurrence, TransformerLike, DeepResLSTM |
+  | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer, Longhorn |
+  | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Sigmoid Attention, FoX (Forgetting Transformer), Log-Linear, NHA (Native Hybrid Attention), LASER, MoBA, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, SPLA, InfLLM-V2, Dual Chunk Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision, DINOv3, Janus |
-  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Rectified Flow, SoFlow, Normalizing Flow, TarFlow, STARFlow, Transfusion, CogVideoX, TRELLIS, MDLM, MAGVIT-v2, Show-o, JanusFlow |
+  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Rectified Flow, SoFlow, Normalizing Flow, TarFlow, STARFlow, Transfusion, CogVideoX, TRELLIS, MDLM, LLaDA, CaDDi, DeepFlow, Meissonic, MAGVIT-v2, Show-o, JanusFlow |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, DimeNet, SE(3)-Transformer, GPS, KA-GNN, Message Passing |
   | Sets | DeepSets, PointNet, PointNet++ |
   | Energy | EBM, Hopfield, Neural ODE |
   | Probabilistic | Bayesian, MC Dropout, Evidential |
   | Memory | NTM, Memory Networks, Memory Layers |
-  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, ReMoE, MoR, MoED, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, EAGLE-3, Manifold HC, Distillation Head, QAT, Coconut, Hybrid Builder |
+  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, ReMoE, MoR, MoED, LoRA, DoRA, VeRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, EAGLE-3, Manifold HC, Distillation Head, QAT, Coconut, Hybrid Builder |
   | Liquid | Liquid Neural Networks |
   | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA, Temporal JEPA, V-JEPA 2 |
   | Interpretability | Sparse Autoencoder, Transcoder, Gated SAE, JumpReLU SAE, BatchTopK SAE, Linear Probe, Crosscoder, Concept Bottleneck, DAS Probe, LEACE, Matryoshka SAE, Cross-Layer Transcoder |
@@ -88,6 +88,8 @@ defmodule Edifice do
     native_recurrence: Edifice.Recurrent.NativeRecurrence,
     transformer_like: Edifice.Recurrent.TransformerLike,
     deep_res_lstm: Edifice.Recurrent.DeepResLSTM,
+    huginn: Edifice.Recurrent.Huginn,
+    delta_product: Edifice.Recurrent.DeltaProduct,
     # SSM
     mamba: Edifice.SSM.Mamba,
     mamba_ssd: Edifice.SSM.MambaSSD,
@@ -108,6 +110,9 @@ defmodule Edifice do
     hyena_v2: Edifice.SSM.HyenaV2,
     hymba: Edifice.SSM.Hymba,
     ss_transformer: Edifice.SSM.SSTransformer,
+    longhorn: Edifice.SSM.Longhorn,
+    samba: Edifice.SSM.Samba,
+    mixture_of_mamba: Edifice.SSM.MixtureOfMamba,
     hybrid_builder: Edifice.Meta.HybridBuilder,
     # Attention
     attention: Edifice.Attention.MultiHead,
@@ -149,6 +154,8 @@ defmodule Edifice do
     fox: Edifice.Attention.FoX,
     log_linear: Edifice.Attention.LogLinear,
     nha: Edifice.Attention.NHA,
+    laser: Edifice.Attention.LASER,
+    moba: Edifice.Attention.MoBA,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -203,6 +210,10 @@ defmodule Edifice do
     janus_flow: Edifice.Generative.JanusFlow,
     tar_flow: Edifice.Generative.TarFlow,
     star_flow: Edifice.Generative.STARFlow,
+    llada: Edifice.Generative.LLaDA,
+    deep_flow: Edifice.Generative.DeepFlow,
+    caddi: Edifice.Generative.CaDDi,
+    meissonic: Edifice.Generative.Meissonic,
     # Graph
     gcn: Edifice.Graph.GCN,
     gat: Edifice.Graph.GAT,
@@ -262,6 +273,7 @@ defmodule Edifice do
     mixture_of_recursions: Edifice.Meta.MixtureOfRecursions,
     mixture_of_expert_depths: Edifice.Meta.MixtureOfExpertDepths,
     coconut: Edifice.Meta.Coconut,
+    vera: Edifice.Meta.VeRA,
     # Contrastive / Self-Supervised
     simclr: Edifice.Contrastive.SimCLR,
     byol: Edifice.Contrastive.BYOL,
@@ -346,7 +358,13 @@ defmodule Edifice do
   @spec list_families() :: %{atom() => [atom()]}
   def list_families do
     %{
-      transformer: [:decoder_only, :multi_token_prediction, :byte_latent_transformer, :nemotron_h, :free_transformer],
+      transformer: [
+        :decoder_only,
+        :multi_token_prediction,
+        :byte_latent_transformer,
+        :nemotron_h,
+        :free_transformer
+      ],
       feedforward: [:mlp, :kan, :kat, :tabnet, :bitnet],
       convolutional: [:conv1d, :resnet, :densenet, :tcn, :mobilenet, :efficientnet],
       recurrent: [
@@ -367,7 +385,9 @@ defmodule Edifice do
         :xlstm_v2,
         :native_recurrence,
         :transformer_like,
-        :deep_res_lstm
+        :deep_res_lstm,
+        :huginn,
+        :delta_product
       ],
       ssm: [
         :mamba,
@@ -388,7 +408,10 @@ defmodule Edifice do
         :gss,
         :hyena_v2,
         :hymba,
-        :ss_transformer
+        :ss_transformer,
+        :longhorn,
+        :samba,
+        :mixture_of_mamba
       ],
       attention: [
         :attention,
@@ -431,7 +454,9 @@ defmodule Edifice do
         :dual_chunk_attention,
         :fox,
         :log_linear,
-        :nha
+        :nha,
+        :laser,
+        :moba
       ],
       vision: [
         :vit,
@@ -481,7 +506,11 @@ defmodule Edifice do
         :show_o,
         :janus_flow,
         :tar_flow,
-        :star_flow
+        :star_flow,
+        :llada,
+        :deep_flow,
+        :caddi,
+        :meissonic
       ],
       graph: [
         :gcn,
@@ -530,7 +559,8 @@ defmodule Edifice do
         :mixture_of_recursions,
         :mixture_of_expert_depths,
         :coconut,
-        :hybrid_builder
+        :hybrid_builder,
+        :vera
       ],
       contrastive: [
         :simclr,

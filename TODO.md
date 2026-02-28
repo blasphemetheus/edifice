@@ -91,7 +91,7 @@ VALLE (SDPA + SinusoidalPE.layer), Perceiver (SDPA), Decision Transformer (SDPA 
 ### 2026 Wave 5 Candidates
 
 **Attention / Sequence:**
-- [ ] **LASER** — Attention with exp(V) transformation for larger gradient signals (ICML 2025, arXiv:2411.03493). Log-Weighted-Sum-Exp trick for stability. Low complexity.
+- [x] **LASER** — Attention with exp(V) transformation for larger gradient signals (ICML 2025, arXiv:2411.03493). Log-Weighted-Sum-Exp trick for stability. Low complexity.
 - [ ] **MoBA** — Mixture of Block Attention (Moonshot/Kimi, arXiv:2502.13189). MoE-style gating router selects relevant KV blocks per query. Production-proven. Medium complexity.
 - [ ] **Multi-Token Attention (MTA)** — Convolution over Q/K/head dims before attention (Meta, arXiv:2504.00927). Conditions attention on multiple tokens simultaneously. Medium complexity.
 - [ ] **DeltaProduct** — Multi-step DeltaNet via products of Householder transformations (NeurIPS 2025, arXiv:2502.10297). Extends existing DeltaNet/Gated DeltaNet. Medium complexity.
@@ -99,19 +99,19 @@ VALLE (SDPA + SinusoidalPE.layer), Perceiver (SDPA), Decision Transformer (SDPA 
 - [ ] **Residual Linear Attention** — Auxiliary recurrent state correcting base linear attention errors (arXiv:2509.25223). Also Residual DeltaNet variant. Low-medium complexity.
 
 **SSM / Recurrent:**
-- [ ] **Longhorn** — SSM from online associative recall closed-form solution (ICLR 2025, arXiv:2407.14207). Drop-in Mamba replacement, no explicit forget gate. Low complexity.
+- [x] **Longhorn** — SSM from online associative recall closed-form solution (ICLR 2025, arXiv:2407.14207). Drop-in Mamba replacement, no explicit forget gate. Low complexity.
 - [ ] **Samba** — Hybrid Mamba + SWA + MLP interleaving for unlimited context (ICLR 2025, arXiv:2406.07522). First hybrid beating Transformers on short+long context. Medium complexity.
 - [ ] **Huginn** — Depth-recurrent transformer with adaptive iteration for latent reasoning (NeurIPS 2025, arXiv:2502.05171). Weight-tied recurrent blocks. Medium complexity.
 - [ ] **Mixture-of-Mamba (MoM)** — Modality-aware SSM sparsity inside Mamba blocks (ICLR 2025, arXiv:2501.16295). Per-modality SSM routing. Medium complexity.
 
 **Generative / Flow:**
-- [ ] **LLaDA** — Masked discrete diffusion LLM, vanilla transformer backbone (ICLR 2025, arXiv:2502.09992). First 8B diffusion LM. Extends MDLM family. Medium complexity.
-- [ ] **CaDDi** — Non-Markovian discrete diffusion with causal trajectory conditioning (NeurIPS 2025, arXiv:2502.09767). Unifies AR and diffusion. Medium complexity.
-- [ ] **DeepFlow** — Deeply supervised flow with VeRA velocity refinement blocks (ICCV 2025, arXiv:2503.14494). Extends SiT. 8x faster convergence. Medium complexity.
-- [ ] **Meissonic** — Masked generative transformer for images with VQ + iterative mask-predict (ICLR 2025, arXiv:2410.08261). SDXL-level quality, 1B params. Medium complexity.
+- [x] **LLaDA** — Masked discrete diffusion LLM, vanilla transformer backbone (ICLR 2025, arXiv:2502.09992). First 8B diffusion LM. Extends MDLM family. Medium complexity.
+- [x] **CaDDi** — Non-Markovian discrete diffusion with causal trajectory conditioning (NeurIPS 2025, arXiv:2502.09767). Unifies AR and diffusion. Medium complexity.
+- [x] **DeepFlow** — Deeply supervised flow with VeRA velocity refinement blocks (ICCV 2025, arXiv:2503.14494). Extends SiT. 8x faster convergence. Medium complexity.
+- [x] **Meissonic** — Masked generative transformer for images with VQ + iterative mask-predict (ICLR 2025, arXiv:2410.08261). SDXL-level quality, 1B params. Medium complexity.
 
 **Meta / PEFT:**
-- [ ] **VeRA** — Shared frozen random matrices + per-layer scaling vectors (ICLR 2025, arXiv:2310.11454). 10x fewer params than LoRA. Low complexity.
+- [x] **VeRA** — Shared frozen random matrices + per-layer scaling vectors (ICLR 2025, arXiv:2310.11454). 10x fewer params than LoRA. Low complexity.
 - [ ] **Kron-LoRA** — Kronecker-product + low-rank LoRA hybrid (arXiv:2508.01961). 4x fewer params than rank-8 LoRA. Low complexity.
 - [ ] **Mixture of Transformers (MoT)** — Per-modality parameter decoupling with shared global attention (Meta/Stanford, TMLR 2025, arXiv:2411.04996). 55% FLOP savings. Medium complexity.
 
