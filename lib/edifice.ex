@@ -27,7 +27,7 @@ defmodule Edifice do
   | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, Reservoir (ESN), Native Recurrence, TransformerLike, DeepResLSTM |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
   | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Sigmoid Attention, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, Dual Chunk Attention |
-  | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision, DINOv3 |
+  | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision, DINOv3, Janus |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Rectified Flow, SoFlow, Normalizing Flow, Transfusion, CogVideoX, TRELLIS, MDLM |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, DimeNet, SE(3)-Transformer, GPS, Message Passing |
   | Sets | DeepSets, PointNet, PointNet++ |
@@ -37,7 +37,7 @@ defmodule Edifice do
   | Meta | MoE, MoE v2, Switch MoE, Soft MoE, ReMoE, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, EAGLE-3, Manifold HC, Distillation Head, QAT, Hybrid Builder |
   | Liquid | Liquid Neural Networks |
   | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA, Temporal JEPA |
-  | Interpretability | Sparse Autoencoder, Transcoder |
+  | Interpretability | Sparse Autoencoder, Transcoder, Gated SAE, JumpReLU SAE, BatchTopK SAE, Linear Probe, Crosscoder, Concept Bottleneck, DAS Probe, LEACE, Matryoshka SAE |
   | World Model | World Model |
   | Multimodal | MLP Projection Fusion, Cross-Attention Fusion, Perceiver Resampler |
   | RL | PolicyValue, Decision Transformer |
@@ -159,6 +159,7 @@ defmodule Edifice do
     metaformer: Edifice.Vision.MetaFormer,
     caformer: {Edifice.Vision.MetaFormer, [variant: :caformer]},
     efficient_vit: Edifice.Vision.EfficientViT,
+    janus: Edifice.Vision.Janus,
     # Detection
     detr: Edifice.Detection.DETR,
     rt_detr: Edifice.Detection.RTDETR,
@@ -260,6 +261,11 @@ defmodule Edifice do
     linear_probe: Edifice.Interpretability.LinearProbe,
     jump_relu_sae: Edifice.Interpretability.JumpReluSAE,
     batch_top_k_sae: Edifice.Interpretability.BatchTopKSAE,
+    crosscoder: Edifice.Interpretability.Crosscoder,
+    concept_bottleneck: Edifice.Interpretability.ConceptBottleneck,
+    das_probe: Edifice.Interpretability.DASProbe,
+    leace: Edifice.Interpretability.LEACE,
+    matryoshka_sae: Edifice.Interpretability.MatryoshkaSAE,
     # World Model
     world_model: Edifice.WorldModel.WorldModel,
     # RL
@@ -418,7 +424,8 @@ defmodule Edifice do
         :dino_v3,
         :metaformer,
         :caformer,
-        :efficient_vit
+        :efficient_vit,
+        :janus
       ],
       generative: [
         :diffusion,
@@ -498,7 +505,12 @@ defmodule Edifice do
         :gated_sae,
         :linear_probe,
         :jump_relu_sae,
-        :batch_top_k_sae
+        :batch_top_k_sae,
+        :crosscoder,
+        :concept_bottleneck,
+        :das_probe,
+        :leace,
+        :matryoshka_sae
       ],
       world_model: [:world_model],
       multimodal: [:multimodal_mlp_fusion],

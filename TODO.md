@@ -77,23 +77,23 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
 - [x] **JumpReLU SAE** — Per-feature learned threshold replaces TopK (DeepMind/Gemma Scope, 2024). Adaptive sparsity without rigid k constraint.
 - [x] **BatchTopK SAE** — Batch-global top-k instead of per-sample (Bussmann, ICLR 2025). Variable per-sample sparsity within batch budget.
 - [x] **Linear Probe** — Single linear layer for concept detection in frozen activations (Alain & Bengio 2016). Foundational interpretability tool, trivial architecture.
-- [ ] **Crosscoder** — Joint SAE across multiple model checkpoints/layers with shared dictionary (Anthropic, Dec 2024). Finds features shared across training stages.
+- [x] **Crosscoder** — Joint SAE across multiple model checkpoints/layers with shared dictionary (Anthropic, Dec 2024). Finds features shared across training stages.
 
 **Tier 2 — Moderate complexity:**
-- [ ] **Concept Bottleneck** — Intermediate interpretable concept layer before task prediction (Koh et al., ICML 2020). Inherently interpretable, enables concept interventions.
-- [ ] **DAS Probe** — Distributed Alignment Search finds causal linear subspaces for concepts (Geiger et al., ICLR 2024). Stronger than linear probes, needs orthogonal parameterization.
-- [ ] **LEACE** — Least-squares concept erasure via projection (Belrose et al., ICML 2023). Closed-form, gold-standard concept removal.
-- [ ] **Matryoshka SAE** — Nested multi-scale SAE with ordered features (Bussmann, 2025). One model, multiple granularity levels.
+- [x] **Concept Bottleneck** — Intermediate interpretable concept layer before task prediction (Koh et al., ICML 2020). Inherently interpretable, enables concept interventions.
+- [x] **DAS Probe** — Distributed Alignment Search finds causal linear subspaces for concepts (Geiger et al., ICLR 2024). Stronger than linear probes, needs orthogonal parameterization.
+- [x] **LEACE** — Least-squares concept erasure via projection (Belrose et al., ICML 2023). Closed-form, gold-standard concept removal.
+- [x] **Matryoshka SAE** — Nested multi-scale SAE with ordered features (Bussmann, 2025). One model, multiple granularity levels.
 - [ ] **Cross-Layer Transcoder** — Extends Transcoder to all MLP layers simultaneously with shared dictionary (Anthropic, Feb 2025). Enables full circuit-level sparse analysis.
 
 ### Backlog
 - [ ] Flash Attention — IO-aware exact attention (requires EXLA backend work)
 - [ ] SPLA — Sparse + Linear Attention hybrid
 - [ ] InfLLM-V2 — Block-partitioned KV cache selection
-- [ ] F5-TTS — Non-autoregressive flow-matching TTS
+- [x] F5-TTS — Non-autoregressive flow-matching TTS (DiT backbone + ConvNeXt V2 text encoder + RoPE + conv PE)
 - [ ] JanusFlow — AR text + rectified flow images
 - [ ] Show-o — AR + discrete diffusion
-- [ ] Diffusion Policy — Diffusion for robot action generation
+- [x] Diffusion Policy — ConditionalUnet1D with FiLM conditioning, cosine noise schedule
 - [ ] CausVid — Causal video DiT distillation
 - [x] DeepONet — Branch-trunk operator learning (branch MLP + trunk MLP + dot-product combine)
 - [ ] MAGVIT-v2 — Lookup-free quantization for image/video tokens
@@ -102,7 +102,7 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
 - [ ] MoED — Mixture of Expert Depths
 - [x] PointNet++ — Hierarchical point cloud processing (FPS + ball query + mini-PointNet SA layers)
 - [x] Wav2Vec 2.0 — Self-supervised speech backbone (7-layer CNN encoder + conv PE + Transformer + product quantizer)
-- [ ] Janus Multimodal — Decoupled visual encoding (CVPR 2025)
+- [x] Janus Multimodal — Decoupled visual encoding (ViT encoder + MLP aligner + VQ gen head)
 - [x] GPS — General Powerful Scalable graph transformer (GIN MPNN + global attention dual-branch with RWSE PE)
 - [ ] Agent swarm patterns — Multi-agent coordination framework
 
