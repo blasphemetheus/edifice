@@ -43,8 +43,8 @@ defmodule Edifice do
   | RL | PolicyValue, Decision Transformer |
   | Neuromorphic | SNN, ANN2SNN |
   | Inference | Medusa |
-  | Robotics | ACT, OpenVLA |
-  | Audio | SoundStorm, EnCodec, VALL-E, Whisper, Wav2Vec 2.0 |
+  | Robotics | ACT, Diffusion Policy, OpenVLA |
+  | Audio | SoundStorm, EnCodec, F5-TTS, VALL-E, Whisper, Wav2Vec 2.0 |
   | Detection | DETR, RT-DETR, SAM 2 |
   | Scientific | FNO, DeepONet |
   """
@@ -281,10 +281,12 @@ defmodule Edifice do
     medusa: Edifice.Inference.Medusa,
     # Robotics
     act: Edifice.Robotics.ACT,
+    diffusion_policy: Edifice.Robotics.DiffusionPolicy,
     openvla: Edifice.Robotics.OpenVLA,
     # Audio
     soundstorm: Edifice.Audio.SoundStorm,
     encodec: Edifice.Audio.EnCodec,
+    f5_tts: Edifice.Audio.F5TTS,
     valle: Edifice.Audio.VALLE,
     whisper: Edifice.Audio.Whisper,
     wav2vec2: Edifice.Audio.Wav2Vec2
@@ -505,8 +507,8 @@ defmodule Edifice do
       scientific: [:fno, :deep_onet],
       neuromorphic: [:snn, :ann2snn],
       inference: [:medusa],
-      robotics: [:act, :openvla],
-      audio: [:soundstorm, :encodec, :valle, :whisper, :wav2vec2],
+      robotics: [:act, :diffusion_policy, :openvla],
+      audio: [:soundstorm, :encodec, :f5_tts, :valle, :whisper, :wav2vec2],
       detection: [:detr, :rt_detr, :sam2]
     }
   end
