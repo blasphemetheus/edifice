@@ -92,7 +92,7 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
 - [ ] InfLLM-V2 — Block-partitioned KV cache selection
 - [x] F5-TTS — Non-autoregressive flow-matching TTS (DiT backbone + ConvNeXt V2 text encoder + RoPE + conv PE)
 - [ ] JanusFlow — AR text + rectified flow images
-- [ ] Show-o — AR + discrete diffusion
+- [x] Show-o — AR + discrete diffusion (unified transformer with omni-attention mask)
 - [x] Diffusion Policy — ConditionalUnet1D with FiLM conditioning, cosine noise schedule
 - [ ] CausVid — Causal video DiT distillation
 - [x] DeepONet — Branch-trunk operator learning (branch MLP + trunk MLP + dot-product combine)
@@ -159,7 +159,7 @@ have dedicated test files. Remaining gaps are leaf modules or minor variants.
 
 ### Module Decomposition (Priority: Low-Medium)
 
-- [ ] **Split multi_head.ex** (1,152 lines) — Extract 5 attention algorithms into focused modules: `attention/standard_attention.ex`, `attention/sliding_window_attention.ex`, `attention/chunked_attention.ex`, `attention/memory_efficient_attention.ex`, `attention/online_softmax_attention.ex`. Keep `multi_head.ex` as the entry point that dispatches by option. Each extracted module gets its own test file.
+- [x] **Split multi_head.ex** — Extracted pure tensor attention computations into `Edifice.Attention.Primitives` (~580 lines). Slimmed `multi_head.ex` to ~634 lines (Axon layer/model builders only). Deduplicated `causal_mask`/`window_mask` via `defdelegate` to `Edifice.Blocks.CausalMask`. All public APIs preserved via delegation.
 - [ ] **Vision backbone interface** — Define a shared interface for vision modules (ViT, Swin, DeiT, ConvNeXt, etc.) so they can be used interchangeably as feature extractors. Consider an `Edifice.Vision.Backbone` behaviour with `build_encoder/1` callback.
 
 ### CI/CD Improvements (Priority: Medium)

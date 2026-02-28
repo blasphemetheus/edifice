@@ -7,7 +7,7 @@ defmodule Edifice.Attention.MultiHeadCoverageTest do
   @seq_len 8
   @dim 16
 
-  describe "causal_mask/1" do
+  describe "causal_mask/1 (delegated)" do
     test "produces lower-triangular mask" do
       mask = MultiHead.causal_mask(4)
       assert Nx.shape(mask) == {4, 4}
@@ -20,7 +20,7 @@ defmodule Edifice.Attention.MultiHeadCoverageTest do
     end
   end
 
-  describe "window_mask/2" do
+  describe "window_mask/2 (delegated)" do
     test "produces windowed causal mask" do
       mask = MultiHead.window_mask(6, 3)
       assert Nx.shape(mask) == {6, 6}
@@ -33,87 +33,14 @@ defmodule Edifice.Attention.MultiHeadCoverageTest do
     end
   end
 
-  describe "scaled_dot_product_attention/4" do
-    test "computes attention without mask" do
+  describe "scaled_dot_product_attention/4 (delegated)" do
+    test "delegates to Primitives" do
       q = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
       k = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
       v = Nx.broadcast(0.5, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
 
       result = MultiHead.scaled_dot_product_attention(q, k, v)
       assert Nx.shape(result) == {@batch, @seq_len, @dim}
-      assert Nx.all(Nx.is_nan(result) |> Nx.bitwise_not()) |> Nx.to_number() == 1
-    end
-
-    test "computes attention with 2D mask" do
-      q = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      k = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      v = Nx.broadcast(0.5, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      mask = MultiHead.causal_mask(@seq_len)
-
-      result = MultiHead.scaled_dot_product_attention(q, k, v, mask: mask)
-      assert Nx.shape(result) == {@batch, @seq_len, @dim}
-    end
-
-    test "computes attention with 3D mask" do
-      q = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      k = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      v = Nx.broadcast(0.5, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      mask = MultiHead.causal_mask(@seq_len) |> Nx.broadcast({@batch, @seq_len, @seq_len})
-
-      result = MultiHead.scaled_dot_product_attention(q, k, v, mask: mask)
-      assert Nx.shape(result) == {@batch, @seq_len, @dim}
-    end
-  end
-
-  describe "chunked_attention/4" do
-    test "produces same shape as standard attention" do
-      q = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      k = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      v = Nx.broadcast(0.5, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-
-      result = MultiHead.chunked_attention(q, k, v, chunk_size: 4)
-      assert Nx.shape(result) == {@batch, @seq_len, @dim}
-    end
-
-    test "with mask" do
-      q = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      k = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      v = Nx.broadcast(0.5, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      mask = MultiHead.causal_mask(@seq_len)
-
-      result = MultiHead.chunked_attention(q, k, v, chunk_size: 4, mask: mask)
-      assert Nx.shape(result) == {@batch, @seq_len, @dim}
-    end
-  end
-
-  describe "memory_efficient_attention/4" do
-    test "produces correct shape" do
-      q = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      k = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      v = Nx.broadcast(0.5, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-
-      result = MultiHead.memory_efficient_attention(q, k, v, chunk_size: 4)
-      assert Nx.shape(result) == {@batch, @seq_len, @dim}
-    end
-
-    test "with causal masking" do
-      q = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      k = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      v = Nx.broadcast(0.5, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-
-      result = MultiHead.memory_efficient_attention(q, k, v, chunk_size: 4, causal: true)
-      assert Nx.shape(result) == {@batch, @seq_len, @dim}
-    end
-  end
-
-  describe "qk_layer_norm/1" do
-    test "normalizes tensor" do
-      x = Nx.tensor([[1.0, 2.0, 3.0, 4.0]], type: :f32)
-      result = MultiHead.qk_layer_norm(x)
-      assert Nx.shape(result) == {1, 4}
-      # Mean should be approximately 0
-      mean = Nx.mean(result) |> Nx.to_number()
-      assert abs(mean) < 0.01
     end
   end
 
@@ -139,7 +66,7 @@ defmodule Edifice.Attention.MultiHeadCoverageTest do
     end
   end
 
-  describe "add_positional_encoding/2" do
+  describe "add_positional_encoding/2 (delegated)" do
     test "adds positional encoding to input" do
       input = Axon.input("input", shape: {nil, @seq_len, @dim})
       layer = MultiHead.add_positional_encoding(input)

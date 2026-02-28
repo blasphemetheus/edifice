@@ -510,7 +510,13 @@ defmodule Edifice.Attention.Primitives do
 
   `[batch, seq, num_heads * head_dim]` -> `[batch, num_heads, seq, head_dim]`
   """
-  @spec reshape_to_heads(Nx.Tensor.t(), non_neg_integer(), non_neg_integer(), pos_integer(), pos_integer()) ::
+  @spec reshape_to_heads(
+          Nx.Tensor.t(),
+          non_neg_integer(),
+          non_neg_integer(),
+          pos_integer(),
+          pos_integer()
+        ) ::
           Nx.Tensor.t()
   def reshape_to_heads(x, batch, seq_len, num_heads, head_dim) do
     x
@@ -523,7 +529,13 @@ defmodule Edifice.Attention.Primitives do
 
   `[batch, num_heads, seq, head_dim]` -> `[batch, seq, num_heads * head_dim]`
   """
-  @spec reshape_from_heads(Nx.Tensor.t(), non_neg_integer(), non_neg_integer(), pos_integer(), pos_integer()) ::
+  @spec reshape_from_heads(
+          Nx.Tensor.t(),
+          non_neg_integer(),
+          non_neg_integer(),
+          pos_integer(),
+          pos_integer()
+        ) ::
           Nx.Tensor.t()
   def reshape_from_heads(x, batch, seq_len, num_heads, head_dim) do
     x
