@@ -79,7 +79,7 @@ VALLE (SDPA + SinusoidalPE.layer), Perceiver (SDPA), Decision Transformer (SDPA 
 - [ ] **KA-GNN** — KAN-augmented GNN (KAN activation functions replace MLPs in GNN message passing). Improves expressivity on molecular property prediction.
 
 **Meta / Reasoning:**
-- [ ] **Coconut (Continuous Chain of Thought)** — Meta ICLR 2025. Internal reasoning in continuous latent space rather than discrete tokens. Breadth-first reasoning without text generation overhead.
+- [x] **Coconut (Continuous Chain of Thought)** — Meta ICLR 2025. Internal reasoning in continuous latent space rather than discrete tokens. Breadth-first reasoning without text generation overhead.
 - [ ] **Memory Layers** — Meta 2025. Sparse key-value lookup layers (1M+ keys) that replace dense FFN. Product-quantized nearest-neighbor retrieval provides massive memory at constant compute.
 
 **Vision / Multimodal:**
@@ -190,7 +190,7 @@ have dedicated test files. Remaining gaps are leaf modules or minor variants.
 
 - [ ] **Multi-version test matrix** — Test against Elixir 1.18 + 1.19 + 1.20 on OTP 27 + 28. The `mix.exs` claims `~> 1.18` compatibility; CI should verify it.
 - [ ] **Benchmark regression CI** — Run Benchee on 5-10 key architectures in CI. Store baseline timings, fail if >10% regression. Candidate architectures: MLP, LSTM, Mamba, GQA, ViT, DETR (covers major families and input patterns).
-- [ ] **Normalize git tag format** — Use consistent `v` prefix on all tags. Current mix: `0.1.1` and `v0.2.0`.
+- [x] **Normalize git tag format** — All tags now use `v` prefix (`v0.1.1`, `v0.2.0`).
 
 ### ML-Specific Quality (Priority: Low)
 
