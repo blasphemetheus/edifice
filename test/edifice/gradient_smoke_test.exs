@@ -2425,4 +2425,26 @@ defmodule Edifice.GradientSmokeTest do
     input = random_tensor({@batch, @in_channels, @image_size, @image_size})
     check_gradients(model, %{"image" => input})
   end
+
+  test "mixture_of_mamba gradient" do
+    model =
+      Edifice.build(:mixture_of_mamba,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        state_size: 4,
+        expand_factor: 2,
+        num_layers: @num_layers,
+        num_modalities: 2,
+        window_size: @seq_len
+      )
+
+    seq = random_tensor({@batch, @seq_len, @embed})
+
+    mask =
+      Nx.iota({@batch, @seq_len}, axis: 1)
+      |> Nx.remainder(2)
+      |> Nx.as_type(:s32)
+
+    check_gradients(model, %{"state_sequence" => seq, "modality_mask" => mask})
+  end
 end
