@@ -188,21 +188,15 @@ defmodule Edifice.Meta.KronLoRA do
 
     # A_kron: small Kronecker factor {d_A2, d_A1} - Kaiming init
     a_kron =
-      Axon.param("#{name}_A_kron", {d_a2, d_a1},
-        initializer: Axon.Initializers.lecun_normal()
-      )
+      Axon.param("#{name}_A_kron", {d_a2, d_a1}, initializer: Axon.Initializers.lecun_normal())
 
     # B2: LoRA down-project {r, d_B1} - normal init
     b2 =
-      Axon.param("#{name}_B2", {rank, d_b1},
-        initializer: Axon.Initializers.normal(scale: 0.02)
-      )
+      Axon.param("#{name}_B2", {rank, d_b1}, initializer: Axon.Initializers.normal(scale: 0.02))
 
     # B1: LoRA up-project {d_B2, r} - zero init for clean start
     b1 =
-      Axon.param("#{name}_B1", {d_b2, rank},
-        initializer: Axon.Initializers.zeros()
-      )
+      Axon.param("#{name}_B1", {d_b2, rank}, initializer: Axon.Initializers.zeros())
 
     Axon.layer(
       &kron_lora_forward/5,

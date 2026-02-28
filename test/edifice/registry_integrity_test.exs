@@ -239,6 +239,8 @@ defmodule Edifice.RegistryIntegrityTest do
     # Wave 5 generative
     deep_flow: [input_size: 8, patch_size: 2, in_channels: 1, num_branches: 2],
     meissonic: [codebook_size: 32, num_image_tokens: 16, text_dim: 8, cond_dim: 8],
+    # Wave 5 meta
+    mixture_of_transformers: [vocab_size: 32, seq_len: 8],
     # Wave 5 attention
     gsa: [num_slots: 4],
     mta: [c_q: 2, c_k: 3, c_h: 2]

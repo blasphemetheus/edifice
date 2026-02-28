@@ -109,7 +109,9 @@ defmodule Edifice.Meta.MixtureOfTransformersTest do
       params = init_fn.(template, Axon.ModelState.empty())
 
       key = Nx.Random.key(99)
-      {tokens, _key} = Nx.Random.randint(key, 0, @vocab_size, shape: {@batch, @seq_len}, type: :s64)
+
+      {tokens, _key} =
+        Nx.Random.randint(key, 0, @vocab_size, shape: {@batch, @seq_len}, type: :s64)
 
       # All tokens belong to modality 0
       mask = Nx.broadcast(0.0, {@batch, @seq_len, @num_modalities})

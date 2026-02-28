@@ -34,7 +34,7 @@ defmodule Edifice do
   | Energy | EBM, Hopfield, Neural ODE |
   | Probabilistic | Bayesian, MC Dropout, Evidential |
   | Memory | NTM, Memory Networks, Memory Layers |
-  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, ReMoE, MoR, MoED, LoRA, DoRA, VeRA, Kron-LoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, EAGLE-3, Manifold HC, Distillation Head, QAT, Coconut, Hybrid Builder |
+  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, ReMoE, MoR, MoED, LoRA, DoRA, VeRA, Kron-LoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, EAGLE-3, Manifold HC, Distillation Head, QAT, Coconut, Hybrid Builder, MoT |
   | Liquid | Liquid Neural Networks |
   | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA, Temporal JEPA, V-JEPA 2 |
   | Interpretability | Sparse Autoencoder, Transcoder, Gated SAE, JumpReLU SAE, BatchTopK SAE, Linear Probe, Crosscoder, Concept Bottleneck, DAS Probe, LEACE, Matryoshka SAE, Cross-Layer Transcoder |
@@ -281,6 +281,7 @@ defmodule Edifice do
     coconut: Edifice.Meta.Coconut,
     vera: Edifice.Meta.VeRA,
     kron_lora: Edifice.Meta.KronLoRA,
+    mixture_of_transformers: Edifice.Meta.MixtureOfTransformers,
     # Contrastive / Self-Supervised
     simclr: Edifice.Contrastive.SimCLR,
     byol: Edifice.Contrastive.BYOL,
@@ -574,7 +575,8 @@ defmodule Edifice do
         :coconut,
         :hybrid_builder,
         :vera,
-        :kron_lora
+        :kron_lora,
+        :mixture_of_transformers
       ],
       contrastive: [
         :simclr,
