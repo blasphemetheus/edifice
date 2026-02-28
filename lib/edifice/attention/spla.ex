@@ -220,7 +220,7 @@ defmodule Edifice.Attention.SPLA do
     num_heads = opts[:num_heads]
     head_dim = opts[:head_dim]
     block_stride = opts[:block_stride]
-    block_window = opts[:block_window]
+    _block_window = opts[:block_window]
     selection_ratio = opts[:selection_ratio]
 
     batch = Nx.axis_size(q, 0)
@@ -323,14 +323,18 @@ defmodule Edifice.Attention.SPLA do
 
     # Exact softmax attention on selected (masked) blocks
     # scores: [batch, heads, seq_len, seq_len]
-    attn_scores = Nx.dot(q, [3], [0, 1], Nx.transpose(k_sel_flat, axes: [0, 1, 3, 2]), [2], [0, 1])
+    attn_scores =
+      Nx.dot(q, [3], [0, 1], Nx.transpose(k_sel_flat, axes: [0, 1, 3, 2]), [2], [0, 1])
 
     # Apply causal mask
     causal = build_causal_mask(seq_len)
     attn_scores = Nx.add(attn_scores, causal)
 
-    attn_weights = Nx.exp(Nx.subtract(attn_scores, Nx.reduce_max(attn_scores, axes: [3], keep_axes: true)))
-    attn_weights = Nx.divide(attn_weights, Nx.add(Nx.sum(attn_weights, axes: [3], keep_axes: true), 1.0e-6))
+    attn_weights =
+      Nx.exp(Nx.subtract(attn_scores, Nx.reduce_max(attn_scores, axes: [3], keep_axes: true)))
+
+    attn_weights =
+      Nx.divide(attn_weights, Nx.add(Nx.sum(attn_weights, axes: [3], keep_axes: true), 1.0e-6))
 
     o_sparse = Nx.dot(attn_weights, [3], [0, 1], v_sel_flat, [2], [0, 1])
 
