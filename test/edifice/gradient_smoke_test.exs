@@ -2067,6 +2067,91 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"batch_topk_sae_input" => input})
   end
 
+  @tag timeout: 120_000
+  test "gradient flows through crosscoder" do
+    model =
+      Edifice.build(:crosscoder,
+        input_size: @embed,
+        dict_size: @hidden * 4,
+        num_sources: 2,
+        top_k: 8
+      )
+
+    inputs = %{
+      "crosscoder_source_0" => random_tensor({@batch, @embed}),
+      "crosscoder_source_1" => random_tensor({@batch, @embed})
+    }
+
+    check_gradients(model, inputs)
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through concept_bottleneck" do
+    model =
+      Edifice.build(:concept_bottleneck,
+        input_size: @embed,
+        num_concepts: 8,
+        num_classes: 5
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"cbm_input" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through das_probe" do
+    model =
+      Edifice.build(:das_probe,
+        input_size: @embed,
+        subspace_dim: 8,
+        num_classes: 5
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"das_probe_input" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through leace" do
+    model =
+      Edifice.build(:leace,
+        input_size: @embed,
+        concept_dim: 2
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"leace_input" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through matryoshka_sae" do
+    model =
+      Edifice.build(:matryoshka_sae,
+        input_size: @embed,
+        dict_size: @hidden * 4,
+        top_k: 8
+      )
+
+    input = random_tensor({@batch, @embed})
+    check_gradients(model, %{"matryoshka_sae_input" => input})
+  end
+
+  @tag timeout: 120_000
+  test "gradient flows through cross_layer_transcoder" do
+    num_layers = 2
+
+    model =
+      Edifice.build(:cross_layer_transcoder,
+        hidden_size: @embed,
+        num_layers: num_layers,
+        dict_size: @hidden * 4,
+        top_k: 8
+      )
+
+    input = random_tensor({@batch, num_layers * @embed})
+    check_gradients(model, %{"activations" => input})
+  end
+
   # ── World Model ────────────────────────────────────────────────
 
   @tag timeout: 120_000

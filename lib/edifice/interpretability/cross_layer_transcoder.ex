@@ -91,7 +91,9 @@ defmodule Edifice.Interpretability.CrossLayerTranscoder do
             input,
             fn t ->
               Nx.slice_along_axis(t, i * hidden_size, hidden_size, axis: 1)
-            end, name: "slice_layer_#{i}")
+            end,
+            name: "slice_layer_#{i}"
+          )
 
         encoded = Axon.dense(layer_acts, dict_size, name: "encoder_#{i}")
 

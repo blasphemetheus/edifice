@@ -80,16 +80,24 @@ defmodule Edifice.Interpretability.MatryoshkaSAETest do
       input = Nx.broadcast(0.0, {@batch, @input_size})
 
       # Only early features active
-      early = Nx.concatenate([
-        Nx.broadcast(1.0, {@batch, div(@dict_size, 2)}),
-        Nx.broadcast(0.0, {@batch, div(@dict_size, 2)})
-      ], axis: 1)
+      early =
+        Nx.concatenate(
+          [
+            Nx.broadcast(1.0, {@batch, div(@dict_size, 2)}),
+            Nx.broadcast(0.0, {@batch, div(@dict_size, 2)})
+          ],
+          axis: 1
+        )
 
       # Only late features active
-      late = Nx.concatenate([
-        Nx.broadcast(0.0, {@batch, div(@dict_size, 2)}),
-        Nx.broadcast(1.0, {@batch, div(@dict_size, 2)})
-      ], axis: 1)
+      late =
+        Nx.concatenate(
+          [
+            Nx.broadcast(0.0, {@batch, div(@dict_size, 2)}),
+            Nx.broadcast(1.0, {@batch, div(@dict_size, 2)})
+          ],
+          axis: 1
+        )
 
       loss_early = MatryoshkaSAE.loss(input, input, early, l1_coeff: 1.0)
       loss_late = MatryoshkaSAE.loss(input, input, late, l1_coeff: 1.0)

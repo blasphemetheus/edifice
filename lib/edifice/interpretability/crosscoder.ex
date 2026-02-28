@@ -167,8 +167,7 @@ defmodule Edifice.Interpretability.Crosscoder do
         {input, encoded}
       end
 
-    {Enum.map(inputs_and_encoded, &elem(&1, 0)),
-     Enum.map(inputs_and_encoded, &elem(&1, 1))}
+    {Enum.map(inputs_and_encoded, &elem(&1, 0)), Enum.map(inputs_and_encoded, &elem(&1, 1))}
   end
 
   defp build_shared_hidden(encoded, top_k) do
