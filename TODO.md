@@ -98,8 +98,8 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
 - [x] DeepONet — Branch-trunk operator learning (branch MLP + trunk MLP + dot-product combine)
 - [x] MAGVIT-v2 — Lookup-free quantization for image/video tokens
 - [ ] MIRAS — Google's Titans extension framework
-- [ ] MoR — Mixture of Recursions
-- [ ] MoED — Mixture of Expert Depths
+- [x] MoR — Mixture of Recursions (weight-tied recursive transformer with per-token depth routing)
+- [x] MoED — Mixture of Expert Depths (integrated MoDE with no-op expert for depth routing)
 - [x] PointNet++ — Hierarchical point cloud processing (FPS + ball query + mini-PointNet SA layers)
 - [x] Wav2Vec 2.0 — Self-supervised speech backbone (7-layer CNN encoder + conv PE + Transformer + product quantizer)
 - [x] Janus Multimodal — Decoupled visual encoding (ViT encoder + MLP aligner + VQ gen head)

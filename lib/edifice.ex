@@ -34,7 +34,7 @@ defmodule Edifice do
   | Energy | EBM, Hopfield, Neural ODE |
   | Probabilistic | Bayesian, MC Dropout, Evidential |
   | Memory | NTM, Memory Networks |
-  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, ReMoE, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, EAGLE-3, Manifold HC, Distillation Head, QAT, Hybrid Builder |
+  | Meta | MoE, MoE v2, Switch MoE, Soft MoE, ReMoE, MoR, MoED, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, EAGLE-3, Manifold HC, Distillation Head, QAT, Hybrid Builder |
   | Liquid | Liquid Neural Networks |
   | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA, Temporal JEPA |
   | Interpretability | Sparse Autoencoder, Transcoder, Gated SAE, JumpReLU SAE, BatchTopK SAE, Linear Probe, Crosscoder, Concept Bottleneck, DAS Probe, LEACE, Matryoshka SAE, Cross-Layer Transcoder |
@@ -247,6 +247,8 @@ defmodule Edifice do
     distillation_head: Edifice.Meta.DistillationHead,
     qat: Edifice.Meta.QAT,
     remoe: Edifice.Meta.ReMoE,
+    mixture_of_recursions: Edifice.Meta.MixtureOfRecursions,
+    mixture_of_expert_depths: Edifice.Meta.MixtureOfExpertDepths,
     # Contrastive / Self-Supervised
     simclr: Edifice.Contrastive.SimCLR,
     byol: Edifice.Contrastive.BYOL,
@@ -501,6 +503,8 @@ defmodule Edifice do
         :distillation_head,
         :qat,
         :remoe,
+        :mixture_of_recursions,
+        :mixture_of_expert_depths,
         :hybrid_builder
       ],
       contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg, :jepa, :temporal_jepa, :siglip],
