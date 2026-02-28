@@ -226,9 +226,37 @@ have dedicated test files. Remaining gaps are leaf modules or minor variants.
 - [ ] **Benchmark regression CI** — Run Benchee on 5-10 key architectures in CI. Store baseline timings, fail if >10% regression. Candidate architectures: MLP, LSTM, Mamba, GQA, ViT, DETR (covers major families and input patterns).
 - [x] **Normalize git tag format** — All tags now use `v` prefix (`v0.1.1`, `v0.2.0`).
 
-### ML-Specific Quality (Priority: Low)
+### Pretrained Weight Loading (Priority: Medium)
 
-- [ ] **Pretrained weight loading** — Support loading weights for 2-3 reference architectures (e.g., Whisper tiny, a small MLP). Even minimal weight support differentiates from "just architecture definitions." Investigate SafeTensors format for Elixir.
+Load HuggingFace SafeTensors checkpoints into Edifice models. The `safetensors` Elixir package
+(v0.1.3, `elixir-nx/safetensors`) handles serialization; the work is key mapping and tensor
+transformation between PyTorch and Axon conventions.
+
+**Phase 1 — Core infrastructure (`lib/edifice/pretrained/`):**
+
+- [ ] **Add `{:safetensors, "~> 0.1.3"}` dependency** — Add to `mix.exs` as optional dep. Zero runtime cost for users who don't load weights.
+- [ ] **Key mapping behaviour** — `Edifice.Pretrained.KeyMap` behaviour with `@callback map_key(pytorch_key :: String.t()) :: String.t() | :skip`. Each architecture implements this to translate PyTorch param names (e.g. `model.layers.0.self_attn.q_proj.weight`) to Axon layer names. Include `@callback tensor_transforms() :: [{String.t(), (Nx.Tensor.t() -> Nx.Tensor.t())}]` for per-key reshape/transpose rules.
+- [ ] **Tensor transformation layer** — `Edifice.Pretrained.Transform` module. Handles: (1) Linear weight transpose (`[out, in]` PyTorch -> `[in, out]` Axon), (2) Conv weight permutation (PyTorch OIHW -> Axon format), (3) Dtype casting (fp16/bf16 -> f32 or preserve), (4) Nested key grouping (flat `"layer.0.weight"` -> `%{"layer" => %{"0" => %{"weight" => tensor}}}`).
+- [ ] **Loader API** — `Edifice.Pretrained.load(module, path_or_url, opts)` that: (1) Reads `.safetensors` file via `Safetensors.read!/2` with lazy loading, (2) Applies module's key mapping, (3) Applies tensor transforms, (4) Returns `Axon.ModelState.t()`. Options: `:backend` (default BinaryBackend), `:dtype` (cast all to given type), `:strict` (error on unmapped keys vs warn).
+
+**Phase 2 — Reference architecture key maps (2-3 models):**
+
+- [ ] **ViT key map** — `Edifice.Vision.ViT.KeyMap`. Map from HuggingFace `vit-base-patch16-224` checkpoint. Covers patch embedding, positional embedding, transformer encoder layers, layernorm, classifier head. Test with `google/vit-base-patch16-224` (~86M params, 330MB safetensors).
+- [ ] **Whisper key map** — `Edifice.Audio.Whisper.KeyMap`. Map from HuggingFace `whisper-tiny` checkpoint. Covers: mel encoder conv layers, encoder transformer, decoder transformer, cross-attention projections. Test with `openai/whisper-tiny` (~39M params, 151MB safetensors). Exercises encoder-decoder architecture.
+- [ ] **ConvNeXt key map** (stretch) — `Edifice.Vision.ConvNeXt.KeyMap`. Map from `facebook/convnext-tiny-224`. Exercises a pure-CNN architecture with depthwise convs, LayerNorm, different param naming patterns from transformers.
+
+**Phase 3 — HuggingFace Hub integration (optional):**
+
+- [ ] **Hub download helper** — `Edifice.Pretrained.Hub.download(repo_id, opts)`. Downloads `.safetensors` from HuggingFace Hub via HTTP. Handles: multi-file sharded checkpoints (`model-00001-of-00003.safetensors`), `model.safetensors.index.json` shard index, local caching in `~/.cache/edifice/`, progress reporting via Logger. Optional dep on `req` for HTTP.
+- [ ] **Model card metadata** — Parse `config.json` from HuggingFace repos to auto-detect architecture type and build opts (hidden_size, num_heads, etc.) so users can do `Edifice.Pretrained.from_hub("google/vit-base-patch16-224")` without specifying opts.
+
+**Phase 4 — Validation & docs:**
+
+- [ ] **Round-trip tests** — For each reference model: (1) Build Edifice model, (2) Init random weights, (3) `Safetensors.write!` -> `Pretrained.load` round-trip, (4) Assert all params match. Also test with actual HuggingFace checkpoints (tagged `:external`, skipped in CI).
+- [ ] **Numerical validation** — For ViT and Whisper: compare Edifice forward pass output against known PyTorch outputs on reference inputs. Store expected outputs as fixtures. Tolerance: 1e-4 for f32.
+- [ ] **Guide** — `guides/loading_pretrained_weights.md`. Walk through: installing dep, downloading checkpoint, loading into model, running inference. Include troubleshooting for common key mismatches.
+
+### ML-Specific Quality (Priority: Low)
 - [ ] **ONNX integration guide** — Document workflow: Edifice.build → Axon model → axon_onnx export → inference in other runtimes. Even if axon_onnx is a separate package, showing the integration path is valuable.
 - [x] **Architecture visualization** — `mix edifice.viz mamba` prints layer structure as table (default), ASCII tree (`--format tree`), or Mermaid diagram (`--format mermaid`). Handles tuple-returning models via `--component`. See `Edifice.Display` module.
 - [x] **Gradient smoke tests** — 176 passing tests across all 26 families (analytical gradients via `value_and_grad` + parameter sensitivity fallback). Covers sequence models, transformers, vision, detection, audio, robotics, RL, generative, graph, meta/PEFT, contrastive, interpretability, world model, multimodal, scientific, and memory architectures.
