@@ -2241,4 +2241,82 @@ defmodule Edifice.GradientSmokeTest do
     # Use parameter sensitivity check as fallback.
     check_parameter_sensitivity(model, input_map)
   end
+
+  # ── Graph additions ─────────────────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through ka_gnn" do
+    model =
+      Edifice.build(:ka_gnn,
+        input_dim: @node_dim,
+        hidden_dim: @hidden,
+        num_layers: @num_layers,
+        num_harmonics: 2,
+        num_classes: @num_classes,
+        dropout: 0.0
+      )
+
+    nodes = random_tensor({@batch, @num_nodes, @node_dim})
+    adj = random_tensor({@batch, @num_nodes, @num_nodes})
+    check_gradients(model, %{"nodes" => nodes, "adjacency" => adj})
+  end
+
+  # ── Generative flow additions ───────────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through star_flow encoder" do
+    {encoder, _decoder} =
+      Edifice.build(:star_flow,
+        input_size: @embed,
+        hidden_size: @hidden,
+        num_blocks: 2,
+        deep_layers: 1,
+        shallow_layers: 1,
+        num_heads: 2,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(encoder, %{"input" => input})
+  end
+
+  # ── Memory addition (memory_layer) ──────────────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through memory_layer" do
+    model =
+      Edifice.build(:memory_layer,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: @num_layers,
+        num_keys: 8,
+        top_k: 2,
+        key_dim: @hidden,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
+
+  # ── Transformer addition (free_transformer) ─────────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through free_transformer" do
+    model =
+      Edifice.build(:free_transformer,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_heads: 2,
+        num_layers: 2,
+        num_latent_bits: 4,
+        seq_len: @seq_len,
+        dropout: 0.0
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
 end

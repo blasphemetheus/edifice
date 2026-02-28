@@ -73,20 +73,20 @@ VALLE (SDPA + SinusoidalPE.layer), Perceiver (SDPA), Decision Transformer (SDPA 
 
 **Generative / Flow:**
 - [x] **TarFlow** — Transformer-based normalizing flow (Apple, ICML 2025). Autoregressive flow using masked self-attention on image patches. Competitive with diffusion, exact likelihood.
-- [ ] **STARFlow** — Stacked TarFlow with multi-scale latent hierarchy. Extension of TarFlow with progressive resolution refinement.
+- [x] **STARFlow** — Stacked TarFlow with multi-scale latent hierarchy. Extension of TarFlow with progressive resolution refinement.
 
 **Graph / Scientific:**
-- [ ] **KA-GNN** — KAN-augmented GNN (KAN activation functions replace MLPs in GNN message passing). Improves expressivity on molecular property prediction.
+- [x] **KA-GNN** — KAN-augmented GNN (KAN activation functions replace MLPs in GNN message passing). Improves expressivity on molecular property prediction.
 
 **Meta / Reasoning:**
 - [x] **Coconut (Continuous Chain of Thought)** — Meta ICLR 2025. Internal reasoning in continuous latent space rather than discrete tokens. Breadth-first reasoning without text generation overhead.
-- [ ] **Memory Layers** — Meta 2025. Sparse key-value lookup layers (1M+ keys) that replace dense FFN. Product-quantized nearest-neighbor retrieval provides massive memory at constant compute.
+- [x] **Memory Layers** — Meta 2025. Sparse key-value lookup layers (1M+ keys) that replace dense FFN. Product-quantized nearest-neighbor retrieval provides massive memory at constant compute.
 
 **Vision / Multimodal:**
 - [x] **V-JEPA 2** — Meta 2025. Video world model with 3D-RoPE, sequence-level ViT encoder, and lightweight predictor with mask tokens.
 
 **Dynamic Inference:**
-- [ ] **FreeTransformer** — Meta 2025. Decoder with latent variable per layer enabling speculative decoding without separate draft model. Samples latent → deterministic generation.
+- [x] **FreeTransformer** — Meta 2025. Decoder with latent variable per layer enabling speculative decoding without separate draft model. Samples latent → deterministic generation.
 
 ### 2026 Wave 5 Candidates
 
@@ -168,6 +168,7 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
 ## Open — Infrastructure
 
 - [ ] **CUDA Kernel Fusion** — Fused RNN kernels for LSTM/GRU/minGRU/minLSTM. Axon unrolls each timestep as separate kernel launches (70-600ms for seq_len=32 vs 14ms for gated_ssm). Investigate cuDNN integration, custom CUDA kernels, XLA fusion passes, or seq_len=1 inference. See `bench/inference_latency.exs`.
+- [ ] **EXLA GPU Custom Call Infrastructure** — Prototype for GPU-native custom calls bypassing NIF copy overhead. Branch `gpu-custom-calls` in `/home/dori/git/melee/nx` (commit `5a7d8cc8`). Adds nvcc compilation to EXLA Makefile, `gpu_add.cu` prototype kernel, `Value.gpu_add/3` stablehlo.custom_call binding, and `GPUCustomCall` module. Validated pattern for FlashAttention. Intent: clean up and PR to `elixir-nx/nx` separately.
 
 ## Open — Codebase Quality (from 2026-02-27 evaluation)
 
