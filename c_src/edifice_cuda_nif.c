@@ -6,6 +6,11 @@
  * integers (from Nx.to_pointer) and dimensions, launches the fused
  * kernel, and returns the output pointer integer.
  *
+ * Memory management: Each cudaMalloc'd output is wrapped in an Erlang
+ * NIF resource. The resource's destructor calls cudaFree when the BEAM
+ * garbage collects the reference. The Elixir side must hold the resource
+ * reference for the lifetime of the Nx tensor wrapping the pointer.
+ *
  * Marked ERL_NIF_DIRTY_JOB_IO_BOUND so GPU blocking doesn't stall
  * the BEAM scheduler.
  */
@@ -67,10 +72,60 @@ static ERL_NIF_TERM make_error(ErlNifEnv* env, const char* reason) {
         enif_make_string(env, reason, ERL_NIF_LATIN1));
 }
 
-static ERL_NIF_TERM make_ok_pointer(ErlNifEnv* env, uint64_t ptr) {
-    return enif_make_tuple2(env,
+/* ========================================================================== */
+/* GPU Buffer Resource — ensures cudaFree on GC                               */
+/* ========================================================================== */
+
+/* NIF resource type for tracking GPU allocations */
+static ErlNifResourceType* s_gpu_buffer_type = NULL;
+
+typedef struct {
+    void* device_ptr;  /* GPU pointer from cudaMalloc */
+} GpuBuffer;
+
+/* Called by BEAM GC when the resource reference count drops to zero */
+static void gpu_buffer_dtor(ErlNifEnv* env, void* obj) {
+    (void)env;
+    GpuBuffer* buf = (GpuBuffer*)obj;
+    if (buf->device_ptr && s_cuda_free) {
+        s_cuda_free(buf->device_ptr);
+        buf->device_ptr = NULL;
+    }
+}
+
+/*
+ * Allocate a GPU buffer, wrap it in a NIF resource, and return
+ * {:ok, pointer_int, resource_ref} or {:error, reason}.
+ *
+ * The caller must hold resource_ref for the lifetime of any Nx tensor
+ * wrapping pointer_int. When resource_ref is GC'd, cudaFree is called.
+ */
+static ERL_NIF_TERM alloc_gpu_buffer(ErlNifEnv* env, size_t bytes) {
+    void* dev_ptr = NULL;
+    cudaError_t err = s_cuda_malloc(&dev_ptr, bytes);
+    if (err != 0) {
+        return make_error(env, "cudaMalloc failed for output buffer");
+    }
+
+    /* Create a NIF resource that will call cudaFree in its destructor */
+    GpuBuffer* buf = enif_alloc_resource(s_gpu_buffer_type, sizeof(GpuBuffer));
+    if (!buf) {
+        s_cuda_free(dev_ptr);
+        return make_error(env, "failed to allocate NIF resource");
+    }
+    buf->device_ptr = dev_ptr;
+
+    /* Make an Erlang term referencing this resource */
+    ERL_NIF_TERM ref = enif_make_resource(env, buf);
+
+    /* Release our ownership — the term now holds the only reference.
+     * When the BEAM GCs the term, gpu_buffer_dtor fires. */
+    enif_release_resource(buf);
+
+    return enif_make_tuple3(env,
         enif_make_atom(env, "ok"),
-        enif_make_uint64(env, ptr));
+        enif_make_uint64(env, (uint64_t)(uintptr_t)dev_ptr),
+        ref);
 }
 
 /* ========================================================================== */
@@ -79,9 +134,10 @@ static ERL_NIF_TERM make_ok_pointer(ErlNifEnv* env, uint64_t ptr) {
 
 /*
  * fused_mingru_scan(gates_ptr, candidates_ptr, h0_ptr, batch, seq_len, hidden)
- *   -> {:ok, output_ptr} | {:error, reason}
+ *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
  *
  * All pointer args are uint64 device pointer addresses.
+ * gc_ref is a NIF resource — hold it to prevent cudaFree until done.
  */
 static ERL_NIF_TERM nif_fused_mingru_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -102,14 +158,30 @@ static ERL_NIF_TERM nif_fused_mingru_scan(
         return enif_make_badarg(env);
     }
 
-    /* Allocate output buffer on GPU: [batch, seq_len, hidden] * sizeof(float) */
-    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
-    void* out_dev = NULL;
+    if (batch <= 0 || seq_len <= 0 || hidden <= 0)
+        return make_error(env, "dimensions must be positive");
 
-    cudaError_t err = s_cuda_malloc(&out_dev, out_bytes);
-    if (err != 0) {
-        return make_error(env, "cudaMalloc failed for output buffer");
+    /* Allocate output buffer on GPU, wrapped in a GC-tracked resource */
+    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    /* Check if allocation succeeded */
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2) {
+        return alloc_result;  /* propagate error */
     }
+
+    /* Check for :error atom */
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0) {
+        return alloc_result;
+    }
+
+    /* Extract the device pointer from {:ok, ptr, ref} */
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
 
     /* Launch the fused kernel on the default stream */
     int launch_err = s_mingru_launch(
@@ -117,23 +189,22 @@ static ERL_NIF_TERM nif_fused_mingru_scan(
         (const float*)(uintptr_t)gates_ptr,
         (const float*)(uintptr_t)cand_ptr,
         (const float*)(uintptr_t)h0_ptr,
-        (float*)out_dev,
+        (float*)(uintptr_t)out_ptr,
         batch, seq_len, hidden
     );
 
     if (launch_err != 0) {
-        s_cuda_free(out_dev);
+        /* Resource ref goes out of scope → GC will call cudaFree */
         return make_error(env, "kernel launch failed");
     }
 
     /* Synchronize — blocks this dirty scheduler thread until GPU finishes */
-    err = s_cuda_sync();
+    cudaError_t err = s_cuda_sync();
     if (err != 0) {
-        s_cuda_free(out_dev);
         return make_error(env, "cudaDeviceSynchronize failed");
     }
 
-    return make_ok_pointer(env, (uint64_t)(uintptr_t)out_dev);
+    return alloc_result;  /* {:ok, output_ptr, gc_ref} */
 }
 
 /* ========================================================================== */
@@ -143,7 +214,7 @@ static ERL_NIF_TERM nif_fused_mingru_scan(
 /*
  * fused_minlstm_scan(forget_ptr, input_ptr, cand_ptr, h0_ptr,
  *                    batch, seq_len, hidden)
- *   -> {:ok, output_ptr} | {:error, reason}
+ *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
  */
 static ERL_NIF_TERM nif_fused_minlstm_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -165,13 +236,26 @@ static ERL_NIF_TERM nif_fused_minlstm_scan(
         return enif_make_badarg(env);
     }
 
-    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
-    void* out_dev = NULL;
+    if (batch <= 0 || seq_len <= 0 || hidden <= 0)
+        return make_error(env, "dimensions must be positive");
 
-    cudaError_t err = s_cuda_malloc(&out_dev, out_bytes);
-    if (err != 0) {
-        return make_error(env, "cudaMalloc failed for output buffer");
+    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2) {
+        return alloc_result;
     }
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0) {
+        return alloc_result;
+    }
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
 
     int launch_err = s_minlstm_launch(
         NULL,
@@ -179,50 +263,20 @@ static ERL_NIF_TERM nif_fused_minlstm_scan(
         (const float*)(uintptr_t)input_ptr,
         (const float*)(uintptr_t)cand_ptr,
         (const float*)(uintptr_t)h0_ptr,
-        (float*)out_dev,
+        (float*)(uintptr_t)out_ptr,
         batch, seq_len, hidden
     );
 
     if (launch_err != 0) {
-        s_cuda_free(out_dev);
         return make_error(env, "kernel launch failed");
     }
 
-    err = s_cuda_sync();
+    cudaError_t err = s_cuda_sync();
     if (err != 0) {
-        s_cuda_free(out_dev);
         return make_error(env, "cudaDeviceSynchronize failed");
     }
 
-    return make_ok_pointer(env, (uint64_t)(uintptr_t)out_dev);
-}
-
-/* ========================================================================== */
-/* NIF: cuda_free                                                             */
-/* ========================================================================== */
-
-/*
- * cuda_free(device_ptr) -> :ok | {:error, reason}
- *
- * Frees a device pointer allocated by a fused scan NIF.
- * Needed if Nx.from_pointer doesn't take ownership.
- */
-static ERL_NIF_TERM nif_cuda_free(
-    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
-{
-    uint64_t ptr;
-
-    if (!s_cuda_free)
-        return make_error(env, "cudart not loaded");
-
-    if (!enif_get_uint64(env, argv[0], &ptr))
-        return enif_make_badarg(env);
-
-    cudaError_t err = s_cuda_free((void*)(uintptr_t)ptr);
-    if (err != 0)
-        return make_error(env, "cudaFree failed");
-
-    return enif_make_atom(env, "ok");
+    return alloc_result;  /* {:ok, output_ptr, gc_ref} */
 }
 
 /* ========================================================================== */
@@ -233,10 +287,16 @@ static int nif_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
     (void)priv_data;
     (void)load_info;
 
-    /* Resolve path to kernel shared library.
-     * The NIF .so lives at priv/libedifice_cuda_nif.so,
-     * the kernel .so lives at priv/cuda/libedifice_cuda_kernels.so.
-     * We use the NIF path to derive the kernel path. */
+    /* Register the GPU buffer resource type with a destructor */
+    s_gpu_buffer_type = enif_open_resource_type(
+        env, NULL, "gpu_buffer",
+        gpu_buffer_dtor,
+        ERL_NIF_RT_CREATE, NULL);
+
+    if (!s_gpu_buffer_type) {
+        return -1;  /* fatal — can't register resource type */
+    }
+
     char kernels_path[512];
 
     /* Try to load libcudart first — may already be in LD_LIBRARY_PATH */
@@ -255,22 +315,8 @@ static int nif_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
     s_cuda_sync   = (cuda_device_synchronize_fn)dlsym(s_cudart_handle, "cudaDeviceSynchronize");
 
     if (!s_cuda_malloc || !s_cuda_free || !s_cuda_sync) {
-        /* cudart symbols missing — unusual but handle gracefully */
         return 0;
     }
-
-    /* Build path to kernel library relative to priv dir.
-     * We get priv_dir from the Elixir side via the load path,
-     * but here we use a fixed relative path from the NIF .so. */
-
-    /* The NIF is loaded from priv/libedifice_cuda_nif — the .so is in priv/.
-     * The kernels are in priv/cuda/. We use dlopen with a relative path
-     * from the process working directory, or the Elixir side can pass the
-     * path. For robustness, we try the known path pattern. */
-
-    /* Use /proc/self/maps to find where our NIF is loaded, then derive path */
-    /* Simpler approach: the Elixir side sets priv_dir, we look relative to it */
-    /* Simplest: try common locations */
 
     /* First try: relative to CWD (mix project root) */
     s_kernels_handle = dlopen("priv/cuda/libedifice_cuda_kernels.so", RTLD_NOW);
@@ -278,7 +324,6 @@ static int nif_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
         /* Second try: find via Dl_info on our own symbol */
         Dl_info info;
         if (dladdr((void*)nif_load, &info) && info.dli_fname) {
-            /* info.dli_fname = ".../priv/libedifice_cuda_nif.so" */
             const char* fname = info.dli_fname;
             const char* last_slash = strrchr(fname, '/');
             if (last_slash) {
@@ -293,7 +338,6 @@ static int nif_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
     }
 
     if (!s_kernels_handle) {
-        /* Kernel library not found — NIF loads but kernel functions return errors */
         return 0;
     }
 
@@ -302,7 +346,6 @@ static int nif_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
     s_minlstm_launch = (minlstm_launch_fn)dlsym(
         s_kernels_handle, "fused_minlstm_scan_launch");
 
-    /* If symbols are missing, the individual NIF functions will return errors */
     return 0;
 }
 
@@ -331,8 +374,7 @@ static void nif_unload(ErlNifEnv* env, void* priv_data) {
 
 static ErlNifFunc nif_funcs[] = {
     {"fused_mingru_scan",  6, nif_fused_mingru_scan,  ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_minlstm_scan", 7, nif_fused_minlstm_scan, ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"cuda_free",          1, nif_cuda_free,           ERL_NIF_DIRTY_JOB_IO_BOUND}
+    {"fused_minlstm_scan", 7, nif_fused_minlstm_scan, ERL_NIF_DIRTY_JOB_IO_BOUND}
 };
 
 ERL_NIF_INIT(Elixir.Edifice.CUDA.NIF, nif_funcs, nif_load, NULL, NULL, nif_unload)

@@ -5,8 +5,11 @@ defmodule Edifice.CUDA.NIF do
   # All functions take raw uint64 device pointer addresses and integer dimensions.
   # Use Edifice.CUDA.FusedScan for the high-level API that handles Nx tensors.
   #
-  # The NIF is loaded lazily — if the .so doesn't exist (e.g. no CUDA),
-  # all functions return :erlang.nif_error(:not_loaded).
+  # Return format: {:ok, output_ptr, gc_ref} | {:error, reason}
+  #
+  # gc_ref is a NIF resource that calls cudaFree when garbage collected.
+  # The caller MUST hold gc_ref for the lifetime of any tensor wrapping
+  # output_ptr. When gc_ref is GC'd, the GPU memory is freed.
 
   @on_load :load_nif
 
@@ -26,9 +29,5 @@ defmodule Edifice.CUDA.NIF do
 
   @doc false
   def fused_minlstm_scan(_forget_ptr, _input_ptr, _cand_ptr, _h0_ptr, _batch, _seq_len, _hidden),
-    do: :erlang.nif_error(:not_loaded)
-
-  @doc false
-  def cuda_free(_device_ptr),
     do: :erlang.nif_error(:not_loaded)
 end

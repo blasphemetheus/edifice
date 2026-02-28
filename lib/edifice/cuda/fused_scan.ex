@@ -7,8 +7,12 @@ defmodule Edifice.CUDA.FusedScan do
   #   and wrap the output back into an Nx tensor (zero-copy GPU path)
   # - Otherwise: fall back to the Elixir sequential scan
   #
-  # The CUDA path avoids per-timestep kernel launch overhead by running
-  # the entire scan in a single fused kernel.
+  # Memory management: The NIF returns a gc_ref (NIF resource) alongside
+  # the output pointer. This gc_ref calls cudaFree when garbage collected.
+  # We store it in the process dictionary keyed by pointer address to
+  # prevent premature GC while EXLA's PjRt view is alive.
+
+  @gc_refs_key :__edifice_cuda_gc_refs__
 
   @doc false
   def mingru(gates, candidates) do
@@ -50,7 +54,10 @@ defmodule Edifice.CUDA.FusedScan do
            z_ptr.address, c_ptr.address, h0_ptr.address,
            batch, seq_len, hidden
          ) do
-      {:ok, out_addr} ->
+      {:ok, out_addr, gc_ref} ->
+        # Hold gc_ref to prevent cudaFree until we're done with the tensor
+        hold_gc_ref(out_addr, gc_ref)
+
         out_bytes = batch * seq_len * hidden * 4
 
         Nx.from_pointer(
@@ -85,7 +92,9 @@ defmodule Edifice.CUDA.FusedScan do
            f_ptr.address, i_ptr.address, c_ptr.address, h0_ptr.address,
            batch, seq_len, hidden
          ) do
-      {:ok, out_addr} ->
+      {:ok, out_addr, gc_ref} ->
+        hold_gc_ref(out_addr, gc_ref)
+
         out_bytes = batch * seq_len * hidden * 4
 
         Nx.from_pointer(
@@ -101,17 +110,27 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   # ============================================================================
+  # GC reference tracking
+  # ============================================================================
+
+  # Store a gc_ref in the process dictionary to prevent premature cudaFree.
+  # The NIF resource destructor calls cudaFree when the gc_ref is GC'd.
+  # We keep only the most recent ref per pointer address (a new allocation
+  # at the same address means the old one was already freed).
+  defp hold_gc_ref(ptr_addr, gc_ref) do
+    refs = Process.get(@gc_refs_key, %{})
+    Process.put(@gc_refs_key, Map.put(refs, ptr_addr, gc_ref))
+  end
+
+  # ============================================================================
   # Backend detection
   # ============================================================================
 
   defp cuda_available?(tensor) do
-    # Check that we're on EXLA backend with CUDA, the NIF is loaded,
-    # and the kernel library was resolved
     exla_cuda_backend?(tensor) and nif_loaded?()
   end
 
   defp exla_cuda_backend?(tensor) do
-    # The backend module is stored in tensor.data.__struct__
     exla_backend = Module.concat([EXLA, Backend])
     tensor.data.__struct__ == exla_backend
   rescue
@@ -123,9 +142,6 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   defp nif_loaded? do
-    # Try calling cuda_free with an obviously-invalid arg to check if
-    # the NIF is loaded. If it returns :erlang.nif_error, the NIF isn't loaded.
-    # A cleaner approach: just check if the module is loaded and the function exists.
     Code.ensure_loaded?(Edifice.CUDA.NIF) and
       function_exported?(Edifice.CUDA.NIF, :fused_mingru_scan, 6)
   end
