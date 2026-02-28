@@ -100,9 +100,9 @@ VALLE (SDPA + SinusoidalPE.layer), Perceiver (SDPA), Decision Transformer (SDPA 
 
 **SSM / Recurrent:**
 - [x] **Longhorn** — SSM from online associative recall closed-form solution (ICLR 2025, arXiv:2407.14207). Drop-in Mamba replacement, no explicit forget gate. Low complexity.
-- [ ] **Samba** — Hybrid Mamba + SWA + MLP interleaving for unlimited context (ICLR 2025, arXiv:2406.07522). First hybrid beating Transformers on short+long context. Medium complexity.
-- [ ] **Huginn** — Depth-recurrent transformer with adaptive iteration for latent reasoning (NeurIPS 2025, arXiv:2502.05171). Weight-tied recurrent blocks. Medium complexity.
-- [ ] **Mixture-of-Mamba (MoM)** — Modality-aware SSM sparsity inside Mamba blocks (ICLR 2025, arXiv:2501.16295). Per-modality SSM routing. Medium complexity.
+- [x] **Samba** — Hybrid Mamba + SWA + MLP interleaving for unlimited context (ICLR 2025, arXiv:2406.07522). First hybrid beating Transformers on short+long context. Medium complexity.
+- [x] **Huginn** — Depth-recurrent transformer with adaptive iteration for latent reasoning (NeurIPS 2025, arXiv:2502.05171). Weight-tied recurrent blocks. Medium complexity.
+- [x] **Mixture-of-Mamba (MoM)** — Modality-aware SSM sparsity inside Mamba blocks (ICLR 2025, arXiv:2501.16295). Per-modality SSM routing. Medium complexity.
 
 **Generative / Flow:**
 - [x] **LLaDA** — Masked discrete diffusion LLM, vanilla transformer backbone (ICLR 2025, arXiv:2502.09992). First 8B diffusion LM. Extends MDLM family. Medium complexity.
