@@ -204,6 +204,7 @@ defmodule Edifice.RegistryIntegrityTest do
     # Interpretability
     sparse_autoencoder: [input_size: 16, hidden_size: 32],
     transcoder: [input_size: 16, output_size: 8, hidden_size: 32],
+    concept_bottleneck: [input_size: 16, num_concepts: 8],
     # World Model
     world_model: [action_size: 4],
     # Multimodal
