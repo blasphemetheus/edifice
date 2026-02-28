@@ -238,7 +238,10 @@ defmodule Edifice.RegistryIntegrityTest do
     vjepa2: [patch_dim: 16],
     # Wave 5 generative
     deep_flow: [input_size: 8, patch_size: 2, in_channels: 1, num_branches: 2],
-    meissonic: [codebook_size: 32, num_image_tokens: 16, text_dim: 8, cond_dim: 8]
+    meissonic: [codebook_size: 32, num_image_tokens: 16, text_dim: 8, cond_dim: 8],
+    # Wave 5 attention
+    gsa: [num_slots: 4],
+    mta: [c_q: 2, c_k: 3, c_h: 2]
   }
 
   for arch <- Edifice.list_architectures() do

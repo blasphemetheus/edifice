@@ -2447,4 +2447,24 @@ defmodule Edifice.GradientSmokeTest do
 
     check_gradients(model, %{"state_sequence" => seq, "modality_mask" => mask})
   end
+
+  # ── Wave 5: TNN (Toeplitz Neural Network) ───────────────────
+
+  @tag timeout: 120_000
+  test "gradient flows through tnn" do
+    model =
+      Edifice.build(:tnn,
+        embed_dim: @embed,
+        hidden_size: @hidden,
+        num_layers: @num_layers,
+        expand_ratio: 2,
+        rpe_dim: 4,
+        rpe_layers: 1,
+        dropout: 0.0,
+        window_size: @seq_len
+      )
+
+    input = random_tensor({@batch, @seq_len, @embed})
+    check_gradients(model, %{"state_sequence" => input})
+  end
 end

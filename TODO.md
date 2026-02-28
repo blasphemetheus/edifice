@@ -93,10 +93,11 @@ VALLE (SDPA + SinusoidalPE.layer), Perceiver (SDPA), Decision Transformer (SDPA 
 **Attention / Sequence:**
 - [x] **LASER** — Attention with exp(V) transformation for larger gradient signals (ICML 2025, arXiv:2411.03493). Log-Weighted-Sum-Exp trick for stability. Low complexity.
 - [x] **MoBA** — Mixture of Block Attention (Moonshot/Kimi, arXiv:2502.13189). MoE-style gating router selects relevant KV blocks per query. Production-proven. Medium complexity.
-- [ ] **Multi-Token Attention (MTA)** — Convolution over Q/K/head dims before attention (Meta, arXiv:2504.00927). Conditions attention on multiple tokens simultaneously. Medium complexity.
+- [x] **Multi-Token Attention (MTA)** — Convolution over Q/K/head dims before attention (Meta, arXiv:2504.00927). Conditions attention on multiple tokens simultaneously. Medium complexity.
 - [x] **DeltaProduct** — Multi-step DeltaNet via products of Householder transformations (NeurIPS 2025, arXiv:2502.10297). Extends existing DeltaNet/Gated DeltaNet. Medium complexity.
-- [ ] **Gated Slot Attention (GSA)** — Two-layer GLA linked via softmax with adaptive forgetting (NeurIPS 2024, arXiv:2409.07146). Fixed-size memory slots, linear time. Medium complexity.
-- [ ] **Residual Linear Attention** — Auxiliary recurrent state correcting base linear attention errors (arXiv:2509.25223). Also Residual DeltaNet variant. Low-medium complexity.
+- [x] **Gated Slot Attention (GSA)** — Two-layer GLA linked via softmax with adaptive forgetting (NeurIPS 2024, arXiv:2409.07146). Fixed-size memory slots, linear time. Medium complexity.
+- [x] **Residual Linear Attention** — Auxiliary recurrent state correcting base linear attention errors (arXiv:2509.25223). Also Residual DeltaNet variant. Low-medium complexity.
+- [x] **TNN (Toeplitz Neural Network)** — Position-based token mixing via learned Toeplitz convolutions with RPE (ICLR 2023, arXiv:2305.04749). O(n log n), excellent length extrapolation. Low complexity.
 
 **SSM / Recurrent:**
 - [x] **Longhorn** — SSM from online associative recall closed-form solution (ICLR 2025, arXiv:2407.14207). Drop-in Mamba replacement, no explicit forget gate. Low complexity.
