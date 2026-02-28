@@ -24,13 +24,13 @@ defmodule Edifice do
   | Transformer | Decoder-Only (GPT-style), Multi-Token Prediction, Byte Latent Transformer, Nemotron-H |
   | Feedforward | MLP, KAN, KAT, TabNet, BitNet |
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
-  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, Reservoir (ESN), Native Recurrence, TransformerLike |
+  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, Reservoir (ESN), Native Recurrence, TransformerLike, DeepResLSTM |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
   | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Sigmoid Attention, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, Dual Chunk Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision, DINOv3 |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Rectified Flow, SoFlow, Normalizing Flow, Transfusion, CogVideoX, TRELLIS, MDLM |
-  | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, DimeNet, SE(3)-Transformer, Message Passing |
-  | Sets | DeepSets, PointNet |
+  | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, DimeNet, SE(3)-Transformer, GPS, Message Passing |
+  | Sets | DeepSets, PointNet, PointNet++ |
   | Energy | EBM, Hopfield, Neural ODE |
   | Probabilistic | Bayesian, MC Dropout, Evidential |
   | Memory | NTM, Memory Networks |
@@ -44,8 +44,9 @@ defmodule Edifice do
   | Neuromorphic | SNN, ANN2SNN |
   | Inference | Medusa |
   | Robotics | ACT, OpenVLA |
-  | Audio | SoundStorm, EnCodec, VALL-E, Whisper |
+  | Audio | SoundStorm, EnCodec, VALL-E, Whisper, Wav2Vec 2.0 |
   | Detection | DETR, RT-DETR, SAM 2 |
+  | Scientific | FNO, DeepONet |
   """
 
   @architecture_registry %{
@@ -84,6 +85,7 @@ defmodule Edifice do
     xlstm_v2: Edifice.Recurrent.XLSTMv2,
     native_recurrence: Edifice.Recurrent.NativeRecurrence,
     transformer_like: Edifice.Recurrent.TransformerLike,
+    deep_res_lstm: Edifice.Recurrent.DeepResLSTM,
     # SSM
     mamba: Edifice.SSM.Mamba,
     mamba_ssd: Edifice.SSM.MambaSSD,
@@ -200,9 +202,11 @@ defmodule Edifice do
     egnn: Edifice.Graph.EGNN,
     dimenet: Edifice.Graph.DimeNet,
     se3_transformer: Edifice.Graph.SE3Transformer,
+    gps: Edifice.Graph.GPS,
     # Sets
     deep_sets: Edifice.Sets.DeepSets,
     pointnet: Edifice.Sets.PointNet,
+    pointnet_pp: Edifice.Sets.PointNetPP,
     # Energy
     ebm: Edifice.Energy.EBM,
     hopfield: Edifice.Energy.Hopfield,
@@ -265,6 +269,7 @@ defmodule Edifice do
     liquid: Edifice.Liquid,
     # Scientific
     fno: Edifice.Scientific.FNO,
+    deep_onet: Edifice.Scientific.DeepONet,
     # Neuromorphic
     snn: Edifice.Neuromorphic.SNN,
     ann2snn: Edifice.Neuromorphic.ANN2SNN,
@@ -277,7 +282,8 @@ defmodule Edifice do
     soundstorm: Edifice.Audio.SoundStorm,
     encodec: Edifice.Audio.EnCodec,
     valle: Edifice.Audio.VALLE,
-    whisper: Edifice.Audio.Whisper
+    whisper: Edifice.Audio.Whisper,
+    wav2vec2: Edifice.Audio.Wav2Vec2
   }
 
   @doc """
@@ -328,7 +334,8 @@ defmodule Edifice do
         :slstm,
         :xlstm_v2,
         :native_recurrence,
-        :transformer_like
+        :transformer_like,
+        :deep_res_lstm
       ],
       ssm: [
         :mamba,
@@ -433,8 +440,21 @@ defmodule Edifice do
         :mdlm,
         :rectified_flow
       ],
-      graph: [:gcn, :gat, :graph_sage, :gin, :gin_v2, :pna, :graph_transformer, :schnet, :egnn, :dimenet, :se3_transformer],
-      sets: [:deep_sets, :pointnet],
+      graph: [
+        :gcn,
+        :gat,
+        :graph_sage,
+        :gin,
+        :gin_v2,
+        :pna,
+        :graph_transformer,
+        :schnet,
+        :egnn,
+        :dimenet,
+        :se3_transformer,
+        :gps
+      ],
+      sets: [:deep_sets, :pointnet, :pointnet_pp],
       energy: [:ebm, :hopfield, :neural_ode],
       probabilistic: [:bayesian, :mc_dropout, :evidential],
       memory: [:ntm, :memory_network, :engram],
@@ -471,11 +491,11 @@ defmodule Edifice do
       multimodal: [:multimodal_mlp_fusion],
       rl: [:policy_value, :decision_transformer],
       liquid: [:liquid],
-      scientific: [:fno],
+      scientific: [:fno, :deep_onet],
       neuromorphic: [:snn, :ann2snn],
       inference: [:medusa],
       robotics: [:act, :openvla],
-      audio: [:soundstorm, :encodec, :valle, :whisper],
+      audio: [:soundstorm, :encodec, :valle, :whisper, :wav2vec2],
       detection: [:detr, :rt_detr, :sam2]
     }
   end
