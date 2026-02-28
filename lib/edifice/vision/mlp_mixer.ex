@@ -91,6 +91,8 @@ defmodule Edifice.Vision.MLPMixer do
     (Tolstikhin et al., NeurIPS 2021)
   """
 
+  use Edifice.Vision.Backbone
+
   alias Edifice.Blocks.PatchEmbed
 
   @default_image_size 224
@@ -273,5 +275,19 @@ defmodule Edifice.Vision.MLPMixer do
       nil -> Keyword.get(opts, :hidden_size, @default_hidden_size)
       num_classes -> num_classes
     end
+  end
+
+  # ============================================================================
+  # Backbone Behaviour
+  # ============================================================================
+
+  @impl Edifice.Vision.Backbone
+  def build_backbone(opts \\ []) do
+    opts |> Keyword.delete(:num_classes) |> build()
+  end
+
+  @impl Edifice.Vision.Backbone
+  def feature_size(opts \\ []) do
+    Keyword.get(opts, :hidden_size, @default_hidden_size)
   end
 end

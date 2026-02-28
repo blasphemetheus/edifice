@@ -88,6 +88,8 @@ defmodule Edifice.Vision.ConvNeXt do
   - "A ConvNet for the 2020s" (Liu et al., CVPR 2022)
   """
 
+  use Edifice.Vision.Backbone
+
   @default_image_size 224
   @default_patch_size 4
   @default_in_channels 3
@@ -324,5 +326,20 @@ defmodule Edifice.Vision.ConvNeXt do
       num_classes ->
         num_classes
     end
+  end
+
+  # ============================================================================
+  # Backbone Behaviour
+  # ============================================================================
+
+  @impl Edifice.Vision.Backbone
+  def build_backbone(opts \\ []) do
+    opts |> Keyword.delete(:num_classes) |> build()
+  end
+
+  @impl Edifice.Vision.Backbone
+  def feature_size(opts \\ []) do
+    dims = Keyword.get(opts, :dims, @default_dims)
+    List.last(dims)
   end
 end

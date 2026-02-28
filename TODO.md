@@ -184,7 +184,7 @@ have dedicated test files. Remaining gaps are leaf modules or minor variants.
 ### Module Decomposition (Priority: Low-Medium)
 
 - [x] **Split multi_head.ex** — Extracted pure tensor attention computations into `Edifice.Attention.Primitives` (~580 lines). Slimmed `multi_head.ex` to ~634 lines (Axon layer/model builders only). Deduplicated `causal_mask`/`window_mask` via `defdelegate` to `Edifice.Blocks.CausalMask`. All public APIs preserved via delegation.
-- [ ] **Vision backbone interface** — Define a shared interface for vision modules (ViT, Swin, DeiT, ConvNeXt, etc.) so they can be used interchangeably as feature extractors. Consider an `Edifice.Vision.Backbone` behaviour with `build_encoder/1` callback.
+- [x] **Vision backbone interface** — `Edifice.Vision.Backbone` behaviour with `build_backbone/1`, `feature_size/1`, and `input_shape/1` callbacks. Adopted by 12 modules: ViT, DeiT, Swin, ConvNeXt, MLPMixer, PoolFormer, FocalNet, MetaFormer, EfficientViT, MambaVision, DINOv2, DINOv3. Dispatch helper `Backbone.build_backbone(Module, opts)`.
 
 ### CI/CD Improvements (Priority: Medium)
 

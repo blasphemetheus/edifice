@@ -74,6 +74,8 @@ defmodule Edifice.Vision.DINOv3 do
   - iBOT: https://arxiv.org/abs/2111.07832
   """
 
+  @behaviour Edifice.Vision.Backbone
+
   import Nx.Defn
 
   alias Edifice.Blocks.{PatchEmbed, SwiGLU}
@@ -156,6 +158,9 @@ defmodule Edifice.Vision.DINOv3 do
   @doc """
   Build a single DINOv3 backbone (ViT with axial RoPE + projection heads).
 
+  When called via the `Edifice.Vision.Backbone` behaviour, pass
+  `include_head: false` to get raw `[batch, embed_dim]` features.
+
   ## Options
 
     Same as `build/1`, plus:
@@ -165,6 +170,7 @@ defmodule Edifice.Vision.DINOv3 do
   When `include_head: true`, returns `Axon.container(%{dino: ..., ibot: ...})`.
   When `include_head: false`, returns CLS token features `[batch, embed_dim]`.
   """
+  @impl Edifice.Vision.Backbone
   @spec build_backbone(keyword()) :: Axon.t()
   def build_backbone(opts \\ []) do
     image_size = Keyword.get(opts, :image_size, @default_image_size)
@@ -952,5 +958,23 @@ defmodule Edifice.Vision.DINOv3 do
           ffn_type: :swiglu
         ]
     end
+  end
+
+  # ============================================================================
+  # Backbone Behaviour
+  # ============================================================================
+
+  @impl Edifice.Vision.Backbone
+  @spec feature_size(keyword()) :: pos_integer()
+  def feature_size(opts \\ []) do
+    Keyword.get(opts, :embed_dim, @default_embed_dim)
+  end
+
+  @impl Edifice.Vision.Backbone
+  @spec input_shape(keyword()) :: tuple()
+  def input_shape(opts \\ []) do
+    in_channels = Keyword.get(opts, :in_channels, @default_in_channels)
+    image_size = Keyword.get(opts, :image_size, @default_image_size)
+    {nil, in_channels, image_size, image_size}
   end
 end

@@ -97,6 +97,8 @@ defmodule Edifice.Vision.DINOv2 do
   - Original DINO: "Emerging Properties in Self-Supervised Vision Transformers" (2021)
   """
 
+  @behaviour Edifice.Vision.Backbone
+
   import Nx.Defn
 
   alias Edifice.Blocks.PatchEmbed
@@ -168,12 +170,16 @@ defmodule Edifice.Vision.DINOv2 do
   @doc """
   Build a single DINOv2 backbone (ViT with register tokens + DINO head).
 
+  When called via the `Edifice.Vision.Backbone` behaviour, pass
+  `include_head: false` to get raw `[batch, embed_dim]` features.
+
   ## Options
 
     Same as `build/1`, plus:
     - `:prefix` - Layer name prefix ("student" or "teacher")
     - `:include_head` - Whether to include DINO head (default: true)
   """
+  @impl Edifice.Vision.Backbone
   @spec build_backbone(keyword()) :: Axon.t()
   def build_backbone(opts \\ []) do
     image_size = Keyword.get(opts, :image_size, @default_image_size)
@@ -659,6 +665,20 @@ defmodule Edifice.Vision.DINOv2 do
   @spec output_size(keyword()) :: pos_integer()
   def output_size(opts \\ []) do
     Keyword.get(opts, :head_output_dim, @default_head_output_dim)
+  end
+
+  @impl Edifice.Vision.Backbone
+  @spec feature_size(keyword()) :: pos_integer()
+  def feature_size(opts \\ []) do
+    Keyword.get(opts, :embed_dim, @default_embed_dim)
+  end
+
+  @impl Edifice.Vision.Backbone
+  @spec input_shape(keyword()) :: tuple()
+  def input_shape(opts \\ []) do
+    in_channels = Keyword.get(opts, :in_channels, @default_in_channels)
+    image_size = Keyword.get(opts, :image_size, @default_image_size)
+    {nil, in_channels, image_size, image_size}
   end
 
   @doc """

@@ -56,6 +56,8 @@ defmodule Edifice.Vision.MambaVision do
   - Code: https://github.com/NVlabs/MambaVision
   """
 
+  use Edifice.Vision.Backbone
+
   alias Edifice.Utils.FusedOps
 
   # ============================================================================
@@ -574,6 +576,21 @@ defmodule Edifice.Vision.MambaVision do
       nil -> dim * 8
       num_classes -> num_classes
     end
+  end
+
+  # ============================================================================
+  # Backbone Behaviour
+  # ============================================================================
+
+  @impl Edifice.Vision.Backbone
+  def build_backbone(opts \\ []) do
+    opts |> Keyword.delete(:num_classes) |> build()
+  end
+
+  @impl Edifice.Vision.Backbone
+  def feature_size(opts \\ []) do
+    dim = Keyword.get(opts, :dim, @default_dim)
+    dim * 8
   end
 
   @doc """

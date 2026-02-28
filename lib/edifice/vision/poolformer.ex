@@ -64,6 +64,8 @@ defmodule Edifice.Vision.PoolFormer do
   - https://arxiv.org/abs/2111.11418
   """
 
+  use Edifice.Vision.Backbone
+
   alias Edifice.Blocks.{FFN, PatchEmbed}
 
   @default_image_size 224
@@ -156,6 +158,20 @@ defmodule Edifice.Vision.PoolFormer do
       nil -> Keyword.get(opts, :hidden_size, @default_hidden_size)
       num_classes -> num_classes
     end
+  end
+
+  # ============================================================================
+  # Backbone Behaviour
+  # ============================================================================
+
+  @impl Edifice.Vision.Backbone
+  def build_backbone(opts \\ []) do
+    opts |> Keyword.delete(:num_classes) |> build()
+  end
+
+  @impl Edifice.Vision.Backbone
+  def feature_size(opts \\ []) do
+    Keyword.get(opts, :hidden_size, @default_hidden_size)
   end
 
   # PoolFormer block: pool token mixer + FFN with residual connections

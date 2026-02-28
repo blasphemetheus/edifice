@@ -102,6 +102,8 @@ defmodule Edifice.Vision.EfficientViT do
   - arXiv: https://arxiv.org/abs/2205.14756
   """
 
+  use Edifice.Vision.Backbone
+
   alias Edifice.Blocks.PatchEmbed
 
   @default_image_size 224
@@ -370,5 +372,22 @@ defmodule Edifice.Vision.EfficientViT do
       num_classes ->
         num_classes
     end
+  end
+
+  # ============================================================================
+  # Backbone Behaviour
+  # ============================================================================
+
+  @impl Edifice.Vision.Backbone
+  def build_backbone(opts \\ []) do
+    opts |> Keyword.delete(:num_classes) |> build()
+  end
+
+  @impl Edifice.Vision.Backbone
+  def feature_size(opts \\ []) do
+    embed_dim = Keyword.get(opts, :embed_dim, @default_embed_dim)
+    depths = Keyword.get(opts, :depths, @default_depths)
+    num_stages = length(depths)
+    embed_dim * round(:math.pow(2, num_stages - 1))
   end
 end

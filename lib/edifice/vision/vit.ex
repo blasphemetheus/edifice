@@ -83,6 +83,8 @@ defmodule Edifice.Vision.ViT do
     (Dosovitskiy et al., ICLR 2021)
   """
 
+  use Edifice.Vision.Backbone
+
   alias Edifice.Blocks.PatchEmbed
   alias Edifice.Utils.FusedOps
 
@@ -364,5 +366,19 @@ defmodule Edifice.Vision.ViT do
       nil -> Keyword.get(opts, :embed_dim, @default_embed_dim)
       num_classes -> num_classes
     end
+  end
+
+  # ============================================================================
+  # Backbone Behaviour
+  # ============================================================================
+
+  @impl Edifice.Vision.Backbone
+  def build_backbone(opts \\ []) do
+    opts |> Keyword.delete(:num_classes) |> build()
+  end
+
+  @impl Edifice.Vision.Backbone
+  def feature_size(opts \\ []) do
+    Keyword.get(opts, :embed_dim, @default_embed_dim)
   end
 end

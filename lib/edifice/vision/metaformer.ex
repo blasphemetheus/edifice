@@ -81,6 +81,8 @@ defmodule Edifice.Vision.MetaFormer do
   - https://arxiv.org/abs/2210.13452
   """
 
+  use Edifice.Vision.Backbone
+
   alias Edifice.Blocks.{FFN, PatchEmbed}
 
   @default_image_size 224
@@ -451,5 +453,20 @@ defmodule Edifice.Vision.MetaFormer do
       num_classes ->
         num_classes
     end
+  end
+
+  # ============================================================================
+  # Backbone Behaviour
+  # ============================================================================
+
+  @impl Edifice.Vision.Backbone
+  def build_backbone(opts \\ []) do
+    opts |> Keyword.delete(:num_classes) |> build()
+  end
+
+  @impl Edifice.Vision.Backbone
+  def feature_size(opts \\ []) do
+    dims = Keyword.get(opts, :dims, @default_dims)
+    List.last(dims)
   end
 end

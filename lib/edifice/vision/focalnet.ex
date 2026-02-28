@@ -62,6 +62,8 @@ defmodule Edifice.Vision.FocalNet do
   - https://arxiv.org/abs/2203.11926
   """
 
+  use Edifice.Vision.Backbone
+
   alias Edifice.Blocks.{FFN, PatchEmbed}
 
   @default_image_size 224
@@ -158,6 +160,20 @@ defmodule Edifice.Vision.FocalNet do
       nil -> Keyword.get(opts, :hidden_size, @default_hidden_size)
       num_classes -> num_classes
     end
+  end
+
+  # ============================================================================
+  # Backbone Behaviour
+  # ============================================================================
+
+  @impl Edifice.Vision.Backbone
+  def build_backbone(opts \\ []) do
+    opts |> Keyword.delete(:num_classes) |> build()
+  end
+
+  @impl Edifice.Vision.Backbone
+  def feature_size(opts \\ []) do
+    Keyword.get(opts, :hidden_size, @default_hidden_size)
   end
 
   # FocalNet block: focal modulation + FFN with residual connections
