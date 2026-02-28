@@ -1,6 +1,6 @@
 # Edifice Testing Guide
 
-Edifice has 258 test files covering 202 registered architecture implementations across
+Edifice has 263 test files covering 231 registered architecture implementations across
 26 families. The full suite takes ~9 minutes on BinaryBackend (CPU), so targeted test
 runs are essential.
 

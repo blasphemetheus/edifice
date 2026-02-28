@@ -26,7 +26,7 @@ defmodule Edifice do
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
   | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, MIRAS, Reservoir (ESN), Native Recurrence, TransformerLike, DeepResLSTM |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
-  | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Sigmoid Attention, FoX (Forgetting Transformer), Log-Linear, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, SPLA, InfLLM-V2, Dual Chunk Attention |
+  | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Sigmoid Attention, FoX (Forgetting Transformer), Log-Linear, NHA (Native Hybrid Attention), Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, SPLA, InfLLM-V2, Dual Chunk Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision, DINOv3, Janus |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Rectified Flow, SoFlow, Normalizing Flow, TarFlow, Transfusion, CogVideoX, TRELLIS, MDLM, MAGVIT-v2, Show-o, JanusFlow |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, DimeNet, SE(3)-Transformer, GPS, Message Passing |
@@ -36,7 +36,7 @@ defmodule Edifice do
   | Memory | NTM, Memory Networks |
   | Meta | MoE, MoE v2, Switch MoE, Soft MoE, ReMoE, MoR, MoED, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, EAGLE-3, Manifold HC, Distillation Head, QAT, Hybrid Builder |
   | Liquid | Liquid Neural Networks |
-  | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA, Temporal JEPA |
+  | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA, Temporal JEPA, V-JEPA 2 |
   | Interpretability | Sparse Autoencoder, Transcoder, Gated SAE, JumpReLU SAE, BatchTopK SAE, Linear Probe, Crosscoder, Concept Bottleneck, DAS Probe, LEACE, Matryoshka SAE, Cross-Layer Transcoder |
   | World Model | World Model |
   | Multimodal | MLP Projection Fusion, Cross-Attention Fusion, Perceiver Resampler |
@@ -147,6 +147,7 @@ defmodule Edifice do
     tmrope: Edifice.Attention.TMRoPE,
     fox: Edifice.Attention.FoX,
     log_linear: Edifice.Attention.LogLinear,
+    nha: Edifice.Attention.NHA,
     # Vision
     vit: Edifice.Vision.ViT,
     deit: Edifice.Vision.DeiT,
@@ -264,6 +265,7 @@ defmodule Edifice do
     vicreg: Edifice.Contrastive.VICReg,
     jepa: Edifice.Contrastive.JEPA,
     temporal_jepa: Edifice.Contrastive.TemporalJEPA,
+    vjepa2: Edifice.Contrastive.VJEPA2,
     siglip: Edifice.Contrastive.SigLIP,
     # Interpretability
     sparse_autoencoder: Edifice.Interpretability.SparseAutoencoder,
@@ -423,7 +425,8 @@ defmodule Edifice do
         :tmrope,
         :dual_chunk_attention,
         :fox,
-        :log_linear
+        :log_linear,
+        :nha
       ],
       vision: [
         :vit,
@@ -521,7 +524,17 @@ defmodule Edifice do
         :mixture_of_expert_depths,
         :hybrid_builder
       ],
-      contrastive: [:simclr, :byol, :barlow_twins, :mae, :vicreg, :jepa, :temporal_jepa, :siglip],
+      contrastive: [
+        :simclr,
+        :byol,
+        :barlow_twins,
+        :mae,
+        :vicreg,
+        :jepa,
+        :temporal_jepa,
+        :siglip,
+        :vjepa2
+      ],
       interpretability: [
         :sparse_autoencoder,
         :transcoder,
@@ -587,6 +600,7 @@ defmodule Edifice do
     - `:vicreg` — `{backbone, projection_head}`
     - `:jepa` — `{context_encoder, predictor}`
     - `:temporal_jepa` — `{context_encoder, predictor}`
+    - `:vjepa2` — `{context_encoder, predictor}`
     - `:mae` — `{encoder, decoder}`
     - `:world_model` — `{encoder, dynamics, reward_head}` (or 4-tuple with decoder)
     - `:byte_latent_transformer` — `{encoder, latent_transformer, decoder}`

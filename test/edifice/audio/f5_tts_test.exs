@@ -2,6 +2,8 @@ defmodule Edifice.Audio.F5TTSTest do
   use ExUnit.Case, async: true
   @moduletag :audio
 
+  alias Edifice.Audio.F5TTS
+
   import Edifice.TestHelpers
 
   @batch 2
@@ -26,7 +28,7 @@ defmodule Edifice.Audio.F5TTSTest do
   ]
 
   defp build_and_predict(opts \\ @opts) do
-    model = Edifice.Audio.F5TTS.build(opts)
+    model = F5TTS.build(opts)
     {init_fn, predict_fn} = Axon.build(model)
 
     mel_dim = Keyword.get(opts, :mel_dim, @mel_dim)
@@ -90,11 +92,11 @@ defmodule Edifice.Audio.F5TTSTest do
 
   describe "output_size/1" do
     test "returns mel_dim" do
-      assert Edifice.Audio.F5TTS.output_size(mel_dim: 100) == 100
+      assert F5TTS.output_size(mel_dim: 100) == 100
     end
 
     test "uses default mel_dim" do
-      assert Edifice.Audio.F5TTS.output_size([]) == 100
+      assert F5TTS.output_size([]) == 100
     end
   end
 end

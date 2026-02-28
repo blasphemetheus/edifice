@@ -1,6 +1,8 @@
 defmodule Mix.Tasks.Edifice.VizTest do
   use ExUnit.Case, async: true
 
+  alias Mix.Tasks.Edifice.Viz
+
   import ExUnit.CaptureIO
 
   # MLP requires input_size, so we always pass it
@@ -8,7 +10,7 @@ defmodule Mix.Tasks.Edifice.VizTest do
 
   describe "run/1" do
     test "renders table for mlp (default format)" do
-      output = capture_io(fn -> Mix.Tasks.Edifice.Viz.run(@mlp_args) end)
+      output = capture_io(fn -> Viz.run(@mlp_args) end)
 
       assert output =~ "Building :mlp"
       assert output =~ "Layer"
@@ -16,7 +18,7 @@ defmodule Mix.Tasks.Edifice.VizTest do
     end
 
     test "renders tree format" do
-      output = capture_io(fn -> Mix.Tasks.Edifice.Viz.run(@mlp_args ++ ["--format", "tree"]) end)
+      output = capture_io(fn -> Viz.run(@mlp_args ++ ["--format", "tree"]) end)
 
       assert output =~ "(dense)"
       assert output =~ "(input)"
@@ -24,14 +26,14 @@ defmodule Mix.Tasks.Edifice.VizTest do
 
     test "renders mermaid format" do
       output =
-        capture_io(fn -> Mix.Tasks.Edifice.Viz.run(@mlp_args ++ ["--format", "mermaid"]) end)
+        capture_io(fn -> Viz.run(@mlp_args ++ ["--format", "mermaid"]) end)
 
       assert output =~ "graph TD;"
       assert output =~ "-->"
     end
 
     test "accepts -f alias for format" do
-      output = capture_io(fn -> Mix.Tasks.Edifice.Viz.run(@mlp_args ++ ["-f", "tree"]) end)
+      output = capture_io(fn -> Viz.run(@mlp_args ++ ["-f", "tree"]) end)
 
       assert output =~ "(dense)"
     end
@@ -39,7 +41,7 @@ defmodule Mix.Tasks.Edifice.VizTest do
     test "passes build options to architecture" do
       output =
         capture_io(fn ->
-          Mix.Tasks.Edifice.Viz.run(["mlp", "-f", "tree", "--input_size", "32"])
+          Viz.run(["mlp", "-f", "tree", "--input_size", "32"])
         end)
 
       assert output =~ "(dense)"
@@ -47,19 +49,19 @@ defmodule Mix.Tasks.Edifice.VizTest do
 
     test "raises for unknown architecture" do
       assert_raise Mix.Error, ~r/Unknown architecture/, fn ->
-        Mix.Tasks.Edifice.Viz.run(["nonexistent_arch_xyz"])
+        Viz.run(["nonexistent_arch_xyz"])
       end
     end
 
     test "raises for invalid format" do
       assert_raise Mix.Error, ~r/Invalid format/, fn ->
-        Mix.Tasks.Edifice.Viz.run(@mlp_args ++ ["--format", "png"])
+        Viz.run(@mlp_args ++ ["--format", "png"])
       end
     end
 
     test "raises with no arguments" do
       assert_raise Mix.Error, ~r/Usage/, fn ->
-        Mix.Tasks.Edifice.Viz.run([])
+        Viz.run([])
       end
     end
 
@@ -67,7 +69,7 @@ defmodule Mix.Tasks.Edifice.VizTest do
       # VAE returns {encoder, decoder}
       output =
         capture_io(fn ->
-          Mix.Tasks.Edifice.Viz.run(["vae", "-f", "tree", "-c", "encoder", "--input_size", "16"])
+          Viz.run(["vae", "-f", "tree", "-c", "encoder", "--input_size", "16"])
         end)
 
       assert output =~ "(input)"
@@ -78,7 +80,7 @@ defmodule Mix.Tasks.Edifice.VizTest do
     test "handles --component all for tuple-returning model" do
       output =
         capture_io(fn ->
-          Mix.Tasks.Edifice.Viz.run(["vae", "-f", "tree", "-c", "all", "--input_size", "16"])
+          Viz.run(["vae", "-f", "tree", "-c", "all", "--input_size", "16"])
         end)
 
       assert output =~ "=== Encoder ==="

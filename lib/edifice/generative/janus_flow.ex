@@ -185,7 +185,9 @@ defmodule Edifice.Generative.JanusFlow do
         fn t ->
           {b, h, w, d} = Nx.shape(t)
           Nx.reshape(t, {b, h * w, d})
-        end, name: "enc_flatten")
+        end,
+        name: "enc_flatten"
+      )
 
     # Project to transformer hidden size
     z_seq = Axon.dense(z_seq, hidden, name: "enc_proj")
@@ -216,7 +218,9 @@ defmodule Edifice.Generative.JanusFlow do
         fn t ->
           start = Nx.axis_size(t, 1) - img_seq_len
           Nx.slice_along_axis(t, start, img_seq_len, axis: 1)
-        end, name: "extract_img")
+        end,
+        name: "extract_img"
+      )
 
     # Project to decoder dimension
     img_hidden =
@@ -231,7 +235,9 @@ defmodule Edifice.Generative.JanusFlow do
         fn t ->
           {b, _s, d} = Nx.shape(t)
           Nx.reshape(t, {b, spatial, spatial, d})
-        end, name: "dec_reshape")
+        end,
+        name: "dec_reshape"
+      )
 
     # --- ShallowUViT Decoder ---
     # Concat with encoder skip connection
@@ -262,7 +268,9 @@ defmodule Edifice.Generative.JanusFlow do
         velocity,
         fn t ->
           pixel_shuffle(t, patch_size, latent_ch)
-        end, name: "pixel_shuffle")
+        end,
+        name: "pixel_shuffle"
+      )
 
     {velocity, nil}
   end

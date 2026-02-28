@@ -95,7 +95,7 @@ defmodule Edifice.Attention.FoXTest do
       # Verify forget gate parameters exist in the params
       flat = flatten_params(params)
       forget_keys = Enum.filter(flat, fn {path, _} -> String.contains?(path, "forget_proj") end)
-      assert length(forget_keys) > 0
+      assert forget_keys != []
     end
   end
 

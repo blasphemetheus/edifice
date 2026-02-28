@@ -139,7 +139,9 @@ defmodule Edifice.Robotics.DiffusionPolicy do
         fn t ->
           {batch, _to, _dim} = Nx.shape(t)
           Nx.reshape(t, {batch, :auto})
-        end, name: "flatten_obs")
+        end,
+        name: "flatten_obs"
+      )
 
     # Timestep embedding: SinPosEmb -> MLP
     time_embed =

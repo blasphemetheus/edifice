@@ -2,6 +2,8 @@ defmodule Edifice.Robotics.DiffusionPolicyTest do
   use ExUnit.Case, async: true
   @moduletag :robotics
 
+  alias Edifice.Robotics.DiffusionPolicy
+
   import Edifice.TestHelpers
 
   @batch 2
@@ -22,7 +24,7 @@ defmodule Edifice.Robotics.DiffusionPolicyTest do
   ]
 
   defp build_and_predict(opts \\ @opts) do
-    model = Edifice.Robotics.DiffusionPolicy.build(opts)
+    model = DiffusionPolicy.build(opts)
     {init_fn, predict_fn} = Axon.build(model)
 
     tp = Keyword.get(opts, :prediction_horizon, @tp)
@@ -81,7 +83,7 @@ defmodule Edifice.Robotics.DiffusionPolicyTest do
 
   describe "make_cosine_schedule/1" do
     test "returns correct schedule fields" do
-      schedule = Edifice.Robotics.DiffusionPolicy.make_cosine_schedule(num_steps: 10)
+      schedule = DiffusionPolicy.make_cosine_schedule(num_steps: 10)
 
       assert schedule.num_steps == 10
       assert Nx.shape(schedule.betas) == {10}
@@ -91,7 +93,7 @@ defmodule Edifice.Robotics.DiffusionPolicyTest do
     end
 
     test "alphas_cumprod is monotonically decreasing" do
-      schedule = Edifice.Robotics.DiffusionPolicy.make_cosine_schedule(num_steps: 50)
+      schedule = DiffusionPolicy.make_cosine_schedule(num_steps: 50)
       ac = Nx.to_flat_list(schedule.alphas_cumprod)
 
       for [a, b] <- Enum.chunk_every(ac, 2, 1, :discard) do
@@ -100,7 +102,7 @@ defmodule Edifice.Robotics.DiffusionPolicyTest do
     end
 
     test "betas are in valid range" do
-      schedule = Edifice.Robotics.DiffusionPolicy.make_cosine_schedule(num_steps: 100)
+      schedule = DiffusionPolicy.make_cosine_schedule(num_steps: 100)
       betas = Nx.to_flat_list(schedule.betas)
 
       for b <- betas do
@@ -111,12 +113,12 @@ defmodule Edifice.Robotics.DiffusionPolicyTest do
 
   describe "add_noise/4" do
     test "noisy actions have same shape as input" do
-      schedule = Edifice.Robotics.DiffusionPolicy.make_cosine_schedule(num_steps: 10)
+      schedule = DiffusionPolicy.make_cosine_schedule(num_steps: 10)
       actions = random_tensor({2, 8, 4})
       noise = random_tensor({2, 8, 4})
       timesteps = Nx.tensor([3, 7])
 
-      noisy = Edifice.Robotics.DiffusionPolicy.add_noise(actions, noise, timesteps, schedule)
+      noisy = DiffusionPolicy.add_noise(actions, noise, timesteps, schedule)
       assert Nx.shape(noisy) == {2, 8, 4}
       assert_finite!(noisy)
     end
@@ -126,7 +128,7 @@ defmodule Edifice.Robotics.DiffusionPolicyTest do
     test "returns scalar loss" do
       pred = random_tensor({2, 8, 4})
       actual = random_tensor({2, 8, 4})
-      loss = Edifice.Robotics.DiffusionPolicy.compute_loss(pred, actual)
+      loss = DiffusionPolicy.compute_loss(pred, actual)
       assert Nx.shape(loss) == {}
       assert_finite!(loss)
     end
@@ -134,7 +136,7 @@ defmodule Edifice.Robotics.DiffusionPolicyTest do
 
   describe "output_size/1" do
     test "returns action_dim * prediction_horizon" do
-      assert Edifice.Robotics.DiffusionPolicy.output_size(
+      assert DiffusionPolicy.output_size(
                action_dim: 7,
                prediction_horizon: 16
              ) == 112

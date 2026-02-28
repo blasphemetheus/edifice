@@ -298,7 +298,15 @@ defmodule Edifice.MixProject do
       "test.changed": ["test", "--stale"],
       "test.fast": ["test"],
       "test.slow": ["test", "--include", "slow"],
-      "test.all": ["test", "--include", "slow", "--include", "integration", "--include", "exla_only"],
+      "test.all": [
+        "test",
+        "--include",
+        "slow",
+        "--include",
+        "integration",
+        "--include",
+        "exla_only"
+      ],
 
       # Smoke test — one test per family (~30-60s)
       "test.smoke": ["test", "--only", "smoke"],

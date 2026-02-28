@@ -3,6 +3,7 @@ defmodule Edifice.Attention.PrimitivesTest do
   @moduletag :attention
 
   alias Edifice.Attention.Primitives
+  alias Edifice.Blocks.CausalMask
 
   @batch 2
   @seq_len 8
@@ -23,7 +24,7 @@ defmodule Edifice.Attention.PrimitivesTest do
       q = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
       k = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
       v = Nx.broadcast(0.5, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      mask = Edifice.Blocks.CausalMask.causal(@seq_len)
+      mask = CausalMask.causal(@seq_len)
 
       result = Primitives.scaled_dot_product_attention(q, k, v, mask: mask)
       assert Nx.shape(result) == {@batch, @seq_len, @dim}
@@ -35,7 +36,7 @@ defmodule Edifice.Attention.PrimitivesTest do
       v = Nx.broadcast(0.5, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
 
       mask =
-        Edifice.Blocks.CausalMask.causal(@seq_len) |> Nx.broadcast({@batch, @seq_len, @seq_len})
+        CausalMask.causal(@seq_len) |> Nx.broadcast({@batch, @seq_len, @seq_len})
 
       result = Primitives.scaled_dot_product_attention(q, k, v, mask: mask)
       assert Nx.shape(result) == {@batch, @seq_len, @dim}
@@ -56,7 +57,7 @@ defmodule Edifice.Attention.PrimitivesTest do
       q = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
       k = Nx.broadcast(0.1, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
       v = Nx.broadcast(0.5, {@batch, @seq_len, @dim}) |> Nx.as_type(:f32)
-      mask = Edifice.Blocks.CausalMask.causal(@seq_len)
+      mask = CausalMask.causal(@seq_len)
 
       result = Primitives.chunked_attention(q, k, v, chunk_size: 4, mask: mask)
       assert Nx.shape(result) == {@batch, @seq_len, @dim}
@@ -97,7 +98,7 @@ defmodule Edifice.Attention.PrimitivesTest do
       q = Nx.broadcast(0.1, {@batch, 2, @seq_len, 8}) |> Nx.as_type(:f32)
       k = Nx.broadcast(0.1, {@batch, 2, @seq_len, 8}) |> Nx.as_type(:f32)
       v = Nx.broadcast(0.5, {@batch, 2, @seq_len, 8}) |> Nx.as_type(:f32)
-      mask = Edifice.Blocks.CausalMask.causal(@seq_len)
+      mask = CausalMask.causal(@seq_len)
 
       result = Primitives.multi_head_sdpa(q, k, v, mask: mask)
       assert Nx.shape(result) == {@batch, 2, @seq_len, 8}
