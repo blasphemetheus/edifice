@@ -347,17 +347,12 @@ defmodule Edifice.Utils.Quantization do
     end
   end
 
-  defp estimate_hessians(_params, calibration_inputs) do
-    # Simplified: compute per-layer input covariance as Hessian proxy
-    # In full GPTQ, this requires forward hooks on each linear layer
-    # Here we provide the structure for users to supply their own
-    if calibration_inputs == [] do
-      %{}
-    else
-      # Return empty map — users should provide pre-computed Hessians
-      # via the activation_stats mechanism
-      %{}
-    end
+  defp estimate_hessians(params, _calibration_inputs) do
+    # Stub: returns identity map (key -> nil) as placeholder.
+    # In full GPTQ, this requires forward hooks on each linear layer to compute
+    # per-layer input covariance as Hessian proxy. Users should provide
+    # pre-computed Hessians via activation_stats.
+    Map.new(Map.keys(params), fn key -> {key, nil} end)
   end
 
   # ============================================================================

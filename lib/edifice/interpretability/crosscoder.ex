@@ -102,7 +102,7 @@ defmodule Edifice.Interpretability.Crosscoder do
     top_k = Keyword.get(opts, :top_k, @default_top_k)
 
     # Per-source inputs and encoders
-    {inputs, encoded} = build_encoders(input_size, dict_size, num_sources)
+    {_inputs, encoded} = build_encoders(input_size, dict_size, num_sources)
 
     # Sum encoder outputs, activate, sparsify
     hidden = build_shared_hidden(encoded, top_k)
