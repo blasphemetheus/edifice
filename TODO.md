@@ -2,7 +2,7 @@
 
 ## Current Status
 
-196 registered architectures across 26 families, 20 shared blocks, 2170+ tests.
+223 registered architectures across 26 families, 20 shared blocks, 2170+ tests.
 
 ## Completed Milestones
 
@@ -91,7 +91,7 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
 - [x] SPLA — Block-sparse + residual linear attention with 2nd-order Taylor selection
 - [x] InfLLM-V2 — Dense-sparse switchable attention with multi-level block selection
 - [x] F5-TTS — Non-autoregressive flow-matching TTS (DiT backbone + ConvNeXt V2 text encoder + RoPE + conv PE)
-- [ ] JanusFlow — AR text + rectified flow images
+- [x] JanusFlow — AR text + rectified flow images (velocity prediction network: ShallowUViT + ConvNeXt V2 + transformer backbone)
 - [x] Show-o — AR + discrete diffusion (unified transformer with omni-attention mask)
 - [x] Diffusion Policy — ConditionalUnet1D with FiLM conditioning, cosine noise schedule
 - [x] CausVid — ~~Causal video DiT distillation~~ Training technique only, not architecture (skip)

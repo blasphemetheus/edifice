@@ -492,4 +492,4 @@ Uses `ModelBuilder.build_sequence_model` with custom block_builder. The `build_c
 | CausVid | Skip | -- | Training technique, not architecture |
 | MIRAS (Moneta/Yaad/Memora) | DONE | -- | Three memory variants implemented |
 | InfLLM-V2 | DONE | -- | Dense-sparse switchable attention |
-| JanusFlow | Open | Low | Very complex, many new primitives |
+| JanusFlow | DONE | -- | ShallowUViT + ConvNeXt V2 + transformer velocity network |
