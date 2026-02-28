@@ -114,7 +114,7 @@ VALLE (SDPA + SinusoidalPE.layer), Perceiver (SDPA), Decision Transformer (SDPA 
 **Meta / PEFT:**
 - [x] **VeRA** — Shared frozen random matrices + per-layer scaling vectors (ICLR 2025, arXiv:2310.11454). 10x fewer params than LoRA. Low complexity.
 - [x] **Kron-LoRA** — Kronecker-product + low-rank LoRA hybrid (arXiv:2508.01961). 4x fewer params than rank-8 LoRA. Low complexity.
-- [ ] **Mixture of Transformers (MoT)** — Per-modality parameter decoupling with shared global attention (Meta/Stanford, TMLR 2025, arXiv:2411.04996). 55% FLOP savings. Medium complexity.
+- [x] **Mixture of Transformers (MoT)** — Per-modality parameter decoupling with shared global attention (Meta/Stanford, TMLR 2025, arXiv:2411.04996). 55% FLOP savings. Medium complexity.
 
 **Vision:**
 - [x] **Vision KAN** — Hierarchical RBFKAN vision backbone without attention (arXiv:2601.21541). Patch-wise KAN + depthwise conv. Extends existing KAN module. Medium complexity.
