@@ -1,7 +1,8 @@
 # Edifice Testing Guide
 
-Edifice has 254 test files covering 92+ architecture implementations. The full suite
-takes ~9 minutes on BinaryBackend (CPU), so targeted test runs are essential.
+Edifice has 258 test files covering 202 registered architecture implementations across
+26 families. The full suite takes ~9 minutes on BinaryBackend (CPU), so targeted test
+runs are essential.
 
 ## Quick Reference
 
@@ -59,10 +60,10 @@ and any tests that depend on it (e.g., registry tests if they import the module)
 
 ```bash
 # After editing one architecture:
-mix test --stale    # Runs ~1-2 test files instead of 254
+mix test --stale    # Runs ~1-2 test files instead of 258
 
 # After editing a shared block (e.g., Blocks.FFN):
-mix test --stale    # Runs all tests that use FFN — more files, but still not all 254
+mix test --stale    # Runs all tests that use FFN — more files, but still not all 258
 ```
 
 First run builds a manifest and runs everything. Subsequent runs are fast.
@@ -99,19 +100,28 @@ Use `--only <tag>` to run a specific family:
 
 | Tag | Directory | File Count |
 |-----|-----------|------------|
-| `:recurrent` | `test/edifice/recurrent/` | 12 |
-| `:ssm` | `test/edifice/ssm/` | 19 |
-| `:attention` | `test/edifice/attention/` | 39 |
-| `:vision` | `test/edifice/vision/` | 14 |
-| `:generative` | `test/edifice/generative/` | 23 |
-| `:feedforward` | `test/edifice/feedforward/` | 5 |
-| `:convolutional` | `test/edifice/convolutional/` | 6 |
-| `:graph` | `test/edifice/graph/` | 10 |
-| `:meta` | `test/edifice/meta/` | 24 |
-| `:contrastive` | `test/edifice/contrastive/` | 5 |
-| `:memory` | `test/edifice/memory/` | 3 |
-| `:energy` | `test/edifice/energy/` | 4 |
+| `:attention` | `test/edifice/attention/` | 41 |
 | `:blocks` | `test/edifice/blocks/` | 25 |
+| `:meta` | `test/edifice/meta/` | 24 |
+| `:generative` | `test/edifice/generative/` | 24 |
+| `:ssm` | `test/edifice/ssm/` | 19 |
+| `:vision` | `test/edifice/vision/` | 14 |
+| `:recurrent` | `test/edifice/recurrent/` | 13 |
+| `:interpretability` | `test/edifice/interpretability/` | 12 |
+| `:graph` | `test/edifice/graph/` | 10 |
+| `:convolutional` | `test/edifice/convolutional/` | 6 |
+| `:audio` | `test/edifice/audio/` | 6 |
+| `:feedforward` | `test/edifice/feedforward/` | 5 |
+| `:contrastive` | `test/edifice/contrastive/` | 5 |
+| `:transformer` | `test/edifice/transformer/` | 4 |
+| `:energy` | `test/edifice/energy/` | 4 |
+| `:sets` | `test/edifice/sets/` | 3 |
+| `:rl` | `test/edifice/rl/` | 3 |
+| `:memory` | `test/edifice/memory/` | 3 |
+| `:detection` | `test/edifice/detection/` | 3 |
+| `:scientific` | `test/edifice/scientific/` | 2 |
+| `:robotics` | `test/edifice/robotics/` | 2 |
+| `:neuromorphic` | `test/edifice/neuromorphic/` | 2 |
 
 ```bash
 # Run only recurrent architecture tests
@@ -132,24 +142,37 @@ test/
 ├── support/
 │   └── test_helpers.ex          # Shared: assert_finite!, build_and_init, random_tensor
 ├── edifice/
-│   ├── recurrent/               # LSTM, GRU, xLSTM, TransformerLike, DeepResLSTM, ...
-│   ├── ssm/                     # Mamba, S4, S4D, H3, Hyena, ...
-│   ├── attention/               # MultiHead, RetNet, RWKV, Griffin, Performer, ...
-│   ├── vision/                  # ViT, Swin, UNet, ConvNeXt, ...
-│   ├── generative/              # Diffusion, VAE, GAN, FlowMatching, ...
-│   ├── feedforward/             # MLP, KAN, TabNet, ...
-│   ├── convolutional/           # ResNet, DenseNet, TCN, ...
-│   ├── graph/                   # GCN, GAT, GraphSAGE, ...
-│   ├── meta/                    # MoE, LoRA, Adapter, ...
-│   ├── blocks/                  # FFN, TransformerBlock, RMSNorm, ...
-│   ├── contrastive/             # SimCLR, BYOL, MAE, ...
-│   ├── memory/                  # NTM, MemoryNetwork
-│   ├── energy/                  # EBM, Hopfield, NeuralODE
-│   ├── ...                      # (other families)
-│   ├── registry_sweep_test.exs  # Tests every registered architecture builds
-│   ├── registry_integrity_test.exs  # Registry consistency checks
+│   ├── attention/               # MultiHead, RetNet, RWKV, Griffin, MLA, NSA, ... (41)
+│   ├── blocks/                  # FFN, TransformerBlock, RMSNorm, SDPA, ... (25)
+│   ├── meta/                    # MoE, LoRA, Adapter, EAGLE-3, mHC, ... (24)
+│   ├── generative/              # Diffusion, VAE, GAN, FlowMatching, VAR, ... (24)
+│   ├── ssm/                     # Mamba, S4, S4D, H3, Hyena, Mamba3, ... (19)
+│   ├── vision/                  # ViT, Swin, UNet, ConvNeXt, DINOv2, ... (14)
+│   ├── recurrent/               # LSTM, GRU, xLSTM, DeltaNet, TTT, ... (13)
+│   ├── interpretability/        # SAE, Transcoder, Crosscoder, LEACE, ... (12)
+│   ├── graph/                   # GCN, GAT, GraphSAGE, DimeNet, SE3, ... (10)
+│   ├── convolutional/           # ResNet, DenseNet, TCN, MobileNet, ... (6)
+│   ├── audio/                   # Whisper, EnCodec, VALL-E, SoundStorm, ... (6)
+│   ├── feedforward/             # MLP, KAN, TabNet, BitNet, ... (5)
+│   ├── contrastive/             # SimCLR, BYOL, JEPA, ... (5)
+│   ├── transformer/             # DecoderOnly, NemotronH, ... (4)
+│   ├── energy/                  # EBM, Hopfield, NeuralODE (4)
+│   ├── sets/                    # DeepSets, PointNet, PointNet++ (3)
+│   ├── rl/                      # PolicyValue, DecisionTransformer (3)
+│   ├── memory/                  # NTM, MemoryNetwork, Engram (3)
+│   ├── detection/               # DETR, RT-DETR, SAM2 (3)
+│   ├── scientific/              # FNO, DeepONet (2)
+│   ├── robotics/                # ACT, OpenVLA (2)
+│   ├── neuromorphic/            # SNN, ANN2SNN (2)
+│   ├── world_model/             # WorldModel (1)
+│   ├── inference/               # Medusa (1)
+│   ├── export/                  # GGUF export (1)
+│   ├── registry_sweep_test.exs  # Forward-pass tests for all architectures (batch=1,4)
+│   ├── registry_integrity_test.exs  # Build-only tests for all 202 architectures
 │   ├── gradient_smoke_test.exs  # Gradient flow for all architectures
+│   ├── output_size_sweep_test.exs  # output_size/1 for all modules
 │   ├── coverage_batch_*.exs     # Coverage sweep tests (a-f batches)
+│   ├── input_robustness_test.exs  # Edge-case inputs
 │   └── property_test.exs        # Property-based tests
 └── mix/tasks/                   # Mix task tests
 ```
@@ -161,13 +184,16 @@ properties across ALL architectures:
 
 | File | Purpose | Speed |
 |------|---------|-------|
-| `registry_sweep_test.exs` | Every registered architecture builds and produces output | Slow (~5 min) |
-| `registry_integrity_test.exs` | Registry keys match modules, no duplicates | Fast |
-| `gradient_smoke_test.exs` | Gradient flows through all architectures | Moderate |
+| `registry_sweep_test.exs` | Forward pass at batch=1,4 for all architectures | Slow (~5 min) |
+| `registry_integrity_test.exs` | Build-only test for all 202 registered architectures | Fast (~30s) |
+| `gradient_smoke_test.exs` | Gradient flows through all 26 families | Moderate (~2 min) |
+| `output_size_sweep_test.exs` | `output_size/1` returns correct values for all modules | Fast (~10s) |
 | `coverage_batch_*.exs` | Coverage sweep in batches (a-f) | Slow |
-| `output_size_sweep_test.exs` | `output_size/1` returns correct values | Fast |
 | `input_robustness_test.exs` | Handles edge-case inputs | Moderate |
 | `property_test.exs` | Property-based invariant checks | Slow |
+| `audit_correctness_test.exs` | Correctness audits across architectures | Moderate |
+| `architecture_doctest_test.exs` | Representative architecture doctests (MLP, LSTM, etc.) | Fast |
+| `display_test.exs` | `mix edifice.viz` display module tests | Fast |
 
 ## Writing Tests for a New Architecture
 

@@ -2,7 +2,7 @@
 
 > Where Edifice stands, what's happening at the frontier, and what to build next.
 
-Edifice currently implements **184 registered architectures** spanning 25 families — from transformers and state space models to graph networks, generative models, multimodal fusion, audio synthesis, robotics, RL integration, scientific ML, and neuromorphic computing. This document maps the broader landscape to identify gaps, emerging paradigms, and high-impact build targets.
+Edifice currently implements **234 registered architectures** spanning 26 families — from transformers and state space models to graph networks, generative models, multimodal fusion, audio synthesis, robotics, RL integration, scientific ML, interpretability, and neuromorphic computing. This document maps the broader landscape to identify gaps, emerging paradigms, and high-impact build targets.
 
 ---
 
@@ -927,7 +927,7 @@ For reference, here is every architecture currently registered in Edifice (184 e
 > implementable tiers. Research conducted across attention/SSM, generative/diffusion,
 > vision/multimodal, robotics, scientific ML, and dynamic inference domains.
 
-**Current state**: 184 registered architectures across 25 families.
+**Current state**: 234 registered architectures across 26 families.
 
 ### How Tiers Are Assigned
 
@@ -1150,3 +1150,201 @@ All 16 items from the original priority list are now implemented:
 | **"RLHF Without Tears"** — DPO vs GRPO vs KTO on simple preference tasks | DPO, GRPO, KTO, rlhf_head | Medium |
 | **"Audio from Scratch"** — EnCodec tokenization + VALL-E generation | EnCodec, VALL-E | Medium |
 | **"Unified Multimodal"** — Transfusion: one model for text + images | Transfusion, decoder_only, dit | High |
+
+---
+
+## 2026 Update #3: Wave 4 Architecture Candidates (Feb 28, 2026)
+
+> Research survey of architectures not yet in Edifice's 234-module registry.
+> Cross-referenced against all existing implementations to identify genuine gaps.
+
+**Current state**: 234 registered architectures across 26 families. Since Update #2,
+added 50 architectures including full interpretability family (10 modules), detection
+family (3), expanded audio (6), expanded graph (DimeNet, SE3, GPS), sets family
+(DeepSets, PointNet, PointNet++), and many more.
+
+### Top Candidates for Wave 4
+
+#### FoX (Forgetting Transformer) — ICLR 2025
+
+**What**: Standard softmax attention augmented with a learnable per-head forget gate.
+Each head has a sigmoid gate that modulates attention weights, effectively giving the
+transformer bounded memory. Tokens beyond the "forgetting horizon" receive exponentially
+decayed attention, enabling O(1) memory during inference while maintaining training-time
+full-attention quality.
+
+**Why it matters**: FoX unifies the transformer/RNN divide. During training, the forget
+gate is near 1.0 (standard attention). During inference, it enables streaming with
+bounded KV cache. Microsoft has adopted this for production models.
+
+**Key innovation**: The forget gate is multiplicative on the attention logits (before
+softmax), not on the attention weights. This means it can be fused with standard
+FlashAttention kernels with minimal overhead.
+
+**Paper**: "FoX: Forgetting Transformer" (ICLR 2025)
+
+**Difficulty**: Low-medium. Extends existing `MultiHead` attention with per-head sigmoid
+gate. Main work is the decay-based attention modification.
+
+**Builds on**: `:attention`, `:gated_attention` (similar pattern of post-attention gating)
+
+#### Log-Linear Attention — arXiv Jun 2025
+
+**What**: Attention mechanism with O(log T) memory that bridges linear attention (O(1)
+memory, poor quality) and softmax attention (O(T) memory, full quality). Uses a
+hierarchical segment tree where each level stores aggregated KV pairs at
+exponentially increasing granularity.
+
+**Why it matters**: Linear attention sacrifices quality. Full attention sacrifices
+memory. Log-Linear achieves a Pareto-optimal tradeoff — provably the best possible
+memory-quality curve for any attention mechanism.
+
+**Key innovation**: Segment-based attention with hierarchical aggregation. Recent
+tokens get exact attention, older tokens get coarser-grained attention. The tree
+structure makes this O(log T) in both time and space.
+
+**Difficulty**: Medium. Requires segment tree data structure and hierarchical
+attention aggregation. Novel implementation pattern not seen in existing modules.
+
+**Builds on**: `:lightning_attention` (hybrid attention concept), `:infini_attention`
+(compressive memory concept)
+
+#### TarFlow / STARFlow — Apple, ICML 2025
+
+**What**: Normalizing flow built entirely from transformer blocks. Uses masked
+self-attention on flattened image patches to define an autoregressive flow.
+Unlike diffusion models, provides exact log-likelihood computation and single-pass
+generation. STARFlow extends this with stacked multi-scale latent hierarchy.
+
+**Why it matters**: First normalizing flow competitive with diffusion on image
+quality (FID ~2 on ImageNet 256x256). Exact likelihood enables principled density
+estimation, out-of-distribution detection, and lossless compression.
+
+**Key innovation**: Reuses standard transformer architecture (attention + FFN) as
+flow coupling layers. The autoregressive masking pattern defines the triangular
+Jacobian needed for tractable likelihood.
+
+**Paper**: "Autoregressive Image Generation without Vector Quantization" (Apple, ICML 2025)
+
+**Difficulty**: Medium. Core transformer infrastructure exists. Main work is the
+flow coupling layer pattern and multi-scale hierarchy for STARFlow.
+
+**Builds on**: `:normalizing_flow` (flow framework), `:decoder_only` (masked attention)
+
+#### Native Hybrid Attention (NHA) — ICML 2025
+
+**What**: Unified framework that jointly selects linear vs. full (softmax) attention
+on a per-layer basis with shared KV projections. Instead of designing the hybrid
+ratio by hand (like Jamba's 87.5% Mamba / 12.5% attention), NHA learns the optimal
+allocation during training.
+
+**Why it matters**: The hybrid SSM+attention pattern is dominant (Nemotron-H,
+Jamba, Zamba), but the ratio is always hand-tuned. NHA makes this learnable,
+potentially finding better ratios than human designers.
+
+**Difficulty**: Medium. Extends existing `:hybrid_builder` with learned per-layer
+selection mechanism.
+
+**Builds on**: `:hybrid_builder`, `:lightning_attention` (linear attention),
+`:attention` (softmax attention)
+
+#### Coconut (Continuous Chain of Thought) — Meta, ICLR 2025
+
+**What**: Instead of generating chain-of-thought reasoning as discrete text tokens,
+Coconut operates in continuous latent space. The model's hidden states from one
+"thought step" are fed back as input to the next step, enabling breadth-first
+exploration of reasoning paths without the bottleneck of text generation.
+
+**Why it matters**: Text-based CoT is sequential and lossy (the model must compress
+its reasoning into discrete tokens). Continuous CoT can maintain richer intermediate
+representations and explore multiple reasoning paths simultaneously.
+
+**Key innovation**: Hidden state recycling — the last hidden state of one forward
+pass becomes the "thought token" input for the next pass. No text generation overhead.
+
+**Paper**: "Training Large Language Models to Reason in a Continuous Latent Space"
+(Meta, ICLR 2025)
+
+**Difficulty**: Medium. The architecture modification is straightforward (hidden
+state feedback), but training requires the multi-stage curriculum from the paper.
+
+**Builds on**: `:decoder_only` (base architecture), `:test_time_compute` (related
+concept of adaptive inference)
+
+#### Memory Layers — Meta, 2025
+
+**What**: Sparse key-value lookup layers with 1M+ keys that replace dense FFN
+layers. Each "memory layer" stores a large dictionary of key-value pairs. During
+forward pass, the input is used to retrieve the top-k most relevant memories via
+product-quantized approximate nearest neighbor search.
+
+**Why it matters**: Dense FFN layers scale linearly with hidden dimension and are
+the majority of parameters in large models. Memory layers provide massive
+associative storage at constant compute cost — only top-k memories are activated.
+
+**Key innovation**: Product quantization makes the lookup O(sqrt(N)) instead of
+O(N). The memories are trained end-to-end with the rest of the model.
+
+**Difficulty**: Medium-high. Requires product quantization and efficient
+nearest-neighbor search. Novel pattern not in existing modules.
+
+**Builds on**: `:engram` (hash-based associative memory concept), `:moe` (sparse
+activation concept)
+
+#### V-JEPA 2 — Meta, 2025
+
+**What**: Next-generation video world model extending V-JEPA with attentive pooling
+and a multimodal decoder. Improved temporal abstraction through hierarchical
+prediction targets at multiple temporal scales.
+
+**Why it matters**: V-JEPA showed that predicting in representation space (not pixel
+space) learns strong video features. V-JEPA 2 adds the ability to decode back to
+multiple modalities (text, action) while maintaining the non-generative training.
+
+**Difficulty**: Medium. Extends existing `:temporal_jepa` with attentive pooling
+and multimodal decoder heads.
+
+**Builds on**: `:temporal_jepa`, `:jepa`, `:perceiver` (cross-attention pooling)
+
+#### KA-GNN — KAN + GNN Hybrid
+
+**What**: Replaces the MLP message functions in GNNs with KAN (Kolmogorov-Arnold
+Network) layers. The learnable B-spline activation functions in KAN provide more
+expressive edge/node transformations than standard ReLU MLPs.
+
+**Why it matters**: Molecular property prediction and drug discovery rely heavily
+on GNNs. KA-GNN shows consistent improvements on molecular benchmarks by making
+the message passing more expressive.
+
+**Difficulty**: Low. Swap MLP layers for KAN layers in existing GNN modules.
+
+**Builds on**: `:kan` (KAN architecture), `:gcn`/`:gat`/`:gin` (GNN family)
+
+#### FreeTransformer — Meta, 2025
+
+**What**: Decoder architecture with a per-layer latent variable that enables
+speculative decoding without a separate draft model. Each layer samples a latent
+from a learned prior; given the latent, generation becomes deterministic. This
+means you can speculate by sampling multiple latents and verifying in parallel.
+
+**Why it matters**: Speculative decoding currently requires maintaining a separate
+small "draft" model. FreeTransformer eliminates this requirement — the model is
+its own draft model via latent sampling.
+
+**Difficulty**: Medium-high. Requires latent variable integration into the
+transformer forward pass and modified sampling procedure.
+
+**Builds on**: `:decoder_only`, `:speculative_decoding` (inference pattern)
+
+### Research Trend Summary (Late Feb 2026)
+
+| Trend | Heat | Signal |
+|-------|------|--------|
+| Forgetting/bounded-memory attention (FoX) | Very Hot | ICLR 2025, Microsoft adoption |
+| Learned hybrid attention ratios (NHA) | Hot | ICML 2025, replaces hand-tuned ratios |
+| Continuous reasoning (Coconut) | Hot | Meta ICLR 2025, alternative to text CoT |
+| Transformer-based normalizing flows (TarFlow) | Hot | Apple ICML 2025, competitive with diffusion |
+| Sparse memory layers | Hot | Meta production research, massive parameter efficiency |
+| Log-space attention (Log-Linear) | Emerging | Theoretical optimality proof, early adoption |
+| KAN in everything (KA-GNN, KAT) | Warm | Consistent improvements across domains |
+| Self-speculative decoding (FreeTransformer) | Emerging | Eliminates draft model requirement |

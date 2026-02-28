@@ -2,7 +2,7 @@
 
 ## Current Status
 
-223 registered architectures across 26 families, 20 shared blocks, 2170+ tests.
+234 registered architectures across 26 families, 20 shared blocks, 2500+ tests.
 
 ## Completed Milestones
 
@@ -63,6 +63,30 @@ VALLE (SDPA + SinusoidalPE.layer), Perceiver (SDPA), Decision Transformer (SDPA 
 - [x] **DINOv3** — Self-supervised vision backbone (Meta AI, Aug 2025). Axial 2D RoPE + LayerScale + Sinkhorn-Knopp centering + iBOT + Gram anchoring.
 - [x] **EAGLE-3** — Multi-level feature fusion draft head (NeurIPS 2025). Low/mid/high target features, single decoder layer, GQA, SwiGLU, vocabulary mapping.
 - [x] **mHC** — Manifold Hyper-Connections (DeepSeek, arXiv:2512.24880). Multi-rate residual streams with Sinkhorn-Knopp doubly stochastic mixing on Birkhoff polytope.
+
+### 2026 Wave 4 Candidates
+
+**Attention / Sequence:**
+- [x] **FoX (Forgetting Transformer)** — Learnable forget gate on softmax attention (ICLR 2025). Per-head sigmoid gate modulates attention weights, enabling bounded memory in standard transformers. Adopted by Microsoft.
+- [x] **Log-Linear Attention** — O(log T) space attention bridging linear and softmax (arXiv Jun 2025). Segment-based attention with hierarchical aggregation tree. Optimal memory-quality tradeoff.
+- [ ] **Native Hybrid Attention (NHA)** — Unified per-layer selection of linear vs full attention with shared KV projection (ICML 2025). Jointly trains attention type selection.
+
+**Generative / Flow:**
+- [x] **TarFlow** — Transformer-based normalizing flow (Apple, ICML 2025). Autoregressive flow using masked self-attention on image patches. Competitive with diffusion, exact likelihood.
+- [ ] **STARFlow** — Stacked TarFlow with multi-scale latent hierarchy. Extension of TarFlow with progressive resolution refinement.
+
+**Graph / Scientific:**
+- [ ] **KA-GNN** — KAN-augmented GNN (KAN activation functions replace MLPs in GNN message passing). Improves expressivity on molecular property prediction.
+
+**Meta / Reasoning:**
+- [ ] **Coconut (Continuous Chain of Thought)** — Meta ICLR 2025. Internal reasoning in continuous latent space rather than discrete tokens. Breadth-first reasoning without text generation overhead.
+- [ ] **Memory Layers** — Meta 2025. Sparse key-value lookup layers (1M+ keys) that replace dense FFN. Product-quantized nearest-neighbor retrieval provides massive memory at constant compute.
+
+**Vision / Multimodal:**
+- [ ] **V-JEPA 2** — Meta 2025. Video world model with attentive pooling + multimodal decoder. Extends V-JEPA with better temporal abstraction.
+
+**Dynamic Inference:**
+- [ ] **FreeTransformer** — Meta 2025. Decoder with latent variable per layer enabling speculative decoding without separate draft model. Samples latent → deterministic generation.
 
 ### Graph
 - [x] **DimeNet** — Directional message passing (DimeNet++) with radial Bessel basis, Chebyshev angular basis, and Hadamard interaction blocks.
