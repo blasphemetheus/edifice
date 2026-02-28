@@ -488,8 +488,8 @@ Uses `ModelBuilder.build_sequence_model` with custom block_builder. The `build_c
 |-------------|--------|----------|-------|
 | MoR | DONE | -- | Committed dcf6b6c |
 | MoED | DONE | -- | Committed dcf6b6c |
-| SPLA | Open | Medium | Complex but well-documented, ~200-250 lines |
+| SPLA | DONE | -- | Block-sparse + residual linear attention |
 | CausVid | Skip | -- | Training technique, not architecture |
-| MIRAS | N/A | -- | Framework, not architecture |
-| Moneta/Yaad/Memora | Open | Medium | Concrete MIRAS variants, extend Titans pattern |
+| MIRAS (Moneta/Yaad/Memora) | DONE | -- | Three memory variants implemented |
+| InfLLM-V2 | DONE | -- | Dense-sparse switchable attention |
 | JanusFlow | Open | Low | Very complex, many new primitives |
