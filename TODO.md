@@ -153,9 +153,9 @@ have dedicated test files. Remaining gaps are leaf modules or minor variants.
 
 ### Documentation — Guides & Notebooks (Priority: Medium)
 
-- [ ] **Composition guide** — New guide: `guides/composing_architectures.md`. Show how to use TransformerBlock callbacks to mix attention mechanisms, swap FFN variants, combine encoder/decoder from different families. Include before/after code showing custom block vs shared block usage.
+- [x] **Composition guide** — `guides/composing_architectures.md`. Covers TransformerBlock callbacks (attention_fn, cross_attention_fn, custom_ffn), ModelBuilder skeletons (sequence + vision), shared blocks table, and 3 composition recipes (custom attention, hybrid encoder-decoder, SSM+attention interleaving).
 - [ ] **Livebook notebooks** — Create 3-5 `.livemd` notebooks: (1) "Build your first model" — walk through build/init/predict cycle, (2) "Architecture comparison" — benchmark 5 architectures on same task, (3) "Custom architecture from blocks" — compose a novel model from shared blocks, (4) "Whisper ASR demo" — end-to-end encoder-decoder usage, (5) "Training a small model" — connect to Axon training loop.
-- [ ] **CODE_OF_CONDUCT.md** — Add Contributor Covenant (GitHub OSPO community standard). Signals the project welcomes contributions.
+- [ ] **CODE_OF_CONDUCT.md** — Copy Contributor Covenant from contributor-covenant.org (content filters block generation). Manual task.
 
 ### Module Decomposition (Priority: Low-Medium)
 

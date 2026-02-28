@@ -86,6 +86,7 @@ defmodule Edifice.MixProject do
         "guides/generative_models.md",
         "guides/dynamic_and_continuous.md",
         "guides/building_blocks.md",
+        "guides/composing_architectures.md",
         "guides/meta_learning.md",
         "guides/uncertainty_and_memory.md"
       ],
@@ -118,6 +119,7 @@ defmodule Edifice.MixProject do
         ],
         "Guides: Composition & Enhancement": [
           "guides/building_blocks.md",
+          "guides/composing_architectures.md",
           "guides/meta_learning.md",
           "guides/uncertainty_and_memory.md"
         ]
