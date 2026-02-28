@@ -24,9 +24,9 @@ defmodule Edifice do
   | Transformer | Decoder-Only (GPT-style), Multi-Token Prediction, Byte Latent Transformer, Nemotron-H |
   | Feedforward | MLP, KAN, KAT, TabNet, BitNet |
   | Convolutional | Conv1D/2D, ResNet, DenseNet, TCN, MobileNet, EfficientNet |
-  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, Reservoir (ESN), Native Recurrence, TransformerLike, DeepResLSTM |
+  | Recurrent | LSTM, GRU, xLSTM, xLSTM v2, mLSTM, sLSTM, MinGRU, MinLSTM, DeltaNet, Gated DeltaNet, TTT, TTT-E2E, Titans, MIRAS, Reservoir (ESN), Native Recurrence, TransformerLike, DeepResLSTM |
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
-  | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Sigmoid Attention, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, Dual Chunk Attention |
+  | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Sigmoid Attention, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, SPLA, Dual Chunk Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision, DINOv3, Janus |
   | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Rectified Flow, SoFlow, Normalizing Flow, Transfusion, CogVideoX, TRELLIS, MDLM, MAGVIT-v2, Show-o |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, DimeNet, SE(3)-Transformer, GPS, Message Passing |
@@ -80,6 +80,7 @@ defmodule Edifice do
     ttt: Edifice.Recurrent.TTT,
     ttt_e2e: Edifice.Recurrent.TTTE2E,
     titans: Edifice.Recurrent.Titans,
+    miras: Edifice.Recurrent.MIRAS,
     reservoir: Edifice.Recurrent.Reservoir,
     slstm: Edifice.Recurrent.SLSTM,
     xlstm_v2: Edifice.Recurrent.XLSTMv2,
@@ -141,6 +142,7 @@ defmodule Edifice do
     rnope_swa: Edifice.Attention.RNoPESWA,
     yarn: Edifice.Attention.YARN,
     nsa: Edifice.Attention.NSA,
+    spla: Edifice.Attention.SPLA,
     tmrope: Edifice.Attention.TMRoPE,
     # Vision
     vit: Edifice.Vision.ViT,
@@ -347,6 +349,7 @@ defmodule Edifice do
         :ttt,
         :ttt_e2e,
         :titans,
+        :miras,
         :reservoir,
         :slstm,
         :xlstm_v2,
@@ -410,6 +413,7 @@ defmodule Edifice do
         :rnope_swa,
         :yarn,
         :nsa,
+        :spla,
         :tmrope,
         :dual_chunk_attention
       ],

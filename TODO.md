@@ -94,10 +94,10 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
 - [ ] JanusFlow — AR text + rectified flow images
 - [x] Show-o — AR + discrete diffusion (unified transformer with omni-attention mask)
 - [x] Diffusion Policy — ConditionalUnet1D with FiLM conditioning, cosine noise schedule
-- [ ] CausVid — Causal video DiT distillation
+- [x] CausVid — ~~Causal video DiT distillation~~ Training technique only, not architecture (skip)
 - [x] DeepONet — Branch-trunk operator learning (branch MLP + trunk MLP + dot-product combine)
 - [x] MAGVIT-v2 — Lookup-free quantization for image/video tokens
-- [ ] MIRAS — Google's Titans extension framework
+- [ ] MIRAS — Framework; concrete variants: Moneta (generalized norms), Yaad (Huber loss), Memora (KL-divergence)
 - [x] MoR — Mixture of Recursions (weight-tied recursive transformer with per-token depth routing)
 - [x] MoED — Mixture of Expert Depths (integrated MoDE with no-op expert for depth routing)
 - [x] PointNet++ — Hierarchical point cloud processing (FPS + ball query + mini-PointNet SA layers)
