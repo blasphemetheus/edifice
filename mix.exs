@@ -46,6 +46,9 @@ defmodule Edifice.MixProject do
       # GPU Backend (optional - users bring their own)
       {:exla, "~> 0.10.0", optional: true},
 
+      # Pretrained weight loading (optional)
+      {:safetensors, "~> 0.1.3", optional: true},
+
       # Dev & Test
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
@@ -260,6 +263,11 @@ defmodule Edifice.MixProject do
           Edifice.Blocks.SinusoidalPE,
           Edifice.Blocks.AdaptiveNorm,
           Edifice.Blocks.CrossAttention
+        ],
+        Pretrained: [
+          Edifice.Pretrained,
+          Edifice.Pretrained.KeyMap,
+          Edifice.Pretrained.Transform
         ],
         Internals: [
           Edifice.SSM.Common,
