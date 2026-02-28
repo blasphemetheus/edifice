@@ -84,7 +84,7 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
 - [x] **DAS Probe** — Distributed Alignment Search finds causal linear subspaces for concepts (Geiger et al., ICLR 2024). Stronger than linear probes, needs orthogonal parameterization.
 - [x] **LEACE** — Least-squares concept erasure via projection (Belrose et al., ICML 2023). Closed-form, gold-standard concept removal.
 - [x] **Matryoshka SAE** — Nested multi-scale SAE with ordered features (Bussmann, 2025). One model, multiple granularity levels.
-- [ ] **Cross-Layer Transcoder** — Extends Transcoder to all MLP layers simultaneously with shared dictionary (Anthropic, Feb 2025). Enables full circuit-level sparse analysis.
+- [x] **Cross-Layer Transcoder** — Extends Transcoder to all MLP layers simultaneously with shared dictionary (Anthropic, Feb 2025). Enables full circuit-level sparse analysis.
 
 ### Backlog
 - [ ] Flash Attention — IO-aware exact attention (requires EXLA backend work)
@@ -96,7 +96,7 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
 - [x] Diffusion Policy — ConditionalUnet1D with FiLM conditioning, cosine noise schedule
 - [ ] CausVid — Causal video DiT distillation
 - [x] DeepONet — Branch-trunk operator learning (branch MLP + trunk MLP + dot-product combine)
-- [ ] MAGVIT-v2 — Lookup-free quantization for image/video tokens
+- [x] MAGVIT-v2 — Lookup-free quantization for image/video tokens
 - [ ] MIRAS — Google's Titans extension framework
 - [ ] MoR — Mixture of Recursions
 - [ ] MoED — Mixture of Expert Depths

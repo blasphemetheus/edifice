@@ -28,7 +28,7 @@ defmodule Edifice do
   | State Space | Mamba, Mamba-2 (SSD), Mamba-3, S4, S4D, S5, H3, Hyena, Hyena v2, BiMamba, GatedSSM, GSS, StripedHyena, Hymba, State Space Transformer |
   | Attention | Multi-Head, GQA, MLA, KDA (Kimi Delta Attention), DiffTransformer, Sigmoid Attention, Perceiver, FNet, Linear Transformer, Nystromformer, Performer, RetNet, RetNet v2, RWKV, GLA, GLA v2, HGRN, HGRN v2, Griffin, Hawk, Based, InfiniAttention, Conformer, Mega, MEGALODON, RingAttention, Lightning Attention, Flash Linear Attention, YaRN, NSA, Dual Chunk Attention |
   | Vision | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, FocalNet, PoolFormer, NeRF, MambaVision, DINOv3, Janus |
-  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Rectified Flow, SoFlow, Normalizing Flow, Transfusion, CogVideoX, TRELLIS, MDLM |
+  | Generative | VAE, VQ-VAE, GAN, Diffusion, DDIM, DiT, DiT v2, MMDiT, Latent Diffusion, Consistency, Score SDE, Flow Matching, Rectified Flow, SoFlow, Normalizing Flow, Transfusion, CogVideoX, TRELLIS, MDLM, MAGVIT-v2 |
   | Graph | GCN, GAT, GraphSAGE, GIN, GINv2, PNA, GraphTransformer, SchNet, DimeNet, SE(3)-Transformer, GPS, Message Passing |
   | Sets | DeepSets, PointNet, PointNet++ |
   | Energy | EBM, Hopfield, Neural ODE |
@@ -37,7 +37,7 @@ defmodule Edifice do
   | Meta | MoE, MoE v2, Switch MoE, Soft MoE, ReMoE, LoRA, DoRA, Adapter, Hypernetworks, Capsules, MixtureOfDepths, MixtureOfAgents, RLHFHead, Speculative Decoding, Test-Time Compute, Mixture of Tokenizers, Speculative Head, EAGLE-3, Manifold HC, Distillation Head, QAT, Hybrid Builder |
   | Liquid | Liquid Neural Networks |
   | Contrastive | SimCLR, BYOL, Barlow Twins, MAE, VICReg, JEPA, Temporal JEPA |
-  | Interpretability | Sparse Autoencoder, Transcoder, Gated SAE, JumpReLU SAE, BatchTopK SAE, Linear Probe, Crosscoder, Concept Bottleneck, DAS Probe, LEACE, Matryoshka SAE |
+  | Interpretability | Sparse Autoencoder, Transcoder, Gated SAE, JumpReLU SAE, BatchTopK SAE, Linear Probe, Crosscoder, Concept Bottleneck, DAS Probe, LEACE, Matryoshka SAE, Cross-Layer Transcoder |
   | World Model | World Model |
   | Multimodal | MLP Projection Fusion, Cross-Attention Fusion, Perceiver Resampler |
   | RL | PolicyValue, Decision Transformer |
@@ -191,6 +191,7 @@ defmodule Edifice do
     trellis: Edifice.Generative.TRELLIS,
     mdlm: Edifice.Generative.MDLM,
     rectified_flow: Edifice.Generative.RectifiedFlow,
+    magvit2: Edifice.Generative.MAGVIT2,
     # Graph
     gcn: Edifice.Graph.GCN,
     gat: Edifice.Graph.GAT,
@@ -266,6 +267,7 @@ defmodule Edifice do
     das_probe: Edifice.Interpretability.DASProbe,
     leace: Edifice.Interpretability.LEACE,
     matryoshka_sae: Edifice.Interpretability.MatryoshkaSAE,
+    cross_layer_transcoder: Edifice.Interpretability.CrossLayerTranscoder,
     # World Model
     world_model: Edifice.WorldModel.WorldModel,
     # RL
@@ -451,7 +453,8 @@ defmodule Edifice do
         :cogvideox,
         :trellis,
         :mdlm,
-        :rectified_flow
+        :rectified_flow,
+        :magvit2
       ],
       graph: [
         :gcn,
@@ -510,7 +513,8 @@ defmodule Edifice do
         :concept_bottleneck,
         :das_probe,
         :leace,
-        :matryoshka_sae
+        :matryoshka_sae,
+        :cross_layer_transcoder
       ],
       world_model: [:world_model],
       multimodal: [:multimodal_mlp_fusion],
@@ -570,6 +574,7 @@ defmodule Edifice do
     - `:multi_token_prediction` — `Axon.container(%{pred_1: ..., pred_N: ...})`
     - `:test_time_compute` — `Axon.container(%{backbone: ..., scores: ...})`
     - `:speculative_head` — `Axon.container(%{pred_1: ..., pred_N: ...})`
+    - `:magvit2` — `{encoder, decoder}`
     - `:act` — `{encoder, decoder}`
     - `:medusa` — `Axon.container(%{head_1: ..., head_K: ...})`
     - `:detr` — `Axon.container(%{class_logits: ..., bbox_pred: ...})`

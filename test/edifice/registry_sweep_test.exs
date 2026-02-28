@@ -86,7 +86,35 @@ defmodule Edifice.RegistrySweepTest do
     :hyena_v2,
     :retnet_v2,
     :hymba,
-    :megalodon
+    :megalodon,
+    # v0.2.0 attention additions
+    :based,
+    :conformer,
+    :infini_attention,
+    :mega,
+    :gla_v2,
+    :hgrn_v2,
+    :kda,
+    :gated_attention,
+    :sigmoid_attention,
+    :mla,
+    :diff_transformer,
+    :ring_attention,
+    :nsa,
+    :rnope_swa,
+    :attention,
+    :ssmax,
+    :softpick,
+    # v0.2.0 SSM additions
+    :striped_hyena,
+    :mamba3,
+    :ss_transformer,
+    # v0.2.0 recurrent additions
+    :gated_delta_net,
+    :ttt_e2e,
+    :mlstm,
+    :native_recurrence,
+    :transformer_like
   ]
 
   @sequence_opts [
@@ -1275,6 +1303,1814 @@ defmodule Edifice.RegistrySweepTest do
         enc_out = enc_pred.(enc_params, %{"visible_patches" => enc_input})
         assert_finite!(enc_out, "mae encoder batch=#{batch}")
         assert {^batch, ^num_patches, _dim} = Nx.shape(enc_out)
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Chunked Attention
+  # ══════════════════════════════════════════════════════════════════════
+
+  @chunked_archs [:lightning_attention, :flash_linear_attention, :dual_chunk_attention]
+
+  for arch <- @chunked_archs do
+    describe "#{arch} (chunked attention)" do
+      for batch <- [@small_batch, @med_batch] do
+        @tag timeout: 120_000
+        test "batch=#{batch} produces correct shape with finite values" do
+          batch = unquote(batch)
+          arch = unquote(arch)
+          block = div(@seq_len, 2)
+
+          model =
+            Edifice.build(
+              arch,
+              Keyword.merge(@sequence_opts, block_size: block, chunk_size: block)
+            )
+
+          input = random_tensor({batch, @seq_len, @embed})
+          {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+          output = predict_fn.(params, %{"state_sequence" => input})
+          assert_finite!(output, "#{arch} batch=#{batch}")
+          assert {^batch, @hidden} = Nx.shape(output)
+        end
+      end
+    end
+  end
+
+  # ── Feedforward additions: bitnet, kat (sequence-like) ──────────────
+
+  for arch <- [:bitnet, :kat] do
+    describe "#{arch} (feedforward-sequence)" do
+      for batch <- @batches do
+        @tag timeout: 120_000
+        test "batch=#{batch} produces correct shape with finite values" do
+          batch = unquote(batch)
+          arch = unquote(arch)
+          model = Edifice.build(arch, @sequence_opts)
+          input = random_tensor({batch, @seq_len, @embed})
+          {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+          output = predict_fn.(params, %{"state_sequence" => input})
+          assert_finite!(output, "#{arch} batch=#{batch}")
+          assert {^batch, @hidden} = Nx.shape(output)
+        end
+      end
+    end
+  end
+
+  # ── Conv1D ──────────────────────────────────────────────────────────
+
+  describe "conv1d (convolutional)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+        model = Edifice.build(:conv1d, input_size: @embed, hidden_size: @hidden, num_layers: 2)
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"input" => input})
+        output = predict_fn.(params, %{"input" => input})
+        assert_finite!(output, "conv1d batch=#{batch}")
+        assert {^batch, @seq_len, _channels} = Nx.shape(output)
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Vision
+  # ══════════════════════════════════════════════════════════════════════
+
+  @new_vision_archs [
+    :focalnet,
+    :poolformer,
+    :metaformer,
+    :caformer,
+    :efficient_vit
+  ]
+
+  for arch <- @new_vision_archs do
+    describe "#{arch} (vision)" do
+      for batch <- [@small_batch, @med_batch] do
+        @tag timeout: 120_000
+        test "batch=#{batch} produces correct shape with finite values" do
+          batch = unquote(batch)
+          arch = unquote(arch)
+
+          model =
+            Edifice.build(arch,
+              image_size: @image_size,
+              in_channels: @in_channels,
+              patch_size: 4,
+              embed_dim: @hidden,
+              hidden_size: @hidden,
+              depths: [1],
+              dims: [@hidden],
+              num_heads: [2],
+              depth: 1,
+              dropout: 0.0
+            )
+
+          input = random_tensor({batch, @in_channels, @image_size, @image_size})
+          {predict_fn, params} = build_and_init(model, %{"image" => input})
+          output = predict_fn.(params, %{"image" => input})
+          assert_finite!(output, "#{arch} batch=#{batch}")
+          assert {^batch, _dim} = Nx.shape(output)
+        end
+      end
+    end
+  end
+
+  # ── MambaVision (4-stage, needs 4-element depths/num_heads) ─────────
+
+  describe "mamba_vision (vision)" do
+    for batch <- [@small_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:mamba_vision,
+            image_size: @image_size,
+            in_channels: @in_channels,
+            dim: 8,
+            depths: [1, 1, 1, 1],
+            num_heads: [1, 1, 2, 2],
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @in_channels, @image_size, @image_size})
+        {predict_fn, params} = build_and_init(model, %{"image" => input})
+        output = predict_fn.(params, %{"image" => input})
+        assert_finite!(output, "mamba_vision batch=#{batch}")
+        assert {^batch, _dim} = Nx.shape(output)
+      end
+    end
+  end
+
+  # ── DINO v2/v3 (returns {student, teacher} tuple) ───────────────────
+
+  for arch <- [:dino_v2, :dino_v3] do
+    describe "#{arch} (vision-contrastive)" do
+      for batch <- [@small_batch, @med_batch] do
+        @tag timeout: 120_000
+        test "batch=#{batch}: student produces correct shape" do
+          batch = unquote(batch)
+          arch = unquote(arch)
+
+          {student, _teacher} =
+            Edifice.build(arch,
+              image_size: @image_size,
+              in_channels: @in_channels,
+              patch_size: 4,
+              embed_dim: @hidden,
+              depth: 1,
+              num_heads: 2,
+              include_head: false,
+              dropout: 0.0
+            )
+
+          input = random_tensor({batch, @in_channels, @image_size, @image_size})
+          {predict_fn, params} = build_and_init(student, %{"image" => input})
+          output = predict_fn.(params, %{"image" => input})
+          assert_finite!(output, "#{arch} student batch=#{batch}")
+          assert {^batch, _dim} = Nx.shape(output)
+        end
+      end
+    end
+  end
+
+  # ── NeRF / 3D ───────────────────────────────────────────────────────
+
+  describe "nerf (vision-3d)" do
+    for batch <- @batches do
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+        model = Edifice.build(:nerf, coord_dim: 3, dir_dim: 3, hidden_size: @hidden)
+        coordinates = random_tensor({batch, 3})
+        directions = random_tensor({batch, 3})
+
+        input_map = %{"coordinates" => coordinates, "directions" => directions}
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "nerf batch=#{batch}")
+        assert {^batch, _dim} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "gaussian_splat (vision-3d)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:gaussian_splat,
+            num_gaussians: 4,
+            image_size: 8
+          )
+
+        input_map = %{
+          "camera_position" => random_tensor({batch, 3}),
+          "view_matrix" => random_tensor({batch, 4, 4}),
+          "proj_matrix" => random_tensor({batch, 4, 4}),
+          "image_height" => random_tensor({batch}),
+          "image_width" => random_tensor({batch})
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "gaussian_splat batch=#{batch}")
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Detection (multi-input, container output)
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "detr (detection)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape with finite values" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:detr,
+            image_size: @image_size,
+            in_channels: @in_channels,
+            hidden_dim: @hidden,
+            num_heads: 2,
+            num_encoder_layers: 1,
+            num_decoder_layers: 1,
+            ffn_dim: @hidden,
+            num_queries: 4,
+            num_classes: @num_classes,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @image_size, @image_size, @in_channels})
+        {predict_fn, params} = build_and_init(model, %{"image" => input})
+        output = predict_fn.(params, %{"image" => input})
+        assert_finite!(output, "detr batch=#{batch}")
+      end
+    end
+  end
+
+  describe "rt_detr (detection)" do
+    for batch <- [@small_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape with finite values" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:rt_detr,
+            image_size: 32,
+            in_channels: @in_channels,
+            hidden_dim: @hidden,
+            num_heads: 2,
+            num_encoder_layers: 1,
+            num_decoder_layers: 1,
+            ffn_dim: @hidden,
+            num_queries: 4,
+            num_classes: @num_classes,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, 32, 32, @in_channels})
+        {predict_fn, params} = build_and_init(model, %{"image" => input})
+        output = predict_fn.(params, %{"image" => input})
+        assert_finite!(output, "rt_detr batch=#{batch}")
+      end
+    end
+  end
+
+  describe "sam2 (detection)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape with finite values" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:sam2,
+            image_size: @image_size,
+            in_channels: @in_channels,
+            hidden_dim: @hidden,
+            num_heads: 2,
+            dropout: 0.0
+          )
+
+        input_map = %{
+          "image" => random_tensor({batch, @image_size, @image_size, @in_channels}),
+          "points" => random_tensor({batch, 2, 2}),
+          "labels" => random_tensor({batch, 2})
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "sam2 batch=#{batch}")
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Audio
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "whisper (audio)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch}: encoder produces correct shape" do
+        batch = unquote(batch)
+
+        {encoder, _decoder} =
+          Edifice.build(:whisper,
+            n_mels: @embed,
+            audio_len: @seq_len,
+            hidden_dim: @hidden,
+            num_heads: 2,
+            num_encoder_layers: 1,
+            num_decoder_layers: 1,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @embed, @seq_len})
+        {predict_fn, params} = build_and_init(encoder, %{"mel_spectrogram" => input})
+        output = predict_fn.(params, %{"mel_spectrogram" => input})
+        assert_finite!(output, "whisper encoder batch=#{batch}")
+        assert {^batch, _seq, _dim} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "encodec (audio)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch}: encoder produces correct shape" do
+        batch = unquote(batch)
+
+        {encoder, _decoder} =
+          Edifice.build(:encodec,
+            hidden_dim: @hidden,
+            num_layers: @num_layers
+          )
+
+        input = random_tensor({batch, 1, 64})
+        {predict_fn, params} = build_and_init(encoder, %{"waveform" => input})
+        output = predict_fn.(params, %{"waveform" => input})
+        assert_finite!(output, "encodec encoder batch=#{batch}")
+      end
+    end
+  end
+
+  describe "soundstorm (audio)" do
+    for batch <- [@small_batch] do
+      @tag timeout: 120_000
+      @tag :slow
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+        num_codebooks = 2
+
+        model =
+          Edifice.build(:soundstorm,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_layers: @num_layers,
+            vocab_size: 32,
+            num_codebooks: num_codebooks,
+            dropout: 0.0
+          )
+
+        total_len = num_codebooks * @seq_len
+        tokens = Nx.iota({batch, total_len}, type: :s64) |> Nx.remainder(32)
+        {predict_fn, params} = build_and_init(model, %{"tokens" => tokens})
+        output = predict_fn.(params, %{"tokens" => tokens})
+        assert_finite!(output, "soundstorm batch=#{batch}")
+      end
+    end
+  end
+
+  describe "valle (audio)" do
+    for batch <- [@small_batch] do
+      @tag timeout: 120_000
+      @tag :slow
+      test "batch=#{batch}: AR model produces correct shape" do
+        batch = unquote(batch)
+
+        {ar_model, _nar_model} =
+          Edifice.build(:valle,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_layers: @num_layers,
+            vocab_size: 32,
+            num_codebooks: 2,
+            dropout: 0.0
+          )
+
+        text_tokens = Nx.iota({batch, @seq_len}, type: :s64) |> Nx.remainder(32)
+        prompt_tokens = Nx.iota({batch, 2, @seq_len}, type: :s64) |> Nx.remainder(32)
+        audio_tokens = Nx.iota({batch, @seq_len}, type: :s64) |> Nx.remainder(32)
+
+        input_map = %{
+          "text_tokens" => text_tokens,
+          "prompt_tokens" => prompt_tokens,
+          "audio_tokens" => audio_tokens
+        }
+
+        {predict_fn, params} = build_and_init(ar_model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "valle ar batch=#{batch}")
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Transformer family
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "decoder_only (transformer)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:decoder_only,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_kv_heads: 2,
+            num_layers: @num_layers,
+            seq_len: @seq_len,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "decoder_only batch=#{batch}")
+        assert {^batch, @hidden} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "nemotron_h (transformer)" do
+    for batch <- [@small_batch] do
+      @tag timeout: 120_000
+      @tag :slow
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:nemotron_h,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_layers: @num_layers,
+            seq_len: @seq_len,
+            state_size: @state_size,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "nemotron_h batch=#{batch}")
+        assert {^batch, @hidden} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "multi_token_prediction (transformer)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:multi_token_prediction,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            vocab_size: 32,
+            num_heads: 2,
+            num_kv_heads: 2,
+            num_layers: @num_layers,
+            num_predictions: 2,
+            seq_len: @seq_len,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "multi_token_prediction batch=#{batch}")
+      end
+    end
+  end
+
+  describe "byte_latent_transformer (transformer)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch}: encoder produces correct shape" do
+        batch = unquote(batch)
+
+        {encoder, _latent, _decoder} =
+          Edifice.build(:byte_latent_transformer,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_layers: @num_layers,
+            max_byte_len: @seq_len,
+            num_patches: 2,
+            latent_dim: @hidden,
+            dropout: 0.0
+          )
+
+        input = Nx.iota({batch, @seq_len}, type: :s64)
+        {predict_fn, params} = build_and_init(encoder, %{"byte_ids" => input})
+        output = predict_fn.(params, %{"byte_ids" => input})
+        assert_finite!(output, "byte_latent_transformer encoder batch=#{batch}")
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Contrastive
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "jepa (contrastive)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch}: context encoder produces correct shape" do
+        batch = unquote(batch)
+
+        {context_encoder, _predictor} =
+          Edifice.build(:jepa,
+            input_dim: @embed,
+            embed_dim: @hidden,
+            predictor_embed_dim: @hidden,
+            encoder_depth: 1,
+            predictor_depth: 1,
+            num_heads: 2,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @embed})
+        {predict_fn, params} = build_and_init(context_encoder, %{"features" => input})
+        output = predict_fn.(params, %{"features" => input})
+        assert_finite!(output, "jepa context_encoder batch=#{batch}")
+        assert {^batch, _dim} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "temporal_jepa (contrastive)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch}: context encoder produces correct shape" do
+        batch = unquote(batch)
+
+        {context_encoder, _predictor} =
+          Edifice.build(:temporal_jepa,
+            input_dim: @embed,
+            embed_dim: @hidden,
+            predictor_embed_dim: @hidden,
+            encoder_depth: 1,
+            predictor_depth: 1,
+            num_heads: 2,
+            seq_len: @seq_len,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(context_encoder, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "temporal_jepa context_encoder batch=#{batch}")
+      end
+    end
+  end
+
+  describe "siglip (contrastive)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch}: encoder produces correct shape" do
+        batch = unquote(batch)
+
+        {encoder, _temp_param} =
+          Edifice.build(:siglip,
+            input_dim: @embed,
+            projection_dim: @hidden,
+            hidden_size: @hidden
+          )
+
+        input = random_tensor({batch, @embed})
+        {predict_fn, params} = build_and_init(encoder, %{"features" => input})
+        output = predict_fn.(params, %{"features" => input})
+        assert_finite!(output, "siglip encoder batch=#{batch}")
+        assert {^batch, _dim} = Nx.shape(output)
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Meta / PEFT
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "mixture_of_depths (meta)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:mixture_of_depths,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_layers: @num_layers,
+            seq_len: @seq_len,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "mixture_of_depths batch=#{batch}")
+        assert {^batch, @hidden} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "mixture_of_agents (meta)" do
+    for batch <- [@small_batch] do
+      @tag timeout: 120_000
+      @tag :slow
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:mixture_of_agents,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_layers: @num_layers,
+            seq_len: @seq_len,
+            num_agents: 2,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "mixture_of_agents batch=#{batch}")
+        assert {^batch, @hidden} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "rlhf_head (meta)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:rlhf_head,
+            input_size: @embed,
+            hidden_size: @hidden
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "rlhf_head batch=#{batch}")
+      end
+    end
+  end
+
+  for arch <- [:dpo, :kto, :grpo] do
+    describe "#{arch} (meta-alignment)" do
+      for batch <- [@small_batch, @med_batch] do
+        @tag timeout: 120_000
+        test "batch=#{batch} produces correct shape" do
+          batch = unquote(batch)
+          arch = unquote(arch)
+
+          model =
+            Edifice.build(arch,
+              embed_dim: @embed,
+              hidden_size: @hidden,
+              vocab_size: 32,
+              num_heads: 2,
+              num_kv_heads: 2,
+              num_layers: @num_layers,
+              seq_len: @seq_len,
+              dropout: 0.0
+            )
+
+          tokens = Nx.iota({batch, @seq_len}, type: :s64) |> Nx.remainder(32)
+          {predict_fn, params} = build_and_init(model, %{"tokens" => tokens})
+          output = predict_fn.(params, %{"tokens" => tokens})
+          assert_finite!(output, "#{arch} batch=#{batch}")
+        end
+      end
+    end
+  end
+
+  describe "speculative_decoding (meta)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch}: draft model produces correct shape" do
+        batch = unquote(batch)
+
+        {draft, _verifier} =
+          Edifice.build(:speculative_decoding,
+            embed_dim: @embed,
+            draft_type: :gqa,
+            verifier_type: :gqa,
+            draft_model_opts: [
+              hidden_size: @hidden,
+              num_layers: 1,
+              num_heads: 2,
+              seq_len: @seq_len,
+              dropout: 0.0
+            ],
+            verifier_model_opts: [
+              hidden_size: @hidden,
+              num_layers: 1,
+              num_heads: 2,
+              seq_len: @seq_len,
+              dropout: 0.0
+            ]
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(draft, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "speculative_decoding draft batch=#{batch}")
+        assert {^batch, @hidden} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "test_time_compute (meta)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:test_time_compute,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_kv_heads: 2,
+            num_layers: @num_layers,
+            scorer_hidden: @hidden,
+            seq_len: @seq_len,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "test_time_compute batch=#{batch}")
+      end
+    end
+  end
+
+  describe "mixture_of_tokenizers (meta)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:mixture_of_tokenizers,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            num_tokenizers: 2,
+            tokenizer_vocab_sizes: [16, 32],
+            tokenizer_embed_dims: [8, 8],
+            num_heads: 2,
+            num_kv_heads: 2,
+            num_layers: @num_layers,
+            seq_len: @seq_len,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "mixture_of_tokenizers batch=#{batch}")
+      end
+    end
+  end
+
+  describe "speculative_head (meta)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:speculative_head,
+            embed_dim: @embed,
+            vocab_size: 32,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_kv_heads: 2,
+            num_layers: @num_layers,
+            num_predictions: 2,
+            head_hidden: @hidden,
+            seq_len: @seq_len,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "speculative_head batch=#{batch}")
+      end
+    end
+  end
+
+  describe "eagle3 (meta)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:eagle3,
+            hidden_size: @hidden,
+            vocab_size: 32,
+            num_heads: 2,
+            num_kv_heads: 2
+          )
+
+        input_map = %{
+          "token_embeddings" => random_tensor({batch, @seq_len, @hidden}),
+          "features_low" => random_tensor({batch, @seq_len, @hidden}),
+          "features_mid" => random_tensor({batch, @seq_len, @hidden}),
+          "features_high" => random_tensor({batch, @seq_len, @hidden})
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "eagle3 batch=#{batch}")
+      end
+    end
+  end
+
+  describe "manifold_hc (meta)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:manifold_hc,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_layers: @num_layers,
+            seq_len: @seq_len,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @seq_len, @hidden})
+        {predict_fn, params} = build_and_init(model, %{"sequence" => input})
+        output = predict_fn.(params, %{"sequence" => input})
+        assert_finite!(output, "manifold_hc batch=#{batch}")
+      end
+    end
+  end
+
+  describe "distillation_head (meta)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:distillation_head,
+            embed_dim: @embed,
+            teacher_dim: @hidden,
+            hidden_size: @hidden
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "distillation_head batch=#{batch}")
+      end
+    end
+  end
+
+  describe "qat (meta)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:qat,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_layers: @num_layers,
+            seq_len: @seq_len,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "qat batch=#{batch}")
+        assert {^batch, @hidden} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "remoe (meta)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:remoe,
+            input_size: @embed,
+            hidden_size: @hidden * 4,
+            output_size: @hidden,
+            num_experts: 2,
+            top_k: 1
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"remoe_input" => input})
+        output = predict_fn.(params, %{"remoe_input" => input})
+        assert_finite!(output, "remoe batch=#{batch}")
+        assert {^batch, @seq_len, _out} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "medusa (inference)" do
+    for batch <- @batches do
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:medusa,
+            base_hidden_dim: @embed,
+            vocab_size: 32,
+            num_medusa_heads: 2
+          )
+
+        input = random_tensor({batch, @embed})
+        {predict_fn, params} = build_and_init(model, %{"hidden_states" => input})
+        output = predict_fn.(params, %{"hidden_states" => input})
+        assert_finite!(output, "medusa batch=#{batch}")
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Generative
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "mmdit (generative)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+        img_tokens = 8
+        txt_tokens = 4
+
+        model =
+          Edifice.build(:mmdit,
+            img_dim: @embed,
+            txt_dim: @embed,
+            hidden_size: @embed,
+            depth: 1,
+            num_heads: 2,
+            img_tokens: img_tokens,
+            txt_tokens: txt_tokens,
+            dropout: 0.0
+          )
+
+        input_map = %{
+          "img_latent" => random_tensor({batch, img_tokens, @embed}),
+          "txt_embed" => random_tensor({batch, txt_tokens, @embed}),
+          "timestep" => random_tensor({batch}),
+          "pooled_text" => random_tensor({batch, @embed})
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "mmdit batch=#{batch}")
+      end
+    end
+  end
+
+  describe "soflow (generative)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:soflow,
+            obs_size: @embed,
+            action_dim: @action_dim,
+            action_horizon: @action_horizon,
+            hidden_size: @hidden,
+            num_layers: @num_layers,
+            dropout: 0.0
+          )
+
+        input_map = %{
+          "x_t" => random_tensor({batch, @action_horizon, @action_dim}),
+          "current_time" => random_tensor({batch}),
+          "target_time" => random_tensor({batch}),
+          "observations" => random_tensor({batch, @embed})
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "soflow batch=#{batch}")
+        assert {^batch, @action_horizon, @action_dim} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "rectified_flow (generative)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:rectified_flow,
+            obs_size: @embed,
+            action_dim: @action_dim,
+            action_horizon: @action_horizon,
+            hidden_size: @hidden,
+            num_layers: @num_layers,
+            dropout: 0.0
+          )
+
+        input_map = %{
+          "x_t" => random_tensor({batch, @action_horizon, @action_dim}),
+          "timestep" => random_tensor({batch}),
+          "observations" => random_tensor({batch, @embed})
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "rectified_flow batch=#{batch}")
+        assert {^batch, @action_horizon, @action_dim} = Nx.shape(output)
+      end
+    end
+  end
+
+  for arch <- [:linear_dit, :sana, :sit] do
+    describe "#{arch} (generative-dit)" do
+      for batch <- @batches do
+        @tag timeout: 120_000
+        test "batch=#{batch} produces correct shape" do
+          batch = unquote(batch)
+          arch = unquote(arch)
+
+          model =
+            Edifice.build(arch,
+              input_dim: @embed,
+              hidden_size: @hidden,
+              depth: 1,
+              num_heads: 2,
+              dropout: 0.0
+            )
+
+          input_map = %{
+            "noisy_input" => random_tensor({batch, @embed}),
+            "timestep" => random_tensor({batch}),
+            "class_label" => random_tensor({batch})
+          }
+
+          {predict_fn, params} = build_and_init(model, input_map)
+          output = predict_fn.(params, input_map)
+          assert_finite!(output, "#{arch} batch=#{batch}")
+          assert {^batch, _dim} = Nx.shape(output)
+        end
+      end
+    end
+  end
+
+  describe "var (generative)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+        scales = [1, 2]
+        total_tokens = Enum.reduce(scales, 0, fn s, acc -> acc + s * s end)
+
+        model =
+          Edifice.build(:var,
+            vocab_size: 32,
+            hidden_size: @hidden,
+            depth: 1,
+            num_heads: 2,
+            scales: scales,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, total_tokens, @hidden})
+        {predict_fn, params} = build_and_init(model, %{"scale_embeddings" => input})
+        output = predict_fn.(params, %{"scale_embeddings" => input})
+        assert_finite!(output, "var batch=#{batch}")
+      end
+    end
+  end
+
+  describe "transfusion (generative)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:transfusion,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            depth: 1,
+            num_heads: 2,
+            vocab_size: 32,
+            dropout: 0.0
+          )
+
+        input_map = %{
+          "sequence" => random_tensor({batch, @seq_len, @embed}),
+          "modality_mask" => random_tensor({batch, @seq_len}),
+          "timestep" => random_tensor({batch})
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "transfusion batch=#{batch}")
+      end
+    end
+  end
+
+  describe "mar (generative)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:mar,
+            vocab_size: 32,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            depth: 1,
+            num_heads: 2,
+            seq_len: @seq_len,
+            dropout: 0.0
+          )
+
+        tokens = Nx.iota({batch, @seq_len}, type: :s64) |> Nx.remainder(32)
+        {predict_fn, params} = build_and_init(model, %{"tokens" => tokens})
+        output = predict_fn.(params, %{"tokens" => tokens})
+        assert_finite!(output, "mar batch=#{batch}")
+      end
+    end
+  end
+
+  describe "mdlm (generative)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:mdlm,
+            vocab_size: 32,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            depth: 1,
+            num_heads: 2,
+            seq_len: @seq_len,
+            dropout: 0.0
+          )
+
+        tokens = Nx.iota({batch, @seq_len}, type: :s64) |> Nx.remainder(32)
+        timestep = random_tensor({batch})
+
+        {predict_fn, params} =
+          build_and_init(model, %{"masked_tokens" => tokens, "timestep" => timestep})
+
+        output = predict_fn.(params, %{"masked_tokens" => tokens, "timestep" => timestep})
+        assert_finite!(output, "mdlm batch=#{batch}")
+      end
+    end
+  end
+
+  describe "cogvideox (generative)" do
+    for batch <- [@small_batch] do
+      @tag timeout: 120_000
+      @tag :slow
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.Generative.CogVideoX.build_transformer(
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_layers: @num_layers,
+            text_hidden_size: @hidden,
+            dropout: 0.0
+          )
+
+        input_map = %{
+          "video_latent" => random_tensor({batch, 2, @in_channels, 4, 4}),
+          "text_embed" => random_tensor({batch, @seq_len, @hidden}),
+          "timestep" => random_tensor({batch})
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "cogvideox batch=#{batch}")
+      end
+    end
+  end
+
+  describe "trellis (generative)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:trellis,
+            feature_dim: @node_dim,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_layers: @num_layers,
+            dropout: 0.0
+          )
+
+        input_map = %{
+          "sparse_features" => random_tensor({batch, @num_nodes, @node_dim}),
+          "voxel_positions" => random_tensor({batch, @num_nodes, 3}),
+          "occupancy_mask" => random_tensor({batch, @num_nodes}),
+          "conditioning" => random_tensor({batch, @seq_len, @hidden}),
+          "timestep" => random_tensor({batch})
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "trellis batch=#{batch}")
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — RL
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "policy_value (rl)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:policy_value,
+            input_size: @embed,
+            action_size: @action_dim,
+            hidden_size: @hidden
+          )
+
+        input = random_tensor({batch, @embed})
+        {predict_fn, params} = build_and_init(model, %{"observation" => input})
+        output = predict_fn.(params, %{"observation" => input})
+        assert_finite!(output, "policy_value batch=#{batch}")
+      end
+    end
+  end
+
+  describe "decision_transformer (rl)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:decision_transformer,
+            state_dim: @embed,
+            action_dim: @action_dim,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_layers: @num_layers,
+            context_len: @seq_len,
+            dropout: 0.0
+          )
+
+        input_map = %{
+          "returns" => random_tensor({batch, @seq_len}),
+          "states" => random_tensor({batch, @seq_len, @embed}),
+          "actions" => random_tensor({batch, @seq_len, @action_dim}),
+          "timesteps" => Nx.iota({batch, @seq_len}, type: :s64)
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "decision_transformer batch=#{batch}")
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Robotics
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "act (robotics)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch}: decoder produces correct shape" do
+        batch = unquote(batch)
+
+        {_encoder, decoder} =
+          Edifice.build(:act,
+            obs_dim: @embed,
+            action_dim: @action_dim,
+            latent_dim: @latent_size,
+            chunk_size: @action_horizon,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_layers: @num_layers,
+            dropout: 0.0
+          )
+
+        input_map = %{
+          "obs" => random_tensor({batch, @embed}),
+          "z" => random_tensor({batch, @latent_size})
+        }
+
+        {predict_fn, params} = build_and_init(decoder, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "act decoder batch=#{batch}")
+      end
+    end
+  end
+
+  describe "openvla (robotics)" do
+    for batch <- [@small_batch] do
+      @tag timeout: 120_000
+      @tag :slow
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:openvla,
+            image_size: @image_size,
+            in_channels: @in_channels,
+            patch_size: 4,
+            hidden_dim: @hidden,
+            num_heads: 2,
+            num_kv_heads: 2,
+            num_layers: @num_layers,
+            dropout: 0.0
+          )
+
+        input_map = %{
+          "image" => random_tensor({batch, @in_channels, @image_size, @image_size}),
+          "text_tokens" => random_tensor({batch, @seq_len, @hidden})
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "openvla batch=#{batch}")
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Scientific
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "fno (scientific)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:fno,
+            in_channels: @in_channels,
+            out_channels: @in_channels,
+            hidden_channels: @hidden,
+            num_layers: @num_layers,
+            modes: 4
+          )
+
+        input = random_tensor({batch, @seq_len, @in_channels})
+        {predict_fn, params} = build_and_init(model, %{"input" => input})
+        output = predict_fn.(params, %{"input" => input})
+        assert_finite!(output, "fno batch=#{batch}")
+        assert {^batch, @seq_len, @in_channels} = Nx.shape(output)
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Interpretability
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "sparse_autoencoder (interpretability)" do
+    for batch <- @batches do
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:sparse_autoencoder,
+            input_size: @embed,
+            hidden_size: @hidden * 4
+          )
+
+        input = random_tensor({batch, @embed})
+        {predict_fn, params} = build_and_init(model, %{"sae_input" => input})
+        output = predict_fn.(params, %{"sae_input" => input})
+        assert_finite!(output, "sparse_autoencoder batch=#{batch}")
+      end
+    end
+  end
+
+  describe "transcoder (interpretability)" do
+    for batch <- @batches do
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:transcoder,
+            input_size: @embed,
+            output_size: @hidden,
+            hidden_size: @hidden * 4
+          )
+
+        input = random_tensor({batch, @embed})
+        {predict_fn, params} = build_and_init(model, %{"transcoder_input" => input})
+        output = predict_fn.(params, %{"transcoder_input" => input})
+        assert_finite!(output, "transcoder batch=#{batch}")
+        assert {^batch, @hidden} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "gated_sae (interpretability)" do
+    for batch <- @batches do
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:gated_sae,
+            input_size: @embed,
+            dict_size: @hidden * 4,
+            top_k: 4
+          )
+
+        input = random_tensor({batch, @embed})
+        {predict_fn, params} = build_and_init(model, %{"gated_sae_input" => input})
+        output = predict_fn.(params, %{"gated_sae_input" => input})
+        assert_finite!(output, "gated_sae batch=#{batch}")
+        # Autoencoder: output matches input size
+        assert {^batch, @embed} = Nx.shape(output)
+      end
+    end
+  end
+
+  describe "linear_probe (interpretability)" do
+    for batch <- @batches do
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:linear_probe,
+            input_size: @embed,
+            num_classes: @num_classes
+          )
+
+        input = random_tensor({batch, @embed})
+        {predict_fn, params} = build_and_init(model, %{"probe_input" => input})
+        output = predict_fn.(params, %{"probe_input" => input})
+        assert_finite!(output, "linear_probe batch=#{batch}")
+        assert {^batch, @num_classes} = Nx.shape(output)
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — World Model
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "world_model" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch}: encoder and dynamics produce finite output" do
+        batch = unquote(batch)
+
+        {encoder, dynamics, _reward_head} =
+          Edifice.build(:world_model,
+            obs_size: @embed,
+            action_size: @action_dim,
+            latent_size: @latent_size,
+            hidden_size: @hidden
+          )
+
+        # Encoder
+        enc_input = random_tensor({batch, @embed})
+        {enc_pred, enc_params} = build_and_init(encoder, %{"observation" => enc_input})
+        enc_out = enc_pred.(enc_params, %{"observation" => enc_input})
+        assert_finite!(enc_out, "world_model encoder batch=#{batch}")
+
+        # Dynamics
+        concat_size = @latent_size + @action_dim
+        dyn_input = random_tensor({batch, concat_size})
+        {dyn_pred, dyn_params} = build_and_init(dynamics, %{"state_action" => dyn_input})
+        dyn_out = dyn_pred.(dyn_params, %{"state_action" => dyn_input})
+        assert_finite!(dyn_out, "world_model dynamics batch=#{batch}")
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Multimodal
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "multimodal_mlp_fusion (multimodal)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:multimodal_mlp_fusion,
+            vision_dim: @embed,
+            llm_dim: @hidden,
+            num_visual_tokens: 4,
+            text_seq_len: @seq_len
+          )
+
+        input_map = %{
+          "visual_tokens" => random_tensor({batch, 4, @embed}),
+          "text_embeddings" => random_tensor({batch, @seq_len, @hidden})
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "multimodal_mlp_fusion batch=#{batch}")
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Memory
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "engram (memory)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:engram,
+            key_dim: @embed,
+            value_dim: @hidden,
+            num_tables: 2,
+            num_buckets: 4
+          )
+
+        input_map = %{
+          "query" => random_tensor({batch, @embed}),
+          "memory_slots" => random_tensor({2, 4, @hidden})
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "engram batch=#{batch}")
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Graph
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "gin_v2 (graph)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:gin_v2,
+            input_dim: @node_dim,
+            edge_dim: 4,
+            hidden_size: @hidden,
+            num_classes: @num_classes,
+            num_layers: @num_layers,
+            dropout: 0.0
+          )
+
+        nodes = random_tensor({batch, @num_nodes, @node_dim})
+        adj = random_tensor({batch, @num_nodes, @num_nodes})
+        edge_features = random_tensor({batch, @num_nodes, @num_nodes, 4})
+
+        input_map = %{
+          "nodes" => nodes,
+          "adjacency" => adj,
+          "edge_features" => edge_features
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "gin_v2 batch=#{batch}")
+        {out_batch, out_nodes, _dim} = Nx.shape(output)
+        assert out_batch == batch
+        assert out_nodes == @num_nodes
+      end
+    end
+  end
+
+  describe "egnn (graph)" do
+    for batch <- @batches do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:egnn,
+            in_node_features: @node_dim,
+            hidden_size: @hidden,
+            num_layers: @num_layers
+          )
+
+        nodes = random_tensor({batch, @num_nodes, @node_dim})
+        coords = random_tensor({batch, @num_nodes, 3})
+        edge_index = Nx.iota({batch, @num_nodes, 2}, type: :s64)
+
+        input_map = %{
+          "nodes" => nodes,
+          "coords" => coords,
+          "edge_index" => edge_index
+        }
+
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "egnn batch=#{batch}")
+      end
+    end
+  end
+
+  describe "dimenet (graph)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      @tag :slow
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:dimenet,
+            input_dim: @node_dim,
+            hidden_size: @hidden,
+            num_blocks: 1
+          )
+
+        nodes = random_tensor({batch, @num_nodes, @node_dim})
+        positions = random_tensor({batch, @num_nodes, 3})
+
+        input_map = %{"nodes" => nodes, "positions" => positions}
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "dimenet batch=#{batch}")
+      end
+    end
+  end
+
+  describe "se3_transformer (graph)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      @tag :slow
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:se3_transformer,
+            input_dim: @node_dim,
+            hidden_size: @hidden,
+            num_layers: @num_layers,
+            num_heads: 2
+          )
+
+        nodes = random_tensor({batch, @num_nodes, @node_dim})
+        positions = random_tensor({batch, @num_nodes, 3})
+
+        input_map = %{"nodes" => nodes, "positions" => positions}
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "se3_transformer batch=#{batch}")
+      end
+    end
+  end
+
+  describe "gps (graph)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:gps,
+            input_dim: @node_dim,
+            hidden_size: @hidden,
+            num_heads: 2,
+            num_layers: @num_layers,
+            pe_dim: 4,
+            rwse_walk_length: 4
+          )
+
+        nodes = random_tensor({batch, @num_nodes, @node_dim})
+        adj = random_tensor({batch, @num_nodes, @num_nodes})
+
+        input_map = %{"nodes" => nodes, "adjacency" => adj}
+        {predict_fn, params} = build_and_init(model, input_map)
+        output = predict_fn.(params, input_map)
+        assert_finite!(output, "gps batch=#{batch}")
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Perceiver
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "perceiver (attention)" do
+    for batch <- [@small_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:perceiver,
+            input_dim: @embed,
+            latent_dim: @hidden,
+            num_latents: 4,
+            num_layers: @num_layers,
+            num_heads: 2,
+            seq_len: @seq_len,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "perceiver batch=#{batch}")
+        assert {^batch, @hidden} = Nx.shape(output)
+      end
+    end
+  end
+
+  # ══════════════════════════════════════════════════════════════════════
+  # v0.2.0 ADDITIONS — Hybrid / Misc
+  # ══════════════════════════════════════════════════════════════════════
+
+  describe "hybrid_builder (meta)" do
+    for batch <- [@small_batch, @med_batch] do
+      @tag timeout: 120_000
+      test "batch=#{batch} produces correct shape" do
+        batch = unquote(batch)
+
+        model =
+          Edifice.build(:hybrid_builder,
+            embed_dim: @embed,
+            hidden_size: @hidden,
+            num_heads: 2,
+            head_dim: 8,
+            num_layers: @num_layers,
+            seq_len: @seq_len,
+            window_size: @seq_len,
+            dropout: 0.0
+          )
+
+        input = random_tensor({batch, @seq_len, @embed})
+        {predict_fn, params} = build_and_init(model, %{"state_sequence" => input})
+        output = predict_fn.(params, %{"state_sequence" => input})
+        assert_finite!(output, "hybrid_builder batch=#{batch}")
+        assert {^batch, @hidden} = Nx.shape(output)
       end
     end
   end

@@ -98,5 +98,8 @@ jobs:
       - name: Compile
         run: mix compile
 
-      - name: Run tests
-        run: mix test
+      - name: Run tests with coverage
+        run: mix coveralls.github
+        env:
+          MIX_ENV: test
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

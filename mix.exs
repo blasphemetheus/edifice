@@ -13,6 +13,7 @@ defmodule Edifice.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
+      test_coverage: [tool: ExCoveralls],
       dialyzer: [plt_add_apps: [:mix, :jason]],
 
       # Docs
@@ -54,7 +55,8 @@ defmodule Edifice.MixProject do
       {:kino_vega_lite, "~> 0.1", only: :dev},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
-      {:doctor, "~> 0.22.0", only: :dev, runtime: false}
+      {:doctor, "~> 0.22.0", only: :dev, runtime: false},
+      {:excoveralls, "~> 0.18", only: :test, runtime: false}
     ]
   end
 
