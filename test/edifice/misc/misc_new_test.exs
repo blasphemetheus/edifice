@@ -1,5 +1,6 @@
 defmodule Edifice.Misc.MiscNewTest do
   use ExUnit.Case, async: true
+  @moduletag :misc
 
   alias Edifice.Convolutional.EfficientNet
   alias Edifice.Convolutional.MobileNet

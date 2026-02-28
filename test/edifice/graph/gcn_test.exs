@@ -1,5 +1,6 @@
 defmodule Edifice.Graph.GCNTest do
   use ExUnit.Case, async: true
+  @moduletag :graph
 
   alias Edifice.Graph.GCN
 
@@ -25,6 +26,7 @@ defmodule Edifice.Graph.GCNTest do
   end
 
   describe "build/1" do
+    @tag :smoke
     test "produces node embeddings with correct shape" do
       model = GCN.build(input_dim: @input_dim, hidden_dims: [16, 8])
 

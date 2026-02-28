@@ -1,5 +1,6 @@
 defmodule Edifice.WorldModel.WorldModelTest do
   use ExUnit.Case, async: true
+  @moduletag :world_model
 
   alias Edifice.WorldModel.WorldModel
 

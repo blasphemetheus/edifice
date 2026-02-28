@@ -1,5 +1,6 @@
 defmodule Edifice.Recurrent.DeepResLSTMTest do
   use ExUnit.Case, async: true
+  @moduletag :recurrent
 
   alias Edifice.Recurrent.DeepResLSTM
 
@@ -33,6 +34,7 @@ defmodule Edifice.Recurrent.DeepResLSTMTest do
   end
 
   describe "build/1 shape tests" do
+    @tag :smoke
     test "returns an Axon model" do
       model = DeepResLSTM.build(base_opts())
       assert %Axon{} = model

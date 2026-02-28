@@ -1,5 +1,6 @@
 defmodule Edifice.Vision.DINOv3Test do
   use ExUnit.Case, async: true
+  @moduletag :vision
 
   alias Edifice.Vision.DINOv3
 

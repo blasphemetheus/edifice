@@ -1,5 +1,6 @@
 defmodule Edifice.Audio.EnCodecTest do
   use ExUnit.Case, async: true
+  @moduletag :audio
   # Conv-heavy model is slow on BinaryBackend (no EXLA in tests)
   @moduletag timeout: 300_000
 

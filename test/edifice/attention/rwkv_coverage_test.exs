@@ -6,6 +6,7 @@ defmodule Edifice.Attention.RWKVCoverageTest do
   build_time_mixing directly, build_channel_mixing directly, different head sizes.
   """
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.RWKV
 

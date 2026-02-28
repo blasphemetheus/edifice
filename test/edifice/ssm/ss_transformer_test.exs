@@ -1,5 +1,6 @@
 defmodule Edifice.SSM.SSTransformerTest do
   use ExUnit.Case, async: true
+  @moduletag :ssm
 
   alias Edifice.SSM.SSTransformer
 

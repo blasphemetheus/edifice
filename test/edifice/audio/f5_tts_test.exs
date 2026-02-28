@@ -1,5 +1,6 @@
 defmodule Edifice.Audio.F5TTSTest do
   use ExUnit.Case, async: true
+  @moduletag :audio
 
   import Edifice.TestHelpers
 

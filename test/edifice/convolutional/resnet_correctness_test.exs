@@ -1,5 +1,6 @@
 defmodule Edifice.Convolutional.ResNetCorrectnessTest do
   use ExUnit.Case, async: true
+  @moduletag :convolutional
   # All ResNet tests involve convolutions which are too slow on BinaryBackend
   @moduletag :slow
 

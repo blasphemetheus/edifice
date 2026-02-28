@@ -1,11 +1,13 @@
 defmodule Edifice.Feedforward.MLPTest do
   use ExUnit.Case, async: true
+  @moduletag :feedforward
 
   alias Edifice.Feedforward.MLP
 
   @batch_size 2
 
   describe "build/1" do
+    @tag :smoke
     test "builds model with correct output shape" do
       model = MLP.build(input_size: 64, hidden_sizes: [128, 64])
 

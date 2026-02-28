@@ -7,6 +7,7 @@ defmodule Edifice.Attention.RetNetCoverageTest do
   head counts and layer counts.
   """
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.RetNet
 

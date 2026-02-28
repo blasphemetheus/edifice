@@ -1,5 +1,6 @@
 defmodule Edifice.Meta.MoETest do
   use ExUnit.Case, async: true
+  @moduletag :meta
 
   alias Edifice.Meta.MoE
 

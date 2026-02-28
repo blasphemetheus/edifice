@@ -1,5 +1,6 @@
 defmodule Edifice.Blocks.ModelBuilderTest do
   use ExUnit.Case, async: true
+  @moduletag :blocks
 
   alias Edifice.Blocks.{ModelBuilder, TransformerBlock}
 

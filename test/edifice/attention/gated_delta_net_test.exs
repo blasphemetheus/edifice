@@ -1,5 +1,6 @@
 defmodule Edifice.Recurrent.GatedDeltaNetTest do
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Recurrent.GatedDeltaNet
 

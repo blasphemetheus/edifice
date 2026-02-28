@@ -7,6 +7,7 @@ defmodule Edifice.Attention.PerceiverCoverageTest do
   build_self_attention_block directly.
   """
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.Perceiver
 

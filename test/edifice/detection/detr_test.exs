@@ -1,5 +1,6 @@
 defmodule Edifice.Detection.DETRTest do
   use ExUnit.Case, async: true
+  @moduletag :detection
 
   alias Edifice.Detection.DETR
 

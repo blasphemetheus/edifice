@@ -6,6 +6,7 @@ defmodule Edifice.Probabilistic.CorrectnessTest do
   and MC dropout stochasticity.
   """
   use ExUnit.Case, async: true
+  @moduletag :probabilistic
 
   import Edifice.TestHelpers
 

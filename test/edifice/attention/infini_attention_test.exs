@@ -1,5 +1,6 @@
 defmodule Edifice.Attention.InfiniAttentionTest do
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.InfiniAttention
 

@@ -5,6 +5,7 @@ defmodule Edifice.SSM.S4CoverageTest do
   the build_s4_block/2 standalone not exercised by existing tests.
   """
   use ExUnit.Case, async: true
+  @moduletag :ssm
 
   alias Edifice.SSM.S4
 

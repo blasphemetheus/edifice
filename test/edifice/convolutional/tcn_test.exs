@@ -1,5 +1,6 @@
 defmodule Edifice.Convolutional.TCNTest do
   use ExUnit.Case, async: true
+  @moduletag :convolutional
 
   alias Edifice.Convolutional.TCN
 

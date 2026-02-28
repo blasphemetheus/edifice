@@ -1,5 +1,6 @@
 defmodule Edifice.Attention.PerformerCorrectnessTest do
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.Performer
 

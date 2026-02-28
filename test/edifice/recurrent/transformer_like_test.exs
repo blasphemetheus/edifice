@@ -1,5 +1,6 @@
 defmodule Edifice.Recurrent.TransformerLikeTest do
   use ExUnit.Case, async: true
+  @moduletag :recurrent
 
   alias Edifice.Recurrent.TransformerLike
 

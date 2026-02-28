@@ -292,7 +292,23 @@ defmodule Edifice.MixProject do
 
   defp aliases do
     [
-      setup: ["deps.get"]
+      setup: ["deps.get"],
+
+      # Test aliases — see docs/TESTING.md for full documentation
+      "test.changed": ["test", "--stale"],
+      "test.fast": ["test"],
+      "test.slow": ["test", "--include", "slow"],
+      "test.all": ["test", "--include", "slow", "--include", "integration", "--include", "exla_only"],
+
+      # Smoke test — one test per family (~30-60s)
+      "test.smoke": ["test", "--only", "smoke"],
+
+      # Domain-specific test runs
+      "test.recurrent": ["test", "--only", "recurrent"],
+      "test.ssm": ["test", "--only", "ssm"],
+      "test.attention": ["test", "--only", "attention"],
+      "test.vision": ["test", "--only", "vision"],
+      "test.generative": ["test", "--only", "generative"]
     ]
   end
 end

@@ -1,5 +1,6 @@
 defmodule Edifice.Attention.RWKVCorrectnessTest do
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.RWKV
 

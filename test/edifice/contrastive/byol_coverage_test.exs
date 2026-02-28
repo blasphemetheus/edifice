@@ -5,6 +5,7 @@ defmodule Edifice.Contrastive.BYOLCoverageTest do
   and standalone build functions not exercised by existing tests.
   """
   use ExUnit.Case, async: true
+  @moduletag :contrastive
 
   alias Edifice.Contrastive.BYOL
 

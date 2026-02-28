@@ -1,5 +1,6 @@
 defmodule Edifice.Graph.GraphNewTest do
   use ExUnit.Case, async: true
+  @moduletag :graph
 
   alias Edifice.Graph.GIN
   alias Edifice.Graph.GraphSAGE

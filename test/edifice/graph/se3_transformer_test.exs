@@ -1,5 +1,6 @@
 defmodule Edifice.Graph.SE3TransformerTest do
   use ExUnit.Case, async: true
+  @moduletag :graph
 
   import Edifice.TestHelpers
 

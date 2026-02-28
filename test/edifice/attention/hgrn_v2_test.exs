@@ -1,5 +1,6 @@
 defmodule Edifice.Attention.HGRNv2Test do
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.HGRNv2
 

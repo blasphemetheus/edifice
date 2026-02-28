@@ -1,11 +1,13 @@
 defmodule Edifice.Convolutional.ConvTest do
   use ExUnit.Case, async: true
+  @moduletag :convolutional
 
   alias Edifice.Convolutional.Conv
 
   @batch 2
 
   describe "build_conv1d/1" do
+    @tag :smoke
     test "builds an Axon model" do
       model = Conv.build_conv1d(input_size: 8, channels: [16], seq_len: 10)
       assert %Axon{} = model

@@ -1,5 +1,6 @@
 defmodule Edifice.Attention.GLAv2Test do
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.GLAv2
 

@@ -1,5 +1,6 @@
 defmodule Edifice.SSM.MambaTest do
   use ExUnit.Case, async: true
+  @moduletag :ssm
 
   alias Edifice.SSM.Mamba
 
@@ -25,6 +26,7 @@ defmodule Edifice.SSM.MambaTest do
   end
 
   describe "build/1" do
+    @tag :smoke
     test "builds an Axon model" do
       model = Mamba.build(@opts)
       assert %Axon{} = model

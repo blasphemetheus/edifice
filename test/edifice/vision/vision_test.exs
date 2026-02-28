@@ -1,5 +1,6 @@
 defmodule Edifice.Vision.VisionTest do
   use ExUnit.Case, async: true
+  @moduletag :vision
 
   alias Edifice.Vision.{ConvNeXt, DeiT, MLPMixer, SwinTransformer, UNet, ViT}
 

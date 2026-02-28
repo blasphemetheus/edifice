@@ -5,6 +5,7 @@ defmodule Edifice.Memory.CorrectnessTest do
   and differentiable read/write operations.
   """
   use ExUnit.Case, async: true
+  @moduletag :memory
 
   import Edifice.TestHelpers
 
@@ -19,6 +20,7 @@ defmodule Edifice.Memory.CorrectnessTest do
   # should produce different memory access patterns
 
   @tag timeout: 120_000
+  @tag :smoke
   test "ntm produces different outputs for different inputs" do
     model =
       Edifice.build(:ntm,

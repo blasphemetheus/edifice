@@ -1,5 +1,6 @@
 defmodule Edifice.Interpretability.ConceptBottleneckTest do
   use ExUnit.Case, async: true
+  @moduletag :interpretability
 
   alias Edifice.Interpretability.ConceptBottleneck
 

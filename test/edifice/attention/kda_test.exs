@@ -1,5 +1,6 @@
 defmodule Edifice.Attention.KDATest do
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.KDA
 

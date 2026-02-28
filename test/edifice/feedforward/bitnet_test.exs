@@ -1,5 +1,6 @@
 defmodule Edifice.Feedforward.BitNetTest do
   use ExUnit.Case, async: true
+  @moduletag :feedforward
 
   alias Edifice.Feedforward.BitNet
 

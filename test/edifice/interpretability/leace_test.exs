@@ -1,5 +1,6 @@
 defmodule Edifice.Interpretability.LEACETest do
   use ExUnit.Case, async: true
+  @moduletag :interpretability
 
   alias Edifice.Interpretability.LEACE
 

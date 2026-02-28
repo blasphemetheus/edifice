@@ -1,5 +1,6 @@
 defmodule Edifice.Audio.WhisperTest do
   use ExUnit.Case, async: true
+  @moduletag :audio
 
   alias Edifice.Audio.Whisper
 

@@ -5,6 +5,7 @@ defmodule Edifice.Utils.ODESolverCoverageTest do
   adaptive LTC solver, step rejection paths, and edge cases.
   """
   use ExUnit.Case, async: true
+  @moduletag :utils
 
   alias Edifice.Utils.ODESolver
 

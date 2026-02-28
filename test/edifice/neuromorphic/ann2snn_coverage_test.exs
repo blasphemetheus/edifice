@@ -5,6 +5,7 @@ defmodule Edifice.Neuromorphic.ANN2SNNCoverageTest do
   default threshold/timesteps in if_neuron_simulate, and finiteness/determinism.
   """
   use ExUnit.Case, async: true
+  @moduletag :neuromorphic
 
   alias Edifice.Neuromorphic.ANN2SNN
 

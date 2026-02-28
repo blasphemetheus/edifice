@@ -7,6 +7,7 @@ defmodule Edifice.Graph.MessagePassingCoverageTest do
   weighted adjacency matrices.
   """
   use ExUnit.Case, async: true
+  @moduletag :graph
 
   alias Edifice.Graph.MessagePassing
 

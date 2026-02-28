@@ -1,5 +1,6 @@
 defmodule Edifice.Attention.BasedTest do
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.Based
 

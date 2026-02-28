@@ -5,6 +5,7 @@ defmodule Edifice.Sets.CorrectnessTest do
   shuffling set elements should not change the output.
   """
   use ExUnit.Case, async: true
+  @moduletag :sets
 
   import Edifice.TestHelpers
 

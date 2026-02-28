@@ -1,5 +1,6 @@
 defmodule Edifice.Graph.DimeNetTest do
   use ExUnit.Case, async: true
+  @moduletag :graph
 
   import Edifice.TestHelpers
 

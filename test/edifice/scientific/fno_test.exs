@@ -1,5 +1,6 @@
 defmodule Edifice.Scientific.FNOTest do
   use ExUnit.Case, async: true
+  @moduletag :scientific
 
   alias Edifice.Scientific.FNO
 

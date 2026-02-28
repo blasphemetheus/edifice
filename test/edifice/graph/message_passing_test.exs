@@ -1,5 +1,6 @@
 defmodule Edifice.Graph.MessagePassingTest do
   use ExUnit.Case, async: true
+  @moduletag :graph
 
   alias Edifice.Graph.MessagePassing
 

@@ -8,6 +8,7 @@ defmodule Edifice.SSM.GatedSSMCoverage2Test do
   param_count edge cases, and dropout paths.
   """
   use ExUnit.Case, async: true
+  @moduletag :ssm
 
   @moduletag timeout: 300_000
 

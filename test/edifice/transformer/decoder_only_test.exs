@@ -1,5 +1,6 @@
 defmodule Edifice.Transformer.DecoderOnlyTest do
   use ExUnit.Case, async: true
+  @moduletag :transformer
 
   alias Edifice.Transformer.DecoderOnly
 

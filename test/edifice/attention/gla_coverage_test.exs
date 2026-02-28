@@ -6,6 +6,7 @@ defmodule Edifice.Attention.GLACoverageTest do
   dropout=0 branch, different head/layer configurations.
   """
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.GLA
 

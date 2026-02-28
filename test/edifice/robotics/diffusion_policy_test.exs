@@ -1,5 +1,6 @@
 defmodule Edifice.Robotics.DiffusionPolicyTest do
   use ExUnit.Case, async: true
+  @moduletag :robotics
 
   import Edifice.TestHelpers
 

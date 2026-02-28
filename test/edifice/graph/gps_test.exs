@@ -1,5 +1,6 @@
 defmodule Edifice.Graph.GPSTest do
   use ExUnit.Case, async: true
+  @moduletag :graph
 
   import Edifice.TestHelpers
 

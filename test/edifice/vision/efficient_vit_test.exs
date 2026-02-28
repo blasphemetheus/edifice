@@ -1,5 +1,6 @@
 defmodule Edifice.Vision.EfficientViTTest do
   use ExUnit.Case, async: true
+  @moduletag :vision
 
   alias Edifice.Vision.EfficientViT
 

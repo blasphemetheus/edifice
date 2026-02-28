@@ -1,5 +1,6 @@
 defmodule Edifice.Convolutional.EfficientNetTest do
   use ExUnit.Case, async: true
+  @moduletag :convolutional
 
   # Full model forward passes are expensive on BinaryBackend under cover
   @moduletag timeout: 180_000

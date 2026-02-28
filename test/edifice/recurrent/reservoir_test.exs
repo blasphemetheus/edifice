@@ -1,5 +1,6 @@
 defmodule Edifice.Recurrent.ReservoirTest do
   use ExUnit.Case, async: true
+  @moduletag :recurrent
 
   alias Edifice.Recurrent.Reservoir
 

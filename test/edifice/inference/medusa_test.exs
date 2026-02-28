@@ -1,5 +1,6 @@
 defmodule Edifice.Inference.MedusaTest do
   use ExUnit.Case, async: true
+  @moduletag :inference
 
   alias Edifice.Inference.Medusa
 

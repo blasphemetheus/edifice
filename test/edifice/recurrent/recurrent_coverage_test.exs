@@ -1,5 +1,6 @@
 defmodule Edifice.RecurrentCoverageTest do
   use ExUnit.Case, async: true
+  @moduletag :recurrent
 
   @moduletag timeout: 180_000
 

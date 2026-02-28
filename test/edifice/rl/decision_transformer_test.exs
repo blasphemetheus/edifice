@@ -1,5 +1,6 @@
 defmodule Edifice.RL.DecisionTransformerTest do
   use ExUnit.Case, async: true
+  @moduletag :rl
 
   alias Edifice.RL.DecisionTransformer
 

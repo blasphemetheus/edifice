@@ -1,5 +1,6 @@
 defmodule Edifice.Feedforward.TabNetCorrectnessTest do
   use ExUnit.Case, async: true
+  @moduletag :feedforward
 
   alias Edifice.Feedforward.TabNet
 

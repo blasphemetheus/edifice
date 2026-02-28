@@ -1,5 +1,6 @@
 defmodule Edifice.Meta.DistillationHeadTest do
   use ExUnit.Case, async: true
+  @moduletag :meta
 
   alias Edifice.Meta.DistillationHead
 

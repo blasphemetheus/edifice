@@ -5,6 +5,7 @@ defmodule Edifice.Attention.HGRNCorrectnessTest do
   state_expansion values produce different outputs.
   """
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.HGRN
 

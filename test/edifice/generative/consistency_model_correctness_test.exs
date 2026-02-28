@@ -5,6 +5,7 @@ defmodule Edifice.Generative.ConsistencyModelCorrectnessTest do
   pseudo-Huber loss properties, and consistency loss returns scalar.
   """
   use ExUnit.Case, async: true
+  @moduletag :generative
 
   alias Edifice.Generative.ConsistencyModel
 

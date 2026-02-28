@@ -1,5 +1,6 @@
 defmodule Edifice.Contrastive.JEPATest do
   use ExUnit.Case, async: true
+  @moduletag :contrastive
 
   alias Edifice.Contrastive.JEPA
 

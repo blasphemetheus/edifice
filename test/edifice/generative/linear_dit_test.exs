@@ -1,5 +1,6 @@
 defmodule Edifice.Generative.LinearDiTTest do
   use ExUnit.Case, async: true
+  @moduletag :generative
 
   alias Edifice.Generative.LinearDiT
 

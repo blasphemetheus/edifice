@@ -1,5 +1,6 @@
 defmodule Edifice.Convolutional.ResNetTest do
   use ExUnit.Case, async: true
+  @moduletag :convolutional
 
   alias Edifice.Convolutional.ResNet
 

@@ -1,5 +1,6 @@
 defmodule Edifice.SSM.SSMRemainingTest do
   use ExUnit.Case, async: true
+  @moduletag :ssm
 
   alias Edifice.SSM.Hybrid
   alias Edifice.SSM.HybridBuilder

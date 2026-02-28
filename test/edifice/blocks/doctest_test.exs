@@ -1,5 +1,6 @@
 defmodule Edifice.Blocks.DoctestTest do
   use ExUnit.Case, async: true
+  @moduletag :blocks
 
   # Shared blocks
   doctest Edifice.Blocks.CausalMask

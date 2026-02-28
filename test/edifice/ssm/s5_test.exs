@@ -1,5 +1,6 @@
 defmodule Edifice.SSM.S5Test do
   use ExUnit.Case, async: true
+  @moduletag :ssm
 
   alias Edifice.SSM.S5
 

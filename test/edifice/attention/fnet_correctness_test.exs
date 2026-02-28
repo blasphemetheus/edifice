@@ -5,6 +5,7 @@ defmodule Edifice.Attention.FNetCorrectnessTest do
   and output shape is preserved.
   """
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.FNet
 

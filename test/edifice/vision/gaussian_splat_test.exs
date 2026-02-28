@@ -1,5 +1,6 @@
 defmodule Edifice.Vision.GaussianSplatTest do
   use ExUnit.Case, async: true
+  @moduletag :vision
 
   alias Edifice.Vision.GaussianSplat
 

@@ -1,5 +1,6 @@
 defmodule Edifice.Export.GGUFTest do
   use ExUnit.Case, async: true
+  @moduletag :export
 
   alias Edifice.Export.GGUF
 

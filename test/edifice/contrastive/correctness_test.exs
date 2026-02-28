@@ -5,6 +5,7 @@ defmodule Edifice.Contrastive.CorrectnessTest do
   encoder consistency.
   """
   use ExUnit.Case, async: true
+  @moduletag :contrastive
 
   import Edifice.TestHelpers
 

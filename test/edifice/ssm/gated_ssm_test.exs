@@ -1,5 +1,6 @@
 defmodule Edifice.SSM.GatedSSMTest do
   use ExUnit.Case, async: true
+  @moduletag :ssm
 
   alias Edifice.SSM.GatedSSM
 

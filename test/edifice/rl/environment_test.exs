@@ -1,5 +1,6 @@
 defmodule Edifice.RL.EnvironmentTest do
   use ExUnit.Case, async: true
+  @moduletag :rl
 
   alias Edifice.RL.Environment
 

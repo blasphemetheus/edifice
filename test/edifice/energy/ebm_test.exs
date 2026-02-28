@@ -1,5 +1,6 @@
 defmodule Edifice.Energy.EBMTest do
   use ExUnit.Case, async: true
+  @moduletag :energy
 
   alias Edifice.Energy.EBM
 
@@ -7,6 +8,7 @@ defmodule Edifice.Energy.EBMTest do
   @input_size 16
 
   describe "build/1" do
+    @tag :smoke
     test "builds an Axon model" do
       model = EBM.build(input_size: @input_size)
       assert %Axon{} = model

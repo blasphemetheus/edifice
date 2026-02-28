@@ -7,6 +7,7 @@ defmodule Edifice.SSM.MambaSSDCoverage2Test do
   branching, and utility functions.
   """
   use ExUnit.Case, async: true
+  @moduletag :ssm
 
   @moduletag timeout: 300_000
 

@@ -5,6 +5,7 @@ defmodule Edifice.Attention.RetNetCorrectnessTest do
   and different num_heads produce different model structures.
   """
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.RetNet
 

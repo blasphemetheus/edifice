@@ -1,5 +1,6 @@
 defmodule Edifice.Meta.SpeculativeDecodingTest do
   use ExUnit.Case, async: true
+  @moduletag :meta
 
   alias Edifice.Meta.SpeculativeDecoding
 

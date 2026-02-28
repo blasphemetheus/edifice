@@ -1,5 +1,6 @@
 defmodule Edifice.Generative.GenerativeRemainingTest do
   use ExUnit.Case, async: true
+  @moduletag :generative
 
   alias Edifice.Generative.Diffusion
   alias Edifice.Generative.FlowMatching

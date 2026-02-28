@@ -1,5 +1,6 @@
 defmodule Edifice.Blocks.Batch0Test do
   use ExUnit.Case, async: true
+  @moduletag :blocks
 
   alias Edifice.Attention.GQA
   alias Edifice.Attention.MultiHead

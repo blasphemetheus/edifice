@@ -1,5 +1,6 @@
 defmodule Edifice.Utils.ODESolverTest do
   use ExUnit.Case, async: true
+  @moduletag :utils
 
   alias Edifice.Utils.ODESolver
 

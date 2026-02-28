@@ -1,5 +1,6 @@
 defmodule Edifice.Graph.EGNNTest do
   use ExUnit.Case, async: true
+  @moduletag :graph
 
   alias Edifice.Graph.EGNN
 

@@ -1,5 +1,6 @@
 defmodule Edifice.Robotics.ACTTest do
   use ExUnit.Case, async: true
+  @moduletag :robotics
 
   alias Edifice.Robotics.ACT
 

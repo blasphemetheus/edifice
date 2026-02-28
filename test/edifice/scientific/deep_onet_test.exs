@@ -1,5 +1,6 @@
 defmodule Edifice.Scientific.DeepONetTest do
   use ExUnit.Case, async: true
+  @moduletag :scientific
 
   import Edifice.TestHelpers
 

@@ -1,5 +1,6 @@
 defmodule Edifice.Sets.DeepSetsTest do
   use ExUnit.Case, async: true
+  @moduletag :sets
 
   alias Edifice.Sets.DeepSets
 

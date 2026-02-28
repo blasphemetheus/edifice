@@ -1,5 +1,6 @@
 defmodule Edifice.RL.PolicyValueTest do
   use ExUnit.Case, async: true
+  @moduletag :rl
 
   alias Edifice.RL.PolicyValue
 

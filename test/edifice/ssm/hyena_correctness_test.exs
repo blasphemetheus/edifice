@@ -1,5 +1,6 @@
 defmodule Edifice.SSM.HyenaCorrectnessTest do
   use ExUnit.Case, async: true
+  @moduletag :ssm
 
   alias Edifice.SSM.Hyena
 

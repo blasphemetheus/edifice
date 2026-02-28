@@ -1,5 +1,6 @@
 defmodule Edifice.SSM.Mamba3Test do
   use ExUnit.Case, async: true
+  @moduletag :ssm
 
   alias Edifice.SSM.Mamba3
 

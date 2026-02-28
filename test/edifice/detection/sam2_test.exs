@@ -1,5 +1,6 @@
 defmodule Edifice.Detection.SAM2Test do
   use ExUnit.Case, async: true
+  @moduletag :detection
 
   alias Edifice.Detection.SAM2
 

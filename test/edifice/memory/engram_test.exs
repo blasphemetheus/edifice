@@ -1,5 +1,6 @@
 defmodule Edifice.Memory.EngramTest do
   use ExUnit.Case, async: true
+  @moduletag :memory
 
   alias Edifice.Memory.Engram
 

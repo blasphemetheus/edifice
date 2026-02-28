@@ -1,5 +1,6 @@
 defmodule Edifice.Meta.MetaNewTest do
   use ExUnit.Case, async: true
+  @moduletag :meta
 
   alias Edifice.Meta.Adapter
   alias Edifice.Meta.LoRA

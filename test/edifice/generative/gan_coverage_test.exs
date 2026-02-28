@@ -5,6 +5,7 @@ defmodule Edifice.Generative.GANCoverageTest do
   conditional generator variations, and code branches not exercised by existing tests.
   """
   use ExUnit.Case, async: true
+  @moduletag :generative
 
   alias Edifice.Generative.GAN
 

@@ -6,6 +6,7 @@ defmodule Edifice.Attention.NystromformerCoverageTest do
   landmark counts, different head/layer configurations.
   """
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.Nystromformer
 

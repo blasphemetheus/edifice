@@ -1,5 +1,6 @@
 defmodule Edifice.Audio.VALLETest do
   use ExUnit.Case, async: true
+  @moduletag :audio
 
   alias Edifice.Audio.VALLE
 

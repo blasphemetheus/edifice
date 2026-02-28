@@ -5,6 +5,7 @@ defmodule Edifice.Generative.DDIMCoverageTest do
   schedule variations, recommended_defaults, and edge cases.
   """
   use ExUnit.Case, async: true
+  @moduletag :generative
 
   alias Edifice.Generative.DDIM
 

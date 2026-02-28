@@ -1,5 +1,6 @@
 defmodule Edifice.Attention.MultiHeadTest do
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.MultiHead
 

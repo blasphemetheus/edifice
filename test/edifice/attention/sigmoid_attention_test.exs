@@ -1,5 +1,6 @@
 defmodule Edifice.Attention.SigmoidAttentionTest do
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.SigmoidAttention
 

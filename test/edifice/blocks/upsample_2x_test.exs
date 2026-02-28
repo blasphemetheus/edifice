@@ -1,5 +1,6 @@
 defmodule Edifice.Blocks.Upsample2xTest do
   use ExUnit.Case, async: true
+  @moduletag :blocks
 
   alias Edifice.Blocks.Upsample2x
 

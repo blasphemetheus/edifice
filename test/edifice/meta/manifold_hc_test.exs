@@ -1,5 +1,6 @@
 defmodule Edifice.Meta.ManifoldHCTest do
   use ExUnit.Case, async: true
+  @moduletag :meta
 
   import Edifice.TestHelpers
 

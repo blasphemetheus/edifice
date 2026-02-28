@@ -1,5 +1,6 @@
 defmodule Edifice.ContrastiveTest do
   use ExUnit.Case, async: true
+  @moduletag :contrastive
 
   alias Edifice.Contrastive.BarlowTwins
   alias Edifice.Contrastive.BYOL
@@ -17,6 +18,7 @@ defmodule Edifice.ContrastiveTest do
   # ============================================================================
 
   describe "SimCLR.build/1" do
+    @tag :smoke
     test "returns an Axon model" do
       model =
         SimCLR.build(

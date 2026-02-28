@@ -1,5 +1,6 @@
 defmodule Edifice.Blocks.SinusoidalPE2DTest do
   use ExUnit.Case, async: true
+  @moduletag :blocks
 
   alias Edifice.Blocks.SinusoidalPE2D
 

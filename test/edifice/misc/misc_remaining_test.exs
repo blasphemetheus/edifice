@@ -1,5 +1,6 @@
 defmodule Edifice.Misc.MiscRemainingTest do
   use ExUnit.Case, async: true
+  @moduletag :misc
 
   alias Edifice.Convolutional.Conv
   alias Edifice.Energy.EBM

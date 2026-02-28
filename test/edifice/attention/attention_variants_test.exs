@@ -1,5 +1,6 @@
 defmodule Edifice.Attention.AttentionVariantsTest do
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.{FNet, GQA, LinearTransformer, Nystromformer, Perceiver, Performer}
 
@@ -31,6 +32,7 @@ defmodule Edifice.Attention.AttentionVariantsTest do
       seq_len: @seq_len
     ]
 
+    @tag :smoke
     test "build/1 returns an Axon model" do
       model = GQA.build(@gqa_opts)
       assert %Axon{} = model

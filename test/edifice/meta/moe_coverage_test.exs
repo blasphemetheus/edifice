@@ -6,6 +6,7 @@ defmodule Edifice.Meta.MoECoverageTest do
   embed_dim == hidden_size branch, dropout=0 branches.
   """
   use ExUnit.Case, async: true
+  @moduletag :meta
 
   alias Edifice.Meta.MoE
 

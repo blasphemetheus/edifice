@@ -1,5 +1,6 @@
 defmodule Edifice.Attention.DualChunkTest do
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.DualChunk
   alias Edifice.Transformer.DecoderOnly

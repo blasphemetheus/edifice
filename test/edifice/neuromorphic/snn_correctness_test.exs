@@ -1,5 +1,6 @@
 defmodule Edifice.Neuromorphic.SNNCorrectnessTest do
   use ExUnit.Case, async: true
+  @moduletag :neuromorphic
 
   alias Edifice.Neuromorphic.SNN
 

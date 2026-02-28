@@ -1,5 +1,6 @@
 defmodule Edifice.Blocks.CorrectnessTest do
   use ExUnit.Case, async: true
+  @moduletag :blocks
 
   alias Edifice.Blocks.{
     AdaptiveNorm,

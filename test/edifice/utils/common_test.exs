@@ -1,5 +1,6 @@
 defmodule Edifice.Utils.CommonTest do
   use ExUnit.Case, async: true
+  @moduletag :utils
 
   alias Edifice.Utils.Common
 

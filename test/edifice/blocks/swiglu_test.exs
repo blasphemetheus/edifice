@@ -1,5 +1,6 @@
 defmodule Edifice.Blocks.SwiGLUTest do
   use ExUnit.Case, async: true
+  @moduletag :blocks
 
   alias Edifice.Blocks.SwiGLU
 

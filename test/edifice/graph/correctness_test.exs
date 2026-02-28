@@ -5,6 +5,7 @@ defmodule Edifice.Graph.CorrectnessTest do
   adjacency handling, and degree-zero robustness.
   """
   use ExUnit.Case, async: true
+  @moduletag :graph
 
   import Edifice.TestHelpers
 

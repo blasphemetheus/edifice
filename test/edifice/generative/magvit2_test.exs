@@ -1,5 +1,6 @@
 defmodule Edifice.Generative.MAGVIT2Test do
   use ExUnit.Case, async: true
+  @moduletag :generative
 
   alias Edifice.Generative.MAGVIT2
 

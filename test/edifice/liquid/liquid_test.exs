@@ -1,5 +1,6 @@
 defmodule Edifice.LiquidTest do
   use ExUnit.Case, async: true
+  @moduletag :liquid
 
   alias Edifice.Liquid
 

@@ -5,6 +5,7 @@ defmodule Edifice.Recurrent.TTTCorrectnessTest do
   and numerical stability.
   """
   use ExUnit.Case, async: true
+  @moduletag :recurrent
 
   alias Edifice.Recurrent.TTT
 

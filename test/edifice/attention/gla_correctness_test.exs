@@ -5,6 +5,7 @@ defmodule Edifice.Attention.GLACorrectnessTest do
   and data-dependent gating produces valid outputs.
   """
   use ExUnit.Case, async: true
+  @moduletag :attention
 
   alias Edifice.Attention.GLA
 

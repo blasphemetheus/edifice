@@ -1,5 +1,6 @@
 defmodule Edifice.Meta.DPOTest do
   use ExUnit.Case, async: true
+  @moduletag :meta
 
   alias Edifice.Meta.DPO
 

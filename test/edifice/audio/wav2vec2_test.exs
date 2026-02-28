@@ -1,5 +1,6 @@
 defmodule Edifice.Audio.Wav2Vec2Test do
   use ExUnit.Case, async: true
+  @moduletag :audio
 
   import Edifice.TestHelpers
 

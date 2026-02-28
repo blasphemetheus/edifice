@@ -1,5 +1,6 @@
 defmodule Edifice.SSM.GatedSSMCoverageTest do
   use ExUnit.Case, async: true
+  @moduletag :ssm
 
   @moduletag timeout: 180_000
 

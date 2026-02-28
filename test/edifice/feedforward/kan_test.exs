@@ -1,5 +1,6 @@
 defmodule Edifice.Feedforward.KANTest do
   use ExUnit.Case, async: true
+  @moduletag :feedforward
   @moduletag timeout: 120_000
 
   alias Edifice.Feedforward.KAN

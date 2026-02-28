@@ -1,5 +1,6 @@
 defmodule Edifice.SSM.H3CorrectnessTest do
   use ExUnit.Case, async: true
+  @moduletag :ssm
 
   alias Edifice.SSM.H3
 

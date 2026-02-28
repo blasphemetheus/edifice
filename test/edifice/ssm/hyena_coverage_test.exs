@@ -4,6 +4,7 @@ defmodule Edifice.SSM.HyenaCoverageTest do
   Covers option variations and code branches not exercised by existing tests.
   """
   use ExUnit.Case, async: true
+  @moduletag :ssm
 
   alias Edifice.SSM.Hyena
 

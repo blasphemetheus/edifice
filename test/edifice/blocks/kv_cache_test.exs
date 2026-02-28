@@ -1,5 +1,6 @@
 defmodule Edifice.Blocks.KVCacheTest do
   use ExUnit.Case, async: true
+  @moduletag :blocks
 
   alias Edifice.Blocks.KVCache
 

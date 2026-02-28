@@ -5,6 +5,7 @@ defmodule Edifice.Memory.NTMCorrectnessTest do
   and read/write heads function properly.
   """
   use ExUnit.Case, async: true
+  @moduletag :memory
 
   alias Edifice.Memory.NTM
 

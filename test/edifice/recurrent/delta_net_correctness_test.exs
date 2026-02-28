@@ -5,6 +5,7 @@ defmodule Edifice.Recurrent.DeltaNetCorrectnessTest do
   output shape is [batch, hidden_size], and different num_heads values work.
   """
   use ExUnit.Case, async: true
+  @moduletag :recurrent
 
   alias Edifice.Recurrent.DeltaNet
 

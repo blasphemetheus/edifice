@@ -1,5 +1,6 @@
 defmodule Edifice.Sets.PointNetPPTest do
   use ExUnit.Case, async: true
+  @moduletag :sets
 
   import Edifice.TestHelpers
 

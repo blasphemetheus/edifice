@@ -5,6 +5,7 @@ defmodule Edifice.Meta.CorrectnessTest do
   identity, and hypernetwork conditioning dependence.
   """
   use ExUnit.Case, async: true
+  @moduletag :meta
 
   import Edifice.TestHelpers
 
@@ -16,6 +17,7 @@ defmodule Edifice.Meta.CorrectnessTest do
   # ── LoRA Low-Rank Structure ──────────────────────────────────────
   # LoRA adds a low-rank adaptation: output = W*x + (alpha/rank) * B(A(x))
 
+  @tag :smoke
   test "lora output shape matches specified dimensions" do
     model = Edifice.build(:lora, input_size: @embed, output_size: @hidden, rank: 4)
 

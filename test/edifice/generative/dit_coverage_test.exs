@@ -5,6 +5,7 @@ defmodule Edifice.Generative.DiTCoverageTest do
   with various options, param_count, recommended_defaults, and default options.
   """
   use ExUnit.Case, async: true
+  @moduletag :generative
 
   alias Edifice.Generative.DiT
 

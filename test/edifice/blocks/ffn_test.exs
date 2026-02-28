@@ -1,5 +1,6 @@
 defmodule Edifice.Blocks.FFNTest do
   use ExUnit.Case, async: true
+  @moduletag :blocks
 
   alias Edifice.Blocks.FFN
 
@@ -8,6 +9,7 @@ defmodule Edifice.Blocks.FFNTest do
   @hidden 32
 
   describe "layer/2 (standard FFN)" do
+    @tag :smoke
     test "output dimension equals input dimension" do
       input = Axon.input("input", shape: {nil, @seq_len, @hidden})
       model = FFN.layer(input, hidden_size: @hidden, name: "test_ffn")

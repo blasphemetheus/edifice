@@ -1,5 +1,6 @@
 defmodule Edifice.Generative.GenerativeNewTest do
   use ExUnit.Case, async: true
+  @moduletag :generative
 
   alias Edifice.Generative.ConsistencyModel
   alias Edifice.Generative.DDIM

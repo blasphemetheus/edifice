@@ -4,6 +4,7 @@ defmodule Edifice.Generative.CorrectnessTest do
   Verifies encoder/decoder independence, latent structure, and output properties.
   """
   use ExUnit.Case, async: true
+  @moduletag :generative
 
   import Edifice.TestHelpers
 
@@ -14,6 +15,7 @@ defmodule Edifice.Generative.CorrectnessTest do
   # ── VAE Encoder/Decoder Independence ──────────────────────────
   # Encoder and decoder should be independently buildable with different params
 
+  @tag :smoke
   test "vae encoder and decoder have independent parameters" do
     {encoder, decoder} = Edifice.build(:vae, input_size: @embed, latent_size: @latent)
 

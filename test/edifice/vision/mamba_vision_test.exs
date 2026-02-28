@@ -1,5 +1,6 @@
 defmodule Edifice.Vision.MambaVisionTest do
   use ExUnit.Case, async: true
+  @moduletag :vision
 
   alias Edifice.Vision.MambaVision
 

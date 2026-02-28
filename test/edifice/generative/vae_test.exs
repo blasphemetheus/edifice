@@ -1,5 +1,6 @@
 defmodule Edifice.Generative.VAETest do
   use ExUnit.Case, async: true
+  @moduletag :generative
 
   alias Edifice.Generative.VAE
 

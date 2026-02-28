@@ -1,5 +1,6 @@
 defmodule Edifice.Energy.HopfieldCorrectnessTest do
   use ExUnit.Case, async: true
+  @moduletag :energy
 
   alias Edifice.Energy.Hopfield
 
