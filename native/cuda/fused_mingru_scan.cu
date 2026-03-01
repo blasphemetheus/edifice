@@ -148,7 +148,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
         .Ret<ffi::Buffer<ffi::F32>>()   // output
 );
 
-XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(),
+XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
     "exla_fused_mingru_scan_f32", "CUDA", fused_mingru_scan);
 
 #endif  // EXLA_FFI

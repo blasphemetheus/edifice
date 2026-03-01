@@ -132,7 +132,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(qr_cpu_custom_call_f32,
                                   .Ret<ffi::Buffer<ffi::F32>>()
                                   .Ret<ffi::Buffer<ffi::F32>>());
 
-XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(), "qr_cpu_custom_call_f32",
+XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(), "qr_cpu_custom_call_f32",
                          "Host", qr_cpu_custom_call_f32);
 ```
 
@@ -160,7 +160,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(gpu_add, gpu_add_impl,
         .Arg<ffi::Buffer<ffi::F32>>()
         .Ret<ffi::Buffer<ffi::F32>>()
 );
-XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(), "exla_gpu_add_f32", "CUDA", gpu_add);
+XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(), "exla_gpu_add_f32", "CUDA", gpu_add);
 ```
 
 **`exla/lib/exla/mlir/value.ex`** — `Value.gpu_add/3` emits `stablehlo.custom_call`
@@ -371,7 +371,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
         .Ret<ffi::Buffer<ffi::F32>>()   // output
 );
 
-XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(),
+XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
     "exla_fused_mingru_scan_f32", "CUDA", fused_mingru_scan);
 ```
 

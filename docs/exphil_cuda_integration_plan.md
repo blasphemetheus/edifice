@@ -330,7 +330,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(my_handler, my_impl,
         .Arg<ffi::Buffer<ffi::F32>>()
         .Ret<ffi::Buffer<ffi::F32>>());
 
-XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(),
+XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
     "exla_my_kernel_f32", "CUDA", my_handler);
 ```
 

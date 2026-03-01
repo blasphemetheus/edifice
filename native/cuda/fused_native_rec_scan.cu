@@ -245,7 +245,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
         .Ret<ffi::Buffer<ffi::F32>>()   // output
 );
 
-XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(),
+XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
     "exla_fused_elu_gru_scan_f32", "CUDA", fused_elu_gru_scan);
 
 // --- Real-GRU FFI ---
@@ -292,7 +292,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
         .Ret<ffi::Buffer<ffi::F32>>()   // output
 );
 
-XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(),
+XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
     "exla_fused_real_gru_scan_f32", "CUDA", fused_real_gru_scan);
 
 // --- Diag-Linear FFI ---
@@ -339,7 +339,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
         .Ret<ffi::Buffer<ffi::F32>>()   // output
 );
 
-XLA_FFI_REGISTER_HANDLER(ffi::GetXlaFfiApi(),
+XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
     "exla_fused_diag_linear_scan_f32", "CUDA", fused_diag_linear_scan);
 
 #endif  // EXLA_FFI
