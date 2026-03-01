@@ -39,7 +39,7 @@ endif
 # Kernel source files (exclude test/bench harnesses — they have main())
 KERNEL_SOURCES := fused_mingru_scan.cu fused_minlstm_scan.cu \
                   fused_native_rec_scan.cu fused_liquid_scan.cu \
-                  fused_linear_scan.cu
+                  fused_linear_scan.cu fused_delta_rule_scan.cu
 KERNEL_OBJECTS := $(patsubst %.cu,$(OBJ_DIR)/%.o,$(KERNEL_SOURCES))
 
 # All sources for syntax checking

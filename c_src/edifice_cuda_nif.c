@@ -57,6 +57,22 @@ typedef int (*scan_2input_launch_fn)(
     int batch, int seq_len, int hidden
 );
 
+/* Delta rule scan launch wrappers (DeltaNet / GatedDeltaNet) */
+typedef int (*delta_net_launch_fn)(
+    cudaStream_t stream,
+    const float* q, const float* k, const float* v, const float* beta,
+    float* output,
+    int batch, int seq_len, int num_heads, int head_dim
+);
+
+typedef int (*gated_delta_net_launch_fn)(
+    cudaStream_t stream,
+    const float* q, const float* k, const float* v, const float* beta,
+    const float* alpha,
+    float* output,
+    int batch, int seq_len, int num_heads, int head_dim
+);
+
 /* cudaMalloc / cudaFree — resolved from libcudart */
 typedef cudaError_t (*cuda_malloc_fn)(void** devPtr, size_t size);
 typedef cudaError_t (*cuda_free_fn)(void* devPtr);
@@ -70,6 +86,8 @@ static scan_2input_launch_fn s_real_gru_launch    = NULL;
 static scan_2input_launch_fn s_diag_linear_launch = NULL;
 static scan_2input_launch_fn s_liquid_launch      = NULL;
 static scan_2input_launch_fn s_linear_launch     = NULL;
+static delta_net_launch_fn       s_delta_net_launch       = NULL;
+static gated_delta_net_launch_fn s_gated_delta_net_launch = NULL;
 static cuda_malloc_fn    s_cuda_malloc    = NULL;
 static cuda_free_fn      s_cuda_free      = NULL;
 static cuda_device_synchronize_fn s_cuda_sync = NULL;
@@ -399,6 +417,154 @@ static ERL_NIF_TERM nif_fused_linear_scan(
 }
 
 /* ========================================================================== */
+/* NIF: fused delta net scan (DeltaNet — no alpha)                            */
+/* ========================================================================== */
+
+/*
+ * fused_delta_net_scan(q_ptr, k_ptr, v_ptr, beta_ptr,
+ *                      batch, seq_len, num_heads, head_dim)
+ *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
+ */
+static ERL_NIF_TERM nif_fused_delta_net_scan(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t q_ptr, k_ptr, v_ptr, beta_ptr;
+    int batch, seq_len, num_heads, head_dim;
+
+    if (!s_delta_net_launch)
+        return make_error(env, "delta_net kernel not loaded");
+
+    if (!enif_get_uint64(env, argv[0], &q_ptr) ||
+        !enif_get_uint64(env, argv[1], &k_ptr) ||
+        !enif_get_uint64(env, argv[2], &v_ptr) ||
+        !enif_get_uint64(env, argv[3], &beta_ptr) ||
+        !enif_get_int(env, argv[4], &batch) ||
+        !enif_get_int(env, argv[5], &seq_len) ||
+        !enif_get_int(env, argv[6], &num_heads) ||
+        !enif_get_int(env, argv[7], &head_dim))
+    {
+        return enif_make_badarg(env);
+    }
+
+    if (batch <= 0 || seq_len <= 0 || num_heads <= 0 || head_dim <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * sizeof(float);
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2) {
+        return alloc_result;
+    }
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0) {
+        return alloc_result;
+    }
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = s_delta_net_launch(
+        NULL,
+        (const float*)(uintptr_t)q_ptr,
+        (const float*)(uintptr_t)k_ptr,
+        (const float*)(uintptr_t)v_ptr,
+        (const float*)(uintptr_t)beta_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, num_heads, head_dim
+    );
+
+    if (launch_err != 0) {
+        return make_error(env, "delta_net kernel launch failed");
+    }
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0) {
+        return make_error(env, "cudaDeviceSynchronize failed");
+    }
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused gated delta net scan (GatedDeltaNet — with alpha)               */
+/* ========================================================================== */
+
+/*
+ * fused_gated_delta_net_scan(q_ptr, k_ptr, v_ptr, beta_ptr, alpha_ptr,
+ *                            batch, seq_len, num_heads, head_dim)
+ *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
+ */
+static ERL_NIF_TERM nif_fused_gated_delta_net_scan(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t q_ptr, k_ptr, v_ptr, beta_ptr, alpha_ptr;
+    int batch, seq_len, num_heads, head_dim;
+
+    if (!s_gated_delta_net_launch)
+        return make_error(env, "gated_delta_net kernel not loaded");
+
+    if (!enif_get_uint64(env, argv[0], &q_ptr) ||
+        !enif_get_uint64(env, argv[1], &k_ptr) ||
+        !enif_get_uint64(env, argv[2], &v_ptr) ||
+        !enif_get_uint64(env, argv[3], &beta_ptr) ||
+        !enif_get_uint64(env, argv[4], &alpha_ptr) ||
+        !enif_get_int(env, argv[5], &batch) ||
+        !enif_get_int(env, argv[6], &seq_len) ||
+        !enif_get_int(env, argv[7], &num_heads) ||
+        !enif_get_int(env, argv[8], &head_dim))
+    {
+        return enif_make_badarg(env);
+    }
+
+    if (batch <= 0 || seq_len <= 0 || num_heads <= 0 || head_dim <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * sizeof(float);
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2) {
+        return alloc_result;
+    }
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0) {
+        return alloc_result;
+    }
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = s_gated_delta_net_launch(
+        NULL,
+        (const float*)(uintptr_t)q_ptr,
+        (const float*)(uintptr_t)k_ptr,
+        (const float*)(uintptr_t)v_ptr,
+        (const float*)(uintptr_t)beta_ptr,
+        (const float*)(uintptr_t)alpha_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, num_heads, head_dim
+    );
+
+    if (launch_err != 0) {
+        return make_error(env, "gated_delta_net kernel launch failed");
+    }
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0) {
+        return make_error(env, "cudaDeviceSynchronize failed");
+    }
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
 /* NIF Load — resolve all symbols                                             */
 /* ========================================================================== */
 
@@ -474,6 +640,10 @@ static int nif_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
         s_kernels_handle, "fused_liquid_scan_launch");
     s_linear_launch = (scan_2input_launch_fn)dlsym(
         s_kernels_handle, "fused_linear_scan_launch");
+    s_delta_net_launch = (delta_net_launch_fn)dlsym(
+        s_kernels_handle, "fused_delta_net_scan_launch");
+    s_gated_delta_net_launch = (gated_delta_net_launch_fn)dlsym(
+        s_kernels_handle, "fused_gated_delta_net_scan_launch");
 
     return 0;
 }
@@ -490,14 +660,16 @@ static void nif_unload(ErlNifEnv* env, void* priv_data) {
         dlclose(s_cudart_handle);
         s_cudart_handle = NULL;
     }
-    s_mingru_launch      = NULL;
-    s_minlstm_launch     = NULL;
-    s_elu_gru_launch     = NULL;
-    s_real_gru_launch    = NULL;
-    s_diag_linear_launch = NULL;
-    s_liquid_launch      = NULL;
-    s_linear_launch      = NULL;
-    s_cuda_malloc        = NULL;
+    s_mingru_launch          = NULL;
+    s_minlstm_launch         = NULL;
+    s_elu_gru_launch         = NULL;
+    s_real_gru_launch        = NULL;
+    s_diag_linear_launch     = NULL;
+    s_liquid_launch          = NULL;
+    s_linear_launch          = NULL;
+    s_delta_net_launch       = NULL;
+    s_gated_delta_net_launch = NULL;
+    s_cuda_malloc            = NULL;
     s_cuda_free          = NULL;
     s_cuda_sync          = NULL;
 }
@@ -513,7 +685,9 @@ static ErlNifFunc nif_funcs[] = {
     {"fused_real_gru_scan",     6, nif_fused_real_gru_scan,     ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_diag_linear_scan",  6, nif_fused_diag_linear_scan,  ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_liquid_scan",       6, nif_fused_liquid_scan,       ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_linear_scan",       6, nif_fused_linear_scan,       ERL_NIF_DIRTY_JOB_IO_BOUND}
+    {"fused_linear_scan",           6, nif_fused_linear_scan,           ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_delta_net_scan",        8, nif_fused_delta_net_scan,        ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_gated_delta_net_scan",  9, nif_fused_gated_delta_net_scan,  ERL_NIF_DIRTY_JOB_IO_BOUND}
 };
 
 ERL_NIF_INIT(Elixir.Edifice.CUDA.NIF, nif_funcs, nif_load, NULL, NULL, nif_unload)

@@ -48,6 +48,19 @@ extern "C" int fused_linear_scan_launch(
     const float* a_vals, const float* b_vals, const float* h0,
     float* output, int batch, int seq_len, int hidden);
 
+extern "C" int fused_delta_net_scan_launch(
+    cudaStream_t stream,
+    const float* q, const float* k, const float* v, const float* beta,
+    float* output,
+    int batch, int seq_len, int num_heads, int head_dim);
+
+extern "C" int fused_gated_delta_net_scan_launch(
+    cudaStream_t stream,
+    const float* q, const float* k, const float* v, const float* beta,
+    const float* alpha,
+    float* output,
+    int batch, int seq_len, int num_heads, int head_dim);
+
 // ============================================================================
 // CPU reference implementations
 // ============================================================================
@@ -185,6 +198,112 @@ void liquid_scan_cpu(
             }
         }
     }
+}
+
+// CPU reference: DeltaNet delta rule scan (no alpha)
+// Inputs: q,k,v,beta are [B, T, H, d], output is [B, T, H, d]
+void delta_net_scan_cpu(
+    const float* q, const float* k, const float* v, const float* beta,
+    float* output, int batch, int seq_len, int num_heads, int head_dim
+) {
+    int dd = head_dim * head_dim;
+    float* S = (float*)calloc(dd, sizeof(float));
+
+    for (int b = 0; b < batch; b++) {
+        for (int h = 0; h < num_heads; h++) {
+            // Zero state matrix
+            memset(S, 0, dd * sizeof(float));
+
+            for (int t = 0; t < seq_len; t++) {
+                int offset = b * seq_len * num_heads * head_dim
+                           + t * num_heads * head_dim
+                           + h * head_dim;
+
+                // Retrieval: S @ k
+                for (int i = 0; i < head_dim; i++) {
+                    float ret = 0.0f;
+                    for (int j = 0; j < head_dim; j++) {
+                        ret += S[i * head_dim + j] * k[offset + j];
+                    }
+                    // error = v - retrieval, scaled_error = beta * error
+                    float error_i = v[offset + i] - ret;
+                    float scaled = beta[offset + i] * error_i;
+                    // Rank-1 update: S[i][j] += scaled * k[j]
+                    for (int j = 0; j < head_dim; j++) {
+                        S[i * head_dim + j] += scaled * k[offset + j];
+                    }
+                }
+
+                // Output: S @ q
+                for (int i = 0; i < head_dim; i++) {
+                    float out = 0.0f;
+                    for (int j = 0; j < head_dim; j++) {
+                        out += S[i * head_dim + j] * q[offset + j];
+                    }
+                    output[offset + i] = out;
+                }
+            }
+        }
+    }
+    free(S);
+}
+
+// CPU reference: GatedDeltaNet delta rule scan (with alpha)
+// alpha is [B, T, H] — scalar per head per timestep
+void gated_delta_net_scan_cpu(
+    const float* q, const float* k, const float* v, const float* beta,
+    const float* alpha,
+    float* output, int batch, int seq_len, int num_heads, int head_dim
+) {
+    int dd = head_dim * head_dim;
+    float* S = (float*)calloc(dd, sizeof(float));
+
+    for (int b = 0; b < batch; b++) {
+        for (int h = 0; h < num_heads; h++) {
+            memset(S, 0, dd * sizeof(float));
+
+            for (int t = 0; t < seq_len; t++) {
+                int offset = b * seq_len * num_heads * head_dim
+                           + t * num_heads * head_dim
+                           + h * head_dim;
+                int alpha_offset = b * seq_len * num_heads
+                                 + t * num_heads
+                                 + h;
+
+                float alpha_val = alpha[alpha_offset];
+
+                // Decay state: S *= alpha
+                for (int i = 0; i < head_dim; i++) {
+                    for (int j = 0; j < head_dim; j++) {
+                        S[i * head_dim + j] *= alpha_val;
+                    }
+                }
+
+                // Retrieval: S @ k
+                for (int i = 0; i < head_dim; i++) {
+                    float ret = 0.0f;
+                    for (int j = 0; j < head_dim; j++) {
+                        ret += S[i * head_dim + j] * k[offset + j];
+                    }
+                    float error_i = v[offset + i] - ret;
+                    float scaled = beta[offset + i] * error_i;
+                    for (int j = 0; j < head_dim; j++) {
+                        S[i * head_dim + j] += scaled * k[offset + j];
+                    }
+                }
+
+                // Output: S @ q
+                for (int i = 0; i < head_dim; i++) {
+                    float out = 0.0f;
+                    for (int j = 0; j < head_dim; j++) {
+                        out += S[i * head_dim + j] * q[offset + j];
+                    }
+                    output[offset + i] = out;
+                }
+            }
+        }
+    }
+    free(S);
 }
 
 // ============================================================================
@@ -389,6 +508,130 @@ bool test_2input_kernel(
     return pass;
 }
 
+// ============================================================================
+// Delta Rule Scan Tests
+// ============================================================================
+
+bool test_delta_net(int batch, int seq_len, int num_heads, int head_dim) {
+    int total = batch * seq_len * num_heads * head_dim;
+
+    float* h_q          = (float*)malloc(total * sizeof(float));
+    float* h_k          = (float*)malloc(total * sizeof(float));
+    float* h_v          = (float*)malloc(total * sizeof(float));
+    float* h_beta       = (float*)malloc(total * sizeof(float));
+    float* h_output_gpu = (float*)malloc(total * sizeof(float));
+    float* h_output_cpu = (float*)malloc(total * sizeof(float));
+
+    srand(700);
+    for (int i = 0; i < total; i++) {
+        h_q[i] = rand_float() * 2.0f - 1.0f;
+        // k should be L2-normalized per head — approximate with small values
+        h_k[i] = (rand_float() * 2.0f - 1.0f) * 0.2f;
+        h_v[i] = rand_float() * 2.0f - 1.0f;
+        h_beta[i] = rand_float();  // post-sigmoid [0,1]
+    }
+
+    delta_net_scan_cpu(h_q, h_k, h_v, h_beta, h_output_cpu,
+                       batch, seq_len, num_heads, head_dim);
+
+    float *d_q, *d_k, *d_v, *d_beta, *d_output;
+    CUDA_CHECK(cudaMalloc(&d_q, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_k, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_v, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_beta, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_output, total * sizeof(float)));
+
+    CUDA_CHECK(cudaMemcpy(d_q, h_q, total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_k, h_k, total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_v, h_v, total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_beta, h_beta, total * sizeof(float), cudaMemcpyHostToDevice));
+
+    int err = fused_delta_net_scan_launch(0, d_q, d_k, d_v, d_beta, d_output,
+                                          batch, seq_len, num_heads, head_dim);
+    if (err != 0) {
+        printf("  FAIL: DeltaNet kernel launch error %d\n", err);
+        return false;
+    }
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    CUDA_CHECK(cudaMemcpy(h_output_gpu, d_output, total * sizeof(float), cudaMemcpyDeviceToHost));
+
+    float diff = max_abs_diff(h_output_cpu, h_output_gpu, total);
+    bool pass = diff < 1.0e-3f;  // Matrix ops accumulate more error
+
+    printf("  DeltaNet [B=%d, T=%d, H=%d, d=%d]: max_diff=%.2e %s\n",
+           batch, seq_len, num_heads, head_dim, diff, pass ? "PASS" : "FAIL");
+
+    cudaFree(d_q); cudaFree(d_k); cudaFree(d_v); cudaFree(d_beta); cudaFree(d_output);
+    free(h_q); free(h_k); free(h_v); free(h_beta); free(h_output_gpu); free(h_output_cpu);
+
+    return pass;
+}
+
+bool test_gated_delta_net(int batch, int seq_len, int num_heads, int head_dim) {
+    int total = batch * seq_len * num_heads * head_dim;
+    int alpha_total = batch * seq_len * num_heads;
+
+    float* h_q          = (float*)malloc(total * sizeof(float));
+    float* h_k          = (float*)malloc(total * sizeof(float));
+    float* h_v          = (float*)malloc(total * sizeof(float));
+    float* h_beta       = (float*)malloc(total * sizeof(float));
+    float* h_alpha      = (float*)malloc(alpha_total * sizeof(float));
+    float* h_output_gpu = (float*)malloc(total * sizeof(float));
+    float* h_output_cpu = (float*)malloc(total * sizeof(float));
+
+    srand(800);
+    for (int i = 0; i < total; i++) {
+        h_q[i] = rand_float() * 2.0f - 1.0f;
+        h_k[i] = (rand_float() * 2.0f - 1.0f) * 0.2f;
+        h_v[i] = rand_float() * 2.0f - 1.0f;
+        h_beta[i] = rand_float();
+    }
+    for (int i = 0; i < alpha_total; i++) {
+        h_alpha[i] = 0.8f + rand_float() * 0.2f;  // [0.8, 1.0] post-sigmoid range
+    }
+
+    gated_delta_net_scan_cpu(h_q, h_k, h_v, h_beta, h_alpha, h_output_cpu,
+                             batch, seq_len, num_heads, head_dim);
+
+    float *d_q, *d_k, *d_v, *d_beta, *d_alpha, *d_output;
+    CUDA_CHECK(cudaMalloc(&d_q, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_k, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_v, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_beta, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_alpha, alpha_total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_output, total * sizeof(float)));
+
+    CUDA_CHECK(cudaMemcpy(d_q, h_q, total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_k, h_k, total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_v, h_v, total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_beta, h_beta, total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_alpha, h_alpha, alpha_total * sizeof(float), cudaMemcpyHostToDevice));
+
+    int err = fused_gated_delta_net_scan_launch(0, d_q, d_k, d_v, d_beta, d_alpha, d_output,
+                                                 batch, seq_len, num_heads, head_dim);
+    if (err != 0) {
+        printf("  FAIL: GatedDeltaNet kernel launch error %d\n", err);
+        return false;
+    }
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    CUDA_CHECK(cudaMemcpy(h_output_gpu, d_output, total * sizeof(float), cudaMemcpyDeviceToHost));
+
+    float diff = max_abs_diff(h_output_cpu, h_output_gpu, total);
+    bool pass = diff < 1.0e-3f;
+
+    printf("  GatedDeltaNet [B=%d, T=%d, H=%d, d=%d]: max_diff=%.2e %s\n",
+           batch, seq_len, num_heads, head_dim, diff, pass ? "PASS" : "FAIL");
+
+    cudaFree(d_q); cudaFree(d_k); cudaFree(d_v); cudaFree(d_beta);
+    cudaFree(d_alpha); cudaFree(d_output);
+    free(h_q); free(h_k); free(h_v); free(h_beta); free(h_alpha);
+    free(h_output_gpu); free(h_output_cpu);
+
+    return pass;
+}
+
 int main() {
     printf("=== Fused Scan Kernel Tests ===\n\n");
 
@@ -496,6 +739,21 @@ int main() {
                         32, 32, 256, 605, 0.0f, 1.0f, -1.0f, 1.0f) ? pass++ : fail++);
     (test_2input_kernel("Linear", fused_linear_scan_launch, linear_scan_cpu,
                         1, 32, 512, 606, 0.0f, 1.0f, -1.0f, 1.0f) ? pass++ : fail++);
+
+    // Delta Rule kernels — matrix-state recurrences
+    printf("\nDeltaNet tests:\n");
+    (test_delta_net(1, 1, 4, 16)   ? pass++ : fail++);  // minimal
+    (test_delta_net(1, 32, 4, 64)  ? pass++ : fail++);  // target config
+    (test_delta_net(2, 32, 4, 64)  ? pass++ : fail++);  // batch=2
+    (test_delta_net(1, 64, 4, 64)  ? pass++ : fail++);  // longer seq
+    (test_delta_net(32, 32, 4, 64) ? pass++ : fail++);  // batch=32
+
+    printf("\nGatedDeltaNet tests:\n");
+    (test_gated_delta_net(1, 1, 4, 16)   ? pass++ : fail++);
+    (test_gated_delta_net(1, 32, 4, 64)  ? pass++ : fail++);
+    (test_gated_delta_net(2, 32, 4, 64)  ? pass++ : fail++);
+    (test_gated_delta_net(1, 64, 4, 64)  ? pass++ : fail++);
+    (test_gated_delta_net(32, 32, 4, 64) ? pass++ : fail++);
 
     printf("\n=== Results: %d passed, %d failed ===\n", pass, fail);
     return fail > 0 ? 1 : 0;

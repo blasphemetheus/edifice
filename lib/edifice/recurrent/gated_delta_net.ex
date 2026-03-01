@@ -286,6 +286,72 @@ defmodule Edifice.Recurrent.GatedDeltaNet do
     Axon.activation(conved, :silu, name: "#{name}_conv_silu")
   end
 
+  @doc """
+  Sequential gated delta rule scan — the core recurrence loop.
+
+  Inputs q, k, v, beta are [batch, seq_len, num_heads, head_dim].
+  Alpha is [batch, seq_len, num_heads] — scalar forget gate per head
+  (pre-computed mean across head_dim, post-sigmoid).
+
+  Returns [batch, seq_len, num_heads, head_dim] retrieval outputs.
+
+  This is the fallback path called by FusedScan when CUDA is not available.
+  """
+  def gated_delta_net_sequential_scan(q_all, k_normalized, v_all, beta, alpha) do
+    batch_size = Nx.axis_size(q_all, 0)
+    seq_len = Nx.axis_size(q_all, 1)
+    num_heads = Nx.axis_size(q_all, 2)
+    head_dim = Nx.axis_size(q_all, 3)
+
+    # Initialize per-head memory: [batch, num_heads, head_dim, head_dim]
+    s_init = Nx.broadcast(0.0, {batch_size, num_heads, head_dim, head_dim})
+
+    # Sequential scan with gated delta rule — vectorized across heads
+    {_, output_list} =
+      Enum.reduce(0..(seq_len - 1), {s_init, []}, fn t, {s_prev, acc} ->
+        # Extract timestep t: [batch, num_heads, head_dim]
+        q_t = Nx.slice_along_axis(q_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        k_t = Nx.slice_along_axis(k_normalized, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        v_t = Nx.slice_along_axis(v_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+        # alpha: [batch, seq_len, num_heads] -> alpha_t: [batch, num_heads]
+        alpha_t = Nx.slice_along_axis(alpha, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+        # Broadcast scalar alpha per head to [batch, H, 1, 1] for matrix multiply
+        alpha_scalar =
+          alpha_t
+          |> Nx.new_axis(2)
+          |> Nx.new_axis(3)
+
+        s_gated = Nx.multiply(alpha_scalar, s_prev)
+
+        # Retrieval: S @ k per head: [batch, num_heads, head_dim]
+        retrieval =
+          Nx.dot(s_gated, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1])
+          |> Nx.squeeze(axes: [3])
+
+        # Error: v_t - retrieval
+        error = Nx.subtract(v_t, retrieval)
+
+        # Delta update: S = alpha*S + beta * error * k^T
+        scaled_error = Nx.multiply(beta_t, error)
+        update = Nx.multiply(Nx.new_axis(scaled_error, 3), Nx.new_axis(k_t, 2))
+
+        s_t = Nx.add(s_gated, update)
+
+        # Output: S @ q per head
+        o_t =
+          Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, 3), [2], [0, 1])
+          |> Nx.squeeze(axes: [3])
+
+        {s_t, [o_t | acc]}
+      end)
+
+    # [batch, seq_len, num_heads, head_dim]
+    output_list |> Enum.reverse() |> Nx.stack(axis: 1)
+  end
+
   defp gated_delta_net_scan(projections, hidden_size, num_heads) do
     # projections: [batch, seq_len, hidden_size * 6]
     batch_size = Nx.axis_size(projections, 0)
@@ -302,7 +368,7 @@ defmodule Edifice.Recurrent.GatedDeltaNet do
 
     # Gates: beta controls write strength, alpha controls memory retention
     beta = Nx.sigmoid(beta_pre)
-    alpha = Nx.sigmoid(alpha_pre)
+    alpha_raw = Nx.sigmoid(alpha_pre)
     # Output gate: swish(gate) = gate * sigmoid(gate)
     gate = Nx.multiply(gate_pre, Nx.sigmoid(gate_pre))
 
@@ -311,7 +377,7 @@ defmodule Edifice.Recurrent.GatedDeltaNet do
     k_all = Nx.reshape(k_all, {batch_size, seq_len, num_heads, head_dim})
     v_all = Nx.reshape(v_all, {batch_size, seq_len, num_heads, head_dim})
     beta = Nx.reshape(beta, {batch_size, seq_len, num_heads, head_dim})
-    alpha = Nx.reshape(alpha, {batch_size, seq_len, num_heads, head_dim})
+    alpha_raw = Nx.reshape(alpha_raw, {batch_size, seq_len, num_heads, head_dim})
 
     # L2 normalize keys per head for stable memory updates
     k_norm =
@@ -319,57 +385,16 @@ defmodule Edifice.Recurrent.GatedDeltaNet do
 
     k_normalized = Nx.divide(k_all, k_norm)
 
-    # Initialize per-head memory: [batch, num_heads, head_dim, head_dim]
-    s_init = Nx.broadcast(0.0, {batch_size, num_heads, head_dim, head_dim})
+    # Reduce alpha to scalar per head: [batch, seq_len, num_heads]
+    alpha = Nx.mean(alpha_raw, axes: [3])
 
-    # Sequential scan with gated delta rule — vectorized across heads
-    {_, output_list} =
-      Enum.reduce(0..(seq_len - 1), {s_init, []}, fn t, {s_prev, acc} ->
-        # Extract timestep t: [batch, num_heads, head_dim]
-        q_t = Nx.slice_along_axis(q_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        k_t = Nx.slice_along_axis(k_normalized, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        v_t = Nx.slice_along_axis(v_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        alpha_t = Nx.slice_along_axis(alpha, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+    # Dispatch through FusedScan (CUDA or sequential fallback)
+    # Returns [batch, seq_len, num_heads, head_dim]
+    scan_output =
+      Edifice.CUDA.FusedScan.gated_delta_net_scan(q_all, k_normalized, v_all, beta, alpha)
 
-        # Gated state retention: alpha controls how much of previous state to keep
-        # alpha_t is [batch, num_heads, head_dim], need to broadcast to [batch, H, d, d]
-        # We use the mean across head_dim as a scalar gate per head
-        alpha_scalar =
-          Nx.mean(alpha_t, axes: [2])
-          |> Nx.new_axis(2)
-          |> Nx.new_axis(3)
-
-        s_gated = Nx.multiply(alpha_scalar, s_prev)
-
-        # Retrieval: S @ k per head: [batch, num_heads, head_dim]
-        retrieval =
-          Nx.dot(s_gated, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1])
-          |> Nx.squeeze(axes: [3])
-
-        # Error: v_t - retrieval
-        error = Nx.subtract(v_t, retrieval)
-
-        # Delta update: S = alpha*S + beta * error * k^T (outer product per head)
-        scaled_error = Nx.multiply(beta_t, error)
-        update = Nx.multiply(Nx.new_axis(scaled_error, 3), Nx.new_axis(k_t, 2))
-
-        s_t = Nx.add(s_gated, update)
-
-        # Output: S @ q per head
-        o_t =
-          Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, 3), [2], [0, 1])
-          |> Nx.squeeze(axes: [3])
-
-        # Flatten heads: [batch, num_heads * head_dim]
-        o_flat = Nx.reshape(o_t, {batch_size, num_heads * head_dim})
-
-        {s_t, [o_flat | acc]}
-      end)
-
-    # Stack and apply output gate
-    # output: [batch, seq_len, hidden_size]
-    raw_output = output_list |> Enum.reverse() |> Nx.stack(axis: 1)
+    # Flatten heads: [batch, seq_len, num_heads * head_dim]
+    raw_output = Nx.reshape(scan_output, {batch_size, seq_len, num_heads * head_dim})
 
     # Apply swish output gate: gate is [batch, seq_len, hidden_size]
     Nx.multiply(gate, raw_output)

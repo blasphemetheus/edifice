@@ -49,6 +49,19 @@ extern "C" int fused_linear_scan_launch(
     const float* a_vals, const float* b_vals, const float* h0,
     float* output, int batch, int seq_len, int hidden);
 
+extern "C" int fused_delta_net_scan_launch(
+    cudaStream_t stream,
+    const float* q, const float* k, const float* v, const float* beta,
+    float* output,
+    int batch, int seq_len, int num_heads, int head_dim);
+
+extern "C" int fused_gated_delta_net_scan_launch(
+    cudaStream_t stream,
+    const float* q, const float* k, const float* v, const float* beta,
+    const float* alpha,
+    float* output,
+    int batch, int seq_len, int num_heads, int head_dim);
+
 #define CUDA_CHECK(call) do { \
     cudaError_t err = (call); \
     if (err != cudaSuccess) { \
@@ -275,6 +288,128 @@ int main() {
         auto r = bench_2input(fused_linear_scan_launch, cfg.batch, cfg.seq_len, cfg.hidden,
                               WARMUP, ITERS, 0.0f, 1.0f, -1.0f, 1.0f);
         printf("%-42s %10.3f %10.3f %10.3f\n", cfg.label, r.avg_ms, r.min_ms, r.median_ms);
+    }
+
+    // Delta Rule kernel benchmarks — matrix-state recurrences
+    // These have a fundamentally different thread layout: one block per (batch, head)
+    // with d threads, vs one thread per (batch, hidden) for element-wise scans.
+    struct DeltaConfig { int batch; int seq_len; int num_heads; int head_dim; const char* label; };
+    DeltaConfig delta_configs[] = {
+        {1,   1, 4, 64, "inference seq=1   (single step)"},
+        {1,  32, 4, 64, "inference seq=32  (target config)"},
+        {1,  64, 4, 64, "inference seq=64  (extended)"},
+        {1,  32, 4, 32, "inference seq=32  (small head)"},
+        {32, 32, 4, 64, "training  seq=32  (batch=32)"},
+    };
+    int n_delta = sizeof(delta_configs) / sizeof(delta_configs[0]);
+
+    printf("\n--- DeltaNet (delta rule scan) ---\n");
+    for (int c = 0; c < n_delta; c++) {
+        auto& cfg = delta_configs[c];
+        int total = cfg.batch * cfg.seq_len * cfg.num_heads * cfg.head_dim;
+        int alpha_total = cfg.batch * cfg.seq_len * cfg.num_heads;
+
+        float *d_q, *d_k, *d_v, *d_beta, *d_output;
+        CUDA_CHECK(cudaMalloc(&d_q, total * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&d_k, total * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&d_v, total * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&d_beta, total * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&d_output, total * sizeof(float)));
+
+        float* h_buf = (float*)malloc(total * sizeof(float));
+        srand(42);
+        for (int i = 0; i < total; i++) h_buf[i] = ((float)rand() / RAND_MAX) * 0.4f - 0.2f;
+        CUDA_CHECK(cudaMemcpy(d_q, h_buf, total * sizeof(float), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_k, h_buf, total * sizeof(float), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_v, h_buf, total * sizeof(float), cudaMemcpyHostToDevice));
+        for (int i = 0; i < total; i++) h_buf[i] = (float)rand() / RAND_MAX;
+        CUDA_CHECK(cudaMemcpy(d_beta, h_buf, total * sizeof(float), cudaMemcpyHostToDevice));
+        free(h_buf);
+
+        for (int i = 0; i < WARMUP; i++) {
+            fused_delta_net_scan_launch(0, d_q, d_k, d_v, d_beta, d_output,
+                                        cfg.batch, cfg.seq_len, cfg.num_heads, cfg.head_dim);
+        }
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        std::vector<float> times(ITERS);
+        cudaEvent_t start, stop;
+        CUDA_CHECK(cudaEventCreate(&start));
+        CUDA_CHECK(cudaEventCreate(&stop));
+        for (int i = 0; i < ITERS; i++) {
+            CUDA_CHECK(cudaEventRecord(start));
+            fused_delta_net_scan_launch(0, d_q, d_k, d_v, d_beta, d_output,
+                                        cfg.batch, cfg.seq_len, cfg.num_heads, cfg.head_dim);
+            CUDA_CHECK(cudaEventRecord(stop));
+            CUDA_CHECK(cudaEventSynchronize(stop));
+            CUDA_CHECK(cudaEventElapsedTime(&times[i], start, stop));
+        }
+        CUDA_CHECK(cudaEventDestroy(start));
+        CUDA_CHECK(cudaEventDestroy(stop));
+
+        std::sort(times.begin(), times.end());
+        float sum = 0; for (auto t : times) sum += t;
+        printf("%-42s %10.3f %10.3f %10.3f\n", cfg.label, sum/ITERS, times[0], times[ITERS/2]);
+
+        cudaFree(d_q); cudaFree(d_k); cudaFree(d_v); cudaFree(d_beta); cudaFree(d_output);
+    }
+
+    printf("\n--- GatedDeltaNet (gated delta rule scan) ---\n");
+    for (int c = 0; c < n_delta; c++) {
+        auto& cfg = delta_configs[c];
+        int total = cfg.batch * cfg.seq_len * cfg.num_heads * cfg.head_dim;
+        int alpha_total = cfg.batch * cfg.seq_len * cfg.num_heads;
+
+        float *d_q, *d_k, *d_v, *d_beta, *d_alpha, *d_output;
+        CUDA_CHECK(cudaMalloc(&d_q, total * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&d_k, total * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&d_v, total * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&d_beta, total * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&d_alpha, alpha_total * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&d_output, total * sizeof(float)));
+
+        float* h_buf = (float*)malloc(total * sizeof(float));
+        srand(42);
+        for (int i = 0; i < total; i++) h_buf[i] = ((float)rand() / RAND_MAX) * 0.4f - 0.2f;
+        CUDA_CHECK(cudaMemcpy(d_q, h_buf, total * sizeof(float), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_k, h_buf, total * sizeof(float), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_v, h_buf, total * sizeof(float), cudaMemcpyHostToDevice));
+        for (int i = 0; i < total; i++) h_buf[i] = (float)rand() / RAND_MAX;
+        CUDA_CHECK(cudaMemcpy(d_beta, h_buf, total * sizeof(float), cudaMemcpyHostToDevice));
+        free(h_buf);
+
+        float* h_alpha = (float*)malloc(alpha_total * sizeof(float));
+        for (int i = 0; i < alpha_total; i++) h_alpha[i] = 0.9f + ((float)rand() / RAND_MAX) * 0.1f;
+        CUDA_CHECK(cudaMemcpy(d_alpha, h_alpha, alpha_total * sizeof(float), cudaMemcpyHostToDevice));
+        free(h_alpha);
+
+        for (int i = 0; i < WARMUP; i++) {
+            fused_gated_delta_net_scan_launch(0, d_q, d_k, d_v, d_beta, d_alpha, d_output,
+                                              cfg.batch, cfg.seq_len, cfg.num_heads, cfg.head_dim);
+        }
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        std::vector<float> times(ITERS);
+        cudaEvent_t start, stop;
+        CUDA_CHECK(cudaEventCreate(&start));
+        CUDA_CHECK(cudaEventCreate(&stop));
+        for (int i = 0; i < ITERS; i++) {
+            CUDA_CHECK(cudaEventRecord(start));
+            fused_gated_delta_net_scan_launch(0, d_q, d_k, d_v, d_beta, d_alpha, d_output,
+                                              cfg.batch, cfg.seq_len, cfg.num_heads, cfg.head_dim);
+            CUDA_CHECK(cudaEventRecord(stop));
+            CUDA_CHECK(cudaEventSynchronize(stop));
+            CUDA_CHECK(cudaEventElapsedTime(&times[i], start, stop));
+        }
+        CUDA_CHECK(cudaEventDestroy(start));
+        CUDA_CHECK(cudaEventDestroy(stop));
+
+        std::sort(times.begin(), times.end());
+        float sum = 0; for (auto t : times) sum += t;
+        printf("%-42s %10.3f %10.3f %10.3f\n", cfg.label, sum/ITERS, times[0], times[ITERS/2]);
+
+        cudaFree(d_q); cudaFree(d_k); cudaFree(d_v); cudaFree(d_beta);
+        cudaFree(d_alpha); cudaFree(d_output);
     }
 
     printf("\n--- Comparison with plan doc targets ---\n");

@@ -218,6 +218,60 @@ defmodule Edifice.Recurrent.DeltaNet do
     Axon.add(input, output, name: "#{name}_residual")
   end
 
+  @doc """
+  Sequential delta rule scan — the core recurrence loop.
+
+  Inputs q, k, v, beta are all [batch, seq_len, num_heads, head_dim].
+  Keys should be L2-normalized, beta should be post-sigmoid.
+
+  Returns [batch, seq_len, num_heads, head_dim] retrieval outputs.
+
+  This is the fallback path called by FusedScan when CUDA is not available.
+  """
+  def delta_net_sequential_scan(q_all, k_normalized, v_all, beta) do
+    batch_size = Nx.axis_size(q_all, 0)
+    seq_len = Nx.axis_size(q_all, 1)
+    num_heads = Nx.axis_size(q_all, 2)
+    head_dim = Nx.axis_size(q_all, 3)
+
+    # Initialize per-head memory: [batch, num_heads, head_dim, head_dim]
+    s_init = Nx.broadcast(0.0, {batch_size, num_heads, head_dim, head_dim})
+
+    # Sequential scan with delta rule — vectorized across heads
+    {_, output_list} =
+      Enum.reduce(0..(seq_len - 1), {s_init, []}, fn t, {s_prev, acc} ->
+        # [batch, num_heads, head_dim]
+        q_t = Nx.slice_along_axis(q_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        k_t = Nx.slice_along_axis(k_normalized, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        v_t = Nx.slice_along_axis(v_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+        # Retrieval: S @ k per head: [batch, num_heads, head_dim]
+        retrieval =
+          Nx.dot(s_prev, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1])
+
+        retrieval = Nx.squeeze(retrieval, axes: [3])
+
+        # Error: v_t - retrieval
+        error = Nx.subtract(v_t, retrieval)
+
+        # Delta update: S += beta * error * k^T (outer product per head)
+        scaled_error = Nx.multiply(beta_t, error)
+        update = Nx.multiply(Nx.new_axis(scaled_error, 3), Nx.new_axis(k_t, 2))
+
+        s_t = Nx.add(s_prev, update)
+
+        # Output: S @ q per head: [batch, num_heads, head_dim]
+        o_t = Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, 3), [2], [0, 1])
+        o_t = Nx.squeeze(o_t, axes: [3])
+
+        {s_t, [o_t | acc]}
+      end)
+
+    # [batch, seq_len, num_heads, head_dim]
+    output_list |> Enum.reverse() |> Nx.stack(axis: 1)
+  end
+
   defp delta_net_scan(projections, hidden_size, num_heads) do
     # projections: [batch, seq_len, hidden_size * 4]
     batch_size = Nx.axis_size(projections, 0)
@@ -243,48 +297,13 @@ defmodule Edifice.Recurrent.DeltaNet do
     k_norm = Nx.sqrt(Nx.add(Nx.sum(Nx.pow(k_all, 2), axes: [3], keep_axes: true), norm_eps()))
     k_normalized = Nx.divide(k_all, k_norm)
 
-    # Initialize per-head memory: [batch, num_heads, head_dim, head_dim]
-    s_init = Nx.broadcast(0.0, {batch_size, num_heads, head_dim, head_dim})
+    # Dispatch through FusedScan (CUDA or sequential fallback)
+    # Returns [batch, seq_len, num_heads, head_dim]
+    scan_output =
+      Edifice.CUDA.FusedScan.delta_net_scan(q_all, k_normalized, v_all, beta)
 
-    # Sequential scan with delta rule — vectorized across heads
-    {_, output_list} =
-      Enum.reduce(0..(seq_len - 1), {s_init, []}, fn t, {s_prev, acc} ->
-        # [batch, num_heads, head_dim]
-        q_t = Nx.slice_along_axis(q_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        k_t = Nx.slice_along_axis(k_normalized, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        v_t = Nx.slice_along_axis(v_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-
-        # Retrieval: S @ k per head: [batch, num_heads, head_dim]
-        # s_prev: [batch, H, d, d], k_t: [batch, H, d] -> [batch, H, d]
-        retrieval =
-          Nx.dot(s_prev, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1])
-
-        retrieval = Nx.squeeze(retrieval, axes: [3])
-
-        # Error: v_t - retrieval
-        error = Nx.subtract(v_t, retrieval)
-
-        # Delta update: S += beta * error * k^T (outer product per head)
-        # beta_t * error: [batch, H, d]
-        scaled_error = Nx.multiply(beta_t, error)
-        # outer: [batch, H, d, 1] * [batch, H, 1, d] -> [batch, H, d, d]
-        update = Nx.multiply(Nx.new_axis(scaled_error, 3), Nx.new_axis(k_t, 2))
-
-        s_t = Nx.add(s_prev, update)
-
-        # Output: S @ q per head: [batch, num_heads, head_dim]
-        o_t = Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, 3), [2], [0, 1])
-        o_t = Nx.squeeze(o_t, axes: [3])
-
-        # Flatten heads: [batch, num_heads * head_dim]
-        o_flat = Nx.reshape(o_t, {batch_size, num_heads * head_dim})
-
-        {s_t, [o_flat | acc]}
-      end)
-
-    # [batch, seq_len, hidden_size]
-    output_list |> Enum.reverse() |> Nx.stack(axis: 1)
+    # Flatten heads: [batch, seq_len, num_heads * head_dim]
+    Nx.reshape(scan_output, {batch_size, seq_len, num_heads * head_dim})
   end
 
   # ============================================================================
