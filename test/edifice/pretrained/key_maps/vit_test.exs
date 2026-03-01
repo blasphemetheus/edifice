@@ -43,16 +43,16 @@ defmodule Edifice.Pretrained.KeyMaps.ViTTest do
   describe "map_key/1 - encoder blocks" do
     test "maps layer norms" do
       assert ViT.map_key("vit.encoder.layer.0.layernorm_before.weight") ==
-               "block_0_norm1.scale"
+               "block_0_norm1.gamma"
 
       assert ViT.map_key("vit.encoder.layer.0.layernorm_before.bias") ==
-               "block_0_norm1.bias"
+               "block_0_norm1.beta"
 
       assert ViT.map_key("vit.encoder.layer.3.layernorm_after.weight") ==
-               "block_3_norm2.scale"
+               "block_3_norm2.gamma"
 
       assert ViT.map_key("vit.encoder.layer.3.layernorm_after.bias") ==
-               "block_3_norm2.bias"
+               "block_3_norm2.beta"
     end
 
     test "maps Q/K/V to intermediate keys for concat" do
@@ -100,8 +100,8 @@ defmodule Edifice.Pretrained.KeyMaps.ViTTest do
 
   describe "map_key/1 - final norm and classifier" do
     test "maps final layer norm" do
-      assert ViT.map_key("vit.layernorm.weight") == "final_norm.scale"
-      assert ViT.map_key("vit.layernorm.bias") == "final_norm.bias"
+      assert ViT.map_key("vit.layernorm.weight") == "final_norm.gamma"
+      assert ViT.map_key("vit.layernorm.bias") == "final_norm.beta"
     end
 
     test "maps classifier head" do
@@ -129,7 +129,7 @@ defmodule Edifice.Pretrained.KeyMaps.ViTTest do
       assert map_size(concat) == 24
 
       # Check one kernel group
-      assert {sources, 0} = concat["block_0_attn_qkv.kernel"]
+      assert {sources, 1} = concat["block_0_attn_qkv.kernel"]
 
       assert sources == [
                "block_0_attn_q.kernel",
@@ -137,7 +137,7 @@ defmodule Edifice.Pretrained.KeyMaps.ViTTest do
                "block_0_attn_v.kernel"
              ]
 
-      # Check one bias group
+      # Check one bias group (biases concat along axis 0)
       assert {sources, 0} = concat["block_11_attn_qkv.bias"]
 
       assert sources == [
@@ -264,14 +264,14 @@ defmodule Edifice.Pretrained.KeyMaps.ViTTest do
       flat = Edifice.Pretrained.Transform.flatten_params(model_state)
 
       # QKV kernel: after transpose, each is [embed_dim, embed_dim]
-      # Concatenated along axis 0 → [3*embed_dim, embed_dim]
+      # Concatenated along axis 1 → [embed_dim, 3*embed_dim]
       qkv_kernel = flat["block_0_attn_qkv.kernel"]
-      assert Nx.shape(qkv_kernel) == {3 * embed_dim, embed_dim}
+      assert Nx.shape(qkv_kernel) == {embed_dim, 3 * embed_dim}
 
       # First third should be all 1.0 (transposed Q), second 2.0 (K), third 3.0 (V)
       q_part = Nx.slice(qkv_kernel, [0, 0], [embed_dim, embed_dim])
-      k_part = Nx.slice(qkv_kernel, [embed_dim, 0], [embed_dim, embed_dim])
-      v_part = Nx.slice(qkv_kernel, [2 * embed_dim, 0], [embed_dim, embed_dim])
+      k_part = Nx.slice(qkv_kernel, [0, embed_dim], [embed_dim, embed_dim])
+      v_part = Nx.slice(qkv_kernel, [0, 2 * embed_dim], [embed_dim, embed_dim])
 
       assert Nx.to_number(Nx.mean(q_part)) == 1.0
       assert Nx.to_number(Nx.mean(k_part)) == 2.0
@@ -380,12 +380,12 @@ defmodule Edifice.Pretrained.KeyMaps.ViTTest do
       assert %Nx.Tensor{} = data["patch_embed_proj"]["kernel"]
       assert %Nx.Tensor{} = data["cls_token_proj"]["kernel"]
       assert %Nx.Tensor{} = data["pos_embed_proj"]["kernel"]
-      assert %Nx.Tensor{} = data["final_norm"]["scale"]
+      assert %Nx.Tensor{} = data["final_norm"]["gamma"]
       assert %Nx.Tensor{} = data["classifier"]["kernel"]
 
       # QKV should be combined
       assert %Nx.Tensor{} = data["block_0_attn_qkv"]["kernel"]
-      assert Nx.shape(data["block_0_attn_qkv"]["kernel"]) == {3 * d, d}
+      assert Nx.shape(data["block_0_attn_qkv"]["kernel"]) == {d, 3 * d}
       assert %Nx.Tensor{} = data["block_0_attn_qkv"]["bias"]
       assert Nx.shape(data["block_0_attn_qkv"]["bias"]) == {3 * d}
 

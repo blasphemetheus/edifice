@@ -31,10 +31,10 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXtTest do
                "stem_conv.bias"
 
       assert ConvNeXt.map_key("convnext.embeddings.layernorm.weight") ==
-               "stem_norm.scale"
+               "stem_norm.gamma"
 
       assert ConvNeXt.map_key("convnext.embeddings.layernorm.bias") ==
-               "stem_norm.bias"
+               "stem_norm.beta"
     end
   end
 
@@ -49,10 +49,10 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXtTest do
 
     test "maps block layernorm" do
       assert ConvNeXt.map_key("convnext.encoder.stages.0.layers.0.layernorm.weight") ==
-               "stage0_block0_norm.scale"
+               "stage0_block0_norm.gamma"
 
       assert ConvNeXt.map_key("convnext.encoder.stages.0.layers.0.layernorm.bias") ==
-               "stage0_block0_norm.bias"
+               "stage0_block0_norm.beta"
     end
 
     test "maps pointwise convolutions" do
@@ -93,11 +93,11 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXtTest do
       # HF stages.1.downsampling_layer → Edifice downsample_0
       assert ConvNeXt.map_key(
                "convnext.encoder.stages.1.downsampling_layer.0.weight"
-             ) == "downsample_0_norm.scale"
+             ) == "downsample_0_norm.gamma"
 
       assert ConvNeXt.map_key(
                "convnext.encoder.stages.1.downsampling_layer.0.bias"
-             ) == "downsample_0_norm.bias"
+             ) == "downsample_0_norm.beta"
 
       assert ConvNeXt.map_key(
                "convnext.encoder.stages.1.downsampling_layer.1.weight"
@@ -110,7 +110,7 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXtTest do
       # HF stages.3.downsampling_layer → Edifice downsample_2
       assert ConvNeXt.map_key(
                "convnext.encoder.stages.3.downsampling_layer.0.weight"
-             ) == "downsample_2_norm.scale"
+             ) == "downsample_2_norm.gamma"
 
       assert ConvNeXt.map_key(
                "convnext.encoder.stages.3.downsampling_layer.1.weight"
@@ -120,8 +120,8 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXtTest do
 
   describe "map_key/1 - head" do
     test "maps final norm and classifier" do
-      assert ConvNeXt.map_key("convnext.layernorm.weight") == "final_norm.scale"
-      assert ConvNeXt.map_key("convnext.layernorm.bias") == "final_norm.bias"
+      assert ConvNeXt.map_key("convnext.layernorm.weight") == "final_norm.gamma"
+      assert ConvNeXt.map_key("convnext.layernorm.bias") == "final_norm.beta"
       assert ConvNeXt.map_key("classifier.weight") == "classifier.kernel"
       assert ConvNeXt.map_key("classifier.bias") == "classifier.bias"
     end
@@ -214,7 +214,7 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXtTest do
 
       result =
         Edifice.Pretrained.Transform.apply_transform(
-          "stage0_block0_norm.scale",
+          "stage0_block0_norm.gamma",
           transforms,
           tensor
         )
@@ -284,7 +284,7 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXtTest do
 
       # Stem conv: OIHW {4,3,4,4} → HWIO {4,4,3,4}
       assert Nx.shape(data["stem_conv"]["kernel"]) == {4, 4, 3, dim}
-      assert %Nx.Tensor{} = data["stem_norm"]["scale"]
+      assert %Nx.Tensor{} = data["stem_norm"]["gamma"]
 
       # Block depthwise conv: {4,1,7,7} → {7,7,1,4}
       assert Nx.shape(data["stage0_block0_dw_conv"]["kernel"]) == {7, 7, 1, dim}
@@ -301,11 +301,11 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXtTest do
 
       # Downsample conv: OIHW {8,4,2,2} → HWIO {2,2,4,8}
       assert Nx.shape(data["downsample_0_conv"]["kernel"]) == {2, 2, dim, dim * 2}
-      assert %Nx.Tensor{} = data["downsample_0_norm"]["scale"]
+      assert %Nx.Tensor{} = data["downsample_0_norm"]["gamma"]
 
       # Classifier: Linear {10, dim} → transposed to {dim, 10}
       assert Nx.shape(data["classifier"]["kernel"]) == {dim, 10}
-      assert %Nx.Tensor{} = data["final_norm"]["scale"]
+      assert %Nx.Tensor{} = data["final_norm"]["gamma"]
     end
   end
 end

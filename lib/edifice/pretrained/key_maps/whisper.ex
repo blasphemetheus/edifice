@@ -41,14 +41,14 @@ defmodule Edifice.Pretrained.KeyMaps.Whisper do
   # Sinusoidal PE — not trainable in Edifice
   def map_key("model.encoder.embed_positions.weight"), do: :skip
 
-  def map_key("model.encoder.layer_norm.weight"), do: "enc_final_norm.scale"
-  def map_key("model.encoder.layer_norm.bias"), do: "enc_final_norm.bias"
+  def map_key("model.encoder.layer_norm.weight"), do: "enc_final_norm.gamma"
+  def map_key("model.encoder.layer_norm.bias"), do: "enc_final_norm.beta"
 
   def map_key("model.decoder.embed_tokens.weight"), do: "dec_token_embed.kernel"
   def map_key("model.decoder.embed_positions.weight"), do: "dec_pos_embed.kernel"
 
-  def map_key("model.decoder.layer_norm.weight"), do: "dec_final_norm.scale"
-  def map_key("model.decoder.layer_norm.bias"), do: "dec_final_norm.bias"
+  def map_key("model.decoder.layer_norm.weight"), do: "dec_final_norm.gamma"
+  def map_key("model.decoder.layer_norm.bias"), do: "dec_final_norm.beta"
 
   # Edifice uses its own dec_output_proj
   def map_key("proj_out.weight"), do: :skip
@@ -79,16 +79,16 @@ defmodule Edifice.Pretrained.KeyMaps.Whisper do
   defp map_encoder_layer(i, "self_attn.v_proj.bias"), do: "enc_block_#{i}_attn_v.bias"
   defp map_encoder_layer(i, "self_attn.out_proj.weight"), do: "enc_block_#{i}_attn_out.kernel"
   defp map_encoder_layer(i, "self_attn.out_proj.bias"), do: "enc_block_#{i}_attn_out.bias"
-  defp map_encoder_layer(i, "self_attn_layer_norm.weight"), do: "enc_block_#{i}_attn_norm.scale"
-  defp map_encoder_layer(i, "self_attn_layer_norm.bias"), do: "enc_block_#{i}_attn_norm.bias"
+  defp map_encoder_layer(i, "self_attn_layer_norm.weight"), do: "enc_block_#{i}_attn_norm.gamma"
+  defp map_encoder_layer(i, "self_attn_layer_norm.bias"), do: "enc_block_#{i}_attn_norm.beta"
 
   # Encoder FFN
   defp map_encoder_layer(i, "fc1.weight"), do: "enc_block_#{i}_ffn_up.kernel"
   defp map_encoder_layer(i, "fc1.bias"), do: "enc_block_#{i}_ffn_up.bias"
   defp map_encoder_layer(i, "fc2.weight"), do: "enc_block_#{i}_ffn_down.kernel"
   defp map_encoder_layer(i, "fc2.bias"), do: "enc_block_#{i}_ffn_down.bias"
-  defp map_encoder_layer(i, "final_layer_norm.weight"), do: "enc_block_#{i}_ffn_norm.scale"
-  defp map_encoder_layer(i, "final_layer_norm.bias"), do: "enc_block_#{i}_ffn_norm.bias"
+  defp map_encoder_layer(i, "final_layer_norm.weight"), do: "enc_block_#{i}_ffn_norm.gamma"
+  defp map_encoder_layer(i, "final_layer_norm.bias"), do: "enc_block_#{i}_ffn_norm.beta"
   defp map_encoder_layer(_i, _rest), do: :unmapped
 
   # Decoder self-attention
@@ -100,8 +100,8 @@ defmodule Edifice.Pretrained.KeyMaps.Whisper do
   defp map_decoder_layer(i, "self_attn.v_proj.bias"), do: "dec_block_#{i}_attn_v.bias"
   defp map_decoder_layer(i, "self_attn.out_proj.weight"), do: "dec_block_#{i}_attn_out.kernel"
   defp map_decoder_layer(i, "self_attn.out_proj.bias"), do: "dec_block_#{i}_attn_out.bias"
-  defp map_decoder_layer(i, "self_attn_layer_norm.weight"), do: "dec_block_#{i}_attn_norm.scale"
-  defp map_decoder_layer(i, "self_attn_layer_norm.bias"), do: "dec_block_#{i}_attn_norm.bias"
+  defp map_decoder_layer(i, "self_attn_layer_norm.weight"), do: "dec_block_#{i}_attn_norm.gamma"
+  defp map_decoder_layer(i, "self_attn_layer_norm.bias"), do: "dec_block_#{i}_attn_norm.beta"
 
   # Decoder cross-attention
   defp map_decoder_layer(i, "encoder_attn.q_proj.weight"),
@@ -129,24 +129,26 @@ defmodule Edifice.Pretrained.KeyMaps.Whisper do
     do: "dec_block_#{i}_cross_attn_out_proj.bias"
 
   defp map_decoder_layer(i, "encoder_attn_layer_norm.weight"),
-    do: "dec_block_#{i}_cross_attn_norm.scale"
+    do: "dec_block_#{i}_cross_attn_norm.gamma"
 
   defp map_decoder_layer(i, "encoder_attn_layer_norm.bias"),
-    do: "dec_block_#{i}_cross_attn_norm.bias"
+    do: "dec_block_#{i}_cross_attn_norm.beta"
 
   # Decoder FFN
   defp map_decoder_layer(i, "fc1.weight"), do: "dec_block_#{i}_ffn_up.kernel"
   defp map_decoder_layer(i, "fc1.bias"), do: "dec_block_#{i}_ffn_up.bias"
   defp map_decoder_layer(i, "fc2.weight"), do: "dec_block_#{i}_ffn_down.kernel"
   defp map_decoder_layer(i, "fc2.bias"), do: "dec_block_#{i}_ffn_down.bias"
-  defp map_decoder_layer(i, "final_layer_norm.weight"), do: "dec_block_#{i}_ffn_norm.scale"
-  defp map_decoder_layer(i, "final_layer_norm.bias"), do: "dec_block_#{i}_ffn_norm.bias"
+  defp map_decoder_layer(i, "final_layer_norm.weight"), do: "dec_block_#{i}_ffn_norm.gamma"
+  defp map_decoder_layer(i, "final_layer_norm.bias"), do: "dec_block_#{i}_ffn_norm.beta"
   defp map_decoder_layer(_i, _rest), do: :unmapped
 
   @impl true
   def tensor_transforms do
     [
-      {~r/\.kernel$/, &Transform.transpose_linear/1}
+      # Transpose linear weight matrices but not embedding kernels
+      # Embeddings (token_embed, pos_embed) are already {vocab/seq, dim} in both HF and Axon
+      {~r/(?<!embed)\.kernel$/, &Transform.transpose_linear/1}
     ]
   end
 end

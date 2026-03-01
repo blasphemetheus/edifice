@@ -40,12 +40,12 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXt do
   @impl true
   def map_key("convnext.embeddings.patch_embeddings.weight"), do: "stem_conv.kernel"
   def map_key("convnext.embeddings.patch_embeddings.bias"), do: "stem_conv.bias"
-  def map_key("convnext.embeddings.layernorm.weight"), do: "stem_norm.scale"
-  def map_key("convnext.embeddings.layernorm.bias"), do: "stem_norm.bias"
+  def map_key("convnext.embeddings.layernorm.weight"), do: "stem_norm.gamma"
+  def map_key("convnext.embeddings.layernorm.bias"), do: "stem_norm.beta"
 
   # --- Final norm + classifier ---
-  def map_key("convnext.layernorm.weight"), do: "final_norm.scale"
-  def map_key("convnext.layernorm.bias"), do: "final_norm.bias"
+  def map_key("convnext.layernorm.weight"), do: "final_norm.gamma"
+  def map_key("convnext.layernorm.bias"), do: "final_norm.beta"
   def map_key("classifier.weight"), do: "classifier.kernel"
   def map_key("classifier.bias"), do: "classifier.bias"
 
@@ -72,10 +72,10 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXt do
     do: "stage#{s}_block#{b}_dw_conv.bias"
 
   defp map_block(s, b, "layernorm.weight"),
-    do: "stage#{s}_block#{b}_norm.scale"
+    do: "stage#{s}_block#{b}_norm.gamma"
 
   defp map_block(s, b, "layernorm.bias"),
-    do: "stage#{s}_block#{b}_norm.bias"
+    do: "stage#{s}_block#{b}_norm.beta"
 
   # HF pwconv1/pwconv2 are nn.Linear; Edifice pw_expand/pw_project are Axon.conv 1x1
   defp map_block(s, b, "pwconv1.weight"),
@@ -103,12 +103,12 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXt do
   # downsampling_layer.0 = LayerNorm, downsampling_layer.1 = Conv2d
   defp map_downsample(stage, "0", "weight") do
     ds_idx = String.to_integer(stage) - 1
-    "downsample_#{ds_idx}_norm.scale"
+    "downsample_#{ds_idx}_norm.gamma"
   end
 
   defp map_downsample(stage, "0", "bias") do
     ds_idx = String.to_integer(stage) - 1
-    "downsample_#{ds_idx}_norm.bias"
+    "downsample_#{ds_idx}_norm.beta"
   end
 
   defp map_downsample(stage, "1", "weight") do

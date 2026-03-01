@@ -37,8 +37,8 @@ defmodule Edifice.Pretrained.KeyMaps.ViT do
   def map_key("vit.embeddings.cls_token"), do: "cls_token_proj.kernel"
   def map_key("vit.embeddings.position_embeddings"), do: "pos_embed_proj.kernel"
 
-  def map_key("vit.layernorm.weight"), do: "final_norm.scale"
-  def map_key("vit.layernorm.bias"), do: "final_norm.bias"
+  def map_key("vit.layernorm.weight"), do: "final_norm.gamma"
+  def map_key("vit.layernorm.bias"), do: "final_norm.beta"
 
   def map_key("classifier.weight"), do: "classifier.kernel"
   def map_key("classifier.bias"), do: "classifier.bias"
@@ -50,8 +50,8 @@ defmodule Edifice.Pretrained.KeyMaps.ViT do
     end
   end
 
-  defp map_encoder_layer(idx, "layernorm_before.weight"), do: "block_#{idx}_norm1.scale"
-  defp map_encoder_layer(idx, "layernorm_before.bias"), do: "block_#{idx}_norm1.bias"
+  defp map_encoder_layer(idx, "layernorm_before.weight"), do: "block_#{idx}_norm1.gamma"
+  defp map_encoder_layer(idx, "layernorm_before.bias"), do: "block_#{idx}_norm1.beta"
 
   # Q/K/V mapped to intermediate keys — concat_keys/0 combines them
   defp map_encoder_layer(idx, "attention.attention.query.weight"),
@@ -78,8 +78,8 @@ defmodule Edifice.Pretrained.KeyMaps.ViT do
   defp map_encoder_layer(idx, "attention.output.dense.bias"),
     do: "block_#{idx}_attn_proj.bias"
 
-  defp map_encoder_layer(idx, "layernorm_after.weight"), do: "block_#{idx}_norm2.scale"
-  defp map_encoder_layer(idx, "layernorm_after.bias"), do: "block_#{idx}_norm2.bias"
+  defp map_encoder_layer(idx, "layernorm_after.weight"), do: "block_#{idx}_norm2.gamma"
+  defp map_encoder_layer(idx, "layernorm_after.bias"), do: "block_#{idx}_norm2.beta"
 
   defp map_encoder_layer(idx, "intermediate.dense.weight"),
     do: "block_#{idx}_mlp_fc1.kernel"
@@ -123,7 +123,7 @@ defmodule Edifice.Pretrained.KeyMaps.ViT do
   Useful when loading non-base ViT variants with different layer counts.
   """
   def build_concat_keys(num_layers) do
-    for i <- 0..(num_layers - 1), suffix <- ["kernel", "bias"], into: %{} do
+    for i <- 0..(num_layers - 1), {suffix, axis} <- [{"kernel", 1}, {"bias", 0}], into: %{} do
       target = "block_#{i}_attn_qkv.#{suffix}"
 
       sources = [
@@ -132,7 +132,7 @@ defmodule Edifice.Pretrained.KeyMaps.ViT do
         "block_#{i}_attn_v.#{suffix}"
       ]
 
-      {target, {sources, 0}}
+      {target, {sources, axis}}
     end
   end
 end

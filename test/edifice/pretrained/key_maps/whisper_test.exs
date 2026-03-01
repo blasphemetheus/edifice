@@ -62,16 +62,16 @@ defmodule Edifice.Pretrained.KeyMaps.WhisperTest do
 
     test "maps encoder norms with +1 index" do
       assert Whisper.map_key("model.encoder.layers.0.self_attn_layer_norm.weight") ==
-               "enc_block_1_attn_norm.scale"
+               "enc_block_1_attn_norm.gamma"
 
       assert Whisper.map_key("model.encoder.layers.0.self_attn_layer_norm.bias") ==
-               "enc_block_1_attn_norm.bias"
+               "enc_block_1_attn_norm.beta"
 
       assert Whisper.map_key("model.encoder.layers.2.final_layer_norm.weight") ==
-               "enc_block_3_ffn_norm.scale"
+               "enc_block_3_ffn_norm.gamma"
 
       assert Whisper.map_key("model.encoder.layers.2.final_layer_norm.bias") ==
-               "enc_block_3_ffn_norm.bias"
+               "enc_block_3_ffn_norm.beta"
     end
 
     test "maps encoder FFN layers with +1 index" do
@@ -95,8 +95,8 @@ defmodule Edifice.Pretrained.KeyMaps.WhisperTest do
     end
 
     test "maps encoder final norm" do
-      assert Whisper.map_key("model.encoder.layer_norm.weight") == "enc_final_norm.scale"
-      assert Whisper.map_key("model.encoder.layer_norm.bias") == "enc_final_norm.bias"
+      assert Whisper.map_key("model.encoder.layer_norm.weight") == "enc_final_norm.gamma"
+      assert Whisper.map_key("model.encoder.layer_norm.bias") == "enc_final_norm.beta"
     end
   end
 
@@ -128,10 +128,10 @@ defmodule Edifice.Pretrained.KeyMaps.WhisperTest do
                "dec_block_1_attn_out.kernel"
 
       assert Whisper.map_key("model.decoder.layers.0.self_attn_layer_norm.weight") ==
-               "dec_block_1_attn_norm.scale"
+               "dec_block_1_attn_norm.gamma"
 
       assert Whisper.map_key("model.decoder.layers.0.self_attn_layer_norm.bias") ==
-               "dec_block_1_attn_norm.bias"
+               "dec_block_1_attn_norm.beta"
     end
   end
 
@@ -162,10 +162,10 @@ defmodule Edifice.Pretrained.KeyMaps.WhisperTest do
                "dec_block_1_cross_attn_out_proj.bias"
 
       assert Whisper.map_key("model.decoder.layers.0.encoder_attn_layer_norm.weight") ==
-               "dec_block_1_cross_attn_norm.scale"
+               "dec_block_1_cross_attn_norm.gamma"
 
       assert Whisper.map_key("model.decoder.layers.0.encoder_attn_layer_norm.bias") ==
-               "dec_block_1_cross_attn_norm.bias"
+               "dec_block_1_cross_attn_norm.beta"
     end
 
     test "cross-attention index shift works for higher indices" do
@@ -189,17 +189,17 @@ defmodule Edifice.Pretrained.KeyMaps.WhisperTest do
                "dec_block_1_ffn_down.bias"
 
       assert Whisper.map_key("model.decoder.layers.0.final_layer_norm.weight") ==
-               "dec_block_1_ffn_norm.scale"
+               "dec_block_1_ffn_norm.gamma"
 
       assert Whisper.map_key("model.decoder.layers.0.final_layer_norm.bias") ==
-               "dec_block_1_ffn_norm.bias"
+               "dec_block_1_ffn_norm.beta"
     end
   end
 
   describe "map_key/1 - decoder global" do
     test "maps decoder final norm" do
-      assert Whisper.map_key("model.decoder.layer_norm.weight") == "dec_final_norm.scale"
-      assert Whisper.map_key("model.decoder.layer_norm.bias") == "dec_final_norm.bias"
+      assert Whisper.map_key("model.decoder.layer_norm.weight") == "dec_final_norm.gamma"
+      assert Whisper.map_key("model.decoder.layer_norm.bias") == "dec_final_norm.beta"
     end
 
     test "skips proj_out" do
@@ -311,12 +311,12 @@ defmodule Edifice.Pretrained.KeyMaps.WhisperTest do
       # Encoder block 1 (from HF layer 0)
       assert %Nx.Tensor{} = data["enc_block_1_attn_q"]["kernel"]
       assert Nx.shape(data["enc_block_1_attn_q"]["kernel"]) == {d, d}
-      assert %Nx.Tensor{} = data["enc_block_1_attn_norm"]["scale"]
+      assert %Nx.Tensor{} = data["enc_block_1_attn_norm"]["gamma"]
       assert %Nx.Tensor{} = data["enc_block_1_ffn_up"]["kernel"]
       assert Nx.shape(data["enc_block_1_ffn_up"]["kernel"]) == {d, d * 4}
 
       # Encoder final norm
-      assert %Nx.Tensor{} = data["enc_final_norm"]["scale"]
+      assert %Nx.Tensor{} = data["enc_final_norm"]["gamma"]
 
       # Decoder embeddings
       assert %Nx.Tensor{} = data["dec_token_embed"]["kernel"]
@@ -325,11 +325,11 @@ defmodule Edifice.Pretrained.KeyMaps.WhisperTest do
       # Decoder block 1
       assert %Nx.Tensor{} = data["dec_block_1_attn_q"]["kernel"]
       assert %Nx.Tensor{} = data["dec_block_1_cross_attn_q_proj"]["kernel"]
-      assert %Nx.Tensor{} = data["dec_block_1_cross_attn_norm"]["scale"]
+      assert %Nx.Tensor{} = data["dec_block_1_cross_attn_norm"]["gamma"]
       assert %Nx.Tensor{} = data["dec_block_1_ffn_up"]["kernel"]
 
       # Decoder final norm
-      assert %Nx.Tensor{} = data["dec_final_norm"]["scale"]
+      assert %Nx.Tensor{} = data["dec_final_norm"]["gamma"]
 
       # Verify skipped keys are absent
       flat = Edifice.Pretrained.Transform.flatten_params(model_state)
