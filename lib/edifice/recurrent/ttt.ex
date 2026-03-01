@@ -300,91 +300,97 @@ defmodule Edifice.Recurrent.TTT do
       end
 
     # Fix 2: eta / inner_size scaling (CRITICAL for stability)
-    # Paper: eta = sigmoid(W_eta @ x) / head_dim
-    # Without this, the inner learning rate is ~64x too large
     eta = Nx.divide(Nx.sigmoid(eta_pre), inner_size)
 
-    # Initialize inner model weights from learnable W_0
-    # w0: [inner_size, inner_size] -> broadcast to [batch, inner_size, inner_size]
-    w_init = Nx.broadcast(w0, {batch_size, inner_size, inner_size})
+    # Linear variant without output gate can use fused CUDA kernel
+    if variant == :linear and not output_gate do
+      result = Edifice.CUDA.FusedScan.ttt_scan(q_all, k_all, v_all, eta, w0, ln_gamma, ln_beta)
+      result
+    else
+      # MLP variant or output gate — use sequential fallback
+      w_init = Nx.broadcast(w0, {batch_size, inner_size, inner_size})
 
-    # Sequential scan with TTT update
+      {_, output_list} =
+        Enum.reduce(0..(seq_len - 1), {w_init, []}, fn t, {w_prev, acc} ->
+          q_t = Nx.slice_along_axis(q_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          k_t = Nx.slice_along_axis(k_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          v_t = Nx.slice_along_axis(v_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          eta_t = Nx.slice_along_axis(eta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+          gate_t =
+            if output_gate do
+              Nx.slice_along_axis(gate_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+            else
+              nil
+            end
+
+          {w_t, o_t} =
+            case variant do
+              :mlp ->
+                k_act = Nx.multiply(k_t, Nx.sigmoid(k_t))
+                pred = Nx.dot(w_prev, [2], [0], Nx.new_axis(k_act, 2), [1], [0])
+                pred = Nx.squeeze(pred, axes: [2])
+                pred_normed = manual_layer_norm(pred, ln_gamma, ln_beta)
+                error = Nx.subtract(pred_normed, v_t)
+                grad = Nx.dot(Nx.new_axis(Nx.multiply(eta_t, error), 2), [2], [0], Nx.new_axis(k_act, 1), [1], [0])
+                w_new = Nx.subtract(w_prev, grad)
+                q_act = Nx.multiply(q_t, Nx.sigmoid(q_t))
+                out = Nx.dot(w_new, [2], [0], Nx.new_axis(q_act, 2), [1], [0])
+                {w_new, Nx.squeeze(out, axes: [2])}
+
+              _linear ->
+                pred = Nx.dot(w_prev, [2], [0], Nx.new_axis(k_t, 2), [1], [0])
+                pred = Nx.squeeze(pred, axes: [2])
+                pred_normed = manual_layer_norm(pred, ln_gamma, ln_beta)
+                error = Nx.subtract(pred_normed, v_t)
+                grad = Nx.dot(Nx.new_axis(Nx.multiply(eta_t, error), 2), [2], [0], Nx.new_axis(k_t, 1), [1], [0])
+                w_new = Nx.subtract(w_prev, grad)
+                out = Nx.dot(w_new, [2], [0], Nx.new_axis(q_t, 2), [1], [0])
+                {w_new, Nx.squeeze(out, axes: [2])}
+            end
+
+          o_t =
+            if output_gate do
+              Nx.multiply(o_t, Nx.sigmoid(gate_t))
+            else
+              o_t
+            end
+
+          {w_t, [o_t | acc]}
+        end)
+
+      output_list |> Enum.reverse() |> Nx.stack(axis: 1)
+    end
+  end
+
+  @doc false
+  # Fallback for TTT scan — used by FusedScan when no CUDA kernel is available.
+  # w0 may be [inner_size, inner_size] or [batch, inner_size, inner_size].
+  def ttt_scan_fallback(q, k, v, eta, w0, ln_gamma, ln_beta) do
+    {batch, seq_len, inner_size} = Nx.shape(q)
+
+    # Ensure w0 is batched
+    w_init =
+      if Nx.rank(w0) == 2 do
+        Nx.broadcast(w0, {batch, inner_size, inner_size})
+      else
+        w0
+      end
+
     {_, output_list} =
       Enum.reduce(0..(seq_len - 1), {w_init, []}, fn t, {w_prev, acc} ->
-        q_t = Nx.slice_along_axis(q_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        k_t = Nx.slice_along_axis(k_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        v_t = Nx.slice_along_axis(v_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        q_t = Nx.slice_along_axis(q, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        k_t = Nx.slice_along_axis(k, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        v_t = Nx.slice_along_axis(v, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         eta_t = Nx.slice_along_axis(eta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        gate_t =
-          if output_gate do
-            Nx.slice_along_axis(gate_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-          else
-            nil
-          end
-
-        # Inner model forward and update depend on variant
-        {w_t, o_t} =
-          case variant do
-            :mlp ->
-              # MLP variant: 2-layer inner model (k -> silu -> W @ k)
-              k_act = Nx.multiply(k_t, Nx.sigmoid(k_t))
-
-              pred = Nx.dot(w_prev, [2], [0], Nx.new_axis(k_act, 2), [1], [0])
-              pred = Nx.squeeze(pred, axes: [2])
-
-              # Fix 3: LayerNorm on prediction before computing error
-              pred_normed = manual_layer_norm(pred, ln_gamma, ln_beta)
-              error = Nx.subtract(pred_normed, v_t)
-
-              grad =
-                Nx.dot(
-                  Nx.new_axis(Nx.multiply(eta_t, error), 2),
-                  [2],
-                  [0],
-                  Nx.new_axis(k_act, 1),
-                  [1],
-                  [0]
-                )
-
-              w_new = Nx.subtract(w_prev, grad)
-              q_act = Nx.multiply(q_t, Nx.sigmoid(q_t))
-              out = Nx.dot(w_new, [2], [0], Nx.new_axis(q_act, 2), [1], [0])
-              {w_new, Nx.squeeze(out, axes: [2])}
-
-            _linear ->
-              # Linear variant (default): pred = W @ k
-              pred = Nx.dot(w_prev, [2], [0], Nx.new_axis(k_t, 2), [1], [0])
-              pred = Nx.squeeze(pred, axes: [2])
-
-              # Fix 3: LayerNorm on prediction before computing error
-              pred_normed = manual_layer_norm(pred, ln_gamma, ln_beta)
-              error = Nx.subtract(pred_normed, v_t)
-
-              grad =
-                Nx.dot(
-                  Nx.new_axis(Nx.multiply(eta_t, error), 2),
-                  [2],
-                  [0],
-                  Nx.new_axis(k_t, 1),
-                  [1],
-                  [0]
-                )
-
-              w_new = Nx.subtract(w_prev, grad)
-              out = Nx.dot(w_new, [2], [0], Nx.new_axis(q_t, 2), [1], [0])
-              {w_new, Nx.squeeze(out, axes: [2])}
-          end
-
-        # Fix 4: Output gating (sigmoid gate for smoother gradients)
-        o_t =
-          if output_gate do
-            Nx.multiply(o_t, Nx.sigmoid(gate_t))
-          else
-            o_t
-          end
-
-        {w_t, [o_t | acc]}
+        pred = Nx.dot(w_prev, [2], [0], Nx.new_axis(k_t, 2), [1], [0]) |> Nx.squeeze(axes: [2])
+        pred_normed = manual_layer_norm(pred, ln_gamma, ln_beta)
+        error = Nx.subtract(pred_normed, v_t)
+        grad = Nx.dot(Nx.new_axis(Nx.multiply(eta_t, error), 2), [2], [0], Nx.new_axis(k_t, 1), [1], [0])
+        w_new = Nx.subtract(w_prev, grad)
+        out = Nx.dot(w_new, [2], [0], Nx.new_axis(q_t, 2), [1], [0]) |> Nx.squeeze(axes: [2])
+        {w_new, [out | acc]}
       end)
 
     output_list |> Enum.reverse() |> Nx.stack(axis: 1)

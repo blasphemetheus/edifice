@@ -166,25 +166,37 @@ defmodule Edifice.SSM.Mamba do
   end
 
   # Parallel scan SSM implementation
-  # This is the core algorithm that makes Mamba O(L) efficient
+  # This is the core algorithm that makes Mamba O(L) efficient.
+  # Tries the fused selective scan CUDA kernel first (handles discretization
+  # internally), falls back to Blelloch/sequential scan.
   defp parallel_scan_ssm_impl(x, b, c, dt, opts) do
     state_size = opts[:state_size]
-    seq_len = Nx.axis_size(x, 1)
+    hidden_size = Nx.axis_size(x, 2)
 
-    # Discretize SSM parameters
-    {a_bar, bx} = Common.discretize_ssm(x, b, dt, state_size)
+    if Edifice.CUDA.FusedScan.custom_call_available?() do
+      # Fused kernel handles discretization + scan + output in one pass.
+      # Build A matrix: [hidden_size, state_size] — fixed negative diagonal
+      a_diag = Nx.negate(Nx.add(Nx.iota({state_size}), 1.0))
+      a_matrix = Nx.broadcast(Nx.reshape(a_diag, {1, state_size}), {hidden_size, state_size})
 
-    # Parallel scan: compute all h[t] in O(log L) parallel time
-    # Using the associative property: (a, b) ⊗ (c, d) = (a*c, a*d + b)
-    h =
-      if seq_len <= 32 do
-        Common.sequential_scan(a_bar, bx)
-      else
-        Common.blelloch_scan(a_bar, bx)
-      end
+      Edifice.CUDA.FusedScan.selective_scan(x, dt, a_matrix, b, c)
+    else
+      seq_len = Nx.axis_size(x, 1)
 
-    # Compute output: y[t] = C[t] * h[t]
-    Common.compute_ssm_output(h, c)
+      # Discretize SSM parameters
+      {a_bar, bx} = Common.discretize_ssm(x, b, dt, state_size)
+
+      # Parallel scan: compute all h[t] in O(log L) parallel time
+      h =
+        if seq_len <= 32 do
+          Common.sequential_scan(a_bar, bx)
+        else
+          Common.blelloch_scan(a_bar, bx)
+        end
+
+      # Compute output: y[t] = C[t] * h[t]
+      Common.compute_ssm_output(h, c)
+    end
   end
 
   # ============================================================================

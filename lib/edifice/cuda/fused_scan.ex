@@ -169,6 +169,63 @@ defmodule Edifice.CUDA.FusedScan do
     end
   end
 
+  @doc """
+  sLSTM scan with hidden-to-hidden matmul fused into the kernel.
+
+  Inputs are pre-computed W@x `[batch, seq_len, 4*hidden]` and recurrent
+  weight R `[hidden, 4*hidden]`. The kernel computes R@h internally using
+  shared memory. Uses log-domain stabilized exponential gating.
+  """
+  def slstm_scan(wx, recurrent_weight) do
+    cond do
+      custom_call_available?() ->
+        slstm_custom_call(wx, recurrent_weight)
+
+      true ->
+        Edifice.Recurrent.SLSTM.slstm_scan_fallback(wx, recurrent_weight)
+    end
+  end
+
+  @doc """
+  TTT-Linear scan with per-timestep weight matrix update.
+
+  Inputs: pre-projected Q, K, V, eta `[batch, seq_len, inner_size]`,
+  initial weight matrix W0 `[inner_size, inner_size]`, and LayerNorm
+  gamma/beta `[inner_size]`.
+
+  The eta input should be post-sigmoid, pre-scaled by 1/inner_size.
+  The kernel applies LayerNorm on predictions internally.
+  """
+  def ttt_scan(q, k, v, eta, w0, ln_gamma, ln_beta) do
+    cond do
+      custom_call_available?() ->
+        ttt_custom_call(q, k, v, eta, w0, ln_gamma, ln_beta)
+
+      true ->
+        Edifice.Recurrent.TTT.ttt_scan_fallback(q, k, v, eta, w0, ln_gamma, ln_beta)
+    end
+  end
+
+  @doc """
+  Mamba selective scan with input-dependent discretization.
+
+  Inputs: x `[batch, seq_len, hidden]`, dt `[batch, seq_len, hidden]`,
+  A `[hidden, state_size]`, B `[batch, seq_len, state_size]`,
+  C `[batch, seq_len, state_size]`.
+
+  The kernel handles discretization (A_bar = exp(dt*A), B_bar = dt*B)
+  and the full SSM recurrence internally.
+  """
+  def selective_scan(x, dt, a, b, c) do
+    cond do
+      custom_call_available?() ->
+        selective_scan_custom_call(x, dt, a, b, c)
+
+      true ->
+        Edifice.SSM.Common.selective_scan_fallback(x, dt, a, b, c)
+    end
+  end
+
   # ============================================================================
   # XLA custom call paths (graph-preserving)
   # ============================================================================
@@ -447,6 +504,163 @@ defmodule Edifice.CUDA.FusedScan do
       end)
 
     o_list |> Enum.reverse() |> Nx.stack(axis: 1)
+  end
+
+  # sLSTM: fused R@h matmul with log-domain exponential gating
+  defp slstm_custom_call(wx, recurrent_weight) do
+    {batch, seq_len, hidden4} = Nx.shape(wx)
+    hidden = div(hidden4, 4)
+
+    h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
+    c0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
+    output = Nx.template({batch, seq_len, hidden}, {:f, 32})
+
+    Nx.Shared.optional(:fused_slstm_scan, [wx, recurrent_weight, h0, c0], output,
+      fn wx, r, h0, c0 ->
+        slstm_scan_fallback(wx, r, h0, c0)
+      end)
+  end
+
+  defp slstm_scan_fallback(wx, recurrent_weight, h0, c0) do
+    {_batch, seq_len, hidden4} = Nx.shape(wx)
+    hidden = div(hidden4, 4)
+
+    n0 = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), Nx.shape(h0))
+    m0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), Nx.shape(h0))
+
+    {_, h_list} =
+      Enum.reduce(0..(seq_len - 1), {{h0, c0, n0, m0}, []}, fn t, {{h_p, c_p, n_p, m_p}, acc} ->
+        wx_t = Nx.slice_along_axis(wx, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        rh_t = Nx.dot(h_p, [1], recurrent_weight, [0])
+        gates_t = Nx.add(wx_t, rh_t)
+
+        log_i_t = Nx.slice_along_axis(gates_t, 0, hidden, axis: 1)
+        log_f_t = Nx.slice_along_axis(gates_t, hidden, hidden, axis: 1)
+        z_t = Nx.slice_along_axis(gates_t, hidden * 2, hidden, axis: 1) |> Nx.tanh()
+        o_t = Nx.slice_along_axis(gates_t, hidden * 3, hidden, axis: 1) |> Nx.sigmoid()
+
+        m_t = Nx.max(Nx.add(log_f_t, m_p), log_i_t)
+        i_t = Nx.exp(Nx.subtract(log_i_t, m_t))
+        f_t = Nx.exp(Nx.subtract(Nx.add(log_f_t, m_p), m_t))
+
+        c_t = Nx.add(Nx.multiply(f_t, c_p), Nx.multiply(i_t, z_t))
+        n_t = Nx.add(Nx.multiply(f_t, n_p), i_t)
+        safe_denom = Nx.max(Nx.abs(n_t), 1.0)
+        h_t = Nx.multiply(o_t, Nx.divide(c_t, safe_denom))
+
+        {{h_t, c_t, n_t, m_t}, [h_t | acc]}
+      end)
+
+    h_list |> Enum.reverse() |> Nx.stack(axis: 1)
+  end
+
+  # TTT-Linear: weight matrix W as hidden state, updated per timestep
+  defp ttt_custom_call(q, k, v, eta, w0, ln_gamma, ln_beta) do
+    {batch, seq_len, inner_size} = Nx.shape(q)
+
+    # Broadcast W0 to [batch, inner_size, inner_size]
+    w0_batched = Nx.broadcast(w0, {batch, inner_size, inner_size})
+    output = Nx.template({batch, seq_len, inner_size}, {:f, 32})
+
+    Nx.Shared.optional(:fused_ttt_scan, [q, k, v, eta, w0_batched, ln_gamma, ln_beta], output,
+      fn q, k, v, eta, w0_b, ln_g, ln_b ->
+        ttt_scan_fallback(q, k, v, eta, w0_b, ln_g, ln_b)
+      end)
+  end
+
+  defp ttt_scan_fallback(q, k, v, eta, w0, ln_gamma, ln_beta) do
+    {batch, seq_len, inner_size} = Nx.shape(q)
+
+    w_init =
+      if Nx.rank(w0) == 2 do
+        Nx.broadcast(w0, {batch, inner_size, inner_size})
+      else
+        w0
+      end
+
+    {_, output_list} =
+      Enum.reduce(0..(seq_len - 1), {w_init, []}, fn t, {w_prev, acc} ->
+        q_t = Nx.slice_along_axis(q, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        k_t = Nx.slice_along_axis(k, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        v_t = Nx.slice_along_axis(v, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        eta_t = Nx.slice_along_axis(eta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+        # pred = W @ k
+        pred = Nx.dot(w_prev, [2], [0], Nx.new_axis(k_t, 2), [1], [0]) |> Nx.squeeze(axes: [2])
+
+        # LayerNorm
+        mean = Nx.mean(pred, axes: [-1], keep_axes: true)
+        var = Nx.variance(pred, axes: [-1], keep_axes: true)
+        pred_normed = Nx.divide(Nx.subtract(pred, mean), Nx.sqrt(Nx.add(var, 1.0e-6)))
+        pred_normed = Nx.add(Nx.multiply(pred_normed, ln_gamma), ln_beta)
+
+        # Update
+        error = Nx.subtract(pred_normed, v_t)
+        grad = Nx.dot(Nx.new_axis(Nx.multiply(eta_t, error), 2), [2], [0], Nx.new_axis(k_t, 1), [1], [0])
+        w_new = Nx.subtract(w_prev, grad)
+
+        # Output
+        out = Nx.dot(w_new, [2], [0], Nx.new_axis(q_t, 2), [1], [0]) |> Nx.squeeze(axes: [2])
+        {w_new, [out | acc]}
+      end)
+
+    output_list |> Enum.reverse() |> Nx.stack(axis: 1)
+  end
+
+  # Mamba selective scan: input-dependent SSM discretization
+  defp selective_scan_custom_call(x, dt, a, b, c) do
+    {batch, seq_len, hidden} = Nx.shape(x)
+    output = Nx.template({batch, seq_len, hidden}, {:f, 32})
+
+    Nx.Shared.optional(:fused_selective_scan, [x, dt, a, b, c], output,
+      fn x, dt, a, b, c ->
+        selective_scan_fallback(x, dt, a, b, c)
+      end)
+  end
+
+  defp selective_scan_fallback(x, dt, a, b_proj, c_proj) do
+    {batch, seq_len, hidden} = Nx.shape(x)
+    {_h, state} = Nx.shape(a)
+
+    results =
+      for bi <- 0..(batch - 1) do
+        per_hidden =
+          for hi <- 0..(hidden - 1) do
+            h_state = List.duplicate(0.0, state)
+
+            {_, outputs} =
+              Enum.reduce(0..(seq_len - 1), {h_state, []}, fn t, {hs, acc} ->
+                x_t = Nx.to_number(x[bi][t][hi])
+                dt_t = Nx.to_number(dt[bi][t][hi])
+                dt_t = min(max(dt_t, 0.001), 0.1)
+
+                {new_hs, y_t} =
+                  Enum.reduce(0..(state - 1), {hs, 0.0}, fn s, {hs_acc, y_acc} ->
+                    a_s = Nx.to_number(a[hi][s])
+                    b_s = Nx.to_number(b_proj[bi][t][s])
+                    c_s = Nx.to_number(c_proj[bi][t][s])
+
+                    a_bar = :math.exp(dt_t * a_s)
+                    b_bar = dt_t * b_s
+
+                    new_h = a_bar * Enum.at(hs_acc, s) + b_bar * x_t
+                    {List.replace_at(hs_acc, s, new_h), y_acc + c_s * new_h}
+                  end)
+
+                {new_hs, [y_t | acc]}
+              end)
+
+            Enum.reverse(outputs)
+          end
+
+        for t <- 0..(seq_len - 1) do
+          for hi <- 0..(hidden - 1) do
+            Enum.at(Enum.at(per_hidden, hi), t)
+          end
+        end
+      end
+
+    results |> List.flatten() |> Nx.tensor(type: :f32) |> Nx.reshape({batch, seq_len, hidden})
   end
 
   # ============================================================================
@@ -796,7 +1010,8 @@ defmodule Edifice.CUDA.FusedScan do
       function_exported?(Edifice.CUDA.NIF, :fused_mingru_scan, 6)
   end
 
-  defp custom_call_available? do
+  @doc false
+  def custom_call_available? do
     exla_value = Module.concat([EXLA, MLIR, Value])
 
     Code.ensure_loaded?(exla_value) and

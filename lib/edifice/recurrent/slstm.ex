@@ -211,13 +211,20 @@ defmodule Edifice.Recurrent.SLSTM do
     )
   end
 
-  # sLSTM with log-domain stabilization and recurrent connections
-  defp slstm_impl(input_gates, recurrent_weight, opts) do
-    hidden_size = opts[:hidden_size]
-    batch_size = Nx.axis_size(input_gates, 0)
-    seq_len = Nx.axis_size(input_gates, 1)
+  # sLSTM with log-domain stabilization and recurrent connections.
+  # Dispatches to CUDA fused kernel when available (R@h computed in-kernel).
+  defp slstm_impl(input_gates, recurrent_weight, _opts) do
+    Edifice.CUDA.FusedScan.slstm_scan(input_gates, recurrent_weight)
+  end
 
-    type = Nx.type(input_gates)
+  @doc false
+  # Fallback for sLSTM scan — used by FusedScan when no CUDA kernel is available.
+  def slstm_scan_fallback(wx, recurrent_weight) do
+    hidden_size = div(Nx.axis_size(wx, 2), 4)
+    batch_size = Nx.axis_size(wx, 0)
+    seq_len = Nx.axis_size(wx, 1)
+
+    type = Nx.type(wx)
     h_prev = Nx.broadcast(Nx.tensor(0.0, type: type), {batch_size, hidden_size})
     c_prev = Nx.broadcast(Nx.tensor(0.0, type: type), {batch_size, hidden_size})
     n_prev = Nx.broadcast(Nx.tensor(1.0, type: type), {batch_size, hidden_size})
@@ -228,7 +235,7 @@ defmodule Edifice.Recurrent.SLSTM do
         0..(seq_len - 1),
         {{h_prev, c_prev, n_prev, m_prev}, []},
         fn t, {{h_p, c_p, n_p, m_p}, acc} ->
-          wx_t = Nx.slice_along_axis(input_gates, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          wx_t = Nx.slice_along_axis(wx, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
           rh_t = Nx.dot(h_p, [1], recurrent_weight, [0])
           gates_t = Nx.add(wx_t, rh_t)
 

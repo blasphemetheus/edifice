@@ -576,4 +576,18 @@ defmodule Edifice.SSM.Common do
       dropout: 0.1
     ]
   end
+
+  @doc false
+  # Fallback for selective scan — used by FusedScan when no CUDA kernel is available.
+  # Takes pre-discretization inputs and computes the full SSM recurrence.
+  # x: [batch, seq_len, hidden], dt: [batch, seq_len, hidden],
+  # a: [hidden, state_size], b: [batch, seq_len, state_size], c: [batch, seq_len, state_size]
+  def selective_scan_fallback(x, dt, a, b_proj, c_proj) do
+    state_size = Nx.axis_size(a, 1)
+
+    # Discretize and scan using the existing infrastructure
+    {a_bar, bx} = discretize_ssm(x, b_proj, dt, state_size)
+    h = sequential_scan(a_bar, bx)
+    compute_ssm_output(h, c_proj)
+  end
 end
