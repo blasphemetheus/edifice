@@ -251,7 +251,7 @@ transformation between PyTorch and Axon conventions.
 
 **Phase 3 — HuggingFace Hub integration (optional):**
 
-- [ ] **Hub download helper** — `Edifice.Pretrained.Hub.download(repo_id, opts)`. Downloads `.safetensors` from HuggingFace Hub via HTTP. Handles: multi-file sharded checkpoints (`model-00001-of-00003.safetensors`), `model.safetensors.index.json` shard index, local caching in `~/.cache/edifice/`, progress reporting via Logger. Optional dep on `req` for HTTP.
+- [x] **Hub download helper** — `Edifice.Pretrained.Hub.download(repo_id, opts)`. Downloads `.safetensors` from HuggingFace Hub via HTTP. Handles: multi-file sharded checkpoints (`model-00001-of-00003.safetensors`), `model.safetensors.index.json` shard index, local caching in `~/.cache/edifice/`, progress reporting via Logger. Optional dep on `req` for HTTP. Also added `Pretrained.load_sharded/3` for multi-file checkpoints.
 - [ ] **Model card metadata** — Parse `config.json` from HuggingFace repos to auto-detect architecture type and build opts (hidden_size, num_heads, etc.) so users can do `Edifice.Pretrained.from_hub("google/vit-base-patch16-224")` without specifying opts.
 
 **Phase 4 — Validation & docs:**

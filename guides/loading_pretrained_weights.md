@@ -39,7 +39,24 @@ Then `mix deps.get`.
 
 ### 2. Download a checkpoint
 
-Download a `.safetensors` file from HuggingFace. For example, using `curl`:
+The easiest way is to use the built-in Hub downloader (requires the optional `req` dependency):
+
+```elixir
+# Add to mix.exs deps:
+{:req, "~> 0.5"}
+```
+
+```elixir
+alias Edifice.Pretrained.Hub
+
+# Download and cache locally (~/.cache/edifice/)
+[path] = Hub.download!("google/vit-base-patch16-224")
+
+# For private/gated models, pass a HuggingFace token
+[path] = Hub.download!("meta-llama/Llama-2-7b", token: "hf_...")
+```
+
+Alternatively, download manually with `curl`:
 
 ```bash
 # ViT Base
@@ -56,10 +73,11 @@ curl -LO https://huggingface.co/facebook/convnext-tiny-224/resolve/main/model.sa
 
 ```elixir
 alias Edifice.Pretrained
-alias Edifice.Pretrained.KeyMaps
+alias Edifice.Pretrained.{Hub, KeyMaps}
 
-# Load ViT weights
-model_state = Pretrained.load(KeyMaps.ViT, "model.safetensors")
+# Load ViT weights (from Hub download or local path)
+[path] = Hub.download!("google/vit-base-patch16-224")
+model_state = Pretrained.load(KeyMaps.ViT, path)
 
 # Build the Edifice model
 model = Edifice.Vision.ViT.build(
@@ -438,10 +456,52 @@ def map_key("model.norm.weight"), do: "final_norm.scale"
 def map_key("model.norm.bias"), do: "final_norm.bias"
 ```
 
+## HuggingFace Hub Integration
+
+`Edifice.Pretrained.Hub` downloads checkpoints directly from HuggingFace with local caching.
+Requires the optional `req` dependency (`{:req, "~> 0.5"}`).
+
+### Single-file models
+
+```elixir
+[path] = Hub.download!("google/vit-base-patch16-224")
+model_state = Pretrained.load(KeyMaps.ViT, path)
+```
+
+### Sharded models
+
+Large models split weights across multiple files. Hub detects this automatically via
+`model.safetensors.index.json`:
+
+```elixir
+paths = Hub.download!("bigscience/bloom")
+model_state = Pretrained.load_sharded(MyKeyMap, paths)
+```
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `:revision` | `"main"` | Git revision (branch, tag, or commit hash) |
+| `:cache_dir` | `~/.cache/edifice` | Override local cache directory |
+| `:force` | `false` | Re-download even if cached |
+| `:token` | `nil` | HuggingFace API token for private/gated models |
+
+### Cache location
+
+```elixir
+Hub.cache_path("google/vit-base-patch16-224")
+#=> "~/.cache/edifice/google/vit-base-patch16-224"
+```
+
+Files are downloaded atomically (to a `.part` temp file, then renamed) so interrupted
+downloads won't leave corrupt files in the cache.
+
 ## What's Next
 
 - **Architecture key maps**: Add key maps for more architectures by following the pattern above.
-- **HuggingFace Hub integration**: A future `Edifice.Pretrained.Hub` module will download
-  checkpoints directly from HuggingFace, handle sharded files, and cache locally.
+- **Model card metadata**: Auto-detect architecture type and build opts from HuggingFace
+  `config.json`, enabling `Edifice.Pretrained.from_hub("google/vit-base-patch16-224")`
+  without manually specifying a key map.
 - **Numerical validation**: Compare Edifice forward pass outputs against PyTorch reference
   outputs to verify correctness beyond just shape matching.
