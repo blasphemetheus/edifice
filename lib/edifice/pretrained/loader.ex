@@ -68,7 +68,7 @@ defmodule Edifice.Pretrained do
     strict = Keyword.get(opts, :strict, true)
     transforms = key_map.tensor_transforms()
 
-    checkpoint = Safetensors.read!(path)
+    checkpoint = apply(Safetensors, :read!, [path])
 
     {mapped, unmapped} =
       Enum.reduce(checkpoint, {%{}, []}, fn {ext_key, tensor}, {mapped_acc, unmapped_acc} ->
@@ -118,7 +118,7 @@ defmodule Edifice.Pretrained do
     ensure_safetensors!()
 
     path
-    |> Safetensors.read!()
+    |> then(&apply(Safetensors, :read!, [&1]))
     |> Map.keys()
     |> Enum.sort()
   end

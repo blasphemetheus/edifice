@@ -153,7 +153,7 @@ defmodule Edifice.Generative.DeepFlow do
         start_layer = Enum.sum(Enum.take(branch_sizes, branch_idx - 1))
 
         acc =
-          Enum.reduce(1..branch_layer_count, acc, fn layer_offset, inner ->
+          Enum.reduce(1..branch_layer_count//1, acc, fn layer_offset, inner ->
             layer_idx = start_layer + layer_offset
 
             build_dit_block(inner, condition,
