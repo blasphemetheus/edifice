@@ -192,6 +192,54 @@ defmodule Edifice.PretrainedTest do
     end
   end
 
+  describe "load_sharded/3" do
+    test "merges multiple shard files and loads correctly" do
+      shard1 = %{
+        "layer.0.weight" => Nx.iota({4, 3}, type: :f32),
+        "layer.0.bias" => Nx.tensor([1.0, 2.0, 3.0, 4.0])
+      }
+
+      shard2 = %{
+        "norm.weight" => Nx.tensor([1.0, 1.0, 1.0])
+      }
+
+      path1 = write_fixture(shard1)
+      path2 = write_fixture(shard2)
+
+      model_state = Edifice.Pretrained.load_sharded(TestKeyMap, [path1, path2], strict: false)
+
+      assert %Axon.ModelState{} = model_state
+      assert %Nx.Tensor{} = model_state.data["block_0"]["dense"]["kernel"]
+      assert %Nx.Tensor{} = model_state.data["norm"]["scale"]
+
+      # Kernel should be transposed
+      assert Nx.shape(model_state.data["block_0"]["dense"]["kernel"]) == {3, 4}
+
+      File.rm(path1)
+      File.rm(path2)
+    end
+
+    test "applies dtype cast across shards" do
+      shard1 = %{"layer.0.weight" => Nx.iota({4, 3}, type: :f32)}
+      shard2 = %{"norm.weight" => Nx.tensor([1.0], type: :f32)}
+
+      path1 = write_fixture(shard1)
+      path2 = write_fixture(shard2)
+
+      model_state =
+        Edifice.Pretrained.load_sharded(TestKeyMap, [path1, path2],
+          dtype: :bf16,
+          strict: false
+        )
+
+      assert Nx.type(model_state.data["block_0"]["dense"]["kernel"]) == {:bf, 16}
+      assert Nx.type(model_state.data["norm"]["scale"]) == {:bf, 16}
+
+      File.rm(path1)
+      File.rm(path2)
+    end
+  end
+
   describe "list_keys/1" do
     test "returns sorted key names from a safetensors file" do
       tensors = %{

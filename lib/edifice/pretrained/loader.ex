@@ -18,6 +18,9 @@ defmodule Edifice.Pretrained do
       # Define or use an existing key map
       model_state = Edifice.Pretrained.load(MyApp.KeyMaps.ViT, "model.safetensors")
 
+      # Sharded models (multiple shard files)
+      model_state = Edifice.Pretrained.load_sharded(MyKeyMap, ["shard-1.safetensors", "shard-2.safetensors"])
+
       # Use with an Axon model
       result = Axon.predict(model, model_state, input)
 
@@ -64,14 +67,41 @@ defmodule Edifice.Pretrained do
   def load(key_map, path, opts \\ []) do
     ensure_safetensors!()
 
+    checkpoint = apply(Safetensors, :read!, [path])
+    do_load(key_map, checkpoint, opts)
+  end
+
+  @doc """
+  Loads pretrained weights from multiple sharded SafeTensors files.
+
+  Merges all shard files into a single checkpoint map, then processes
+  keys using the given key map — same as `load/3` but for sharded models.
+
+  ## Examples
+
+      paths = Edifice.Pretrained.Hub.download!("bigscience/bloom")
+      model_state = Edifice.Pretrained.load_sharded(MyKeyMap, paths)
+
+  """
+  @spec load_sharded(module(), [Path.t()], [load_opt()]) :: Axon.ModelState.t()
+  def load_sharded(key_map, paths, opts \\ []) when is_list(paths) do
+    ensure_safetensors!()
+
+    checkpoint =
+      Enum.reduce(paths, %{}, fn path, acc ->
+        Map.merge(acc, apply(Safetensors, :read!, [path]))
+      end)
+
+    do_load(key_map, checkpoint, opts)
+  end
+
+  defp do_load(key_map, checkpoint, opts) do
     dtype = Keyword.get(opts, :dtype)
     strict = Keyword.get(opts, :strict, true)
     transforms = key_map.tensor_transforms()
 
     # Build concat lookup: source_key -> {target_key, axis, [source_keys]}
     {concat_source_lookup, concat_targets} = build_concat_lookup(key_map)
-
-    checkpoint = apply(Safetensors, :read!, [path])
 
     {mapped, unmapped, concat_acc} =
       Enum.reduce(checkpoint, {%{}, [], %{}}, fn {ext_key, tensor},

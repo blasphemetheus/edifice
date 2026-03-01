@@ -57,6 +57,7 @@ defmodule Edifice.MixProject do
 
       # Pretrained weight loading (optional)
       {:safetensors, "~> 0.1.3", optional: true},
+      {:req, "~> 0.5", optional: true},
 
       # Dev & Test
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
@@ -275,6 +276,7 @@ defmodule Edifice.MixProject do
         ],
         Pretrained: [
           Edifice.Pretrained,
+          Edifice.Pretrained.Hub,
           Edifice.Pretrained.KeyMap,
           Edifice.Pretrained.Transform
         ],
