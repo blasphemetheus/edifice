@@ -37,6 +37,22 @@ RELEASE_PLAN.md
 # Logs
 *.log
 
+# CUDA build artifacts
+native/cuda/build/
+native/cuda/.nix-mix/
+native/cuda/.nix-hex/
+
+# Compiled NIF and CUDA shared libraries
+/priv/
+
+# CUDA/NCCL/NVSHMEM compat symlinks (nix-shell)
+/.cuda-compat
+/.nccl
+/.nvshmem
+
+# Scratch planning docs
+/plan.md
+
 # OS
 .DS_Store
 Thumbs.db
