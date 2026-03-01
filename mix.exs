@@ -37,14 +37,23 @@ defmodule Edifice.MixProject do
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
+    # Set EDIFICE_LOCAL_NX=1 to use local nx/exla forks (for CUDA kernel development)
+    local_nx? = System.get_env("EDIFICE_LOCAL_NX") == "1"
+
     [
       # ML Core
-      {:nx, "~> 0.11"},
+      if(local_nx?,
+        do: {:nx, path: "../nx/nx", override: true},
+        else: {:nx, "~> 0.11"}
+      ),
       {:axon, "~> 0.8"},
       {:polaris, "~> 0.1"},
 
-      # GPU Backend (optional - users bring their own)
-      {:exla, "~> 0.11", optional: true},
+      # GPU Backend
+      if(local_nx?,
+        do: {:exla, path: "../nx/exla", optional: true},
+        else: {:exla, "~> 0.11", optional: true}
+      ),
 
       # Pretrained weight loading (optional)
       {:safetensors, "~> 0.1.3", optional: true},

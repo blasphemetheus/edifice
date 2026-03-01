@@ -104,7 +104,6 @@ int fused_minlstm_scan_launch(
 #ifdef EXLA_FFI
 
 #include "xla/ffi/api/ffi.h"
-#include "xla/ffi/ffi_api.h"
 
 namespace ffi = xla::ffi;
 

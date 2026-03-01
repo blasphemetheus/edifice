@@ -25,6 +25,7 @@ pkgs.mkShell {
   ];
 
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+    pkgs.stdenv.cc.cc.lib
     cuda.cuda_cudart
     cuda.cuda_nvrtc
     cuda.cudnn
