@@ -37,17 +37,14 @@ defmodule Edifice.Interpretability.ConceptBottleneckTest do
       assert Nx.shape(output) == {@batch, @num_classes}
     end
 
-    test "output is valid probability distribution (softmax)" do
+    test "output values are finite (logits)" do
       model = ConceptBottleneck.build(@opts)
       {init_fn, predict_fn} = Axon.build(model, mode: :inference)
       params = init_fn.(template(), Axon.ModelState.empty())
       output = predict_fn.(params, %{"cbm_input" => random_input()})
 
-      sums = Nx.sum(output, axes: [1])
-
-      for i <- 0..(@batch - 1) do
-        assert_in_delta Nx.to_number(sums[i]), 1.0, 1.0e-5
-      end
+      assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
+      assert Nx.all(Nx.is_infinity(output) |> Nx.logical_not()) |> Nx.to_number() == 1
     end
   end
 

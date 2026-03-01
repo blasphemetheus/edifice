@@ -15,9 +15,9 @@ defmodule Edifice.Interpretability.ConceptBottleneck do
         |
   [batch, num_concepts]  (interpretable concept activations)
         |
-  Task predictor: dense(num_classes) + softmax
+  Task predictor: dense(num_classes)
         |
-  Output [batch, num_classes]
+  Output [batch, num_classes]  (logits — apply softmax in loss)
   ```
 
   ## Key Properties
@@ -73,9 +73,8 @@ defmodule Edifice.Interpretability.ConceptBottleneck do
     concepts = Axon.dense(input, num_concepts, name: "cbm_concept_predictor")
     concepts = Axon.activation(concepts, :sigmoid, name: "cbm_concept_activation")
 
-    # Task predictor
-    logits = Axon.dense(concepts, num_classes, name: "cbm_task_predictor")
-    Axon.activation(logits, :softmax, name: "cbm_task_output")
+    # Task predictor (returns logits — apply softmax in the loss function)
+    Axon.dense(concepts, num_classes, name: "cbm_task_predictor")
   end
 
   @doc """
