@@ -30,4 +30,20 @@ defmodule Edifice.CUDA.NIF do
   @doc false
   def fused_minlstm_scan(_forget_ptr, _input_ptr, _cand_ptr, _h0_ptr, _batch, _seq_len, _hidden),
     do: :erlang.nif_error(:not_loaded)
+
+  @doc false
+  def fused_elu_gru_scan(_gates, _cand, _h0, _batch, _seq, _hidden),
+    do: :erlang.nif_error(:not_loaded)
+
+  @doc false
+  def fused_real_gru_scan(_gates, _cand, _h0, _batch, _seq, _hidden),
+    do: :erlang.nif_error(:not_loaded)
+
+  @doc false
+  def fused_diag_linear_scan(_a, _b, _h0, _batch, _seq, _hidden),
+    do: :erlang.nif_error(:not_loaded)
+
+  @doc false
+  def fused_liquid_scan(_tau, _act, _h0, _batch, _seq, _hidden),
+    do: :erlang.nif_error(:not_loaded)
 end

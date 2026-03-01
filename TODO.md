@@ -257,6 +257,14 @@ transformation between PyTorch and Axon conventions.
 - [ ] **Numerical validation** — For ViT and Whisper: compare Edifice forward pass output against known PyTorch outputs on reference inputs. Store expected outputs as fixtures. Tolerance: 1e-4 for f32.
 - [ ] **Guide** — `guides/loading_pretrained_weights.md`. Walk through: installing dep, downloading checkpoint, loading into model, running inference. Include troubleshooting for common key mismatches.
 
+### Axon.ModelState Deprecation Warnings (Priority: Medium)
+
+- [ ] **Fix `passing parameter map to initialization is deprecated, use %Axon.ModelState{}` warnings** — Tests produce hundreds of these warnings. The test helpers and/or architecture modules are passing raw parameter maps where `%Axon.ModelState{}` structs are now expected. Audit `Axon.predict/3` and `Axon.init/3` call sites in tests and helpers, wrap params in `%Axon.ModelState{}` or `Axon.ModelState.new/1`.
+
+### cuDNN Algorithm Warning (Priority: Low)
+
+- [ ] **Investigate `Omitted potentially buggy algorithm eng14{k25=2} for conv` info messages** — XLA/cuDNN emits info-level log messages about omitting potentially buggy convolution algorithms (e.g., `eng14{k25=2}` for `__cudnn$convBiasActivationForward`). These appear for several conv ops during EXLA tests. Likely harmless (XLA falls back to a safe algorithm), but worth understanding whether cuDNN version upgrade or config flag can suppress them.
+
 ### ML-Specific Quality (Priority: Low)
 - [ ] **ONNX integration guide** — Document workflow: Edifice.build → Axon model → axon_onnx export → inference in other runtimes. Even if axon_onnx is a separate package, showing the integration path is valuable.
 - [x] **Architecture visualization** — `mix edifice.viz mamba` prints layer structure as table (default), ASCII tree (`--format tree`), or Mermaid diagram (`--format mermaid`). Handles tuple-returning models via `--component`. See `Edifice.Display` module.

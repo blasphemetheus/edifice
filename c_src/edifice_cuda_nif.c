@@ -47,6 +47,16 @@ typedef int (*minlstm_launch_fn)(
     int batch, int seq_len, int hidden
 );
 
+/* NativeRecurrence + Liquid launch wrappers (same 2-input signature) */
+typedef int (*scan_2input_launch_fn)(
+    cudaStream_t stream,
+    const float* input1,
+    const float* input2,
+    const float* h0,
+    float* output,
+    int batch, int seq_len, int hidden
+);
+
 /* cudaMalloc / cudaFree — resolved from libcudart */
 typedef cudaError_t (*cuda_malloc_fn)(void** devPtr, size_t size);
 typedef cudaError_t (*cuda_free_fn)(void* devPtr);
@@ -55,6 +65,10 @@ typedef cudaError_t (*cuda_device_synchronize_fn)(void);
 /* Resolved function pointers (set on NIF load) */
 static mingru_launch_fn  s_mingru_launch  = NULL;
 static minlstm_launch_fn s_minlstm_launch = NULL;
+static scan_2input_launch_fn s_elu_gru_launch     = NULL;
+static scan_2input_launch_fn s_real_gru_launch    = NULL;
+static scan_2input_launch_fn s_diag_linear_launch = NULL;
+static scan_2input_launch_fn s_liquid_launch      = NULL;
 static cuda_malloc_fn    s_cuda_malloc    = NULL;
 static cuda_free_fn      s_cuda_free      = NULL;
 static cuda_device_synchronize_fn s_cuda_sync = NULL;
@@ -280,6 +294,104 @@ static ERL_NIF_TERM nif_fused_minlstm_scan(
 }
 
 /* ========================================================================== */
+/* NIF: fused 2-input scans (ELU-GRU, Real-GRU, DiagLinear, Liquid)          */
+/* ========================================================================== */
+
+/*
+ * Generic NIF for 2-input scan kernels.
+ * fused_*_scan(input1_ptr, input2_ptr, h0_ptr, batch, seq_len, hidden)
+ *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
+ */
+static ERL_NIF_TERM nif_fused_2input_scan(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[],
+    scan_2input_launch_fn launch_fn, const char* kernel_name)
+{
+    uint64_t in1_ptr, in2_ptr, h0_ptr;
+    int batch, seq_len, hidden;
+
+    if (!launch_fn) {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "%s kernel not loaded", kernel_name);
+        return make_error(env, msg);
+    }
+
+    if (!enif_get_uint64(env, argv[0], &in1_ptr) ||
+        !enif_get_uint64(env, argv[1], &in2_ptr) ||
+        !enif_get_uint64(env, argv[2], &h0_ptr) ||
+        !enif_get_int(env, argv[3], &batch) ||
+        !enif_get_int(env, argv[4], &seq_len) ||
+        !enif_get_int(env, argv[5], &hidden))
+    {
+        return enif_make_badarg(env);
+    }
+
+    if (batch <= 0 || seq_len <= 0 || hidden <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2) {
+        return alloc_result;
+    }
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0) {
+        return alloc_result;
+    }
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch_fn(
+        NULL,
+        (const float*)(uintptr_t)in1_ptr,
+        (const float*)(uintptr_t)in2_ptr,
+        (const float*)(uintptr_t)h0_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, hidden
+    );
+
+    if (launch_err != 0) {
+        return make_error(env, "kernel launch failed");
+    }
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0) {
+        return make_error(env, "cudaDeviceSynchronize failed");
+    }
+
+    return alloc_result;
+}
+
+static ERL_NIF_TERM nif_fused_elu_gru_scan(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    return nif_fused_2input_scan(env, argc, argv, s_elu_gru_launch, "elu_gru");
+}
+
+static ERL_NIF_TERM nif_fused_real_gru_scan(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    return nif_fused_2input_scan(env, argc, argv, s_real_gru_launch, "real_gru");
+}
+
+static ERL_NIF_TERM nif_fused_diag_linear_scan(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    return nif_fused_2input_scan(env, argc, argv, s_diag_linear_launch, "diag_linear");
+}
+
+static ERL_NIF_TERM nif_fused_liquid_scan(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    return nif_fused_2input_scan(env, argc, argv, s_liquid_launch, "liquid");
+}
+
+/* ========================================================================== */
 /* NIF Load — resolve all symbols                                             */
 /* ========================================================================== */
 
@@ -345,6 +457,14 @@ static int nif_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
         s_kernels_handle, "fused_mingru_scan_launch");
     s_minlstm_launch = (minlstm_launch_fn)dlsym(
         s_kernels_handle, "fused_minlstm_scan_launch");
+    s_elu_gru_launch = (scan_2input_launch_fn)dlsym(
+        s_kernels_handle, "fused_elu_gru_scan_launch");
+    s_real_gru_launch = (scan_2input_launch_fn)dlsym(
+        s_kernels_handle, "fused_real_gru_scan_launch");
+    s_diag_linear_launch = (scan_2input_launch_fn)dlsym(
+        s_kernels_handle, "fused_diag_linear_scan_launch");
+    s_liquid_launch = (scan_2input_launch_fn)dlsym(
+        s_kernels_handle, "fused_liquid_scan_launch");
 
     return 0;
 }
@@ -361,11 +481,15 @@ static void nif_unload(ErlNifEnv* env, void* priv_data) {
         dlclose(s_cudart_handle);
         s_cudart_handle = NULL;
     }
-    s_mingru_launch  = NULL;
-    s_minlstm_launch = NULL;
-    s_cuda_malloc    = NULL;
-    s_cuda_free      = NULL;
-    s_cuda_sync      = NULL;
+    s_mingru_launch      = NULL;
+    s_minlstm_launch     = NULL;
+    s_elu_gru_launch     = NULL;
+    s_real_gru_launch    = NULL;
+    s_diag_linear_launch = NULL;
+    s_liquid_launch      = NULL;
+    s_cuda_malloc        = NULL;
+    s_cuda_free          = NULL;
+    s_cuda_sync          = NULL;
 }
 
 /* ========================================================================== */
@@ -373,8 +497,12 @@ static void nif_unload(ErlNifEnv* env, void* priv_data) {
 /* ========================================================================== */
 
 static ErlNifFunc nif_funcs[] = {
-    {"fused_mingru_scan",  6, nif_fused_mingru_scan,  ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_minlstm_scan", 7, nif_fused_minlstm_scan, ERL_NIF_DIRTY_JOB_IO_BOUND}
+    {"fused_mingru_scan",       6, nif_fused_mingru_scan,       ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_minlstm_scan",      7, nif_fused_minlstm_scan,      ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_elu_gru_scan",      6, nif_fused_elu_gru_scan,      ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_real_gru_scan",     6, nif_fused_real_gru_scan,     ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_diag_linear_scan",  6, nif_fused_diag_linear_scan,  ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_liquid_scan",       6, nif_fused_liquid_scan,       ERL_NIF_DIRTY_JOB_IO_BOUND}
 };
 
 ERL_NIF_INIT(Elixir.Edifice.CUDA.NIF, nif_funcs, nif_load, NULL, NULL, nif_unload)

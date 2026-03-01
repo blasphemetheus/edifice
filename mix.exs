@@ -39,12 +39,12 @@ defmodule Edifice.MixProject do
   defp deps do
     [
       # ML Core
-      {:nx, "~> 0.10.0"},
+      {:nx, "~> 0.11"},
       {:axon, "~> 0.8"},
       {:polaris, "~> 0.1"},
 
       # GPU Backend (optional - users bring their own)
-      {:exla, "~> 0.10.0", optional: true},
+      {:exla, "~> 0.11", optional: true},
 
       # Pretrained weight loading (optional)
       {:safetensors, "~> 0.1.3", optional: true},

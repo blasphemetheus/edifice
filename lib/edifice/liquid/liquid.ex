@@ -222,25 +222,50 @@ defmodule Edifice.Liquid do
     # Scale to reasonable range [0.1, 10.0]
     tau = Nx.add(softplus(tau_proj), 0.1)
 
-    # Process sequence with ODE integration
-    # Initialize hidden state as zeros
+    # For the :exact solver with 1 integration step, use the fused scan path
+    if solver == :exact and integration_steps == 1 do
+      Edifice.CUDA.FusedScan.liquid(tau, f_proj)
+    else
+      # General ODE integration path (multi-step or non-exact solvers)
+      h0 = Nx.broadcast(0.0, {batch, hidden_size})
+
+      {final_outputs, _} =
+        Enum.reduce(0..(seq_len - 1), {[], h0}, fn t, {outputs, h} ->
+          tau_t = Nx.slice_along_axis(tau, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          f_t = Nx.slice_along_axis(f_proj, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+          h_new = integrate_ode(h, tau_t, f_t, integration_steps, solver)
+
+          {outputs ++ [Nx.new_axis(h_new, 1)], h_new}
+        end)
+
+      Nx.concatenate(final_outputs, axis: 1)
+    end
+  end
+
+  @doc false
+  # Fallback scan for the exact solver, called by FusedScan when CUDA is unavailable.
+  # tau: [batch, seq_len, hidden] — post-softplus time constants
+  # activation: [batch, seq_len, hidden] — f_proj output
+  def liquid_exact_scan(tau, activation) do
+    batch = Nx.axis_size(tau, 0)
+    seq_len = Nx.axis_size(tau, 1)
+    hidden_size = Nx.axis_size(tau, 2)
+
     h0 = Nx.broadcast(0.0, {batch, hidden_size})
 
-    # Sequential processing through time
-    # Using Enum.reduce for clarity (XLA will optimize)
     {final_outputs, _} =
       Enum.reduce(0..(seq_len - 1), {[], h0}, fn t, {outputs, h} ->
-        # Extract current timestep values
         tau_t = Nx.slice_along_axis(tau, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        f_t = Nx.slice_along_axis(f_proj, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        act_t = Nx.slice_along_axis(activation, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        # Integrate ODE for this timestep
-        h_new = integrate_ode(h, tau_t, f_t, integration_steps, solver)
+        # Exact solution: h = activation + (h - activation) * exp(-1.0/tau)
+        decay = Nx.exp(Nx.negate(Nx.divide(1.0, tau_t)))
+        h_new = Nx.add(act_t, Nx.multiply(Nx.subtract(h, act_t), decay))
 
         {outputs ++ [Nx.new_axis(h_new, 1)], h_new}
       end)
 
-    # Concatenate outputs: [batch, seq_len, hidden_size]
     Nx.concatenate(final_outputs, axis: 1)
   end
 

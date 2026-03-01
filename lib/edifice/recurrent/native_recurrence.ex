@@ -127,24 +127,25 @@ defmodule Edifice.Recurrent.NativeRecurrence do
     gate_proj = Axon.dense(normed, hidden_size, name: "#{name}_gate")
     candidate_proj = Axon.dense(normed, hidden_size, name: "#{name}_candidate")
 
-    recurrence_input = Axon.concatenate([gate_proj, candidate_proj], axis: 2, name: "#{name}_cat")
-
     recurrence_output =
-      Axon.nx(
-        recurrence_input,
-        fn combined -> elu_gru_scan(combined, hidden_size) end,
-        name: "#{name}_recurrence"
+      Axon.layer(
+        fn gates, cands, _opts ->
+          Edifice.CUDA.FusedScan.elu_gru(gates, cands)
+        end,
+        [gate_proj, candidate_proj],
+        name: "#{name}_recurrence",
+        op_name: :elu_gru_scan
       )
 
     Axon.add(residual, recurrence_output, name: "#{name}_residual")
   end
 
-  defp elu_gru_scan(combined, hidden_size) do
-    batch_size = Nx.axis_size(combined, 0)
-    seq_len = Nx.axis_size(combined, 1)
-
-    gate_pre = Nx.slice_along_axis(combined, 0, hidden_size, axis: 2)
-    candidate_pre = Nx.slice_along_axis(combined, hidden_size, hidden_size, axis: 2)
+  @doc false
+  # Called by FusedScan fallback with separate gate and candidate tensors.
+  def elu_gru_scan(gate_pre, candidate_pre) do
+    batch_size = Nx.axis_size(gate_pre, 0)
+    seq_len = Nx.axis_size(gate_pre, 1)
+    hidden_size = Nx.axis_size(gate_pre, 2)
 
     z = Nx.sigmoid(gate_pre)
     # 1 + elu(x) ensures candidate is non-negative: elu(x) >= -1, so c >= 0
@@ -173,24 +174,25 @@ defmodule Edifice.Recurrent.NativeRecurrence do
     gate_proj = Axon.dense(normed, hidden_size, name: "#{name}_gate")
     candidate_proj = Axon.dense(normed, hidden_size, name: "#{name}_candidate")
 
-    recurrence_input = Axon.concatenate([gate_proj, candidate_proj], axis: 2, name: "#{name}_cat")
-
     recurrence_output =
-      Axon.nx(
-        recurrence_input,
-        fn combined -> real_gru_scan(combined, hidden_size) end,
-        name: "#{name}_recurrence"
+      Axon.layer(
+        fn gates, cands, _opts ->
+          Edifice.CUDA.FusedScan.real_gru(gates, cands)
+        end,
+        [gate_proj, candidate_proj],
+        name: "#{name}_recurrence",
+        op_name: :real_gru_scan
       )
 
     Axon.add(residual, recurrence_output, name: "#{name}_residual")
   end
 
-  defp real_gru_scan(combined, hidden_size) do
-    batch_size = Nx.axis_size(combined, 0)
-    seq_len = Nx.axis_size(combined, 1)
-
-    gate_pre = Nx.slice_along_axis(combined, 0, hidden_size, axis: 2)
-    candidate = Nx.slice_along_axis(combined, hidden_size, hidden_size, axis: 2)
+  @doc false
+  # Called by FusedScan fallback with separate gate and candidate tensors.
+  def real_gru_scan(gate_pre, candidate) do
+    batch_size = Nx.axis_size(gate_pre, 0)
+    seq_len = Nx.axis_size(gate_pre, 1)
+    hidden_size = Nx.axis_size(gate_pre, 2)
 
     z = Nx.sigmoid(gate_pre)
 
@@ -212,24 +214,25 @@ defmodule Edifice.Recurrent.NativeRecurrence do
     a_proj = Axon.dense(normed, hidden_size, name: "#{name}_a")
     b_proj = Axon.dense(normed, hidden_size, name: "#{name}_b")
 
-    recurrence_input = Axon.concatenate([a_proj, b_proj], axis: 2, name: "#{name}_cat")
-
     recurrence_output =
-      Axon.nx(
-        recurrence_input,
-        fn combined -> diag_linear_scan(combined, hidden_size) end,
-        name: "#{name}_recurrence"
+      Axon.layer(
+        fn a_vals, b_vals, _opts ->
+          Edifice.CUDA.FusedScan.diag_linear(a_vals, b_vals)
+        end,
+        [a_proj, b_proj],
+        name: "#{name}_recurrence",
+        op_name: :diag_linear_scan
       )
 
     Axon.add(residual, recurrence_output, name: "#{name}_residual")
   end
 
-  defp diag_linear_scan(combined, hidden_size) do
-    batch_size = Nx.axis_size(combined, 0)
-    seq_len = Nx.axis_size(combined, 1)
-
-    a_pre = Nx.slice_along_axis(combined, 0, hidden_size, axis: 2)
-    b_val = Nx.slice_along_axis(combined, hidden_size, hidden_size, axis: 2)
+  @doc false
+  # Called by FusedScan fallback with separate a and b tensors.
+  def diag_linear_scan(a_pre, b_val) do
+    batch_size = Nx.axis_size(a_pre, 0)
+    seq_len = Nx.axis_size(a_pre, 1)
+    hidden_size = Nx.axis_size(a_pre, 2)
 
     a = Nx.sigmoid(a_pre)
 
