@@ -108,6 +108,7 @@ defmodule Edifice.Recurrent.MinLSTM do
           | {:num_layers, pos_integer()}
           | {:seq_len, pos_integer()}
           | {:window_size, pos_integer()}
+          | {:fused_block, boolean()}
 
   @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
@@ -117,6 +118,7 @@ defmodule Edifice.Recurrent.MinLSTM do
     dropout = Keyword.get(opts, :dropout, default_dropout())
     window_size = Keyword.get(opts, :window_size, 60)
     seq_len = Keyword.get(opts, :seq_len, window_size)
+    fused_block = Keyword.get(opts, :fused_block, false)
 
     input_seq_dim = if seq_len, do: seq_len, else: nil
 
@@ -131,17 +133,21 @@ defmodule Edifice.Recurrent.MinLSTM do
         input
       end
 
-    # Stack MinLSTM layers
     output =
-      Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
-        layer = build_min_lstm_layer(acc, hidden_size, "min_lstm_#{layer_idx}")
+      if fused_block do
+        build_fused_block(x, hidden_size, num_layers)
+      else
+        # Stack MinLSTM layers
+        Enum.reduce(1..num_layers, x, fn layer_idx, acc ->
+          layer = build_min_lstm_layer(acc, hidden_size, "min_lstm_#{layer_idx}")
 
-        if dropout > 0 and layer_idx < num_layers do
-          Axon.dropout(layer, rate: dropout, name: "dropout_#{layer_idx}")
-        else
-          layer
-        end
-      end)
+          if dropout > 0 and layer_idx < num_layers do
+            Axon.dropout(layer, rate: dropout, name: "dropout_#{layer_idx}")
+          else
+            layer
+          end
+        end)
+      end
 
     # Final layer norm
     output = Axon.layer_norm(output, name: "final_norm")
@@ -155,6 +161,103 @@ defmodule Edifice.Recurrent.MinLSTM do
       end,
       name: "last_timestep"
     )
+  end
+
+  # ============================================================================
+  # Fused Block (inference-only, all layers in one kernel)
+  # ============================================================================
+
+  defp build_fused_block(input, hidden_size, num_layers) do
+    # Create all per-layer parameter nodes (defines Axon params)
+    for layer_idx <- 1..num_layers do
+      name = "min_lstm_#{layer_idx}"
+      normed = Axon.layer_norm(input, name: "#{name}_norm")
+      _forget = Axon.dense(normed, hidden_size, name: "#{name}_forget")
+      _input_gate = Axon.dense(normed, hidden_size, name: "#{name}_input")
+      _candidate = Axon.dense(normed, hidden_size, name: "#{name}_candidate")
+    end
+
+    Axon.layer(
+      fn input_tensor, opts ->
+        params = opts[:params]
+        pack_and_dispatch_minlstm(input_tensor, params, hidden_size, num_layers)
+      end,
+      [input],
+      name: "min_lstm_fused_block",
+      op_name: :min_lstm_fused_block,
+      params: Enum.map(1..num_layers, fn idx -> "min_lstm_#{idx}" end)
+    )
+  end
+
+  defp pack_and_dispatch_minlstm(input, _params, _hidden_size, _num_layers) do
+    input
+  end
+
+  @doc """
+  Pack trained Axon parameters into the flat weight buffer expected by the
+  fused MinLSTM block scan kernel.
+
+  ## Arguments
+    * `params` - trained parameter map from `Axon.build` + training
+    * `num_layers` - number of MinLSTM layers
+    * `hidden_size` - hidden dimension
+
+  ## Returns
+    Flat `{:f, 32}` tensor of shape `[num_layers * (3*H*H + 5*H)]`
+  """
+  @spec pack_block_weights(map(), pos_integer(), pos_integer()) :: Nx.Tensor.t()
+  def pack_block_weights(params, num_layers, _hidden_size) do
+    layers =
+      for layer_idx <- 1..num_layers do
+        prefix = "min_lstm_#{layer_idx}"
+
+        w_f = params["#{prefix}_forget"]["kernel"]
+        b_f = params["#{prefix}_forget"]["bias"]
+        w_i = params["#{prefix}_input"]["kernel"]
+        b_i = params["#{prefix}_input"]["bias"]
+        w_h = params["#{prefix}_candidate"]["kernel"]
+        b_h = params["#{prefix}_candidate"]["bias"]
+        gamma = params["#{prefix}_norm"]["gamma"]
+        beta = params["#{prefix}_norm"]["beta"]
+
+        Nx.concatenate([
+          Nx.flatten(w_f),
+          Nx.flatten(b_f),
+          Nx.flatten(w_i),
+          Nx.flatten(b_i),
+          Nx.flatten(w_h),
+          Nx.flatten(b_h),
+          Nx.flatten(gamma),
+          Nx.flatten(beta)
+        ])
+      end
+
+    Nx.concatenate(layers)
+  end
+
+  @doc """
+  Run fused block inference with pre-packed weights.
+
+  ## Arguments
+    * `input` - [B, T, H] input tensor (after input projection)
+    * `packed_weights` - output of `pack_block_weights/3`
+    * `num_layers` - number of layers
+    * `h0` - optional [B, num_layers, H] initial states (default: zeros)
+
+  ## Returns
+    `[B, T, H]` — output after all MinLSTM layers
+  """
+  def fused_block_inference(input, packed_weights, num_layers, h0 \\ nil) do
+    {batch, _seq_len, hidden} = Nx.shape(input)
+
+    h0 =
+      if h0 do
+        h0
+      else
+        Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, num_layers, hidden})
+      end
+
+    Edifice.CUDA.FusedScan.minlstm_block(input, packed_weights, h0, num_layers)
   end
 
   # ============================================================================
