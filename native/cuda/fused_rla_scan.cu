@@ -219,7 +219,7 @@ int fused_rla_scan_launch(
 
 namespace ffi = xla::ffi;
 
-// Note: variant and clip_threshold passed as attributes from EXLA side
+// variant and clip_threshold passed as scalar buffer operands
 ffi::Error fused_rla_scan_ffi_impl(
     cudaStream_t stream,
     ffi::Buffer<FFI_IO_TYPE> q,       // [B, T, H, d]
@@ -228,10 +228,12 @@ ffi::Error fused_rla_scan_ffi_impl(
     ffi::Buffer<FFI_IO_TYPE> alpha,   // [B, T, H]
     ffi::Buffer<FFI_IO_TYPE> beta,    // [B, T, H]
     ffi::Buffer<FFI_IO_TYPE> gamma,   // [B, T, H]
-    ffi::ResultBuffer<FFI_IO_TYPE> output,  // [B, T, H, d]
-    int32_t variant,
-    float clip_threshold
+    ffi::AnyBuffer variant_buf,             // scalar i32
+    ffi::AnyBuffer clip_buf,                // scalar f32
+    ffi::ResultBuffer<FFI_IO_TYPE> output   // [B, T, H, d]
 ) {
+    int32_t variant = reinterpret_cast<const int32_t*>(variant_buf.untyped_data())[0];
+    float clip_threshold = reinterpret_cast<const float*>(clip_buf.untyped_data())[0];
     auto dims = q.dimensions();
     int batch     = static_cast<int>(dims[0]);
     int seq_len   = static_cast<int>(dims[1]);
@@ -273,9 +275,9 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // alpha
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // beta
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // gamma
+        .Arg<ffi::AnyBuffer>()             // variant (scalar i32)
+        .Arg<ffi::AnyBuffer>()             // clip_threshold (scalar f32)
         .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
-        .Attr<int32_t>("variant")
-        .Attr<float>("clip_threshold")
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),

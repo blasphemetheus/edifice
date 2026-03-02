@@ -144,6 +144,75 @@ defmodule Edifice.Recurrent.DeepResLSTM do
   defp apply_norm(x, :rms_norm, hidden_size, name),
     do: Edifice.Blocks.RMSNorm.layer(x, hidden_size: hidden_size, name: name)
 
+  @doc """
+  Pack trained Axon parameters into the flat weight buffer expected by the
+  fused LSTM block scan kernel.
+
+  Packs the LayerNorm weights and LSTM weights (input proj W_x, bias, recurrent R)
+  for each layer into a single contiguous buffer.
+
+  ## Arguments
+    * `params` - trained parameter map from `Axon.build` + training
+    * `num_layers` - number of residual LSTM blocks
+    * `hidden_size` - hidden dimension
+
+  ## Returns
+    Flat `{:f, 32}` tensor of shape `[num_layers * (8*H*H + 6*H)]`
+  """
+  @spec pack_block_weights(map(), pos_integer(), pos_integer()) :: Nx.Tensor.t()
+  def pack_block_weights(params, num_layers, _hidden_size) do
+    layers =
+      for layer_idx <- 1..num_layers do
+        # Input projection W_x[H, 4H] and bias b_x[4H]
+        w_x = params["lstm_#{layer_idx}_input_proj"]["kernel"]
+        b_x = params["lstm_#{layer_idx}_input_proj"]["bias"]
+
+        # Recurrent weight R[H, 4H]
+        r_w = params["lstm_#{layer_idx}_fused_scan"]["lstm_#{layer_idx}_recurrent_kernel"]
+
+        # LayerNorm gamma and beta
+        gamma = params["block_#{layer_idx}_prenorm"]["gamma"]
+        beta = params["block_#{layer_idx}_prenorm"]["beta"]
+
+        Nx.concatenate([
+          Nx.flatten(w_x),
+          Nx.flatten(b_x),
+          Nx.flatten(r_w),
+          Nx.flatten(gamma),
+          Nx.flatten(beta)
+        ])
+      end
+
+    Nx.concatenate(layers)
+  end
+
+  @doc """
+  Run fused block inference with pre-packed weights.
+
+  Runs all LSTM layers in a single kernel call. Note: this skips the per-layer
+  zero-initialized decoder dense layers (which start as identity). For models
+  early in training or for fast approximate inference, this is numerically
+  equivalent. For fully trained models, use the standard `build/1` path.
+
+  ## Arguments
+    * `input` - [B, T, H] input tensor (after encoder projection)
+    * `packed_weights` - output of `pack_block_weights/3`
+    * `num_layers` - number of layers
+    * `h0` - optional [B, num_layers, H] initial hidden states (default: zeros)
+    * `c0` - optional [B, num_layers, H] initial cell states (default: zeros)
+
+  ## Returns
+    `[B, T, H]` — output after all LSTM layers
+  """
+  def fused_block_inference(input, packed_weights, num_layers, h0 \\ nil, c0 \\ nil) do
+    {batch, _seq_len, hidden} = Nx.shape(input)
+
+    h0 = h0 || Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, num_layers, hidden})
+    c0 = c0 || Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, num_layers, hidden})
+
+    Edifice.CUDA.FusedScan.lstm_block(input, packed_weights, h0, c0, num_layers)
+  end
+
   @doc "Get the output size of the model."
   @spec output_size(keyword()) :: pos_integer()
   def output_size(opts \\ []) do

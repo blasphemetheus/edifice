@@ -91,6 +91,32 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       assert_all_close(grad_v, ref_gv, atol: 1.0e-4)
     end
 
+    test "non-causal gradients match Nx autodiff for bf16" do
+      batch = 1
+      heads = 1
+      seq = 4
+      dim = 4
+
+      key = Nx.Random.key(124)
+      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+      {v, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+
+      {ref_gq, ref_gk, ref_gv} =
+        Nx.Defn.grad({q, k, v}, fn {q, k, v} ->
+          Edifice.CUDA.FusedScan.flash_attention_fallback(q, k, v, 0) |> Nx.sum()
+        end)
+
+      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, heads, seq, dim})
+
+      {grad_q, grad_k, grad_v} =
+        Edifice.CUDA.FusedScan.flash_attention_backward_fallback(q, k, v, 0, grad_output)
+
+      assert_all_close(grad_q, ref_gq, atol: 0.05)
+      assert_all_close(grad_k, ref_gk, atol: 0.05)
+      assert_all_close(grad_v, ref_gv, atol: 0.05)
+    end
+
     test "batch=2 non-causal" do
       batch = 2
       heads = 2
@@ -172,6 +198,35 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       assert_all_close(grad_q, ref_gq, atol: 1.0e-3)
       assert_all_close(grad_k, ref_gk, atol: 1.0e-3)
       assert_all_close(grad_v, ref_gv, atol: 1.0e-3)
+    end
+
+    test "causal gradients match Nx autodiff for bf16" do
+      batch = 1
+      heads = 1
+      seq = 4
+      dim = 4
+
+      key = Nx.Random.key(322)
+      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+      {v, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+
+      v_max = Nx.reduce_max(v, axes: [2], keep_axes: true)
+
+      {ref_gq, ref_gk, ref_gv} =
+        Nx.Defn.grad({q, k, v}, fn {q, k, v} ->
+          vm = Nx.reduce_max(v, axes: [2], keep_axes: true)
+          Edifice.CUDA.FusedScan.laser_attention_fallback(q, k, v, vm, 1) |> Nx.sum()
+        end)
+
+      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, heads, seq, dim})
+
+      {grad_q, grad_k, grad_v} =
+        Edifice.CUDA.FusedScan.laser_attention_backward_fallback(q, k, v, v_max, 1, grad_output)
+
+      assert_all_close(grad_q, ref_gq, atol: 0.05)
+      assert_all_close(grad_k, ref_gk, atol: 0.05)
+      assert_all_close(grad_v, ref_gv, atol: 0.05)
     end
 
     test "batch=2 causal" do
@@ -287,6 +342,40 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
         Edifice.CUDA.FusedScan.fox_attention_backward_fallback(q, k, v, cs, grad_output)
 
       assert_all_close(grad_cs, ref_gcs, atol: 1.0e-4)
+    end
+
+    test "gradients match Nx autodiff for bf16" do
+      batch = 1
+      heads = 1
+      seq = 4
+      dim = 4
+
+      key = Nx.Random.key(223)
+      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+      {v, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+      {cs_raw, _key} = Nx.Random.uniform(key, -1.0, 0.0, shape: {batch, heads, seq}, type: {:bf, 16})
+      cs = Nx.cumulative_sum(cs_raw, axis: 2)
+
+      {ref_gq, ref_gk, ref_gv} =
+        Nx.Defn.grad({q, k, v}, fn {q, k, v} ->
+          Edifice.CUDA.FusedScan.fox_attention_fallback(q, k, v, cs) |> Nx.sum()
+        end)
+
+      ref_gcs =
+        Nx.Defn.grad(cs, fn cs ->
+          Edifice.CUDA.FusedScan.fox_attention_fallback(q, k, v, cs) |> Nx.sum()
+        end)
+
+      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, heads, seq, dim})
+
+      {grad_q, grad_k, grad_v, grad_cs} =
+        Edifice.CUDA.FusedScan.fox_attention_backward_fallback(q, k, v, cs, grad_output)
+
+      assert_all_close(grad_q, ref_gq, atol: 0.05)
+      assert_all_close(grad_k, ref_gk, atol: 0.05)
+      assert_all_close(grad_v, ref_gv, atol: 0.05)
+      assert_all_close(grad_cs, ref_gcs, atol: 0.05)
     end
 
     test "batch=2" do
