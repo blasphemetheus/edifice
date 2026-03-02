@@ -1727,6 +1727,403 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   # ============================================================================
+  # Reservoir (Echo State Network) scan
+  # ============================================================================
+
+  @doc """
+  Reservoir scan — `h = tanh(wx + W_res @ h)` with optional leak rate.
+
+  Returns only the final hidden state `[batch, hidden]`.
+
+  ## Arguments
+
+    * `wx` - Pre-computed input projection `[batch, seq_len, reservoir_size]`
+    * `w_res` - Fixed reservoir weight matrix `[reservoir_size, reservoir_size]`
+    * `opts` - Options:
+      * `:leak_rate` - Leaky integration rate (default: 1.0)
+  """
+  def reservoir_scan(wx, w_res, opts \\ []) do
+    leak_rate = Keyword.get(opts, :leak_rate, 1.0)
+
+    cond do
+      custom_call_available?() ->
+        reservoir_custom_call(wx, w_res, leak_rate)
+
+      cuda_available?(wx) ->
+        reservoir_fused(wx, w_res, leak_rate)
+
+      true ->
+        reservoir_scan_fallback(wx, w_res, leak_rate)
+    end
+  end
+
+  defp reservoir_custom_call(wx, w_res, leak_rate) do
+    {batch, _seq_len, hidden} = Nx.shape(wx)
+    output = Nx.template({batch, hidden}, {:f, 32})
+    leak_tensor = Nx.tensor(leak_rate, type: {:f, 32})
+
+    Nx.Shared.optional(:fused_reservoir_scan, [wx, w_res, Nx.broadcast(0.0, {batch, hidden}), leak_tensor], output, fn wx, w_res, _h0, _leak ->
+      reservoir_scan_fallback(wx, w_res, leak_rate)
+    end)
+  end
+
+  defp reservoir_fused(wx, w_res, leak_rate) do
+    {batch, seq_len, hidden} = Nx.shape(wx)
+
+    wx_ptr = Nx.to_pointer(wx, mode: :local)
+    wres_ptr = Nx.to_pointer(w_res, mode: :local)
+    h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
+    h0_ptr = Nx.to_pointer(h0, mode: :local)
+
+    case Edifice.CUDA.NIF.fused_reservoir_scan(
+           wx_ptr.address, wres_ptr.address, h0_ptr.address,
+           batch, seq_len, hidden, leak_rate / 1
+         ) do
+      {:ok, out_addr, gc_ref} ->
+        hold_gc_ref(out_addr, gc_ref)
+        out_bytes = batch * hidden * 4
+
+        Nx.from_pointer(
+          {backend_for(wx), client: :cuda, device_id: 0},
+          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
+          {:f, 32},
+          {batch, hidden}
+        )
+
+      {:error, reason} ->
+        raise "CUDA reservoir scan failed: #{reason}"
+    end
+  end
+
+  defp reservoir_scan_fallback(wx, w_res, leak_rate) do
+    {batch, seq_len, hidden} = Nx.shape(wx)
+    h = Nx.broadcast(Nx.tensor(0.0, type: Nx.type(wx)), {batch, hidden})
+
+    Enum.reduce(0..(seq_len - 1), h, fn t, h_prev ->
+      wx_t = Nx.slice_along_axis(wx, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+      pre_act = Nx.add(wx_t, Nx.dot(h_prev, w_res))
+      h_new = Nx.tanh(pre_act)
+
+      if leak_rate == 1.0 do
+        h_new
+      else
+        Nx.add(Nx.multiply(1.0 - leak_rate, h_prev), Nx.multiply(leak_rate, h_new))
+      end
+    end)
+  end
+
+  # ============================================================================
+  # Titans scan (surprise-gated memory)
+  # ============================================================================
+
+  @doc """
+  Titans scan — surprise-gated memory update with momentum.
+
+  ## Arguments
+
+    * `combined` - Concatenated `[Q, K, V, gate_input]` tensor `[batch, seq, 4*M]`
+    * `opts` - Options:
+      * `:memory_size` - Memory dimension M (required)
+      * `:momentum` - Momentum coefficient (default: 0.9)
+  """
+  def titans_scan(combined, opts \\ []) do
+    memory_size = Keyword.fetch!(opts, :memory_size)
+    momentum = Keyword.get(opts, :momentum, 0.9)
+
+    cond do
+      custom_call_available?() ->
+        titans_custom_call(combined, memory_size, momentum)
+
+      cuda_available?(combined) ->
+        titans_fused(combined, memory_size, momentum)
+
+      true ->
+        titans_scan_fallback(combined, memory_size, momentum)
+    end
+  end
+
+  defp titans_custom_call(combined, memory_size, momentum) do
+    {batch, seq_len, _} = Nx.shape(combined)
+    output = Nx.template({batch, seq_len, memory_size}, {:f, 32})
+    momentum_tensor = Nx.tensor(momentum, type: {:f, 32})
+
+    Nx.Shared.optional(:fused_titans_scan, [combined, momentum_tensor], output, fn combined, _mom ->
+      titans_scan_fallback(combined, memory_size, momentum)
+    end)
+  end
+
+  defp titans_fused(combined, memory_size, momentum) do
+    {batch, seq_len, _} = Nx.shape(combined)
+
+    combined_ptr = Nx.to_pointer(combined, mode: :local)
+
+    case Edifice.CUDA.NIF.fused_titans_scan(
+           combined_ptr.address, batch, seq_len, memory_size, momentum / 1
+         ) do
+      {:ok, out_addr, gc_ref} ->
+        hold_gc_ref(out_addr, gc_ref)
+        out_bytes = batch * seq_len * memory_size * 4
+
+        Nx.from_pointer(
+          {backend_for(combined), client: :cuda, device_id: 0},
+          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
+          {:f, 32},
+          {batch, seq_len, memory_size}
+        )
+
+      {:error, reason} ->
+        raise "CUDA Titans scan failed: #{reason}"
+    end
+  end
+
+  defp titans_scan_fallback(combined, memory_size, momentum) do
+    {batch, seq_len, _} = Nx.shape(combined)
+
+    q_all = Nx.slice_along_axis(combined, 0, memory_size, axis: 2)
+    k_all = Nx.slice_along_axis(combined, memory_size, memory_size, axis: 2)
+    v_all = Nx.slice_along_axis(combined, memory_size * 2, memory_size, axis: 2)
+    gate_input = Nx.slice_along_axis(combined, memory_size * 3, memory_size, axis: 2)
+
+    m_init = Nx.broadcast(0.0, {batch, memory_size, memory_size})
+    mom_init = Nx.broadcast(0.0, {batch, memory_size, memory_size})
+
+    {_, _, output_list} =
+      Enum.reduce(0..(seq_len - 1), {m_init, mom_init, []}, fn t, {m_prev, mom_prev, acc} ->
+        q_t = Nx.slice_along_axis(q_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        k_t = Nx.slice_along_axis(k_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        v_t = Nx.slice_along_axis(v_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        g_input = Nx.slice_along_axis(gate_input, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+        pred = Nx.dot(m_prev, [2], [0], Nx.new_axis(k_t, 2), [1], [0]) |> Nx.squeeze(axes: [2])
+        error = Nx.subtract(pred, v_t)
+        surprise = Nx.mean(Nx.pow(error, 2), axes: [1], keep_axes: true)
+        surprise_log = Nx.log(Nx.add(surprise, 1.0e-6))
+        gate = Nx.sigmoid(Nx.add(g_input, surprise_log))
+        grad = Nx.dot(Nx.new_axis(error, 2), [2], [0], Nx.new_axis(k_t, 1), [1], [0])
+        mom_t = Nx.add(Nx.multiply(momentum, mom_prev), grad)
+        gate_expanded = Nx.new_axis(gate, 2)
+        m_t = Nx.subtract(m_prev, Nx.multiply(gate_expanded, mom_t))
+        o_t = Nx.dot(m_t, [2], [0], Nx.new_axis(q_t, 2), [1], [0]) |> Nx.squeeze(axes: [2])
+
+        {m_t, mom_t, [o_t | acc]}
+      end)
+
+    output_list |> Enum.reverse() |> Nx.stack(axis: 1)
+  end
+
+  # ============================================================================
+  # MIRAS scan (iterative memory reasoning - Moneta variant)
+  # ============================================================================
+
+  @doc """
+  MIRAS scan — Moneta variant with data-dependent alpha/eta gates.
+
+  ## Arguments
+
+    * `combined` - Concatenated `[Q, K, V, alpha, eta]` tensor `[batch, seq, 5*M]`
+    * `opts` - Options:
+      * `:memory_size` - Memory dimension M (required)
+      * `:momentum` - Momentum coefficient (default: 0.9)
+  """
+  def miras_scan(combined, opts \\ []) do
+    memory_size = Keyword.fetch!(opts, :memory_size)
+    momentum = Keyword.get(opts, :momentum, 0.9)
+
+    cond do
+      custom_call_available?() ->
+        miras_custom_call(combined, memory_size, momentum)
+
+      cuda_available?(combined) ->
+        miras_fused(combined, memory_size, momentum)
+
+      true ->
+        miras_scan_fallback(combined, memory_size, momentum)
+    end
+  end
+
+  defp miras_custom_call(combined, memory_size, momentum) do
+    {batch, seq_len, _} = Nx.shape(combined)
+    output = Nx.template({batch, seq_len, memory_size}, {:f, 32})
+    momentum_tensor = Nx.tensor(momentum, type: {:f, 32})
+
+    Nx.Shared.optional(:fused_miras_scan, [combined, momentum_tensor], output, fn combined, _mom ->
+      miras_scan_fallback(combined, memory_size, momentum)
+    end)
+  end
+
+  defp miras_fused(combined, memory_size, momentum) do
+    {batch, seq_len, _} = Nx.shape(combined)
+
+    combined_ptr = Nx.to_pointer(combined, mode: :local)
+
+    case Edifice.CUDA.NIF.fused_miras_scan(
+           combined_ptr.address, batch, seq_len, memory_size, momentum / 1
+         ) do
+      {:ok, out_addr, gc_ref} ->
+        hold_gc_ref(out_addr, gc_ref)
+        out_bytes = batch * seq_len * memory_size * 4
+
+        Nx.from_pointer(
+          {backend_for(combined), client: :cuda, device_id: 0},
+          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
+          {:f, 32},
+          {batch, seq_len, memory_size}
+        )
+
+      {:error, reason} ->
+        raise "CUDA MIRAS scan failed: #{reason}"
+    end
+  end
+
+  defp miras_scan_fallback(combined, memory_size, momentum) do
+    {batch, seq_len, _} = Nx.shape(combined)
+
+    q_all = Nx.slice_along_axis(combined, 0, memory_size, axis: 2)
+    k_all = Nx.slice_along_axis(combined, memory_size, memory_size, axis: 2)
+    v_all = Nx.slice_along_axis(combined, memory_size * 2, memory_size, axis: 2)
+    alpha_all = Nx.slice_along_axis(combined, memory_size * 3, memory_size, axis: 2)
+    eta_all = Nx.slice_along_axis(combined, memory_size * 4, memory_size, axis: 2)
+
+    m_init = Nx.broadcast(0.0, {batch, memory_size, memory_size})
+    mom_init = Nx.broadcast(0.0, {batch, memory_size, memory_size})
+
+    {_, _, output_list} =
+      Enum.reduce(0..(seq_len - 1), {m_init, mom_init, []}, fn t, {m_prev, mom_prev, acc} ->
+        q_t = Nx.slice_along_axis(q_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        k_t = Nx.slice_along_axis(k_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        v_t = Nx.slice_along_axis(v_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        alpha_raw = Nx.slice_along_axis(alpha_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        eta_raw = Nx.slice_along_axis(eta_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+        alpha_t = Nx.sigmoid(alpha_raw)
+        eta_t = Nx.sigmoid(eta_raw)
+        pred = Nx.dot(m_prev, [2], [0], Nx.new_axis(k_t, 2), [1], [0]) |> Nx.squeeze(axes: [2])
+        error = Nx.subtract(pred, v_t)
+        grad_coeff = Nx.multiply(2.0, error)
+        grad = Nx.dot(Nx.new_axis(grad_coeff, 2), [2], [0], Nx.new_axis(k_t, 1), [1], [0])
+        mom_t = Nx.add(Nx.multiply(momentum, mom_prev), grad)
+        alpha_expanded = Nx.new_axis(alpha_t, 2)
+        eta_expanded = Nx.new_axis(eta_t, 2)
+        m_t = Nx.subtract(Nx.multiply(alpha_expanded, m_prev), Nx.multiply(eta_expanded, mom_t))
+
+        # L2 row normalization (Moneta)
+        norm = Nx.sqrt(Nx.sum(Nx.pow(m_t, 2), axes: [2], keep_axes: true))
+        norm = Nx.max(norm, 1.0e-6)
+        m_t = Nx.divide(m_t, norm)
+
+        o_t = Nx.dot(m_t, [2], [0], Nx.new_axis(q_t, 2), [1], [0]) |> Nx.squeeze(axes: [2])
+
+        {m_t, mom_t, [o_t | acc]}
+      end)
+
+    output_list |> Enum.reverse() |> Nx.stack(axis: 1)
+  end
+
+  # ============================================================================
+  # GSA (Gated Slot Attention) scan
+  # ============================================================================
+
+  @doc """
+  GSA scan — slot memory with gated write + softmax read per timestep.
+
+  ## Arguments
+
+    * `q` - Query `[batch, seq, num_heads, head_dim]` (post ELU+1)
+    * `k_slot` - Slot keys `[batch, seq, num_heads, num_slots]` (post softmax)
+    * `v` - Values `[batch, seq, num_heads, head_dim]`
+    * `alpha` - Gate `[batch, seq, num_heads]` (damped sigmoid)
+
+  ## Returns
+
+    Output `[batch, seq, num_heads * head_dim]`
+  """
+  def gsa_scan(q, k_slot, v, alpha) do
+    cond do
+      custom_call_available?() ->
+        gsa_custom_call(q, k_slot, v, alpha)
+
+      cuda_available?(q) ->
+        gsa_fused(q, k_slot, v, alpha)
+
+      true ->
+        gsa_scan_fallback(q, k_slot, v, alpha)
+    end
+  end
+
+  defp gsa_custom_call(q, k_slot, v, alpha) do
+    {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
+    output = Nx.template({batch, seq_len, num_heads * head_dim}, {:f, 32})
+
+    Nx.Shared.optional(:fused_gsa_scan, [q, k_slot, v, alpha], output, fn q, k_slot, v, alpha ->
+      gsa_scan_fallback(q, k_slot, v, alpha)
+    end)
+  end
+
+  defp gsa_fused(q, k_slot, v, alpha) do
+    {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
+    {_, _, _, num_slots} = Nx.shape(k_slot)
+
+    q_ptr = Nx.to_pointer(q, mode: :local)
+    ks_ptr = Nx.to_pointer(k_slot, mode: :local)
+    v_ptr = Nx.to_pointer(v, mode: :local)
+    alpha_ptr = Nx.to_pointer(alpha, mode: :local)
+
+    case Edifice.CUDA.NIF.fused_gsa_scan(
+           q_ptr.address, ks_ptr.address, v_ptr.address, alpha_ptr.address,
+           batch, seq_len, num_heads, num_slots, head_dim
+         ) do
+      {:ok, out_addr, gc_ref} ->
+        hold_gc_ref(out_addr, gc_ref)
+        out_bytes = batch * seq_len * num_heads * head_dim * 4
+
+        Nx.from_pointer(
+          {backend_for(q), client: :cuda, device_id: 0},
+          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
+          {:f, 32},
+          {batch, seq_len, num_heads * head_dim}
+        )
+
+      {:error, reason} ->
+        raise "CUDA GSA scan failed: #{reason}"
+    end
+  end
+
+  defp gsa_scan_fallback(q, k_slot, v, alpha) do
+    {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
+    {_, _, _, num_slots} = Nx.shape(k_slot)
+
+    slot_mem = Nx.broadcast(0.0, {batch, num_heads, num_slots, head_dim})
+
+    {_, output_list} =
+      Enum.reduce(0..(seq_len - 1), {slot_mem, []}, fn t, {mem, acc} ->
+        q_t = Nx.slice_along_axis(q, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        ks_t = Nx.slice_along_axis(k_slot, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        v_t = Nx.slice_along_axis(v, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        alpha_t = Nx.slice_along_axis(alpha, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+        alpha_broadcast = alpha_t |> Nx.new_axis(2) |> Nx.new_axis(3)
+        kv_outer = Nx.multiply(Nx.new_axis(ks_t, 3), Nx.new_axis(v_t, 2))
+        mem_new = Nx.add(
+          Nx.multiply(alpha_broadcast, mem),
+          Nx.multiply(Nx.subtract(1.0, alpha_broadcast), kv_outer)
+        )
+
+        q_t_exp = Nx.new_axis(q_t, 3)
+        scores = Nx.dot(mem_new, [3], [0, 1], q_t_exp, [2], [0, 1]) |> Nx.squeeze(axes: [3])
+
+        max_s = Nx.reduce_max(scores, axes: [2], keep_axes: true)
+        exp_s = Nx.exp(Nx.subtract(scores, max_s))
+        p = Nx.divide(exp_s, Nx.add(Nx.sum(exp_s, axes: [2], keep_axes: true), 1.0e-8))
+        output_t = Nx.sum(Nx.multiply(Nx.new_axis(p, 3), mem_new), axes: [2])
+
+        o_flat = Nx.reshape(output_t, {batch, num_heads * head_dim})
+        {mem_new, [o_flat | acc]}
+      end)
+
+    output_list |> Enum.reverse() |> Nx.stack(axis: 1)
+  end
+
+  # ============================================================================
   # Fallback: generic linear recurrence scan (CPU/BinaryBackend)
   # ============================================================================
 

@@ -216,12 +216,13 @@ defmodule Edifice.Recurrent.Titans do
         name: "#{name}_cat"
       )
 
-    # Apply Titans recurrence
+    # Apply Titans recurrence (dispatches through 3-tier CUDA pipeline)
     recurrence_output =
       Axon.nx(
         recurrence_input,
         fn combined ->
-          titans_scan(combined, memory_size, momentum)
+          Edifice.CUDA.FusedScan.titans_scan(combined,
+            memory_size: memory_size, momentum: momentum)
         end,
         name: "#{name}_recurrence"
       )
@@ -244,73 +245,7 @@ defmodule Edifice.Recurrent.Titans do
     )
   end
 
-  defp titans_scan(combined, memory_size, momentum) do
-    # combined: [batch, seq_len, memory_size * 4]
-    batch_size = Nx.axis_size(combined, 0)
-    seq_len = Nx.axis_size(combined, 1)
-
-    # Split into Q, K, V, gate_input
-    q_all = Nx.slice_along_axis(combined, 0, memory_size, axis: 2)
-    k_all = Nx.slice_along_axis(combined, memory_size, memory_size, axis: 2)
-    v_all = Nx.slice_along_axis(combined, memory_size * 2, memory_size, axis: 2)
-    gate_input = Nx.slice_along_axis(combined, memory_size * 3, memory_size, axis: 2)
-
-    # Initialize memory: [batch, memory_size, memory_size]
-    m_init = Nx.broadcast(0.0, {batch_size, memory_size, memory_size})
-
-    # Initialize momentum accumulator
-    mom_init = Nx.broadcast(0.0, {batch_size, memory_size, memory_size})
-
-    # Sequential scan with surprise-gated updates
-    {_, _, output_list} =
-      Enum.reduce(0..(seq_len - 1), {m_init, mom_init, []}, fn t, {m_prev, mom_prev, acc} ->
-        q_t = Nx.slice_along_axis(q_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        k_t = Nx.slice_along_axis(k_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        v_t = Nx.slice_along_axis(v_all, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        g_input = Nx.slice_along_axis(gate_input, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-
-        # Memory read: pred = M @ k
-        pred = Nx.dot(m_prev, [2], [0], Nx.new_axis(k_t, 2), [1], [0])
-        pred = Nx.squeeze(pred, axes: [2])
-
-        # Surprise: ||pred - v||^2, reduced to scalar per batch per dim
-        error = Nx.subtract(pred, v_t)
-        surprise = Nx.mean(Nx.pow(error, 2), axes: [1], keep_axes: true)
-
-        # Surprise gate: sigmoid(gate_input + log(surprise + eps))
-        # Adding surprise as a bias to the gate makes updates larger when
-        # the memory is inaccurate
-        surprise_log = Nx.log(Nx.add(surprise, 1.0e-6))
-        gate = Nx.sigmoid(Nx.add(g_input, surprise_log))
-
-        # Gradient: error * k^T (outer product)
-        grad =
-          Nx.dot(
-            Nx.new_axis(error, 2),
-            [2],
-            [0],
-            Nx.new_axis(k_t, 1),
-            [1],
-            [0]
-          )
-
-        # Momentum update
-        mom_t = Nx.add(Nx.multiply(momentum, mom_prev), grad)
-
-        # Surprise-gated memory update: M -= gate * mom
-        # Broadcast gate [batch, memory_size] -> [batch, memory_size, 1]
-        gate_expanded = Nx.new_axis(gate, 2)
-        m_t = Nx.subtract(m_prev, Nx.multiply(gate_expanded, mom_t))
-
-        # Output: M_t @ q_t
-        o_t = Nx.dot(m_t, [2], [0], Nx.new_axis(q_t, 2), [1], [0])
-        o_t = Nx.squeeze(o_t, axes: [2])
-
-        {m_t, mom_t, [o_t | acc]}
-      end)
-
-    output_list |> Enum.reverse() |> Nx.stack(axis: 1)
-  end
+  # titans_scan/3 removed — now dispatched through Edifice.CUDA.FusedScan.titans_scan/2
 
   # ============================================================================
   # Utilities

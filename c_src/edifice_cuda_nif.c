@@ -154,6 +154,41 @@ typedef int (*flash_attention_launch_fn)(
     int causal
 );
 
+/* Reservoir scan launch wrapper */
+typedef int (*reservoir_launch_fn)(
+    cudaStream_t stream,
+    const float* wx, const float* w_res,
+    const float* h0, float* output,
+    int batch, int seq_len, int hidden,
+    float leak_rate
+);
+
+/* Titans scan launch wrapper */
+typedef int (*titans_launch_fn)(
+    cudaStream_t stream,
+    const float* combined, float* output,
+    int batch, int seq_len, int mem_size,
+    float momentum
+);
+
+/* MIRAS scan launch wrapper (same signature as Titans) */
+typedef int (*miras_launch_fn)(
+    cudaStream_t stream,
+    const float* combined, float* output,
+    int batch, int seq_len, int mem_size,
+    float momentum
+);
+
+/* GSA scan launch wrapper */
+typedef int (*gsa_launch_fn)(
+    cudaStream_t stream,
+    const float* q, const float* k_slot,
+    const float* v, const float* alpha,
+    float* output,
+    int batch, int seq_len,
+    int num_heads, int num_slots, int head_dim
+);
+
 /* cudaMalloc / cudaFree — resolved from libcudart */
 typedef cudaError_t (*cuda_malloc_fn)(void** devPtr, size_t size);
 typedef cudaError_t (*cuda_free_fn)(void* devPtr);
@@ -178,6 +213,10 @@ static selective_scan_launch_fn  s_selective_scan_launch  = NULL;
 static kda_launch_fn             s_kda_launch             = NULL;
 static rla_launch_fn             s_rla_launch             = NULL;
 static flash_attention_launch_fn s_flash_attention_launch = NULL;
+static reservoir_launch_fn       s_reservoir_launch       = NULL;
+static titans_launch_fn          s_titans_launch          = NULL;
+static miras_launch_fn           s_miras_launch           = NULL;
+static gsa_launch_fn             s_gsa_launch             = NULL;
 static cuda_malloc_fn    s_cuda_malloc    = NULL;
 static cuda_free_fn      s_cuda_free      = NULL;
 static cuda_device_synchronize_fn s_cuda_sync = NULL;
@@ -1336,6 +1375,251 @@ static ERL_NIF_TERM nif_fused_flash_attention(
     return alloc_result;
 }
 
+/* ---------- Reservoir scan ---------- */
+static ERL_NIF_TERM nif_fused_reservoir_scan(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t wx_ptr, wres_ptr, h0_ptr;
+    int batch, seq_len, hidden;
+    double leak_rate_d;
+
+    if (!s_reservoir_launch)
+        return make_error(env, "reservoir kernel not loaded");
+
+    if (!enif_get_uint64(env, argv[0], &wx_ptr) ||
+        !enif_get_uint64(env, argv[1], &wres_ptr) ||
+        !enif_get_uint64(env, argv[2], &h0_ptr) ||
+        !enif_get_int(env, argv[3], &batch) ||
+        !enif_get_int(env, argv[4], &seq_len) ||
+        !enif_get_int(env, argv[5], &hidden) ||
+        !enif_get_double(env, argv[6], &leak_rate_d))
+    {
+        return enif_make_badarg(env);
+    }
+
+    float leak_rate = (float)leak_rate_d;
+
+    if (batch <= 0 || seq_len <= 0 || hidden <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    /* Output: [batch, hidden] — final hidden state only */
+    size_t out_bytes = (size_t)batch * hidden * sizeof(float);
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2) {
+        return alloc_result;
+    }
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0) {
+        return alloc_result;
+    }
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = s_reservoir_launch(
+        NULL,
+        (const float*)(uintptr_t)wx_ptr,
+        (const float*)(uintptr_t)wres_ptr,
+        (const float*)(uintptr_t)h0_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, hidden, leak_rate
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "reservoir kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ---------- Titans scan ---------- */
+static ERL_NIF_TERM nif_fused_titans_scan(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t combined_ptr;
+    int batch, seq_len, mem_size;
+    double momentum_d;
+
+    if (!s_titans_launch)
+        return make_error(env, "titans kernel not loaded");
+
+    if (!enif_get_uint64(env, argv[0], &combined_ptr) ||
+        !enif_get_int(env, argv[1], &batch) ||
+        !enif_get_int(env, argv[2], &seq_len) ||
+        !enif_get_int(env, argv[3], &mem_size) ||
+        !enif_get_double(env, argv[4], &momentum_d))
+    {
+        return enif_make_badarg(env);
+    }
+
+    float momentum = (float)momentum_d;
+
+    if (batch <= 0 || seq_len <= 0 || mem_size <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t out_bytes = (size_t)batch * seq_len * mem_size * sizeof(float);
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2) {
+        return alloc_result;
+    }
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0) {
+        return alloc_result;
+    }
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = s_titans_launch(
+        NULL,
+        (const float*)(uintptr_t)combined_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, mem_size, momentum
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "titans kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ---------- MIRAS scan ---------- */
+static ERL_NIF_TERM nif_fused_miras_scan(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t combined_ptr;
+    int batch, seq_len, mem_size;
+    double momentum_d;
+
+    if (!s_miras_launch)
+        return make_error(env, "miras kernel not loaded");
+
+    if (!enif_get_uint64(env, argv[0], &combined_ptr) ||
+        !enif_get_int(env, argv[1], &batch) ||
+        !enif_get_int(env, argv[2], &seq_len) ||
+        !enif_get_int(env, argv[3], &mem_size) ||
+        !enif_get_double(env, argv[4], &momentum_d))
+    {
+        return enif_make_badarg(env);
+    }
+
+    float momentum = (float)momentum_d;
+
+    if (batch <= 0 || seq_len <= 0 || mem_size <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t out_bytes = (size_t)batch * seq_len * mem_size * sizeof(float);
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2) {
+        return alloc_result;
+    }
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0) {
+        return alloc_result;
+    }
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = s_miras_launch(
+        NULL,
+        (const float*)(uintptr_t)combined_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, mem_size, momentum
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "miras kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ---------- GSA scan ---------- */
+static ERL_NIF_TERM nif_fused_gsa_scan(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t q_ptr, ks_ptr, v_ptr, alpha_ptr;
+    int batch, seq_len, num_heads, num_slots, head_dim;
+
+    if (!s_gsa_launch)
+        return make_error(env, "gsa kernel not loaded");
+
+    if (!enif_get_uint64(env, argv[0], &q_ptr) ||
+        !enif_get_uint64(env, argv[1], &ks_ptr) ||
+        !enif_get_uint64(env, argv[2], &v_ptr) ||
+        !enif_get_uint64(env, argv[3], &alpha_ptr) ||
+        !enif_get_int(env, argv[4], &batch) ||
+        !enif_get_int(env, argv[5], &seq_len) ||
+        !enif_get_int(env, argv[6], &num_heads) ||
+        !enif_get_int(env, argv[7], &num_slots) ||
+        !enif_get_int(env, argv[8], &head_dim))
+    {
+        return enif_make_badarg(env);
+    }
+
+    if (batch <= 0 || seq_len <= 0 || num_heads <= 0 || num_slots <= 0 || head_dim <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * sizeof(float);
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2) {
+        return alloc_result;
+    }
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0) {
+        return alloc_result;
+    }
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = s_gsa_launch(
+        NULL,
+        (const float*)(uintptr_t)q_ptr,
+        (const float*)(uintptr_t)ks_ptr,
+        (const float*)(uintptr_t)v_ptr,
+        (const float*)(uintptr_t)alpha_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, num_heads, num_slots, head_dim
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "gsa kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
 /* ========================================================================== */
 /* NIF Load — resolve all symbols                                             */
 /* ========================================================================== */
@@ -1434,6 +1718,14 @@ static int nif_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
         s_kernels_handle, "fused_rla_scan_launch");
     s_flash_attention_launch = (flash_attention_launch_fn)dlsym(
         s_kernels_handle, "fused_flash_attention_launch");
+    s_reservoir_launch = (reservoir_launch_fn)dlsym(
+        s_kernels_handle, "fused_reservoir_scan_launch");
+    s_titans_launch = (titans_launch_fn)dlsym(
+        s_kernels_handle, "fused_titans_scan_launch");
+    s_miras_launch = (miras_launch_fn)dlsym(
+        s_kernels_handle, "fused_miras_scan_launch");
+    s_gsa_launch = (gsa_launch_fn)dlsym(
+        s_kernels_handle, "fused_gsa_scan_launch");
 
     return 0;
 }
@@ -1467,6 +1759,11 @@ static void nif_unload(ErlNifEnv* env, void* priv_data) {
     s_selective_scan_launch  = NULL;
     s_kda_launch             = NULL;
     s_rla_launch             = NULL;
+    s_flash_attention_launch = NULL;
+    s_reservoir_launch       = NULL;
+    s_titans_launch          = NULL;
+    s_miras_launch           = NULL;
+    s_gsa_launch             = NULL;
     s_cuda_malloc            = NULL;
     s_cuda_free          = NULL;
     s_cuda_sync          = NULL;
@@ -1494,7 +1791,11 @@ static ErlNifFunc nif_funcs[] = {
     {"fused_selective_scan",        9, nif_fused_selective_scan,        ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_kda_scan",              9, nif_fused_kda_scan,              ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_rla_scan",             12, nif_fused_rla_scan,             ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_flash_attention",        8, nif_fused_flash_attention,       ERL_NIF_DIRTY_JOB_IO_BOUND}
+    {"fused_flash_attention",        8, nif_fused_flash_attention,       ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_reservoir_scan",         7, nif_fused_reservoir_scan,        ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_titans_scan",            5, nif_fused_titans_scan,           ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_miras_scan",             5, nif_fused_miras_scan,            ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_gsa_scan",               9, nif_fused_gsa_scan,              ERL_NIF_DIRTY_JOB_IO_BOUND}
 };
 
 ERL_NIF_INIT(Elixir.Edifice.CUDA.NIF, nif_funcs, nif_load, NULL, NULL, nif_unload)

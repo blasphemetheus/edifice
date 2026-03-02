@@ -94,4 +94,20 @@ defmodule Edifice.CUDA.NIF do
   @doc false
   def fused_flash_attention(_q, _k, _v, _batch, _heads, _seq, _head_dim, _causal),
     do: :erlang.nif_error(:not_loaded)
+
+  @doc false
+  def fused_reservoir_scan(_wx, _w_res, _h0, _batch, _seq, _hidden, _leak_rate),
+    do: :erlang.nif_error(:not_loaded)
+
+  @doc false
+  def fused_titans_scan(_combined, _batch, _seq, _mem_size, _momentum),
+    do: :erlang.nif_error(:not_loaded)
+
+  @doc false
+  def fused_miras_scan(_combined, _batch, _seq, _mem_size, _momentum),
+    do: :erlang.nif_error(:not_loaded)
+
+  @doc false
+  def fused_gsa_scan(_q, _k_slot, _v, _alpha, _batch, _seq, _heads, _slots, _head_dim),
+    do: :erlang.nif_error(:not_loaded)
 end

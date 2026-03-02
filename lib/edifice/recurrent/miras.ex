@@ -211,12 +211,17 @@ defmodule Edifice.Recurrent.MIRAS do
         name: "#{name}_cat"
       )
 
-    # Apply MIRAS recurrence
+    # Apply MIRAS recurrence (Moneta p=2 dispatches through 3-tier CUDA pipeline)
     recurrence_output =
       Axon.nx(
         recurrence_input,
         fn combined ->
-          miras_scan(combined, memory_size, momentum, variant, p_norm)
+          if variant == :moneta and p_norm == 2.0 do
+            Edifice.CUDA.FusedScan.miras_scan(combined,
+              memory_size: memory_size, momentum: momentum)
+          else
+            miras_scan(combined, memory_size, momentum, variant, p_norm)
+          end
         end,
         name: "#{name}_recurrence"
       )

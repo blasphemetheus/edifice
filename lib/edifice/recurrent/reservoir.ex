@@ -127,37 +127,19 @@ defmodule Edifice.Recurrent.Reservoir do
     Axon.dense(reservoir_output, output_size, name: "readout")
   end
 
-  # Reservoir forward pass using pre-computed fixed weights
+  # Reservoir forward pass using pre-computed fixed weights.
+  # Dispatches through 3-tier CUDA pipeline when available.
   defp reservoir_forward(input, w_in, w_res, opts) do
-    reservoir_size = opts[:reservoir_size]
     leak_rate = opts[:leak_rate]
 
+    # Pre-compute W_in @ x for all timesteps: [batch, seq_len, reservoir_size]
     batch_size = Nx.axis_size(input, 0)
     seq_len = Nx.axis_size(input, 1)
+    input_2d = Nx.reshape(input, {batch_size * seq_len, Nx.axis_size(input, 2)})
+    wx = Nx.dot(input_2d, w_in) |> Nx.reshape({batch_size, seq_len, Nx.axis_size(w_res, 0)})
 
-    # Run reservoir dynamics: h[t] = tanh(W_in * x[t] + W_res * h[t-1])
-    h = Nx.broadcast(0.0, {batch_size, reservoir_size})
-
-    final_h =
-      Enum.reduce(0..(seq_len - 1), h, fn t, h_prev ->
-        x_t = Nx.slice_along_axis(input, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-
-        pre_activation = Nx.add(Nx.dot(x_t, w_in), Nx.dot(h_prev, w_res))
-        h_new = Nx.tanh(pre_activation)
-
-        # Leaky integration: h = (1 - alpha) * h_prev + alpha * h_new
-        if leak_rate == 1.0 do
-          h_new
-        else
-          Nx.add(
-            Nx.multiply(1.0 - leak_rate, h_prev),
-            Nx.multiply(leak_rate, h_new)
-          )
-        end
-      end)
-
-    # Return final hidden state: [batch, reservoir_size]
-    final_h
+    # Dispatch: fused kernel handles W_res @ h internally
+    Edifice.CUDA.FusedScan.reservoir_scan(wx, w_res, leak_rate: leak_rate)
   end
 
   @doc """

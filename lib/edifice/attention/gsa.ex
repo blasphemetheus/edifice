@@ -318,59 +318,8 @@ defmodule Edifice.Attention.GSA do
     inv_tau = Nx.divide(1.0, tau)
     alpha = Nx.pow(Nx.sigmoid(alpha_logits), inv_tau)
 
-    # Initialize slot memory: [batch, H, m, d]
-    slot_mem = Nx.broadcast(Nx.tensor(0.0, type: :f32), {batch, num_heads, num_slots, head_dim})
-
-    # Sequential scan over timesteps
-    {_, output_list} =
-      Enum.reduce(0..(seq_len - 1), {slot_mem, []}, fn t, {mem, acc} ->
-        # Extract timestep slices: squeeze out the seq dim
-        # q_t: [batch, H, d]
-        q_t = Nx.slice_along_axis(q, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        # k_slot_t: [batch, H, m]
-        k_slot_t = Nx.slice_along_axis(k_slot, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        # v_t: [batch, H, d]
-        v_t = Nx.slice_along_axis(v, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        # alpha_t: [batch, H]
-        alpha_t = Nx.slice_along_axis(alpha, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-
-        # Broadcast alpha for slot memory: [batch, H, 1, 1]
-        alpha_broadcast = alpha_t |> Nx.new_axis(2) |> Nx.new_axis(3)
-
-        # Write pass: update slot memory
-        # Outer product of slot keys and values: k_slot_t:[B,H,m,1] * v_t:[B,H,1,d] -> [B,H,m,d]
-        kv_outer = Nx.multiply(Nx.new_axis(k_slot_t, 3), Nx.new_axis(v_t, 2))
-
-        # Gated update: mem = alpha * mem + (1 - alpha) * kv_outer
-        mem_new =
-          Nx.add(
-            Nx.multiply(alpha_broadcast, mem),
-            Nx.multiply(Nx.subtract(1.0, alpha_broadcast), kv_outer)
-          )
-
-        # Read pass: compute attention scores over slots
-        # scores = mem @ q_t: [B,H,m,d] @ [B,H,d,1] -> [B,H,m]
-        q_t_expanded = Nx.new_axis(q_t, 3)
-
-        scores =
-          Nx.dot(mem_new, [3], [0, 1], q_t_expanded, [2], [0, 1])
-          |> Nx.squeeze(axes: [3])
-
-        # Softmax over slots: [B, H, m]
-        p = stable_softmax(scores, 2)
-
-        # Weighted read: sum_s(p[s] * mem[s,:]) -> [B, H, d]
-        # p:[B,H,m,1] * mem:[B,H,m,d] -> sum over m -> [B,H,d]
-        output_t = Nx.sum(Nx.multiply(Nx.new_axis(p, 3), mem_new), axes: [2])
-
-        # Flatten heads: [batch, H * d]
-        o_flat = Nx.reshape(output_t, {batch, num_heads * head_dim})
-
-        {mem_new, [o_flat | acc]}
-      end)
-
-    # Stack timesteps: [batch, seq_len, H * d]
-    output_list |> Enum.reverse() |> Nx.stack(axis: 1)
+    # Dispatch through 3-tier CUDA pipeline (custom call → NIF → Elixir fallback)
+    Edifice.CUDA.FusedScan.gsa_scan(q, k_slot, v, alpha)
   end
 
   # ELU+1 feature map: ensures strictly positive outputs for valid attention.

@@ -44,7 +44,9 @@ KERNEL_SOURCES := fused_mingru_scan.cu fused_minlstm_scan.cu \
                   fused_lstm_scan.cu fused_gru_scan.cu \
                   fused_ttt_scan.cu fused_selective_scan.cu \
                   fused_kda_scan.cu fused_rla_scan.cu \
-                  fused_flash_attention.cu
+                  fused_flash_attention.cu \
+                  fused_reservoir_scan.cu fused_titans_scan.cu \
+                  fused_miras_scan.cu fused_gsa_scan.cu
 KERNEL_OBJECTS := $(patsubst %.cu,$(OBJ_DIR)/%.o,$(KERNEL_SOURCES))
 
 # All sources for syntax checking

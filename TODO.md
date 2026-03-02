@@ -174,14 +174,12 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
 - [x] **EXLA GPU Custom Call Infrastructure** — GPU-native custom calls staying inside the XLA computation graph (no graph breaks). EXLA fork at `/home/nixos/nx/exla/` with nvcc `.cu` compilation, `-DEXLA_FFI` flag, stablehlo.custom_call bindings in `value.ex`, `cached_recur_operator` CUDA-platform pattern-match in `defn.ex`. Edifice dispatches via `Nx.Shared.optional` with Elixir fallback. All 9 kernels wired: MinGRU, MinLSTM, ELU-GRU, Real-GRU, DiagLinear, Liquid, LinearScan, DeltaNet, GatedDeltaNet. Use `Axon.build(model, compiler: EXLA)` for cached graph compilation (97x speedup).
 - [x] **EXLA Custom Calls — All Kernels Wired** — All 9 P0/P1 kernels have `cached_recur_operator` clauses in `defn.ex` and 3-tier dispatch (custom call → NIF → Elixir) in `fused_scan.ex`. 3813 tests pass.
 - [x] **CUDA Kernel Fusion (P3)** — Standard LSTM and GRU fused scan kernels. Pre-compute W@x+bias on Axon side, R@h via shared memory in kernel. LSTM: 4-gate (i/f/g/o) with cell+hidden state. GRU: 3-gate (r/z/n) with reset applied selectively to recurrent contribution. Full 3-tier dispatch. `recurrent.ex` auto-detects and uses fused path; DeepResLSTM, TransformerLike, NTM, and Hybrid also wired.
-- [ ] **CUDA Kernel Fusion (P4)** — New kernel types for architectures with unique sequential scan patterns. Candidates by priority:
-  - **Reservoir** (Echo State) — `h = tanh(W_in*x + W_res*h)`, fixed-weight RNN, simplest kernel target
-  - **Griffin RG-LRU** — `h = a^(c*r)*h + sqrt(1-a^2)*i*x`, gated linear recurrence
-  - **HGRN** — `h = f*h + i*x` with state expansion/contraction
-  - **Titans** — Per-timestep matrix ops: `pred = M@k`, surprise computation, gated memory update
-  - **MIRAS** — Iterative memory reasoning with per-timestep gradient + memory update
-  - **GSA** (Gated Slot Attention) — Per-timestep slot memory read/write
-  - **InfiniAttention** — Segment-level memory read/write/update with gating
+- [x] **CUDA Kernel Fusion (P4)** — New kernel types for architectures with unique sequential scan patterns. 4 new kernels with full 3-tier dispatch:
+  - **Reservoir** — `h = tanh(wx + W_res@h)` with optional leak rate. W_in@x pre-computed on Axon side, W_res@h via shared memory. Returns final state only.
+  - **Titans** — Matrix-state `[B,M,M]` surprise-gated momentum update. Pre-concatenated `[Q,K,V,gate]` input, M and momentum in registers.
+  - **MIRAS** (Moneta variant) — Generalized Titans with data-dependent alpha/eta gates and L2 row normalization. Yaad/Memora variants fall back to Elixir.
+  - **GSA** — Slot memory `[B,H,m,d]` with gated EMA write + softmax read per timestep. Thread per (batch,head,slot), mem in registers.
+  - Not needed: Griffin RG-LRU (uses P1 `linear_scan`), HGRN (parallel log-cumsum-exp), InfiniAttention (segment-level, few iterations)
 
 ## Open — Codebase Quality (from 2026-02-27 evaluation)
 
@@ -275,7 +273,7 @@ transformation between PyTorch and Axon conventions.
 
 ### ExPhil Inference Benchmarks (Priority: Medium)
 
-- [ ] **Profile Griffin vs Mamba gap** — Griffin uses the same `linear_scan` kernel as Mamba but benchmarks 2.4x slower (100ms vs 42ms on T400). Profile to determine whether the bottleneck is the RG-LRU pre-computation, extra Axon layers, or graph compilation overhead. Tools: `EXLA.Backend.profiler`, nvprof/nsys.
+- [x] **Profile Griffin vs Mamba gap** — **Root cause: missing `compiler: EXLA`**. Without graph compilation, `pred_fn` re-traces all Axon layer callbacks on every call (~700-2800ms depending on layer count). With `compiler: EXLA`, Griffin 6L runs in **1.9ms** (faster than Mamba 2L at 2.9ms). The gap was 100% Axon re-tracing overhead, not kernel or architecture differences. Fix: add `compiler: EXLA` to exphil's benchmark and inference paths. See `scripts/profile_griffin_mamba.exs`.
 - [ ] **Broad fused-kernel benchmark** — Run inference benchmarks across all ~18 exphil architectures that have fused CUDA kernels (MinGRU, MinLSTM, xLSTM, Mamba, GatedSSM, Griffin, DeltaNet, GatedDeltaNet, DeltaProduct, sLSTM, TTT, KDA, RLA, etc.) to get a complete picture of speedups on T400 4GB. Compare with/without fused kernels enabled.
 
 ### cuDNN Algorithm Warning (Priority: Low)
