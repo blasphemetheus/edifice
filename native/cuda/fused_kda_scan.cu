@@ -31,18 +31,19 @@
 //   Total: ~17KB — within 48KB limit
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 // ============================================================================
 // Kernel
 // ============================================================================
 
 __global__ void fused_kda_scan_kernel(
-    const float* __restrict__ q,       // [B, T, H, d]
-    const float* __restrict__ k,       // [B, T, H, d]
-    const float* __restrict__ v,       // [B, T, H, d]
-    const float* __restrict__ alpha,   // [B, T, H, d]
-    const float* __restrict__ beta,    // [B, T, H]
-    float* __restrict__ output,        // [B, T, H, d]
+    const io_type* __restrict__ q,       // [B, T, H, d]
+    const io_type* __restrict__ k,       // [B, T, H, d]
+    const io_type* __restrict__ v,       // [B, T, H, d]
+    const io_type* __restrict__ alpha,   // [B, T, H, d]
+    const io_type* __restrict__ beta,    // [B, T, H]
+    io_type* __restrict__ output,        // [B, T, H, d]
     int seq_len,
     int num_heads,
     int head_dim
@@ -84,11 +85,11 @@ __global__ void fused_kda_scan_kernel(
         int offset = base_bh + t * THd;
 
         // Step 1: Load k_t into shared memory
-        k_shared[i] = k[offset + i];
+        k_shared[i] = IO_LOAD(k, offset + i);
         __syncthreads();
 
         // Step 2: Channel-wise decay — each thread decays its own row
-        float alpha_i = expf(alpha[offset + i]);
+        float alpha_i = expf(IO_LOAD(alpha, offset + i));
         for (int j = 0; j < head_dim; j++) {
             S[i * head_dim + j] *= alpha_i;
         }
@@ -101,8 +102,8 @@ __global__ void fused_kda_scan_kernel(
         }
 
         // Step 4: Delta rule update
-        float v_i = v[offset + i];
-        float beta_val = beta[beta_base_b + t * beta_TH + h];
+        float v_i = IO_LOAD(v, offset + i);
+        float beta_val = IO_LOAD(beta, beta_base_b + t * beta_TH + h);
         float error_i = v_i - retrieval;
         float scaled_error_i = beta_val * error_i;
 
@@ -113,7 +114,7 @@ __global__ void fused_kda_scan_kernel(
         __syncthreads();
 
         // Step 5: Load q_t into shared memory
-        q_shared[i] = q[offset + i];
+        q_shared[i] = IO_LOAD(q, offset + i);
         __syncthreads();
 
         // Step 6: Compute output[i] = sum_j(S[i][j] * q_shared[j])
@@ -123,7 +124,7 @@ __global__ void fused_kda_scan_kernel(
         }
 
         // Step 7: Write output
-        output[offset + i] = out_i;
+        IO_STORE(output, offset + i, out_i);
         __syncthreads();
     }
 }
@@ -138,9 +139,9 @@ extern "C" {
 
 int fused_kda_scan_launch(
     cudaStream_t stream,
-    const float* q, const float* k, const float* v,
-    const float* alpha, const float* beta,
-    float* output,
+    const io_type* q, const io_type* k, const io_type* v,
+    const io_type* alpha, const io_type* beta,
+    io_type* output,
     int batch, int seq_len, int num_heads, int head_dim
 ) {
     dim3 grid(batch, num_heads);
@@ -174,12 +175,12 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_kda_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> q,       // [B, T, H, d]
-    ffi::Buffer<ffi::F32> k,       // [B, T, H, d]
-    ffi::Buffer<ffi::F32> v,       // [B, T, H, d]
-    ffi::Buffer<ffi::F32> alpha,   // [B, T, H, d]
-    ffi::Buffer<ffi::F32> beta,    // [B, T, H]
-    ffi::ResultBuffer<ffi::F32> output  // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> q,       // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> k,       // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> v,       // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> alpha,   // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> beta,    // [B, T, H]
+    ffi::ResultBuffer<FFI_IO_TYPE> output  // [B, T, H, d]
 ) {
     auto dims = q.dimensions();
     int batch     = static_cast<int>(dims[0]);
@@ -193,12 +194,12 @@ ffi::Error fused_kda_scan_ffi_impl(
                       + 2 * head_dim * sizeof(float);
 
     fused_kda_scan_kernel<<<grid, block, smem_bytes, stream>>>(
-        reinterpret_cast<const float*>(q.untyped_data()),
-        reinterpret_cast<const float*>(k.untyped_data()),
-        reinterpret_cast<const float*>(v.untyped_data()),
-        reinterpret_cast<const float*>(alpha.untyped_data()),
-        reinterpret_cast<const float*>(beta.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(q.untyped_data()),
+        reinterpret_cast<const io_type*>(k.untyped_data()),
+        reinterpret_cast<const io_type*>(v.untyped_data()),
+        reinterpret_cast<const io_type*>(alpha.untyped_data()),
+        reinterpret_cast<const io_type*>(beta.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         seq_len, num_heads, head_dim
     );
 
@@ -214,15 +215,15 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_kda_scan, fused_kda_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // q
-        .Arg<ffi::Buffer<ffi::F32>>()   // k
-        .Arg<ffi::Buffer<ffi::F32>>()   // v
-        .Arg<ffi::Buffer<ffi::F32>>()   // alpha
-        .Arg<ffi::Buffer<ffi::F32>>()   // beta
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // q
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // k
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // v
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // alpha
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // beta
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_kda_scan_f32", "CUDA", fused_kda_scan);
+    "exla_fused_kda_scan_" PRECISION_SUFFIX, "CUDA", fused_kda_scan);
 
 #endif  // EXLA_FFI

@@ -24,16 +24,17 @@
 //   output:     [batch, seq_len, hidden] — all hidden states
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 // ============================================================================
 // Kernel (always compiled)
 // ============================================================================
 
 __global__ void fused_mingru_scan_kernel(
-    const float* __restrict__ gates,       // [B, T, H] sigmoid values
-    const float* __restrict__ candidates,  // [B, T, H] candidate values
-    const float* __restrict__ h0,          // [B, H] initial state
-    float* __restrict__ output,            // [B, T, H] all hidden states
+    const io_type* __restrict__ gates,       // [B, T, H] sigmoid values
+    const io_type* __restrict__ candidates,  // [B, T, H] candidate values
+    const io_type* __restrict__ h0,          // [B, H] initial state
+    io_type* __restrict__ output,            // [B, T, H] all hidden states
     int batch, int seq_len, int hidden
 ) {
     // Each thread processes one (batch, hidden) pair across all timesteps
@@ -43,18 +44,18 @@ __global__ void fused_mingru_scan_kernel(
     if (b >= batch || h >= hidden) return;
 
     // Load initial state into register — stays on-chip for entire scan
-    float h_state = h0[b * hidden + h];
+    float h_state = IO_LOAD(h0, b * hidden + h);
 
     // Sequential scan through timesteps (all state stays in registers)
     for (int t = 0; t < seq_len; t++) {
         int idx = b * seq_len * hidden + t * hidden + h;
-        float z = gates[idx];
-        float h_tilde = candidates[idx];
+        float z = IO_LOAD(gates, idx);
+        float h_tilde = IO_LOAD(candidates, idx);
 
         // MinGRU update: h = (1-z)*h + z*h_tilde
         h_state = (1.0f - z) * h_state + z * h_tilde;
 
-        output[idx] = h_state;
+        IO_STORE(output, idx, h_state);
     }
 }
 
@@ -71,10 +72,10 @@ extern "C" {
 // Returns cudaSuccess (0) on success.
 int fused_mingru_scan_launch(
     cudaStream_t stream,
-    const float* gates,
-    const float* candidates,
-    const float* h0,
-    float* output,
+    const io_type* gates,
+    const io_type* candidates,
+    const io_type* h0,
+    io_type* output,
     int batch, int seq_len, int hidden
 ) {
     int threads_per_block = (hidden < 256) ? hidden : 256;
@@ -106,10 +107,10 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_mingru_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> gates,
-    ffi::Buffer<ffi::F32> candidates,
-    ffi::Buffer<ffi::F32> h0,
-    ffi::ResultBuffer<ffi::F32> output
+    ffi::Buffer<FFI_IO_TYPE> gates,
+    ffi::Buffer<FFI_IO_TYPE> candidates,
+    ffi::Buffer<FFI_IO_TYPE> h0,
+    ffi::ResultBuffer<FFI_IO_TYPE> output
 ) {
     auto dims = gates.dimensions();
     int batch   = static_cast<int>(dims[0]);
@@ -122,10 +123,10 @@ ffi::Error fused_mingru_scan_ffi_impl(
     dim3 block(threads_per_block);
 
     fused_mingru_scan_kernel<<<grid, block, 0, stream>>>(
-        reinterpret_cast<const float*>(gates.untyped_data()),
-        reinterpret_cast<const float*>(candidates.untyped_data()),
-        reinterpret_cast<const float*>(h0.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(gates.untyped_data()),
+        reinterpret_cast<const io_type*>(candidates.untyped_data()),
+        reinterpret_cast<const io_type*>(h0.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         batch, seq_len, hidden
     );
 
@@ -141,13 +142,13 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_mingru_scan, fused_mingru_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // gates
-        .Arg<ffi::Buffer<ffi::F32>>()   // candidates
-        .Arg<ffi::Buffer<ffi::F32>>()   // h0
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // gates
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // candidates
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // h0
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_mingru_scan_f32", "CUDA", fused_mingru_scan);
+    "exla_fused_mingru_scan_" PRECISION_SUFFIX, "CUDA", fused_mingru_scan);
 
 #endif  // EXLA_FFI

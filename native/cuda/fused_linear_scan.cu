@@ -29,16 +29,17 @@
 //   output: [batch, seq_len, hidden] — all hidden states
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 // ============================================================================
 // Kernel
 // ============================================================================
 
 __global__ void fused_linear_scan_kernel(
-    const float* __restrict__ a_vals,  // [B, T, H] multiplicative coefficients
-    const float* __restrict__ b_vals,  // [B, T, H] additive terms
-    const float* __restrict__ h0,      // [B, H] initial state
-    float* __restrict__ output,        // [B, T, H] all hidden states
+    const io_type* __restrict__ a_vals,  // [B, T, H] multiplicative coefficients
+    const io_type* __restrict__ b_vals,  // [B, T, H] additive terms
+    const io_type* __restrict__ h0,      // [B, H] initial state
+    io_type* __restrict__ output,        // [B, T, H] all hidden states
     int batch, int seq_len, int hidden
 ) {
     int b = blockIdx.x;
@@ -46,15 +47,15 @@ __global__ void fused_linear_scan_kernel(
 
     if (b >= batch || h >= hidden) return;
 
-    float h_state = h0[b * hidden + h];
+    float h_state = IO_LOAD(h0, b * hidden + h);
 
     for (int t = 0; t < seq_len; t++) {
         int idx = b * seq_len * hidden + t * hidden + h;
-        float a = a_vals[idx];
-        float bv = b_vals[idx];
+        float a = IO_LOAD(a_vals, idx);
+        float bv = IO_LOAD(b_vals, idx);
 
         h_state = a * h_state + bv;
-        output[idx] = h_state;
+        IO_STORE(output, idx, h_state);
     }
 }
 
@@ -68,8 +69,8 @@ extern "C" {
 
 int fused_linear_scan_launch(
     cudaStream_t stream,
-    const float* a_vals, const float* b_vals, const float* h0,
-    float* output, int batch, int seq_len, int hidden
+    const io_type* a_vals, const io_type* b_vals, const io_type* h0,
+    io_type* output, int batch, int seq_len, int hidden
 ) {
     int threads_per_block = (hidden < 256) ? hidden : 256;
     int blocks_y = (hidden + threads_per_block - 1) / threads_per_block;
@@ -101,10 +102,10 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_linear_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> a_vals,
-    ffi::Buffer<ffi::F32> b_vals,
-    ffi::Buffer<ffi::F32> h0,
-    ffi::ResultBuffer<ffi::F32> output
+    ffi::Buffer<FFI_IO_TYPE> a_vals,
+    ffi::Buffer<FFI_IO_TYPE> b_vals,
+    ffi::Buffer<FFI_IO_TYPE> h0,
+    ffi::ResultBuffer<FFI_IO_TYPE> output
 ) {
     auto dims = a_vals.dimensions();
     int batch   = static_cast<int>(dims[0]);
@@ -117,10 +118,10 @@ ffi::Error fused_linear_scan_ffi_impl(
     dim3 block(threads_per_block);
 
     fused_linear_scan_kernel<<<grid, block, 0, stream>>>(
-        reinterpret_cast<const float*>(a_vals.untyped_data()),
-        reinterpret_cast<const float*>(b_vals.untyped_data()),
-        reinterpret_cast<const float*>(h0.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(a_vals.untyped_data()),
+        reinterpret_cast<const io_type*>(b_vals.untyped_data()),
+        reinterpret_cast<const io_type*>(h0.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         batch, seq_len, hidden
     );
 
@@ -136,13 +137,13 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_linear_scan, fused_linear_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // a_vals
-        .Arg<ffi::Buffer<ffi::F32>>()   // b_vals
-        .Arg<ffi::Buffer<ffi::F32>>()   // h0
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // a_vals
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // b_vals
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // h0
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_linear_scan_f32", "CUDA", fused_linear_scan);
+    "exla_fused_linear_scan_" PRECISION_SUFFIX, "CUDA", fused_linear_scan);
 
 #endif  // EXLA_FFI

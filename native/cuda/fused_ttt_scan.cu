@@ -30,6 +30,7 @@
 //   out:   [batch, seq_len, inner_size]  — output hidden states
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 constexpr float TTT_LN_EPS = 1.0e-6f;
 
@@ -46,14 +47,14 @@ constexpr float TTT_LN_EPS = 1.0e-6f;
 #define TTT_MAX_INNER 128
 
 __global__ void fused_ttt_scan_kernel(
-    const float* __restrict__ q,      // [B, T, D]
-    const float* __restrict__ k,      // [B, T, D]
-    const float* __restrict__ v,      // [B, T, D]
-    const float* __restrict__ eta,    // [B, T, D]
-    const float* __restrict__ w0,     // [B, D, D]
-    const float* __restrict__ ln_g,   // [D]
-    const float* __restrict__ ln_b,   // [D]
-    float* __restrict__ output,       // [B, T, D]
+    const io_type* __restrict__ q,      // [B, T, D]
+    const io_type* __restrict__ k,      // [B, T, D]
+    const io_type* __restrict__ v,      // [B, T, D]
+    const io_type* __restrict__ eta,    // [B, T, D]
+    const io_type* __restrict__ w0,     // [B, D, D]
+    const io_type* __restrict__ ln_g,   // [D]
+    const io_type* __restrict__ ln_b,   // [D]
+    io_type* __restrict__ output,       // [B, T, D]
     int batch, int seq_len, int inner_size
 ) {
     int b = blockIdx.x;
@@ -74,14 +75,14 @@ __global__ void fused_ttt_scan_kernel(
     float W_row[TTT_MAX_INNER];
     int w0_base = b * inner_size * inner_size + i * inner_size;
     for (int j = 0; j < inner_size; j++) {
-        W_row[j] = w0[w0_base + j];
+        W_row[j] = IO_LOAD(w0, w0_base + j);
     }
 
     for (int t = 0; t < seq_len; t++) {
         int tk_idx = b * seq_len * inner_size + t * inner_size;
 
         // Load k_t into shared memory
-        k_shared[i] = k[tk_idx + i];
+        k_shared[i] = IO_LOAD(k, tk_idx + i);
         __syncthreads();
 
         // Step 1: pred_i = W[i,:] @ k  (dot product of row i with k)
@@ -118,14 +119,14 @@ __global__ void fused_ttt_scan_kernel(
         float inv_std = rsqrtf(var + TTT_LN_EPS);
 
         // Apply LayerNorm: pred_normed = gamma * (pred - mean) / std + beta
-        float pred_normed = ln_g[i] * (pred_i - mean) * inv_std + ln_b[i];
+        float pred_normed = IO_LOAD(ln_g, i) * (pred_i - mean) * inv_std + IO_LOAD(ln_b, i);
 
         // Step 3: error = pred_normed - v
-        float v_i = v[tk_idx + i];
+        float v_i = IO_LOAD(v, tk_idx + i);
         float error_i = pred_normed - v_i;
 
         // Step 4: eta-scaled error
-        float eta_i = eta[tk_idx + i];
+        float eta_i = IO_LOAD(eta, tk_idx + i);
         float scaled_error_i = eta_i * error_i;
 
         // Step 5: Update W[i,:] -= scaled_error_i * k[:]
@@ -139,7 +140,7 @@ __global__ void fused_ttt_scan_kernel(
         float q_i_val;
         // Reuse k_shared to load q (sync first to ensure k reads are done)
         __syncthreads();
-        k_shared[i] = q[tk_idx + i];
+        k_shared[i] = IO_LOAD(q, tk_idx + i);
         __syncthreads();
 
         float o_i = 0.0f;
@@ -147,7 +148,7 @@ __global__ void fused_ttt_scan_kernel(
             o_i += W_row[j] * k_shared[j];  // k_shared now holds q
         }
 
-        output[b * seq_len * inner_size + t * inner_size + i] = o_i;
+        IO_STORE(output, b * seq_len * inner_size + t * inner_size + i, o_i);
         __syncthreads();
     }
 }
@@ -162,10 +163,10 @@ extern "C" {
 
 int fused_ttt_scan_launch(
     cudaStream_t stream,
-    const float* q, const float* k, const float* v,
-    const float* eta, const float* w0,
-    const float* ln_g, const float* ln_b,
-    float* output,
+    const io_type* q, const io_type* k, const io_type* v,
+    const io_type* eta, const io_type* w0,
+    const io_type* ln_g, const io_type* ln_b,
+    io_type* output,
     int batch, int seq_len, int inner_size
 ) {
     int threads_per_block = inner_size;  // one thread per output dim
@@ -198,14 +199,14 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_ttt_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> q,       // [B, T, D]
-    ffi::Buffer<ffi::F32> k,       // [B, T, D]
-    ffi::Buffer<ffi::F32> v,       // [B, T, D]
-    ffi::Buffer<ffi::F32> eta,     // [B, T, D]
-    ffi::Buffer<ffi::F32> w0,      // [B, D, D]
-    ffi::Buffer<ffi::F32> ln_g,    // [D]
-    ffi::Buffer<ffi::F32> ln_b,    // [D]
-    ffi::ResultBuffer<ffi::F32> output  // [B, T, D]
+    ffi::Buffer<FFI_IO_TYPE> q,       // [B, T, D]
+    ffi::Buffer<FFI_IO_TYPE> k,       // [B, T, D]
+    ffi::Buffer<FFI_IO_TYPE> v,       // [B, T, D]
+    ffi::Buffer<FFI_IO_TYPE> eta,     // [B, T, D]
+    ffi::Buffer<FFI_IO_TYPE> w0,      // [B, D, D]
+    ffi::Buffer<FFI_IO_TYPE> ln_g,    // [D]
+    ffi::Buffer<FFI_IO_TYPE> ln_b,    // [D]
+    ffi::ResultBuffer<FFI_IO_TYPE> output  // [B, T, D]
 ) {
     auto q_dims = q.dimensions();
     int batch      = static_cast<int>(q_dims[0]);
@@ -223,14 +224,14 @@ ffi::Error fused_ttt_scan_ffi_impl(
     size_t smem_bytes = (2 * inner_size + 2) * sizeof(float);
 
     fused_ttt_scan_kernel<<<grid, block, smem_bytes, stream>>>(
-        reinterpret_cast<const float*>(q.untyped_data()),
-        reinterpret_cast<const float*>(k.untyped_data()),
-        reinterpret_cast<const float*>(v.untyped_data()),
-        reinterpret_cast<const float*>(eta.untyped_data()),
-        reinterpret_cast<const float*>(w0.untyped_data()),
-        reinterpret_cast<const float*>(ln_g.untyped_data()),
-        reinterpret_cast<const float*>(ln_b.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(q.untyped_data()),
+        reinterpret_cast<const io_type*>(k.untyped_data()),
+        reinterpret_cast<const io_type*>(v.untyped_data()),
+        reinterpret_cast<const io_type*>(eta.untyped_data()),
+        reinterpret_cast<const io_type*>(w0.untyped_data()),
+        reinterpret_cast<const io_type*>(ln_g.untyped_data()),
+        reinterpret_cast<const io_type*>(ln_b.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         batch, seq_len, inner_size
     );
 
@@ -246,17 +247,17 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_ttt_scan, fused_ttt_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // q
-        .Arg<ffi::Buffer<ffi::F32>>()   // k
-        .Arg<ffi::Buffer<ffi::F32>>()   // v
-        .Arg<ffi::Buffer<ffi::F32>>()   // eta
-        .Arg<ffi::Buffer<ffi::F32>>()   // w0
-        .Arg<ffi::Buffer<ffi::F32>>()   // ln_g
-        .Arg<ffi::Buffer<ffi::F32>>()   // ln_b
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // q
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // k
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // v
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // eta
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // w0
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // ln_g
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // ln_b
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_ttt_scan_f32", "CUDA", fused_ttt_scan);
+    "exla_fused_ttt_scan_" PRECISION_SUFFIX, "CUDA", fused_ttt_scan);
 
 #endif  // EXLA_FFI

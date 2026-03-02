@@ -27,20 +27,21 @@
 //   grad_h0:   [B, H]    — gradient w.r.t. initial state
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 // ============================================================================
 // Kernel
 // ============================================================================
 
 __global__ void fused_mingru_scan_backward_kernel(
-    const float* __restrict__ z,            // [B, T, H] post-sigmoid gates
-    const float* __restrict__ candidates,   // [B, T, H]
-    const float* __restrict__ h0,           // [B, H]
-    const float* __restrict__ forward_out,  // [B, T, H]
-    const float* __restrict__ grad_output,  // [B, T, H]
-    float* __restrict__ grad_z,             // [B, T, H]
-    float* __restrict__ grad_cand,          // [B, T, H]
-    float* __restrict__ grad_h0,            // [B, H]
+    const io_type* __restrict__ z,            // [B, T, H] post-sigmoid gates
+    const io_type* __restrict__ candidates,   // [B, T, H]
+    const io_type* __restrict__ h0,           // [B, H]
+    const io_type* __restrict__ forward_out,  // [B, T, H]
+    const io_type* __restrict__ grad_output,  // [B, T, H]
+    io_type* __restrict__ grad_z,             // [B, T, H]
+    io_type* __restrict__ grad_cand,          // [B, T, H]
+    io_type* __restrict__ grad_h0,            // [B, H]
     int batch, int seq_len, int hidden
 ) {
     int b = blockIdx.x;
@@ -53,25 +54,25 @@ __global__ void fused_mingru_scan_backward_kernel(
     for (int t = seq_len - 1; t >= 0; t--) {
         int idx = b * seq_len * hidden + t * hidden + h;
 
-        float dh = grad_output[idx] + dh_acc;
+        float dh = IO_LOAD(grad_output, idx) + dh_acc;
 
-        float z_t = z[idx];
-        float c_t = candidates[idx];
+        float z_t = IO_LOAD(z, idx);
+        float c_t = IO_LOAD(candidates, idx);
 
         // h_{t-1}
         float h_prev;
         if (t == 0) {
-            h_prev = h0[b * hidden + h];
+            h_prev = IO_LOAD(h0, b * hidden + h);
         } else {
-            h_prev = forward_out[idx - hidden];
+            h_prev = IO_LOAD(forward_out, idx - hidden);
         }
 
-        grad_z[idx] = dh * (c_t - h_prev);
-        grad_cand[idx] = dh * z_t;
+        IO_STORE(grad_z, idx, dh * (c_t - h_prev));
+        IO_STORE(grad_cand, idx, dh * z_t);
         dh_acc = dh * (1.0f - z_t);
     }
 
-    grad_h0[b * hidden + h] = dh_acc;
+    IO_STORE(grad_h0, b * hidden + h, dh_acc);
 }
 
 // ============================================================================
@@ -85,16 +86,16 @@ extern "C" {
 // Output: concatenated [grad_z (B*T*H) | grad_cand (B*T*H) | grad_h0 (B*H)]
 int fused_mingru_scan_backward_launch(
     cudaStream_t stream,
-    const float* z, const float* candidates,
-    const float* h0, const float* forward_out,
-    const float* grad_output,
-    float* output_concat,
+    const io_type* z, const io_type* candidates,
+    const io_type* h0, const io_type* forward_out,
+    const io_type* grad_output,
+    io_type* output_concat,
     int batch, int seq_len, int hidden
 ) {
     int bth = batch * seq_len * hidden;
-    float* grad_z    = output_concat;
-    float* grad_cand = output_concat + bth;
-    float* grad_h0   = output_concat + 2 * bth;
+    io_type* grad_z    = output_concat;
+    io_type* grad_cand = output_concat + bth;
+    io_type* grad_h0   = output_concat + 2 * bth;
 
     int threads_per_block = (hidden < 256) ? hidden : 256;
     int blocks_y = (hidden + threads_per_block - 1) / threads_per_block;
@@ -126,14 +127,14 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_mingru_scan_backward_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> z,
-    ffi::Buffer<ffi::F32> candidates,
-    ffi::Buffer<ffi::F32> h0,
-    ffi::Buffer<ffi::F32> forward_out,
-    ffi::Buffer<ffi::F32> grad_output,
-    ffi::ResultBuffer<ffi::F32> grad_z,
-    ffi::ResultBuffer<ffi::F32> grad_cand,
-    ffi::ResultBuffer<ffi::F32> grad_h0
+    ffi::Buffer<FFI_IO_TYPE> z,
+    ffi::Buffer<FFI_IO_TYPE> candidates,
+    ffi::Buffer<FFI_IO_TYPE> h0,
+    ffi::Buffer<FFI_IO_TYPE> forward_out,
+    ffi::Buffer<FFI_IO_TYPE> grad_output,
+    ffi::ResultBuffer<FFI_IO_TYPE> grad_z,
+    ffi::ResultBuffer<FFI_IO_TYPE> grad_cand,
+    ffi::ResultBuffer<FFI_IO_TYPE> grad_h0
 ) {
     auto dims = z.dimensions();
     int batch   = static_cast<int>(dims[0]);
@@ -146,14 +147,14 @@ ffi::Error fused_mingru_scan_backward_ffi_impl(
     dim3 block(threads_per_block);
 
     fused_mingru_scan_backward_kernel<<<grid, block, 0, stream>>>(
-        reinterpret_cast<const float*>(z.untyped_data()),
-        reinterpret_cast<const float*>(candidates.untyped_data()),
-        reinterpret_cast<const float*>(h0.untyped_data()),
-        reinterpret_cast<const float*>(forward_out.untyped_data()),
-        reinterpret_cast<const float*>(grad_output.untyped_data()),
-        reinterpret_cast<float*>(grad_z->untyped_data()),
-        reinterpret_cast<float*>(grad_cand->untyped_data()),
-        reinterpret_cast<float*>(grad_h0->untyped_data()),
+        reinterpret_cast<const io_type*>(z.untyped_data()),
+        reinterpret_cast<const io_type*>(candidates.untyped_data()),
+        reinterpret_cast<const io_type*>(h0.untyped_data()),
+        reinterpret_cast<const io_type*>(forward_out.untyped_data()),
+        reinterpret_cast<const io_type*>(grad_output.untyped_data()),
+        reinterpret_cast<io_type*>(grad_z->untyped_data()),
+        reinterpret_cast<io_type*>(grad_cand->untyped_data()),
+        reinterpret_cast<io_type*>(grad_h0->untyped_data()),
         batch, seq_len, hidden
     );
 
@@ -169,17 +170,17 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_mingru_scan_backward, fused_mingru_scan_backward_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // z
-        .Arg<ffi::Buffer<ffi::F32>>()   // candidates
-        .Arg<ffi::Buffer<ffi::F32>>()   // h0
-        .Arg<ffi::Buffer<ffi::F32>>()   // forward_out
-        .Arg<ffi::Buffer<ffi::F32>>()   // grad_output
-        .Ret<ffi::Buffer<ffi::F32>>()   // grad_z
-        .Ret<ffi::Buffer<ffi::F32>>()   // grad_cand
-        .Ret<ffi::Buffer<ffi::F32>>()   // grad_h0
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // z
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // candidates
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // h0
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // forward_out
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // grad_output
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // grad_z
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // grad_cand
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // grad_h0
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_mingru_scan_backward_f32", "CUDA", fused_mingru_scan_backward);
+    "exla_fused_mingru_scan_backward_" PRECISION_SUFFIX, "CUDA", fused_mingru_scan_backward);
 
 #endif  // EXLA_FFI

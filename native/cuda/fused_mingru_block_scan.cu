@@ -27,6 +27,7 @@
 //   output:  [B, T, H]          — final layer output for all timesteps
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 #include <math.h>
 
 // ============================================================================
@@ -38,10 +39,10 @@
 //   [H..2H-1]  = normed_shared (normalized input for GEMV reads)
 
 __global__ void fused_mingru_block_scan_kernel(
-    const float* __restrict__ input,    // [B, T, H]
-    const float* __restrict__ weights,  // [num_layers * (2*H*H + 4*H)]
-    const float* __restrict__ h0,       // [B, num_layers, H]
-    float* __restrict__ output,         // [B, T, H]
+    const io_type* __restrict__ input,    // [B, T, H]
+    const io_type* __restrict__ weights,  // [num_layers * (2*H*H + 4*H)]
+    const io_type* __restrict__ h0,       // [B, num_layers, H]
+    io_type* __restrict__ output,         // [B, T, H]
     int B, int T, int H, int num_layers
 ) {
     // Thread layout: blockIdx.x = batch, threadIdx.x = hidden dim
@@ -62,24 +63,18 @@ __global__ void fused_mingru_block_scan_kernel(
     // Max 16 layers supported (arbitrary but generous for MinGRU stacks)
     float h_state[16];
     for (int l = 0; l < num_layers && l < 16; l++) {
-        h_state[l] = h0[b * num_layers * H + l * H + i];
+        h_state[l] = IO_LOAD(h0, b * num_layers * H + l * H + i);
     }
 
     // Process all timesteps
     for (int t = 0; t < T; t++) {
         // Load input for this timestep into register
-        float x_val = input[b * T * H + t * H + i];
+        float x_val = IO_LOAD(input, b * T * H + t * H + i);
 
         // Process all layers for this timestep
         for (int layer = 0; layer < num_layers; layer++) {
             // Pointer to this layer's packed weights
-            const float* lw = weights + layer * layer_stride;
-            const float* W_z   = lw;                        // [H, H]
-            const float* b_z   = lw + H * H;                // [H]
-            const float* W_h   = lw + H * H + H;            // [H, H]
-            const float* b_h   = lw + 2 * H * H + H;        // [H]
-            const float* gamma = lw + 2 * H * H + 2 * H;    // [H]
-            const float* beta  = lw + 2 * H * H + 3 * H;    // [H]
+            int lw_base = layer * layer_stride;
 
             // ---- LayerNorm ----
             // Step 1: Load x_val into shared memory for reduction
@@ -112,18 +107,20 @@ __global__ void fused_mingru_block_scan_kernel(
 
             // Step 4: Normalize and apply gamma/beta
             float normed = (input_shared[i] - mean) * inv_std;
-            normed = normed * gamma[i] + beta[i];
+            float gamma_val = IO_LOAD(weights, lw_base + 2 * H * H + 2 * H + i);
+            float beta_val  = IO_LOAD(weights, lw_base + 2 * H * H + 3 * H + i);
+            normed = normed * gamma_val + beta_val;
             normed_shared[i] = normed;
             __syncthreads();
 
             // ---- GEMV: gate and candidate projections ----
             // Each thread computes one output element: out[i] = sum_j(normed_shared[j] * W[j*H + i]) + bias
-            float z_val = b_z[i];
-            float c_val = b_h[i];
+            float z_val = IO_LOAD(weights, lw_base + H * H + i);           // b_z[i]
+            float c_val = IO_LOAD(weights, lw_base + 2 * H * H + H + i);   // b_h[i]
             for (int j = 0; j < H; j++) {
                 float n_j = normed_shared[j];
-                z_val += n_j * W_z[j * H + i];
-                c_val += n_j * W_h[j * H + i];
+                z_val += n_j * IO_LOAD(weights, lw_base + j * H + i);              // W_z[j*H + i]
+                c_val += n_j * IO_LOAD(weights, lw_base + H * H + H + j * H + i);  // W_h[j*H + i]
             }
 
             // ---- Sigmoid + Scan update ----
@@ -136,7 +133,7 @@ __global__ void fused_mingru_block_scan_kernel(
         }
 
         // Write final layer output for this timestep
-        output[b * T * H + t * H + i] = x_val;
+        IO_STORE(output, b * T * H + t * H + i, x_val);
     }
 }
 
@@ -150,10 +147,10 @@ extern "C" {
 
 int fused_mingru_block_scan_launch(
     cudaStream_t stream,
-    const float* input,
-    const float* weights,
-    const float* h0,
-    float* output,
+    const io_type* input,
+    const io_type* weights,
+    const io_type* h0,
+    io_type* output,
     int B, int T, int H, int num_layers
 ) {
     // One block per batch element, H threads per block
@@ -186,10 +183,10 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_mingru_block_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> input,
-    ffi::Buffer<ffi::F32> weights,
-    ffi::Buffer<ffi::F32> h0,
-    ffi::ResultBuffer<ffi::F32> output,
+    ffi::Buffer<FFI_IO_TYPE> input,
+    ffi::Buffer<FFI_IO_TYPE> weights,
+    ffi::Buffer<FFI_IO_TYPE> h0,
+    ffi::ResultBuffer<FFI_IO_TYPE> output,
     int32_t num_layers
 ) {
     auto dims = input.dimensions();
@@ -202,10 +199,10 @@ ffi::Error fused_mingru_block_scan_ffi_impl(
     size_t shared_bytes = 3 * H * sizeof(float);
 
     fused_mingru_block_scan_kernel<<<grid, block, shared_bytes, stream>>>(
-        reinterpret_cast<const float*>(input.untyped_data()),
-        reinterpret_cast<const float*>(weights.untyped_data()),
-        reinterpret_cast<const float*>(h0.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(input.untyped_data()),
+        reinterpret_cast<const io_type*>(weights.untyped_data()),
+        reinterpret_cast<const io_type*>(h0.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         B, T, H, num_layers
     );
 
@@ -221,14 +218,14 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_mingru_block_scan, fused_mingru_block_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // input
-        .Arg<ffi::Buffer<ffi::F32>>()   // weights
-        .Arg<ffi::Buffer<ffi::F32>>()   // h0
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // input
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // weights
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // h0
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
         .Attr<int32_t>("num_layers")
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_mingru_block_scan_f32", "CUDA", fused_mingru_block_scan);
+    "exla_fused_mingru_block_scan_" PRECISION_SUFFIX, "CUDA", fused_mingru_block_scan);
 
 #endif  // EXLA_FFI

@@ -25,6 +25,7 @@
 //   out: [batch, seq_len, hidden]   — hidden states for all timesteps
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 // ============================================================================
 // Kernel
@@ -40,11 +41,11 @@
 //          by reading all h[j] from shared memory
 
 __global__ void fused_lstm_scan_kernel(
-    const float* __restrict__ wx,     // [B, T, 4*H]
-    const float* __restrict__ R,      // [H, 4*H]
-    const float* __restrict__ h0,     // [B, H]
-    const float* __restrict__ c0,     // [B, H]
-    float* __restrict__ output,       // [B, T, H]
+    const io_type* __restrict__ wx,     // [B, T, 4*H]
+    const io_type* __restrict__ R,      // [H, 4*H]
+    const io_type* __restrict__ h0,     // [B, H]
+    const io_type* __restrict__ c0,     // [B, H]
+    io_type* __restrict__ output,       // [B, T, H]
     int batch, int seq_len, int hidden
 ) {
     int b = blockIdx.x;
@@ -56,8 +57,8 @@ __global__ void fused_lstm_scan_kernel(
     extern __shared__ float h_shared[];  // [hidden]
 
     // Load initial state
-    float h_val = h0[b * hidden + i];
-    float c_val = c0[b * hidden + i];
+    float h_val = IO_LOAD(h0, b * hidden + i);
+    float c_val = IO_LOAD(c0, b * hidden + i);
 
     int hidden4 = 4 * hidden;
 
@@ -76,18 +77,18 @@ __global__ void fused_lstm_scan_kernel(
         for (int j = 0; j < hidden; j++) {
             float h_j = h_shared[j];
             int r_base = j * hidden4;
-            rh_i += h_j * R[r_base + i];
-            rh_f += h_j * R[r_base + hidden + i];
-            rh_g += h_j * R[r_base + 2 * hidden + i];
-            rh_o += h_j * R[r_base + 3 * hidden + i];
+            rh_i += h_j * IO_LOAD(R, r_base + i);
+            rh_f += h_j * IO_LOAD(R, r_base + hidden + i);
+            rh_g += h_j * IO_LOAD(R, r_base + 2 * hidden + i);
+            rh_o += h_j * IO_LOAD(R, r_base + 3 * hidden + i);
         }
 
         // Load pre-computed W@x + bias gates
         int wx_idx = b * seq_len * hidden4 + t * hidden4;
-        float i_t = 1.0f / (1.0f + expf(-(wx[wx_idx + i] + rh_i)));
-        float f_t = 1.0f / (1.0f + expf(-(wx[wx_idx + hidden + i] + rh_f)));
-        float g_t = tanhf(wx[wx_idx + 2 * hidden + i] + rh_g);
-        float o_t = 1.0f / (1.0f + expf(-(wx[wx_idx + 3 * hidden + i] + rh_o)));
+        float i_t = 1.0f / (1.0f + expf(-(IO_LOAD(wx, wx_idx + i) + rh_i)));
+        float f_t = 1.0f / (1.0f + expf(-(IO_LOAD(wx, wx_idx + hidden + i) + rh_f)));
+        float g_t = tanhf(IO_LOAD(wx, wx_idx + 2 * hidden + i) + rh_g);
+        float o_t = 1.0f / (1.0f + expf(-(IO_LOAD(wx, wx_idx + 3 * hidden + i) + rh_o)));
 
         // Cell update: c = f*c_prev + i*g
         c_val = f_t * c_val + i_t * g_t;
@@ -96,7 +97,7 @@ __global__ void fused_lstm_scan_kernel(
         h_val = o_t * tanhf(c_val);
 
         // Write output
-        output[b * seq_len * hidden + t * hidden + i] = h_val;
+        IO_STORE(output, b * seq_len * hidden + t * hidden + i, h_val);
         __syncthreads();
     }
 }
@@ -111,9 +112,9 @@ extern "C" {
 
 int fused_lstm_scan_launch(
     cudaStream_t stream,
-    const float* wx, const float* R,
-    const float* h0, const float* c0,
-    float* output,
+    const io_type* wx, const io_type* R,
+    const io_type* h0, const io_type* c0,
+    io_type* output,
     int batch, int seq_len, int hidden
 ) {
     int threads_per_block = (hidden < 256) ? hidden : 256;
@@ -147,11 +148,11 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_lstm_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> wx,      // [B, T, 4*H]
-    ffi::Buffer<ffi::F32> R,       // [H, 4*H]
-    ffi::Buffer<ffi::F32> h0,      // [B, H]
-    ffi::Buffer<ffi::F32> c0,      // [B, H]
-    ffi::ResultBuffer<ffi::F32> output  // [B, T, H]
+    ffi::Buffer<FFI_IO_TYPE> wx,      // [B, T, 4*H]
+    ffi::Buffer<FFI_IO_TYPE> R,       // [H, 4*H]
+    ffi::Buffer<FFI_IO_TYPE> h0,      // [B, H]
+    ffi::Buffer<FFI_IO_TYPE> c0,      // [B, H]
+    ffi::ResultBuffer<FFI_IO_TYPE> output  // [B, T, H]
 ) {
     auto wx_dims = wx.dimensions();
     int batch   = static_cast<int>(wx_dims[0]);
@@ -173,11 +174,11 @@ ffi::Error fused_lstm_scan_ffi_impl(
     size_t smem_bytes = hidden * sizeof(float);
 
     fused_lstm_scan_kernel<<<grid, block, smem_bytes, stream>>>(
-        reinterpret_cast<const float*>(wx.untyped_data()),
-        reinterpret_cast<const float*>(R.untyped_data()),
-        reinterpret_cast<const float*>(h0.untyped_data()),
-        reinterpret_cast<const float*>(c0.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(wx.untyped_data()),
+        reinterpret_cast<const io_type*>(R.untyped_data()),
+        reinterpret_cast<const io_type*>(h0.untyped_data()),
+        reinterpret_cast<const io_type*>(c0.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         batch, seq_len, hidden
     );
 
@@ -193,14 +194,14 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_lstm_scan, fused_lstm_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // wx
-        .Arg<ffi::Buffer<ffi::F32>>()   // R
-        .Arg<ffi::Buffer<ffi::F32>>()   // h0
-        .Arg<ffi::Buffer<ffi::F32>>()   // c0
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // wx
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // R
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // h0
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // c0
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_lstm_scan_f32", "CUDA", fused_lstm_scan);
+    "exla_fused_lstm_scan_" PRECISION_SUFFIX, "CUDA", fused_lstm_scan);
 
 #endif  // EXLA_FFI

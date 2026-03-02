@@ -25,6 +25,7 @@
 //   out: [batch, seq_len, num_heads * head_dim]      — concatenated head outputs
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 #define GSA_MAX_HEAD_DIM 128
 #define GSA_MAX_SLOTS 64
@@ -34,11 +35,11 @@
 // Reduction for read pass uses shared memory.
 
 __global__ void fused_gsa_scan_kernel(
-    const float* __restrict__ q,         // [B, T, H, d]
-    const float* __restrict__ k_slot,    // [B, T, H, m]
-    const float* __restrict__ v,         // [B, T, H, d]
-    const float* __restrict__ alpha,     // [B, T, H]
-    float* __restrict__ output,          // [B, T, H*d]
+    const io_type* __restrict__ q,         // [B, T, H, d]
+    const io_type* __restrict__ k_slot,    // [B, T, H, m]
+    const io_type* __restrict__ v,         // [B, T, H, d]
+    const io_type* __restrict__ alpha,     // [B, T, H]
+    io_type* __restrict__ output,          // [B, T, H*d]
     int batch, int seq_len,
     int num_heads, int num_slots, int head_dim
 ) {
@@ -70,16 +71,16 @@ __global__ void fused_gsa_scan_kernel(
 
     for (int t = 0; t < seq_len; t++) {
         // Load alpha for this (batch, timestep, head)
-        float alpha_val = alpha[b * seq_len * alpha_stride + t * alpha_stride + h];
+        float alpha_val = IO_LOAD(alpha, b * seq_len * alpha_stride + t * alpha_stride + h);
 
         // Load k_slot[b, t, h, s] for this slot
-        float ks_val = k_slot[b * seq_len * ks_stride + t * ks_stride + h * num_slots + s];
+        float ks_val = IO_LOAD(k_slot, b * seq_len * ks_stride + t * ks_stride + h * num_slots + s);
 
         // Write pass: update slot memory
         // mem[s][d] = alpha * mem[s][d] + (1-alpha) * k_slot[s] * v[d]
         int v_base = b * seq_len * v_stride + t * v_stride + h * head_dim;
         for (int d = 0; d < head_dim; d++) {
-            float v_val = v[v_base + d];
+            float v_val = IO_LOAD(v, v_base + d);
             mem_slot[d] = alpha_val * mem_slot[d] + (1.0f - alpha_val) * ks_val * v_val;
         }
 
@@ -88,7 +89,7 @@ __global__ void fused_gsa_scan_kernel(
         int q_base = b * seq_len * q_stride + t * q_stride + h * head_dim;
         float score = 0.0f;
         for (int d = 0; d < head_dim; d++) {
-            score += mem_slot[d] * q[q_base + d];
+            score += mem_slot[d] * IO_LOAD(q, q_base + d);
         }
         scores_shared[s] = score;
         __syncthreads();
@@ -138,7 +139,7 @@ __global__ void fused_gsa_scan_kernel(
         if (s == 0) {
             int out_base = b * seq_len * (num_heads * head_dim) + t * (num_heads * head_dim) + h * head_dim;
             for (int d = 0; d < head_dim; d++) {
-                output[out_base + d] = output_accum[d];
+                IO_STORE(output, out_base + d, output_accum[d]);
             }
         }
         __syncthreads();
@@ -155,9 +156,9 @@ extern "C" {
 
 int fused_gsa_scan_launch(
     cudaStream_t stream,
-    const float* q, const float* k_slot,
-    const float* v, const float* alpha,
-    float* output,
+    const io_type* q, const io_type* k_slot,
+    const io_type* v, const io_type* alpha,
+    io_type* output,
     int batch, int seq_len,
     int num_heads, int num_slots, int head_dim
 ) {
@@ -190,11 +191,11 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_gsa_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> q,        // [B, T, H, d]
-    ffi::Buffer<ffi::F32> k_slot,   // [B, T, H, m]
-    ffi::Buffer<ffi::F32> v,        // [B, T, H, d]
-    ffi::Buffer<ffi::F32> alpha,    // [B, T, H]
-    ffi::ResultBuffer<ffi::F32> output  // [B, T, H*d]
+    ffi::Buffer<FFI_IO_TYPE> q,        // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> k_slot,   // [B, T, H, m]
+    ffi::Buffer<FFI_IO_TYPE> v,        // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> alpha,    // [B, T, H]
+    ffi::ResultBuffer<FFI_IO_TYPE> output  // [B, T, H*d]
 ) {
     auto q_dims = q.dimensions();
     int batch    = static_cast<int>(q_dims[0]);
@@ -210,11 +211,11 @@ ffi::Error fused_gsa_scan_ffi_impl(
     size_t smem_bytes = (num_slots + head_dim + 2) * sizeof(float);
 
     fused_gsa_scan_kernel<<<grid, block, smem_bytes, stream>>>(
-        reinterpret_cast<const float*>(q.untyped_data()),
-        reinterpret_cast<const float*>(k_slot.untyped_data()),
-        reinterpret_cast<const float*>(v.untyped_data()),
-        reinterpret_cast<const float*>(alpha.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(q.untyped_data()),
+        reinterpret_cast<const io_type*>(k_slot.untyped_data()),
+        reinterpret_cast<const io_type*>(v.untyped_data()),
+        reinterpret_cast<const io_type*>(alpha.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         batch, seq_len, num_heads, num_slots, head_dim
     );
 
@@ -230,14 +231,14 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_gsa_scan, fused_gsa_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // q
-        .Arg<ffi::Buffer<ffi::F32>>()   // k_slot
-        .Arg<ffi::Buffer<ffi::F32>>()   // v
-        .Arg<ffi::Buffer<ffi::F32>>()   // alpha
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // q
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // k_slot
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // v
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // alpha
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_gsa_scan_f32", "CUDA", fused_gsa_scan);
+    "exla_fused_gsa_scan_" PRECISION_SUFFIX, "CUDA", fused_gsa_scan);
 
 #endif  // EXLA_FFI

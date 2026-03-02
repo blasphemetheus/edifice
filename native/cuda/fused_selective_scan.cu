@@ -25,6 +25,7 @@
 //   out: [batch, seq_len, hidden] — scan output
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 constexpr float DT_MIN = 0.001f;
 constexpr float DT_MAX = 0.1f;
@@ -34,12 +35,12 @@ constexpr float DT_MAX = 0.1f;
 // ============================================================================
 
 __global__ void fused_selective_scan_kernel(
-    const float* __restrict__ x,      // [B, T, H]
-    const float* __restrict__ dt,     // [B, T, H]
-    const float* __restrict__ A,      // [H, S]
-    const float* __restrict__ B,      // [B, T, S]
-    const float* __restrict__ C,      // [B, T, S]
-    float* __restrict__ out,          // [B, T, H]
+    const io_type* __restrict__ x,      // [B, T, H]
+    const io_type* __restrict__ dt,     // [B, T, H]
+    const io_type* __restrict__ A,      // [H, S]
+    const io_type* __restrict__ B,      // [B, T, S]
+    const io_type* __restrict__ C,      // [B, T, S]
+    io_type* __restrict__ out,          // [B, T, H]
     int batch, int seq_len, int hidden, int state
 ) {
     int b = blockIdx.x;
@@ -56,14 +57,14 @@ __global__ void fused_selective_scan_kernel(
     // Load A diagonal for this hidden dim (constant across timesteps)
     float A_diag[32];
     for (int s = 0; s < state && s < 32; s++) {
-        A_diag[s] = A[h * state + s];
+        A_diag[s] = IO_LOAD(A, h * state + s);
     }
 
     // Sequential scan through timesteps
     for (int t = 0; t < seq_len; t++) {
         int x_idx = b * seq_len * hidden + t * hidden + h;
-        float x_t = x[x_idx];
-        float dt_t = fminf(fmaxf(dt[x_idx], DT_MIN), DT_MAX);
+        float x_t = IO_LOAD(x, x_idx);
+        float dt_t = fminf(fmaxf(IO_LOAD(dt, x_idx), DT_MIN), DT_MAX);
 
         int bc_idx = b * seq_len * state + t * state;
         float y_t = 0.0f;
@@ -71,8 +72,8 @@ __global__ void fused_selective_scan_kernel(
         for (int s = 0; s < state && s < 32; s++) {
             // Discretize: A_bar = exp(dt * A), B_bar = dt * B
             float A_bar = expf(dt_t * A_diag[s]);
-            float B_bar = dt_t * B[bc_idx + s];
-            float C_s = C[bc_idx + s];
+            float B_bar = dt_t * IO_LOAD(B, bc_idx + s);
+            float C_s = IO_LOAD(C, bc_idx + s);
 
             // Recurrence: h = A_bar * h + B_bar * x
             h_state[s] = A_bar * h_state[s] + B_bar * x_t;
@@ -81,7 +82,7 @@ __global__ void fused_selective_scan_kernel(
             y_t += C_s * h_state[s];
         }
 
-        out[x_idx] = y_t;
+        IO_STORE(out, x_idx, y_t);
     }
 }
 
@@ -95,9 +96,9 @@ extern "C" {
 
 int fused_selective_scan_launch(
     cudaStream_t stream,
-    const float* x, const float* dt, const float* A,
-    const float* B, const float* C,
-    float* out,
+    const io_type* x, const io_type* dt, const io_type* A,
+    const io_type* B, const io_type* C,
+    io_type* out,
     int batch, int seq_len, int hidden, int state
 ) {
     int threads_per_block = (hidden < 256) ? hidden : 256;
@@ -129,12 +130,12 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_selective_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> x,       // [B, T, H]
-    ffi::Buffer<ffi::F32> dt,      // [B, T, H]
-    ffi::Buffer<ffi::F32> A,       // [H, S]
-    ffi::Buffer<ffi::F32> B,       // [B, T, S]
-    ffi::Buffer<ffi::F32> C,       // [B, T, S]
-    ffi::ResultBuffer<ffi::F32> out // [B, T, H]
+    ffi::Buffer<FFI_IO_TYPE> x,       // [B, T, H]
+    ffi::Buffer<FFI_IO_TYPE> dt,      // [B, T, H]
+    ffi::Buffer<FFI_IO_TYPE> A,       // [H, S]
+    ffi::Buffer<FFI_IO_TYPE> B,       // [B, T, S]
+    ffi::Buffer<FFI_IO_TYPE> C,       // [B, T, S]
+    ffi::ResultBuffer<FFI_IO_TYPE> out // [B, T, H]
 ) {
     // Extract dimensions from x: [batch, seq_len, hidden]
     auto x_dims = x.dimensions();
@@ -152,12 +153,12 @@ ffi::Error fused_selective_scan_ffi_impl(
     dim3 block(threads_per_block);
 
     fused_selective_scan_kernel<<<grid, block, 0, stream>>>(
-        reinterpret_cast<const float*>(x.untyped_data()),
-        reinterpret_cast<const float*>(dt.untyped_data()),
-        reinterpret_cast<const float*>(A.untyped_data()),
-        reinterpret_cast<const float*>(B.untyped_data()),
-        reinterpret_cast<const float*>(C.untyped_data()),
-        reinterpret_cast<float*>(out->untyped_data()),
+        reinterpret_cast<const io_type*>(x.untyped_data()),
+        reinterpret_cast<const io_type*>(dt.untyped_data()),
+        reinterpret_cast<const io_type*>(A.untyped_data()),
+        reinterpret_cast<const io_type*>(B.untyped_data()),
+        reinterpret_cast<const io_type*>(C.untyped_data()),
+        reinterpret_cast<io_type*>(out->untyped_data()),
         batch, seq_len, hidden, state
     );
 
@@ -173,15 +174,15 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_selective_scan, fused_selective_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // x
-        .Arg<ffi::Buffer<ffi::F32>>()   // dt
-        .Arg<ffi::Buffer<ffi::F32>>()   // A
-        .Arg<ffi::Buffer<ffi::F32>>()   // B
-        .Arg<ffi::Buffer<ffi::F32>>()   // C
-        .Ret<ffi::Buffer<ffi::F32>>()   // out
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // x
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // dt
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // A
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // B
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // C
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // out
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_selective_scan_f32", "CUDA", fused_selective_scan);
+    "exla_fused_selective_scan_" PRECISION_SUFFIX, "CUDA", fused_selective_scan);
 
 #endif  // EXLA_FFI

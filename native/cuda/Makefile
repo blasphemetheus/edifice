@@ -1,6 +1,7 @@
 # Makefile for Edifice fused CUDA kernels
 #
-# Builds a shared library with C-linkage launch wrappers for each kernel.
+# Builds shared libraries with C-linkage launch wrappers for each kernel.
+# Two variants: f32 (default) and bf16 (mixed precision with f32 accumulators).
 # These can be loaded via dlopen / Erlang NIF for standalone testing,
 # or via EXLA's device buffer pointer interop.
 #
@@ -8,7 +9,7 @@
 # deps/exla/c_src/exla/custom_calls/ and compile with -DEXLA_FFI.
 #
 # Usage:
-#   make              # Build shared library
+#   make              # Build both f32 and bf16 shared libraries
 #   make clean        # Remove build artifacts
 #   make test-compile # Compile only (syntax check)
 #   make info         # Show configuration
@@ -51,29 +52,59 @@ KERNEL_SOURCES := fused_mingru_scan.cu fused_minlstm_scan.cu \
                   fused_linear_scan_backward.cu \
                   fused_mingru_scan_backward.cu \
                   fused_minlstm_scan_backward.cu \
+                  fused_elu_gru_scan_backward.cu \
+                  fused_real_gru_scan_backward.cu \
+                  fused_diag_linear_scan_backward.cu \
+                  fused_lstm_scan_backward.cu \
+                  fused_gru_scan_backward.cu \
+                  fused_liquid_scan_backward.cu \
+                  fused_delta_rule_scan_backward.cu \
+                  fused_gated_delta_net_scan_backward.cu \
+                  fused_delta_product_scan_backward.cu \
+                  fused_slstm_scan_backward.cu \
+                  fused_selective_scan_backward.cu \
                   fused_mingru_block_scan.cu \
                   fused_minlstm_block_scan.cu
-KERNEL_OBJECTS := $(patsubst %.cu,$(OBJ_DIR)/%.o,$(KERNEL_SOURCES))
+
+# f32 objects (default compilation)
+KERNEL_OBJECTS     := $(patsubst %.cu,$(OBJ_DIR)/%.o,$(KERNEL_SOURCES))
+
+# bf16 objects (compiled with -DUSE_BF16)
+KERNEL_OBJECTS_BF16 := $(patsubst %.cu,$(OBJ_DIR)/%_bf16.o,$(KERNEL_SOURCES))
 
 # All sources for syntax checking
 ALL_SOURCES := $(wildcard *.cu)
 ALL_OBJECTS := $(patsubst %.cu,$(OBJ_DIR)/%.o,$(ALL_SOURCES))
 
 TARGET      := $(BUILD_DIR)/libedifice_cuda_kernels.so
+TARGET_BF16 := $(BUILD_DIR)/libedifice_cuda_kernels_bf16.so
 TEST_BIN    := $(OBJ_DIR)/test_kernels
 BENCH_BIN   := $(OBJ_DIR)/bench_kernels
 
-# Default target — shared library only
-all: $(TARGET)
+# Default target — both f32 and bf16 shared libraries
+all: $(TARGET) $(TARGET_BF16)
 
+# f32 shared library
 $(TARGET): $(KERNEL_OBJECTS)
 	@mkdir -p $(BUILD_DIR)
 	$(NVCC) -shared -arch=$(GPU_ARCH) -o $@ $^
 	@echo "Built: $@"
 
-$(OBJ_DIR)/%.o: %.cu
+# bf16 shared library
+$(TARGET_BF16): $(KERNEL_OBJECTS_BF16)
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) -shared -arch=$(GPU_ARCH) -o $@ $^
+	@echo "Built: $@"
+
+# f32 object rule (depends on precision.cuh)
+$(OBJ_DIR)/%.o: %.cu precision.cuh
 	@mkdir -p $(OBJ_DIR)
 	$(NVCC) -c $(NVCCFLAGS) $< -o $@
+
+# bf16 object rule (depends on precision.cuh, compiled with -DUSE_BF16)
+$(OBJ_DIR)/%_bf16.o: %.cu precision.cuh
+	@mkdir -p $(OBJ_DIR)
+	$(NVCC) -c $(NVCCFLAGS) -DUSE_BF16 $< -o $@
 
 # Test binary — links all kernels + test harness
 test-bin: $(TARGET)
@@ -91,14 +122,15 @@ test-compile: $(ALL_OBJECTS)
 
 clean:
 	rm -rf $(OBJ_DIR)
-	rm -f $(TARGET)
+	rm -f $(TARGET) $(TARGET_BF16)
 
 # Print configuration
 info:
 	@echo "NVCC:        $(NVCC)"
 	@echo "GPU_ARCH:    $(GPU_ARCH)"
 	@echo "KERNELS:     $(KERNEL_SOURCES)"
-	@echo "TARGET:      $(TARGET)"
+	@echo "TARGET_F32:  $(TARGET)"
+	@echo "TARGET_BF16: $(TARGET_BF16)"
 	@echo ""
 	@$(NVCC) --version
 

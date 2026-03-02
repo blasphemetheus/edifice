@@ -35,6 +35,7 @@
 //   grad_h0:   [B, H]    — gradient w.r.t. initial cell state
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 constexpr float NORM_EPS = 1.0e-6f;
 
@@ -43,16 +44,16 @@ constexpr float NORM_EPS = 1.0e-6f;
 // ============================================================================
 
 __global__ void fused_minlstm_scan_backward_kernel(
-    const float* __restrict__ f,            // [B, T, H] post-sigmoid forget
-    const float* __restrict__ i_gate,       // [B, T, H] post-sigmoid input
-    const float* __restrict__ candidates,   // [B, T, H]
-    const float* __restrict__ h0,           // [B, H]
-    const float* __restrict__ forward_out,  // [B, T, H]
-    const float* __restrict__ grad_output,  // [B, T, H]
-    float* __restrict__ grad_f,             // [B, T, H]
-    float* __restrict__ grad_i,             // [B, T, H]
-    float* __restrict__ grad_cand,          // [B, T, H]
-    float* __restrict__ grad_h0,            // [B, H]
+    const io_type* __restrict__ f,            // [B, T, H] post-sigmoid forget
+    const io_type* __restrict__ i_gate,       // [B, T, H] post-sigmoid input
+    const io_type* __restrict__ candidates,   // [B, T, H]
+    const io_type* __restrict__ h0,           // [B, H]
+    const io_type* __restrict__ forward_out,  // [B, T, H]
+    const io_type* __restrict__ grad_output,  // [B, T, H]
+    io_type* __restrict__ grad_f,             // [B, T, H]
+    io_type* __restrict__ grad_i,             // [B, T, H]
+    io_type* __restrict__ grad_cand,          // [B, T, H]
+    io_type* __restrict__ grad_h0,            // [B, H]
     int batch, int seq_len, int hidden
 ) {
     int b = blockIdx.x;
@@ -65,11 +66,11 @@ __global__ void fused_minlstm_scan_backward_kernel(
     for (int t = seq_len - 1; t >= 0; t--) {
         int idx = b * seq_len * hidden + t * hidden + h;
 
-        float dc = grad_output[idx] + dc_acc;
+        float dc = IO_LOAD(grad_output, idx) + dc_acc;
 
-        float f_t = f[idx];
-        float i_t = i_gate[idx];
-        float cand_t = candidates[idx];
+        float f_t = IO_LOAD(f, idx);
+        float i_t = IO_LOAD(i_gate, idx);
+        float cand_t = IO_LOAD(candidates, idx);
 
         // Normalization
         float S = f_t + i_t + NORM_EPS;
@@ -79,9 +80,9 @@ __global__ void fused_minlstm_scan_backward_kernel(
         // c_{t-1}
         float c_prev;
         if (t == 0) {
-            c_prev = h0[b * hidden + h];
+            c_prev = IO_LOAD(h0, b * hidden + h);
         } else {
-            c_prev = forward_out[idx - hidden];
+            c_prev = IO_LOAD(forward_out, idx - hidden);
         }
 
         // Gradients w.r.t. normalized gates
@@ -89,7 +90,7 @@ __global__ void fused_minlstm_scan_backward_kernel(
         float di_norm = dc * cand_t;
 
         // Gradient w.r.t. candidates
-        grad_cand[idx] = dc * i_norm;
+        IO_STORE(grad_cand, idx, dc * i_norm);
 
         // Accumulate gradient flowing back through c_{t-1}
         dc_acc = dc * f_norm;
@@ -113,11 +114,11 @@ __global__ void fused_minlstm_scan_backward_kernel(
         //          = (-df' * f + di' * (f+eps)) / S^2
 
         float S2 = S * S;
-        grad_f[idx] = (df_norm * (i_t + NORM_EPS) - di_norm * i_t) / S2;
-        grad_i[idx] = (-df_norm * f_t + di_norm * (f_t + NORM_EPS)) / S2;
+        IO_STORE(grad_f, idx, (df_norm * (i_t + NORM_EPS) - di_norm * i_t) / S2);
+        IO_STORE(grad_i, idx, (-df_norm * f_t + di_norm * (f_t + NORM_EPS)) / S2);
     }
 
-    grad_h0[b * hidden + h] = dc_acc;
+    IO_STORE(grad_h0, b * hidden + h, dc_acc);
 }
 
 // ============================================================================
@@ -131,18 +132,18 @@ extern "C" {
 // Output: concatenated [grad_f (B*T*H) | grad_i (B*T*H) | grad_cand (B*T*H) | grad_h0 (B*H)]
 int fused_minlstm_scan_backward_launch(
     cudaStream_t stream,
-    const float* f, const float* i_gate,
-    const float* candidates,
-    const float* h0, const float* forward_out,
-    const float* grad_output,
-    float* output_concat,
+    const io_type* f, const io_type* i_gate,
+    const io_type* candidates,
+    const io_type* h0, const io_type* forward_out,
+    const io_type* grad_output,
+    io_type* output_concat,
     int batch, int seq_len, int hidden
 ) {
     int bth = batch * seq_len * hidden;
-    float* grad_f    = output_concat;
-    float* grad_i    = output_concat + bth;
-    float* grad_cand = output_concat + 2 * bth;
-    float* grad_h0   = output_concat + 3 * bth;
+    io_type* grad_f    = output_concat;
+    io_type* grad_i    = output_concat + bth;
+    io_type* grad_cand = output_concat + 2 * bth;
+    io_type* grad_h0   = output_concat + 3 * bth;
 
     int threads_per_block = (hidden < 256) ? hidden : 256;
     int blocks_y = (hidden + threads_per_block - 1) / threads_per_block;
@@ -174,16 +175,16 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_minlstm_scan_backward_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> f,
-    ffi::Buffer<ffi::F32> i_gate,
-    ffi::Buffer<ffi::F32> candidates,
-    ffi::Buffer<ffi::F32> h0,
-    ffi::Buffer<ffi::F32> forward_out,
-    ffi::Buffer<ffi::F32> grad_output,
-    ffi::ResultBuffer<ffi::F32> grad_f,
-    ffi::ResultBuffer<ffi::F32> grad_i,
-    ffi::ResultBuffer<ffi::F32> grad_cand,
-    ffi::ResultBuffer<ffi::F32> grad_h0
+    ffi::Buffer<FFI_IO_TYPE> f,
+    ffi::Buffer<FFI_IO_TYPE> i_gate,
+    ffi::Buffer<FFI_IO_TYPE> candidates,
+    ffi::Buffer<FFI_IO_TYPE> h0,
+    ffi::Buffer<FFI_IO_TYPE> forward_out,
+    ffi::Buffer<FFI_IO_TYPE> grad_output,
+    ffi::ResultBuffer<FFI_IO_TYPE> grad_f,
+    ffi::ResultBuffer<FFI_IO_TYPE> grad_i,
+    ffi::ResultBuffer<FFI_IO_TYPE> grad_cand,
+    ffi::ResultBuffer<FFI_IO_TYPE> grad_h0
 ) {
     auto dims = f.dimensions();
     int batch   = static_cast<int>(dims[0]);
@@ -196,16 +197,16 @@ ffi::Error fused_minlstm_scan_backward_ffi_impl(
     dim3 block(threads_per_block);
 
     fused_minlstm_scan_backward_kernel<<<grid, block, 0, stream>>>(
-        reinterpret_cast<const float*>(f.untyped_data()),
-        reinterpret_cast<const float*>(i_gate.untyped_data()),
-        reinterpret_cast<const float*>(candidates.untyped_data()),
-        reinterpret_cast<const float*>(h0.untyped_data()),
-        reinterpret_cast<const float*>(forward_out.untyped_data()),
-        reinterpret_cast<const float*>(grad_output.untyped_data()),
-        reinterpret_cast<float*>(grad_f->untyped_data()),
-        reinterpret_cast<float*>(grad_i->untyped_data()),
-        reinterpret_cast<float*>(grad_cand->untyped_data()),
-        reinterpret_cast<float*>(grad_h0->untyped_data()),
+        reinterpret_cast<const io_type*>(f.untyped_data()),
+        reinterpret_cast<const io_type*>(i_gate.untyped_data()),
+        reinterpret_cast<const io_type*>(candidates.untyped_data()),
+        reinterpret_cast<const io_type*>(h0.untyped_data()),
+        reinterpret_cast<const io_type*>(forward_out.untyped_data()),
+        reinterpret_cast<const io_type*>(grad_output.untyped_data()),
+        reinterpret_cast<io_type*>(grad_f->untyped_data()),
+        reinterpret_cast<io_type*>(grad_i->untyped_data()),
+        reinterpret_cast<io_type*>(grad_cand->untyped_data()),
+        reinterpret_cast<io_type*>(grad_h0->untyped_data()),
         batch, seq_len, hidden
     );
 
@@ -221,19 +222,19 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_minlstm_scan_backward, fused_minlstm_scan_backward_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // f
-        .Arg<ffi::Buffer<ffi::F32>>()   // i_gate
-        .Arg<ffi::Buffer<ffi::F32>>()   // candidates
-        .Arg<ffi::Buffer<ffi::F32>>()   // h0
-        .Arg<ffi::Buffer<ffi::F32>>()   // forward_out
-        .Arg<ffi::Buffer<ffi::F32>>()   // grad_output
-        .Ret<ffi::Buffer<ffi::F32>>()   // grad_f
-        .Ret<ffi::Buffer<ffi::F32>>()   // grad_i
-        .Ret<ffi::Buffer<ffi::F32>>()   // grad_cand
-        .Ret<ffi::Buffer<ffi::F32>>()   // grad_h0
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // f
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // i_gate
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // candidates
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // h0
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // forward_out
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // grad_output
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // grad_f
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // grad_i
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // grad_cand
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // grad_h0
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_minlstm_scan_backward_f32", "CUDA", fused_minlstm_scan_backward);
+    "exla_fused_minlstm_scan_backward_" PRECISION_SUFFIX, "CUDA", fused_minlstm_scan_backward);
 
 #endif  // EXLA_FFI

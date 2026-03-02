@@ -38,18 +38,19 @@
 //   Total: ~17KB — well within 48KB limit
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 // ============================================================================
 // Kernel
 // ============================================================================
 
 __global__ void fused_delta_rule_scan_kernel(
-    const float* __restrict__ q,       // [B, T, H, d]
-    const float* __restrict__ k,       // [B, T, H, d]
-    const float* __restrict__ v,       // [B, T, H, d]
-    const float* __restrict__ beta,    // [B, T, H, d]
-    const float* __restrict__ alpha,   // [B, T, H] or NULL
-    float* __restrict__ output,        // [B, T, H, d]
+    const io_type* __restrict__ q,       // [B, T, H, d]
+    const io_type* __restrict__ k,       // [B, T, H, d]
+    const io_type* __restrict__ v,       // [B, T, H, d]
+    const io_type* __restrict__ beta,    // [B, T, H, d]
+    const io_type* __restrict__ alpha,   // [B, T, H] or NULL
+    io_type* __restrict__ output,        // [B, T, H, d]
     int seq_len,
     int num_heads,
     int head_dim
@@ -92,7 +93,7 @@ __global__ void fused_delta_rule_scan_kernel(
         int offset = base_bh + t * THd;  // offset for this (b, t, h) in [B,T,H,d]
 
         // Step 1: Load k_t into shared memory (coalesced read, one element per thread)
-        k_shared[i] = k[offset + i];
+        k_shared[i] = IO_LOAD(k, offset + i);
         __syncthreads();
 
         // Step 2: Compute retrieval[i] = sum_j(S[i][j] * k_shared[j])
@@ -103,7 +104,7 @@ __global__ void fused_delta_rule_scan_kernel(
 
         // Step 3: If alpha provided, apply scalar decay to state row
         if (alpha != NULL) {
-            float alpha_val = alpha[alpha_base_bh + t * alpha_TH + h];
+            float alpha_val = IO_LOAD(alpha, alpha_base_bh + t * alpha_TH + h);
             for (int j = 0; j < head_dim; j++) {
                 S[i * head_dim + j] *= alpha_val;
             }
@@ -112,8 +113,8 @@ __global__ void fused_delta_rule_scan_kernel(
         }
 
         // Step 4: Compute error and scaled error
-        float v_i = v[offset + i];
-        float beta_i = beta[offset + i];
+        float v_i = IO_LOAD(v, offset + i);
+        float beta_i = IO_LOAD(beta, offset + i);
         float error_i = v_i - retrieval;
         float scaled_error_i = beta_i * error_i;
 
@@ -124,7 +125,7 @@ __global__ void fused_delta_rule_scan_kernel(
         __syncthreads();
 
         // Step 6: Load q_t into shared memory
-        q_shared[i] = q[offset + i];
+        q_shared[i] = IO_LOAD(q, offset + i);
         __syncthreads();
 
         // Step 7: Compute output[i] = sum_j(S[i][j] * q_shared[j])
@@ -134,7 +135,7 @@ __global__ void fused_delta_rule_scan_kernel(
         }
 
         // Step 8: Write output
-        output[offset + i] = out_i;
+        IO_STORE(output, offset + i, out_i);
         __syncthreads();
     }
 }
@@ -149,9 +150,9 @@ extern "C" {
 
 int fused_delta_rule_scan_launch(
     cudaStream_t stream,
-    const float* q, const float* k, const float* v, const float* beta,
-    const float* alpha,  // NULL for vanilla DeltaNet
-    float* output,
+    const io_type* q, const io_type* k, const io_type* v, const io_type* beta,
+    const io_type* alpha,  // NULL for vanilla DeltaNet
+    io_type* output,
     int batch, int seq_len, int num_heads, int head_dim
 ) {
     // One thread block per (batch, head), head_dim threads per block
@@ -173,8 +174,8 @@ int fused_delta_rule_scan_launch(
 // Convenience wrapper for vanilla DeltaNet (alpha=NULL)
 int fused_delta_net_scan_launch(
     cudaStream_t stream,
-    const float* q, const float* k, const float* v, const float* beta,
-    float* output,
+    const io_type* q, const io_type* k, const io_type* v, const io_type* beta,
+    io_type* output,
     int batch, int seq_len, int num_heads, int head_dim
 ) {
     return fused_delta_rule_scan_launch(
@@ -186,9 +187,9 @@ int fused_delta_net_scan_launch(
 // Convenience wrapper for GatedDeltaNet (alpha provided)
 int fused_gated_delta_net_scan_launch(
     cudaStream_t stream,
-    const float* q, const float* k, const float* v, const float* beta,
-    const float* alpha,
-    float* output,
+    const io_type* q, const io_type* k, const io_type* v, const io_type* beta,
+    const io_type* alpha,
+    io_type* output,
     int batch, int seq_len, int num_heads, int head_dim
 ) {
     return fused_delta_rule_scan_launch(
@@ -215,11 +216,11 @@ namespace ffi = xla::ffi;
 // DeltaNet (no alpha gate)
 ffi::Error fused_delta_net_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> q,
-    ffi::Buffer<ffi::F32> k,
-    ffi::Buffer<ffi::F32> v,
-    ffi::Buffer<ffi::F32> beta,
-    ffi::ResultBuffer<ffi::F32> output
+    ffi::Buffer<FFI_IO_TYPE> q,
+    ffi::Buffer<FFI_IO_TYPE> k,
+    ffi::Buffer<FFI_IO_TYPE> v,
+    ffi::Buffer<FFI_IO_TYPE> beta,
+    ffi::ResultBuffer<FFI_IO_TYPE> output
 ) {
     auto dims = q.dimensions();
     int batch     = static_cast<int>(dims[0]);
@@ -233,12 +234,12 @@ ffi::Error fused_delta_net_scan_ffi_impl(
                       + 2 * head_dim * sizeof(float);
 
     fused_delta_rule_scan_kernel<<<grid, block, smem_bytes, stream>>>(
-        reinterpret_cast<const float*>(q.untyped_data()),
-        reinterpret_cast<const float*>(k.untyped_data()),
-        reinterpret_cast<const float*>(v.untyped_data()),
-        reinterpret_cast<const float*>(beta.untyped_data()),
+        reinterpret_cast<const io_type*>(q.untyped_data()),
+        reinterpret_cast<const io_type*>(k.untyped_data()),
+        reinterpret_cast<const io_type*>(v.untyped_data()),
+        reinterpret_cast<const io_type*>(beta.untyped_data()),
         nullptr,  // no alpha for DeltaNet
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         seq_len, num_heads, head_dim
     );
 
@@ -252,12 +253,12 @@ ffi::Error fused_delta_net_scan_ffi_impl(
 // GatedDeltaNet (with alpha gate)
 ffi::Error fused_gated_delta_net_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> q,
-    ffi::Buffer<ffi::F32> k,
-    ffi::Buffer<ffi::F32> v,
-    ffi::Buffer<ffi::F32> beta,
-    ffi::Buffer<ffi::F32> alpha,
-    ffi::ResultBuffer<ffi::F32> output
+    ffi::Buffer<FFI_IO_TYPE> q,
+    ffi::Buffer<FFI_IO_TYPE> k,
+    ffi::Buffer<FFI_IO_TYPE> v,
+    ffi::Buffer<FFI_IO_TYPE> beta,
+    ffi::Buffer<FFI_IO_TYPE> alpha,
+    ffi::ResultBuffer<FFI_IO_TYPE> output
 ) {
     auto dims = q.dimensions();
     int batch     = static_cast<int>(dims[0]);
@@ -271,12 +272,12 @@ ffi::Error fused_gated_delta_net_scan_ffi_impl(
                       + 2 * head_dim * sizeof(float);
 
     fused_delta_rule_scan_kernel<<<grid, block, smem_bytes, stream>>>(
-        reinterpret_cast<const float*>(q.untyped_data()),
-        reinterpret_cast<const float*>(k.untyped_data()),
-        reinterpret_cast<const float*>(v.untyped_data()),
-        reinterpret_cast<const float*>(beta.untyped_data()),
-        reinterpret_cast<const float*>(alpha.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(q.untyped_data()),
+        reinterpret_cast<const io_type*>(k.untyped_data()),
+        reinterpret_cast<const io_type*>(v.untyped_data()),
+        reinterpret_cast<const io_type*>(beta.untyped_data()),
+        reinterpret_cast<const io_type*>(alpha.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         seq_len, num_heads, head_dim
     );
 
@@ -291,29 +292,29 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_delta_net_scan, fused_delta_net_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // q
-        .Arg<ffi::Buffer<ffi::F32>>()   // k
-        .Arg<ffi::Buffer<ffi::F32>>()   // v
-        .Arg<ffi::Buffer<ffi::F32>>()   // beta
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // q
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // k
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // v
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // beta
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_gated_delta_net_scan, fused_gated_delta_net_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // q
-        .Arg<ffi::Buffer<ffi::F32>>()   // k
-        .Arg<ffi::Buffer<ffi::F32>>()   // v
-        .Arg<ffi::Buffer<ffi::F32>>()   // beta
-        .Arg<ffi::Buffer<ffi::F32>>()   // alpha
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // q
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // k
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // v
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // beta
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // alpha
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_delta_net_scan_f32", "CUDA", fused_delta_net_scan);
+    "exla_fused_delta_net_scan_" PRECISION_SUFFIX, "CUDA", fused_delta_net_scan);
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_gated_delta_net_scan_f32", "CUDA", fused_gated_delta_net_scan);
+    "exla_fused_gated_delta_net_scan_" PRECISION_SUFFIX, "CUDA", fused_gated_delta_net_scan);
 
 #endif  // EXLA_FFI

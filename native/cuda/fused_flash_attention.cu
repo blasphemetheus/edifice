@@ -32,6 +32,7 @@
 // Tile sizes: Br = Bc = 32 (fits comfortably in shared memory for all head dims).
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 #include <float.h>
 
 // ============================================================================
@@ -50,10 +51,10 @@
 // ============================================================================
 
 __global__ void fused_flash_attention_kernel(
-    const float* __restrict__ Q,       // [B, H, T, d]
-    const float* __restrict__ K,       // [B, H, T, d]
-    const float* __restrict__ V,       // [B, H, T, d]
-    float* __restrict__ O,             // [B, H, T, d]
+    const io_type* __restrict__ Q,       // [B, H, T, d]
+    const io_type* __restrict__ K,       // [B, H, T, d]
+    const io_type* __restrict__ V,       // [B, H, T, d]
+    io_type* __restrict__ O,             // [B, H, T, d]
     int seq_len,
     int head_dim,
     int causal
@@ -111,8 +112,8 @@ __global__ void fused_flash_attention_kernel(
             int kv_row = kv_tile * TILE_SIZE + qi;  // reuse qi as loading index
             if (kv_row < seq_len) {
                 for (int dd = 0; dd < head_dim; dd++) {
-                    Kj[qi * head_dim + dd] = K[base + kv_row * head_dim + dd];
-                    Vj[qi * head_dim + dd] = V[base + kv_row * head_dim + dd];
+                    Kj[qi * head_dim + dd] = IO_LOAD(K, base + kv_row * head_dim + dd);
+                    Vj[qi * head_dim + dd] = IO_LOAD(V, base + kv_row * head_dim + dd);
                 }
             } else {
                 // Pad with zeros for out-of-bounds
@@ -135,7 +136,7 @@ __global__ void fused_flash_attention_kernel(
                 // Dot product: s = Q[i] . K[j] * scale
                 float s = 0.0f;
                 for (int dd = 0; dd < head_dim; dd++) {
-                    s += Q[base + i * head_dim + dd] * Kj[j * head_dim + dd];
+                    s += IO_LOAD(Q, base + i * head_dim + dd) * Kj[j * head_dim + dd];
                 }
                 s *= scale;
 
@@ -162,7 +163,7 @@ __global__ void fused_flash_attention_kernel(
         if (i < seq_len && l_i > 0.0f) {
             float inv_l = 1.0f / l_i;
             for (int dd = 0; dd < head_dim; dd++) {
-                O[base + i * head_dim + dd] = o_acc[dd] * inv_l;
+                IO_STORE(O, base + i * head_dim + dd, o_acc[dd] * inv_l);
             }
         }
     }
@@ -178,10 +179,10 @@ extern "C" {
 
 int fused_flash_attention_launch(
     cudaStream_t stream,
-    const float* q,
-    const float* k,
-    const float* v,
-    float* output,
+    const io_type* q,
+    const io_type* k,
+    const io_type* v,
+    io_type* output,
     int batch,
     int num_heads,
     int seq_len,
@@ -219,11 +220,11 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_flash_attention_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> q,
-    ffi::Buffer<ffi::F32> k,
-    ffi::Buffer<ffi::F32> v,
+    ffi::Buffer<FFI_IO_TYPE> q,
+    ffi::Buffer<FFI_IO_TYPE> k,
+    ffi::Buffer<FFI_IO_TYPE> v,
     ffi::AnyBuffer causal_flag,
-    ffi::ResultBuffer<ffi::F32> output
+    ffi::ResultBuffer<FFI_IO_TYPE> output
 ) {
     auto dims = q.dimensions();
     int batch    = static_cast<int>(dims[0]);
@@ -241,10 +242,10 @@ ffi::Error fused_flash_attention_ffi_impl(
     size_t smem_bytes = 2 * TILE_SIZE * head_dim * sizeof(float);
 
     fused_flash_attention_kernel<<<grid, block, smem_bytes, stream>>>(
-        reinterpret_cast<const float*>(q.untyped_data()),
-        reinterpret_cast<const float*>(k.untyped_data()),
-        reinterpret_cast<const float*>(v.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(q.untyped_data()),
+        reinterpret_cast<const io_type*>(k.untyped_data()),
+        reinterpret_cast<const io_type*>(v.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         seq_len, head_dim, causal
     );
 
@@ -260,14 +261,14 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_flash_attention, fused_flash_attention_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // q  [B, H, T, d]
-        .Arg<ffi::Buffer<ffi::F32>>()   // k  [B, H, T, d]
-        .Arg<ffi::Buffer<ffi::F32>>()   // v  [B, H, T, d]
-        .Arg<ffi::AnyBuffer>()          // causal (scalar i32)
-        .Ret<ffi::Buffer<ffi::F32>>()   // output [B, H, T, d]
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // q  [B, H, T, d]
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // k  [B, H, T, d]
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // v  [B, H, T, d]
+        .Arg<ffi::AnyBuffer>()             // causal (scalar i32)
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output [B, H, T, d]
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_flash_attention_f32", "CUDA", fused_flash_attention);
+    "exla_fused_flash_attention_" PRECISION_SUFFIX, "CUDA", fused_flash_attention);
 
 #endif  // EXLA_FFI

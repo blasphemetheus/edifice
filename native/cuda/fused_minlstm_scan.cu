@@ -22,6 +22,7 @@
 //   output:       [batch, seq_len, hidden] — all hidden states
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 constexpr float NORM_EPS = 1.0e-6f;
 
@@ -30,11 +31,11 @@ constexpr float NORM_EPS = 1.0e-6f;
 // ============================================================================
 
 __global__ void fused_minlstm_scan_kernel(
-    const float* __restrict__ forget_gates,  // [B, T, H] sigmoid values
-    const float* __restrict__ input_gates,   // [B, T, H] sigmoid values
-    const float* __restrict__ candidates,    // [B, T, H] candidate values
-    const float* __restrict__ h0,            // [B, H] initial state
-    float* __restrict__ output,              // [B, T, H] all hidden states
+    const io_type* __restrict__ forget_gates,  // [B, T, H] sigmoid values
+    const io_type* __restrict__ input_gates,   // [B, T, H] sigmoid values
+    const io_type* __restrict__ candidates,    // [B, T, H] candidate values
+    const io_type* __restrict__ h0,            // [B, H] initial state
+    io_type* __restrict__ output,              // [B, T, H] all hidden states
     int batch, int seq_len, int hidden
 ) {
     int b = blockIdx.x;
@@ -43,13 +44,13 @@ __global__ void fused_minlstm_scan_kernel(
     if (b >= batch || h >= hidden) return;
 
     // Load initial state into register
-    float c_state = h0[b * hidden + h];
+    float c_state = IO_LOAD(h0, b * hidden + h);
 
     for (int t = 0; t < seq_len; t++) {
         int idx = b * seq_len * hidden + t * hidden + h;
-        float f = forget_gates[idx];
-        float i = input_gates[idx];
-        float cand = candidates[idx];
+        float f = IO_LOAD(forget_gates, idx);
+        float i = IO_LOAD(input_gates, idx);
+        float cand = IO_LOAD(candidates, idx);
 
         // Normalize gates: f' = f/(f+i+eps), i' = i/(f+i+eps)
         float gate_sum = f + i + NORM_EPS;
@@ -59,7 +60,7 @@ __global__ void fused_minlstm_scan_kernel(
         // MinLSTM update: c = f'*c + i'*candidate
         c_state = f_norm * c_state + i_norm * cand;
 
-        output[idx] = c_state;
+        IO_STORE(output, idx, c_state);
     }
 }
 
@@ -73,11 +74,11 @@ extern "C" {
 
 int fused_minlstm_scan_launch(
     cudaStream_t stream,
-    const float* forget_gates,
-    const float* input_gates,
-    const float* candidates,
-    const float* h0,
-    float* output,
+    const io_type* forget_gates,
+    const io_type* input_gates,
+    const io_type* candidates,
+    const io_type* h0,
+    io_type* output,
     int batch, int seq_len, int hidden
 ) {
     int threads_per_block = (hidden < 256) ? hidden : 256;
@@ -109,11 +110,11 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_minlstm_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> forget_gates,
-    ffi::Buffer<ffi::F32> input_gates,
-    ffi::Buffer<ffi::F32> candidates,
-    ffi::Buffer<ffi::F32> h0,
-    ffi::ResultBuffer<ffi::F32> output
+    ffi::Buffer<FFI_IO_TYPE> forget_gates,
+    ffi::Buffer<FFI_IO_TYPE> input_gates,
+    ffi::Buffer<FFI_IO_TYPE> candidates,
+    ffi::Buffer<FFI_IO_TYPE> h0,
+    ffi::ResultBuffer<FFI_IO_TYPE> output
 ) {
     auto dims = forget_gates.dimensions();
     int batch   = static_cast<int>(dims[0]);
@@ -126,11 +127,11 @@ ffi::Error fused_minlstm_scan_ffi_impl(
     dim3 block(threads_per_block);
 
     fused_minlstm_scan_kernel<<<grid, block, 0, stream>>>(
-        reinterpret_cast<const float*>(forget_gates.untyped_data()),
-        reinterpret_cast<const float*>(input_gates.untyped_data()),
-        reinterpret_cast<const float*>(candidates.untyped_data()),
-        reinterpret_cast<const float*>(h0.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(forget_gates.untyped_data()),
+        reinterpret_cast<const io_type*>(input_gates.untyped_data()),
+        reinterpret_cast<const io_type*>(candidates.untyped_data()),
+        reinterpret_cast<const io_type*>(h0.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         batch, seq_len, hidden
     );
 
@@ -146,14 +147,14 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_minlstm_scan, fused_minlstm_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // forget_gates
-        .Arg<ffi::Buffer<ffi::F32>>()   // input_gates
-        .Arg<ffi::Buffer<ffi::F32>>()   // candidates
-        .Arg<ffi::Buffer<ffi::F32>>()   // h0
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // forget_gates
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // input_gates
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // candidates
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // h0
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_minlstm_scan_f32", "CUDA", fused_minlstm_scan);
+    "exla_fused_minlstm_scan_" PRECISION_SUFFIX, "CUDA", fused_minlstm_scan);
 
 #endif  // EXLA_FFI

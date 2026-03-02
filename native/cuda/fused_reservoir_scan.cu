@@ -23,12 +23,13 @@
 //   out:   [batch, reservoir_size]           -- final hidden state only
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 __global__ void fused_reservoir_scan_kernel(
-    const float* __restrict__ wx,       // [B, T, H]
-    const float* __restrict__ w_res,    // [H, H]
-    const float* __restrict__ h0,       // [B, H]
-    float* __restrict__ output,         // [B, H]
+    const io_type* __restrict__ wx,       // [B, T, H]
+    const io_type* __restrict__ w_res,    // [H, H]
+    const io_type* __restrict__ h0,       // [B, H]
+    io_type* __restrict__ output,         // [B, H]
     int batch, int seq_len, int hidden,
     float leak_rate
 ) {
@@ -41,7 +42,7 @@ __global__ void fused_reservoir_scan_kernel(
     extern __shared__ float h_shared[];  // [hidden]
 
     // Load initial state
-    float h_val = h0[b * hidden + i];
+    float h_val = IO_LOAD(h0, b * hidden + i);
 
     for (int t = 0; t < seq_len; t++) {
         // Write current h to shared memory for matmul
@@ -52,12 +53,12 @@ __global__ void fused_reservoir_scan_kernel(
         // rh_i = sum_j(h_shared[j] * w_res[j * H + i])
         float rh_i = 0.0f;
         for (int j = 0; j < hidden; j++) {
-            rh_i += h_shared[j] * w_res[j * hidden + i];
+            rh_i += h_shared[j] * IO_LOAD(w_res, j * hidden + i);
         }
 
         // Load pre-computed wx
         int wx_idx = b * seq_len * hidden + t * hidden + i;
-        float pre_act = wx[wx_idx] + rh_i;
+        float pre_act = IO_LOAD(wx, wx_idx) + rh_i;
 
         // h_new = tanh(wx + W_res @ h)
         float h_new = tanhf(pre_act);
@@ -73,7 +74,7 @@ __global__ void fused_reservoir_scan_kernel(
     }
 
     // Write final hidden state only (ESN only needs last state for readout)
-    output[b * hidden + i] = h_val;
+    IO_STORE(output, b * hidden + i, h_val);
 }
 
 // ============================================================================
@@ -86,8 +87,8 @@ extern "C" {
 
 int fused_reservoir_scan_launch(
     cudaStream_t stream,
-    const float* wx, const float* w_res,
-    const float* h0, float* output,
+    const io_type* wx, const io_type* w_res,
+    const io_type* h0, io_type* output,
     int batch, int seq_len, int hidden,
     float leak_rate
 ) {
@@ -122,11 +123,11 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_reservoir_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> wx,       // [B, T, H]
-    ffi::Buffer<ffi::F32> w_res,    // [H, H]
-    ffi::Buffer<ffi::F32> h0,       // [B, H]
+    ffi::Buffer<FFI_IO_TYPE> wx,       // [B, T, H]
+    ffi::Buffer<FFI_IO_TYPE> w_res,    // [H, H]
+    ffi::Buffer<FFI_IO_TYPE> h0,       // [B, H]
     ffi::Buffer<ffi::F32> leak_t,   // scalar [1]
-    ffi::ResultBuffer<ffi::F32> output  // [B, H]
+    ffi::ResultBuffer<FFI_IO_TYPE> output  // [B, H]
 ) {
     auto wx_dims = wx.dimensions();
     int batch   = static_cast<int>(wx_dims[0]);
@@ -143,10 +144,10 @@ ffi::Error fused_reservoir_scan_ffi_impl(
     size_t smem_bytes = hidden * sizeof(float);
 
     fused_reservoir_scan_kernel<<<grid, block, smem_bytes, stream>>>(
-        reinterpret_cast<const float*>(wx.untyped_data()),
-        reinterpret_cast<const float*>(w_res.untyped_data()),
-        reinterpret_cast<const float*>(h0.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(wx.untyped_data()),
+        reinterpret_cast<const io_type*>(w_res.untyped_data()),
+        reinterpret_cast<const io_type*>(h0.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         batch, seq_len, hidden, leak_rate
     );
 
@@ -162,14 +163,14 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_reservoir_scan, fused_reservoir_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // wx
-        .Arg<ffi::Buffer<ffi::F32>>()   // w_res
-        .Arg<ffi::Buffer<ffi::F32>>()   // h0
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // wx
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // w_res
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // h0
         .Arg<ffi::Buffer<ffi::F32>>()   // leak_rate
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_reservoir_scan_f32", "CUDA", fused_reservoir_scan);
+    "exla_fused_reservoir_scan_" PRECISION_SUFFIX, "CUDA", fused_reservoir_scan);
 
 #endif  // EXLA_FFI

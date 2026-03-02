@@ -32,6 +32,7 @@
 //   Total: ~17KB — well within 48KB limit
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 constexpr float NORM_EPS = 1.0e-6f;
 
@@ -40,11 +41,11 @@ constexpr float NORM_EPS = 1.0e-6f;
 // ============================================================================
 
 __global__ void fused_delta_product_scan_kernel(
-    const float* __restrict__ q,       // [B, T, H, d]
-    const float* __restrict__ k,       // [B, T, n_h, H, d]
-    const float* __restrict__ v,       // [B, T, n_h, H, d]
-    const float* __restrict__ beta,    // [B, T, n_h, H]
-    float* __restrict__ output,        // [B, T, H, d]
+    const io_type* __restrict__ q,       // [B, T, H, d]
+    const io_type* __restrict__ k,       // [B, T, n_h, H, d]
+    const io_type* __restrict__ v,       // [B, T, n_h, H, d]
+    const io_type* __restrict__ beta,    // [B, T, n_h, H]
+    io_type* __restrict__ output,        // [B, T, H, d]
     int seq_len,
     int num_householder,
     int num_heads,
@@ -96,7 +97,7 @@ __global__ void fused_delta_product_scan_kernel(
             int beta_offset = beta_base + t * beta_stride_T + j * beta_stride_J;
 
             // Load k_{t,j}[i] into shared + register
-            float k_i = k[kv_offset + i];
+            float k_i = IO_LOAD(k, kv_offset + i);
             k_shared[i] = k_i;
             __syncthreads();
 
@@ -117,7 +118,7 @@ __global__ void fused_delta_product_scan_kernel(
             k_shared[i] = k_normed_i;  // Store normalized k
             __syncthreads();
 
-            float beta_val = beta[beta_offset];
+            float beta_val = IO_LOAD(beta, beta_offset);
 
             // S = S - beta * (k*k^T @ S) + beta * (k*v^T)
             //
@@ -253,7 +254,7 @@ __global__ void fused_delta_product_scan_kernel(
             // Now q_shared[j] = (S^T @ k)[j]
             // S_new[i][j] = S[i][j] - beta * k[i] * (S^T @ k)[j] + beta * k[i] * v[j]
             //             = S[i][j] + beta * k[i] * (v[j] - (S^T @ k)[j])
-            float v_i_val = v[kv_offset + i];
+            float v_i_val = IO_LOAD(v, kv_offset + i);
 
             // Load v into shared for the update (but we need v[j] not v[i])
             // Thread i can only write v[i] to shared, then read v[j] from shared
@@ -262,7 +263,7 @@ __global__ void fused_delta_product_scan_kernel(
             // This is fine — v is only read once per Householder step.
             float beta_k_i = beta_val * k_normed_i;
             for (int jj = 0; jj < head_dim; jj++) {
-                float v_j = v[kv_offset + jj];
+                float v_j = IO_LOAD(v, kv_offset + jj);
                 S[i * head_dim + jj] += beta_k_i * (v_j - q_shared[jj]);
             }
             __syncthreads();
@@ -272,7 +273,7 @@ __global__ void fused_delta_product_scan_kernel(
         int q_offset = q_base + t * q_stride_T;
 
         // Load q_t into shared
-        q_shared[i] = q[q_offset + i];
+        q_shared[i] = IO_LOAD(q, q_offset + i);
         __syncthreads();
 
         // Compute o_i = sum_j(S[i][j] * q[j])
@@ -292,7 +293,7 @@ __global__ void fused_delta_product_scan_kernel(
         float o_normed = o_i * rms_inv;
 
         // Write output
-        output[q_offset + i] = o_normed;
+        IO_STORE(output, q_offset + i, o_normed);
         __syncthreads();
     }
 }
@@ -307,8 +308,8 @@ extern "C" {
 
 int fused_delta_product_scan_launch(
     cudaStream_t stream,
-    const float* q, const float* k, const float* v, const float* beta,
-    float* output,
+    const io_type* q, const io_type* k, const io_type* v, const io_type* beta,
+    io_type* output,
     int batch, int seq_len, int num_householder, int num_heads, int head_dim
 ) {
     dim3 grid(batch, num_heads);
@@ -343,11 +344,11 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_delta_product_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> q,       // [B, T, H, d]
-    ffi::Buffer<ffi::F32> k,       // [B, T, n_h, H, d]
-    ffi::Buffer<ffi::F32> v,       // [B, T, n_h, H, d]
-    ffi::Buffer<ffi::F32> beta,    // [B, T, n_h, H]
-    ffi::ResultBuffer<ffi::F32> output  // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> q,       // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> k,       // [B, T, n_h, H, d]
+    ffi::Buffer<FFI_IO_TYPE> v,       // [B, T, n_h, H, d]
+    ffi::Buffer<FFI_IO_TYPE> beta,    // [B, T, n_h, H]
+    ffi::ResultBuffer<FFI_IO_TYPE> output  // [B, T, H, d]
 ) {
     // Extract dims from q: [B, T, H, d]
     auto q_dims = q.dimensions();
@@ -367,11 +368,11 @@ ffi::Error fused_delta_product_scan_ffi_impl(
                       + sizeof(float);
 
     fused_delta_product_scan_kernel<<<grid, block, smem_bytes, stream>>>(
-        reinterpret_cast<const float*>(q.untyped_data()),
-        reinterpret_cast<const float*>(k.untyped_data()),
-        reinterpret_cast<const float*>(v.untyped_data()),
-        reinterpret_cast<const float*>(beta.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(q.untyped_data()),
+        reinterpret_cast<const io_type*>(k.untyped_data()),
+        reinterpret_cast<const io_type*>(v.untyped_data()),
+        reinterpret_cast<const io_type*>(beta.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         seq_len, num_householder, num_heads, head_dim
     );
 
@@ -387,14 +388,14 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_delta_product_scan, fused_delta_product_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // q
-        .Arg<ffi::Buffer<ffi::F32>>()   // k
-        .Arg<ffi::Buffer<ffi::F32>>()   // v
-        .Arg<ffi::Buffer<ffi::F32>>()   // beta
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // q
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // k
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // v
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // beta
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_delta_product_scan_f32", "CUDA", fused_delta_product_scan);
+    "exla_fused_delta_product_scan_" PRECISION_SUFFIX, "CUDA", fused_delta_product_scan);
 
 #endif  // EXLA_FFI

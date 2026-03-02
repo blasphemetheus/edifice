@@ -41,19 +41,20 @@
 //   Total: ~33KB — within 48KB limit
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 // ============================================================================
 // Kernel
 // ============================================================================
 
 __global__ void fused_rla_scan_kernel(
-    const float* __restrict__ q,       // [B, T, H, d]
-    const float* __restrict__ k,       // [B, T, H, d]
-    const float* __restrict__ v,       // [B, T, H, d]
-    const float* __restrict__ alpha,   // [B, T, H]
-    const float* __restrict__ beta,    // [B, T, H]
-    const float* __restrict__ gamma,   // [B, T, H]
-    float* __restrict__ output,        // [B, T, H, d]
+    const io_type* __restrict__ q,       // [B, T, H, d]
+    const io_type* __restrict__ k,       // [B, T, H, d]
+    const io_type* __restrict__ v,       // [B, T, H, d]
+    const io_type* __restrict__ alpha,   // [B, T, H]
+    const io_type* __restrict__ beta,    // [B, T, H]
+    const io_type* __restrict__ gamma,   // [B, T, H]
+    io_type* __restrict__ output,        // [B, T, H, d]
     int seq_len,
     int num_heads,
     int head_dim,
@@ -101,14 +102,14 @@ __global__ void fused_rla_scan_kernel(
         int gate_offset = gate_base_b + t * gate_TH + h;
 
         // Load k and v into shared memory
-        k_shared[i] = k[offset + i];
-        v_shared[i] = v[offset + i];
+        k_shared[i] = IO_LOAD(k, offset + i);
+        v_shared[i] = IO_LOAD(v, offset + i);
         __syncthreads();
 
         // Load per-head scalar gates
-        float alpha_val = alpha[gate_offset];
-        float beta_val  = beta[gate_offset];
-        float gamma_val = gamma[gate_offset];
+        float alpha_val = IO_LOAD(alpha, gate_offset);
+        float beta_val  = IO_LOAD(beta, gate_offset);
+        float gamma_val = IO_LOAD(gamma, gate_offset);
 
         // Compute retrieval from S: retrieval_s[i] = sum_j(S[i][j] * k[j])
         float retrieval_s = 0.0f;
@@ -158,7 +159,7 @@ __global__ void fused_rla_scan_kernel(
         __syncthreads();
 
         // Load q into shared memory (reuse v_shared slot since v is consumed)
-        q_shared[i] = q[offset + i];
+        q_shared[i] = IO_LOAD(q, offset + i);
         __syncthreads();
 
         // Output: o[i] = (S[i] + R[i]) @ q
@@ -167,7 +168,7 @@ __global__ void fused_rla_scan_kernel(
             out_i += (S[i * head_dim + j] + R[i * head_dim + j]) * q_shared[j];
         }
 
-        output[offset + i] = out_i;
+        IO_STORE(output, offset + i, out_i);
         __syncthreads();
     }
 }
@@ -182,9 +183,9 @@ extern "C" {
 
 int fused_rla_scan_launch(
     cudaStream_t stream,
-    const float* q, const float* k, const float* v,
-    const float* alpha, const float* beta, const float* gamma,
-    float* output,
+    const io_type* q, const io_type* k, const io_type* v,
+    const io_type* alpha, const io_type* beta, const io_type* gamma,
+    io_type* output,
     int batch, int seq_len, int num_heads, int head_dim,
     int variant, float clip_threshold
 ) {
@@ -221,13 +222,13 @@ namespace ffi = xla::ffi;
 // Note: variant and clip_threshold passed as attributes from EXLA side
 ffi::Error fused_rla_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> q,       // [B, T, H, d]
-    ffi::Buffer<ffi::F32> k,       // [B, T, H, d]
-    ffi::Buffer<ffi::F32> v,       // [B, T, H, d]
-    ffi::Buffer<ffi::F32> alpha,   // [B, T, H]
-    ffi::Buffer<ffi::F32> beta,    // [B, T, H]
-    ffi::Buffer<ffi::F32> gamma,   // [B, T, H]
-    ffi::ResultBuffer<ffi::F32> output,  // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> q,       // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> k,       // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> v,       // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> alpha,   // [B, T, H]
+    ffi::Buffer<FFI_IO_TYPE> beta,    // [B, T, H]
+    ffi::Buffer<FFI_IO_TYPE> gamma,   // [B, T, H]
+    ffi::ResultBuffer<FFI_IO_TYPE> output,  // [B, T, H, d]
     int32_t variant,
     float clip_threshold
 ) {
@@ -243,13 +244,13 @@ ffi::Error fused_rla_scan_ffi_impl(
                       + 3 * head_dim * sizeof(float);
 
     fused_rla_scan_kernel<<<grid, block, smem_bytes, stream>>>(
-        reinterpret_cast<const float*>(q.untyped_data()),
-        reinterpret_cast<const float*>(k.untyped_data()),
-        reinterpret_cast<const float*>(v.untyped_data()),
-        reinterpret_cast<const float*>(alpha.untyped_data()),
-        reinterpret_cast<const float*>(beta.untyped_data()),
-        reinterpret_cast<const float*>(gamma.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(q.untyped_data()),
+        reinterpret_cast<const io_type*>(k.untyped_data()),
+        reinterpret_cast<const io_type*>(v.untyped_data()),
+        reinterpret_cast<const io_type*>(alpha.untyped_data()),
+        reinterpret_cast<const io_type*>(beta.untyped_data()),
+        reinterpret_cast<const io_type*>(gamma.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         seq_len, num_heads, head_dim,
         static_cast<int>(variant), clip_threshold
     );
@@ -266,18 +267,18 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_rla_scan, fused_rla_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // q
-        .Arg<ffi::Buffer<ffi::F32>>()   // k
-        .Arg<ffi::Buffer<ffi::F32>>()   // v
-        .Arg<ffi::Buffer<ffi::F32>>()   // alpha
-        .Arg<ffi::Buffer<ffi::F32>>()   // beta
-        .Arg<ffi::Buffer<ffi::F32>>()   // gamma
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // q
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // k
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // v
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // alpha
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // beta
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // gamma
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
         .Attr<int32_t>("variant")
         .Attr<float>("clip_threshold")
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_rla_scan_f32", "CUDA", fused_rla_scan);
+    "exla_fused_rla_scan_" PRECISION_SUFFIX, "CUDA", fused_rla_scan);
 
 #endif  // EXLA_FFI

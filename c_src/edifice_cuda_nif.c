@@ -236,6 +236,111 @@ typedef int (*minlstm_backward_launch_fn)(
     int batch, int seq_len, int hidden
 );
 
+/* P0 backward kernel launch wrappers — same concatenated-buffer pattern */
+
+/* ELU-GRU backward: same signature as mingru backward (z, c, h0, fwd, grad -> concat) */
+typedef int (*elu_gru_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* z, const float* c,
+    const float* h0, const float* forward_out,
+    const float* grad_output,
+    float* output_concat,
+    int batch, int seq_len, int hidden
+);
+
+/* Real-GRU backward: same signature as mingru backward */
+typedef int (*real_gru_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* z, const float* candidates,
+    const float* h0, const float* forward_out,
+    const float* grad_output,
+    float* output_concat,
+    int batch, int seq_len, int hidden
+);
+
+/* DiagLinear backward: same signature as linear_scan backward */
+typedef int (*diag_linear_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* a,
+    const float* h0, const float* forward_out,
+    const float* grad_output,
+    float* output_concat,
+    int batch, int seq_len, int hidden
+);
+
+/* LSTM backward: wx, R, h0, c0, fwd_out, grad -> concat(grad_wx, grad_h0, grad_c0) */
+typedef int (*lstm_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* wx, const float* R,
+    const float* h0, const float* c0,
+    const float* forward_out,
+    const float* grad_output,
+    float* output_concat,
+    int batch, int seq_len, int hidden
+);
+
+/* GRU backward: wx, R, h0, fwd_out, grad -> concat(grad_wx, grad_h0) */
+typedef int (*gru_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* wx, const float* R,
+    const float* h0,
+    const float* forward_out,
+    const float* grad_output,
+    float* output_concat,
+    int batch, int seq_len, int hidden
+);
+
+/* Phase 3 backward launch wrappers */
+typedef int (*liquid_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* tau, const float* activation,
+    const float* h0, const float* forward_out,
+    const float* grad_output, float* output_concat,
+    int batch, int seq_len, int hidden
+);
+
+typedef int (*delta_rule_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* q, const float* k, const float* v, const float* beta,
+    const float* forward_out, const float* grad_output,
+    float* output_concat,
+    int batch, int seq_len, int num_heads, int head_dim
+);
+
+typedef int (*gated_delta_net_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* q, const float* k, const float* v, const float* beta,
+    const float* alpha, const float* forward_out, const float* grad_output,
+    float* output_concat,
+    int batch, int seq_len, int num_heads, int head_dim
+);
+
+typedef int (*delta_product_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* q, const float* k, const float* v, const float* beta,
+    const float* forward_out, const float* grad_output,
+    float* output_concat,
+    int batch, int seq_len, int num_householder, int num_heads, int head_dim
+);
+
+typedef int (*slstm_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* wx, const float* R,
+    const float* h0, const float* c0,
+    const float* forward_out, const float* grad_output,
+    float* output_concat,
+    int batch, int seq_len, int hidden
+);
+
+typedef int (*selective_scan_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* x, const float* dt, const float* A,
+    const float* B, const float* C,
+    const float* grad_output,
+    float* output_concat,
+    int batch, int seq_len, int hidden, int state_size
+);
+
 /* Multi-layer block scan launch wrappers */
 typedef int (*mingru_block_launch_fn)(
     cudaStream_t stream,
@@ -284,14 +389,68 @@ static gsa_launch_fn             s_gsa_launch             = NULL;
 static linear_scan_backward_launch_fn s_linear_scan_backward_launch = NULL;
 static mingru_backward_launch_fn      s_mingru_backward_launch      = NULL;
 static minlstm_backward_launch_fn     s_minlstm_backward_launch     = NULL;
+static elu_gru_backward_launch_fn     s_elu_gru_backward_launch     = NULL;
+static real_gru_backward_launch_fn    s_real_gru_backward_launch    = NULL;
+static diag_linear_backward_launch_fn s_diag_linear_backward_launch = NULL;
+static lstm_backward_launch_fn        s_lstm_backward_launch        = NULL;
+static gru_backward_launch_fn         s_gru_backward_launch         = NULL;
+static liquid_backward_launch_fn          s_liquid_backward_launch          = NULL;
+static delta_rule_backward_launch_fn      s_delta_rule_backward_launch      = NULL;
+static gated_delta_net_backward_launch_fn s_gated_delta_net_backward_launch = NULL;
+static delta_product_backward_launch_fn   s_delta_product_backward_launch   = NULL;
+static slstm_backward_launch_fn           s_slstm_backward_launch           = NULL;
+static selective_scan_backward_launch_fn  s_selective_scan_backward_launch  = NULL;
 static mingru_block_launch_fn         s_mingru_block_launch         = NULL;
 static minlstm_block_launch_fn        s_minlstm_block_launch        = NULL;
 static cuda_malloc_fn    s_cuda_malloc    = NULL;
 static cuda_free_fn      s_cuda_free      = NULL;
 static cuda_device_synchronize_fn s_cuda_sync = NULL;
 
-static void* s_kernels_handle = NULL;
-static void* s_cudart_handle  = NULL;
+static void* s_kernels_handle      = NULL;
+static void* s_kernels_bf16_handle = NULL;
+static void* s_cudart_handle       = NULL;
+
+/* bf16 kernel launch pointers (from libedifice_cuda_kernels_bf16.so) */
+static mingru_launch_fn          s_mingru_bf16_launch          = NULL;
+static minlstm_launch_fn        s_minlstm_bf16_launch         = NULL;
+static scan_2input_launch_fn    s_elu_gru_bf16_launch         = NULL;
+static scan_2input_launch_fn    s_real_gru_bf16_launch        = NULL;
+static scan_2input_launch_fn    s_diag_linear_bf16_launch     = NULL;
+static scan_2input_launch_fn    s_liquid_bf16_launch          = NULL;
+static scan_2input_launch_fn    s_linear_bf16_launch          = NULL;
+static delta_net_launch_fn       s_delta_net_bf16_launch       = NULL;
+static gated_delta_net_launch_fn s_gated_delta_net_bf16_launch = NULL;
+static delta_product_launch_fn   s_delta_product_bf16_launch   = NULL;
+static slstm_launch_fn           s_slstm_bf16_launch           = NULL;
+static lstm_launch_fn            s_lstm_bf16_launch            = NULL;
+static gru_launch_fn             s_gru_bf16_launch             = NULL;
+static ttt_launch_fn             s_ttt_bf16_launch             = NULL;
+static selective_scan_launch_fn  s_selective_scan_bf16_launch  = NULL;
+static kda_launch_fn             s_kda_bf16_launch             = NULL;
+static rla_launch_fn             s_rla_bf16_launch             = NULL;
+static flash_attention_launch_fn s_flash_attention_bf16_launch = NULL;
+static laser_attention_launch_fn s_laser_attention_bf16_launch = NULL;
+static fox_attention_launch_fn   s_fox_attention_bf16_launch   = NULL;
+static reservoir_launch_fn       s_reservoir_bf16_launch       = NULL;
+static titans_launch_fn          s_titans_bf16_launch          = NULL;
+static miras_launch_fn           s_miras_bf16_launch           = NULL;
+static gsa_launch_fn             s_gsa_bf16_launch             = NULL;
+static linear_scan_backward_launch_fn s_linear_scan_backward_bf16_launch = NULL;
+static mingru_backward_launch_fn      s_mingru_backward_bf16_launch      = NULL;
+static minlstm_backward_launch_fn     s_minlstm_backward_bf16_launch     = NULL;
+static elu_gru_backward_launch_fn     s_elu_gru_backward_bf16_launch     = NULL;
+static real_gru_backward_launch_fn    s_real_gru_backward_bf16_launch    = NULL;
+static diag_linear_backward_launch_fn s_diag_linear_backward_bf16_launch = NULL;
+static lstm_backward_launch_fn        s_lstm_backward_bf16_launch        = NULL;
+static gru_backward_launch_fn         s_gru_backward_bf16_launch         = NULL;
+static liquid_backward_launch_fn          s_liquid_backward_bf16_launch          = NULL;
+static delta_rule_backward_launch_fn      s_delta_rule_backward_bf16_launch      = NULL;
+static gated_delta_net_backward_launch_fn s_gated_delta_net_backward_bf16_launch = NULL;
+static delta_product_backward_launch_fn   s_delta_product_backward_bf16_launch   = NULL;
+static slstm_backward_launch_fn           s_slstm_backward_bf16_launch           = NULL;
+static selective_scan_backward_launch_fn  s_selective_scan_backward_bf16_launch  = NULL;
+static mingru_block_launch_fn         s_mingru_block_bf16_launch         = NULL;
+static minlstm_block_launch_fn        s_minlstm_block_bf16_launch        = NULL;
 
 /* ========================================================================== */
 /* Helpers                                                                    */
@@ -374,26 +533,29 @@ static ERL_NIF_TERM nif_fused_mingru_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t gates_ptr, cand_ptr, h0_ptr;
-    int batch, seq_len, hidden;
-
-    if (!s_mingru_launch)
-        return make_error(env, "kernel library not loaded");
+    int batch, seq_len, hidden, dtype;
 
     if (!enif_get_uint64(env, argv[0], &gates_ptr) ||
         !enif_get_uint64(env, argv[1], &cand_ptr) ||
         !enif_get_uint64(env, argv[2], &h0_ptr) ||
         !enif_get_int(env, argv[3], &batch) ||
         !enif_get_int(env, argv[4], &seq_len) ||
-        !enif_get_int(env, argv[5], &hidden))
+        !enif_get_int(env, argv[5], &hidden) ||
+        !enif_get_int(env, argv[6], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    mingru_launch_fn launch = (dtype == 1) ? s_mingru_bf16_launch : s_mingru_launch;
+    if (!launch)
+        return make_error(env, "kernel library not loaded");
 
     if (batch <= 0 || seq_len <= 0 || hidden <= 0)
         return make_error(env, "dimensions must be positive");
 
     /* Allocate output buffer on GPU, wrapped in a GC-tracked resource */
-    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * hidden * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     /* Check if allocation succeeded */
@@ -415,7 +577,7 @@ static ERL_NIF_TERM nif_fused_mingru_scan(
     enif_get_uint64(env, tuple[1], &out_ptr);
 
     /* Launch the fused kernel on the default stream */
-    int launch_err = s_mingru_launch(
+    int launch_err = launch(
         NULL,  /* default stream */
         (const float*)(uintptr_t)gates_ptr,
         (const float*)(uintptr_t)cand_ptr,
@@ -451,10 +613,7 @@ static ERL_NIF_TERM nif_fused_minlstm_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t forget_ptr, input_ptr, cand_ptr, h0_ptr;
-    int batch, seq_len, hidden;
-
-    if (!s_minlstm_launch)
-        return make_error(env, "kernel library not loaded");
+    int batch, seq_len, hidden, dtype;
 
     if (!enif_get_uint64(env, argv[0], &forget_ptr) ||
         !enif_get_uint64(env, argv[1], &input_ptr) ||
@@ -462,15 +621,21 @@ static ERL_NIF_TERM nif_fused_minlstm_scan(
         !enif_get_uint64(env, argv[3], &h0_ptr) ||
         !enif_get_int(env, argv[4], &batch) ||
         !enif_get_int(env, argv[5], &seq_len) ||
-        !enif_get_int(env, argv[6], &hidden))
+        !enif_get_int(env, argv[6], &hidden) ||
+        !enif_get_int(env, argv[7], &dtype))
     {
         return enif_make_badarg(env);
     }
 
+    minlstm_launch_fn launch = (dtype == 1) ? s_minlstm_bf16_launch : s_minlstm_launch;
+    if (!launch)
+        return make_error(env, "kernel library not loaded");
+
     if (batch <= 0 || seq_len <= 0 || hidden <= 0)
         return make_error(env, "dimensions must be positive");
 
-    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * hidden * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -488,7 +653,7 @@ static ERL_NIF_TERM nif_fused_minlstm_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_minlstm_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)forget_ptr,
         (const float*)(uintptr_t)input_ptr,
@@ -521,7 +686,8 @@ static ERL_NIF_TERM nif_fused_minlstm_scan(
  */
 static ERL_NIF_TERM nif_fused_2input_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[],
-    scan_2input_launch_fn launch_fn, const char* kernel_name)
+    scan_2input_launch_fn launch_fn, const char* kernel_name,
+    size_t elem_size)
 {
     uint64_t in1_ptr, in2_ptr, h0_ptr;
     int batch, seq_len, hidden;
@@ -545,7 +711,7 @@ static ERL_NIF_TERM nif_fused_2input_scan(
     if (batch <= 0 || seq_len <= 0 || hidden <= 0)
         return make_error(env, "dimensions must be positive");
 
-    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
+    size_t out_bytes = (size_t)batch * seq_len * hidden * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -587,31 +753,51 @@ static ERL_NIF_TERM nif_fused_2input_scan(
 static ERL_NIF_TERM nif_fused_elu_gru_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    return nif_fused_2input_scan(env, argc, argv, s_elu_gru_launch, "elu_gru");
+    int dtype;
+    if (!enif_get_int(env, argv[6], &dtype)) return enif_make_badarg(env);
+    scan_2input_launch_fn launch = (dtype == 1) ? s_elu_gru_bf16_launch : s_elu_gru_launch;
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    return nif_fused_2input_scan(env, argc, argv, launch, "elu_gru", elem_size);
 }
 
 static ERL_NIF_TERM nif_fused_real_gru_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    return nif_fused_2input_scan(env, argc, argv, s_real_gru_launch, "real_gru");
+    int dtype;
+    if (!enif_get_int(env, argv[6], &dtype)) return enif_make_badarg(env);
+    scan_2input_launch_fn launch = (dtype == 1) ? s_real_gru_bf16_launch : s_real_gru_launch;
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    return nif_fused_2input_scan(env, argc, argv, launch, "real_gru", elem_size);
 }
 
 static ERL_NIF_TERM nif_fused_diag_linear_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    return nif_fused_2input_scan(env, argc, argv, s_diag_linear_launch, "diag_linear");
+    int dtype;
+    if (!enif_get_int(env, argv[6], &dtype)) return enif_make_badarg(env);
+    scan_2input_launch_fn launch = (dtype == 1) ? s_diag_linear_bf16_launch : s_diag_linear_launch;
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    return nif_fused_2input_scan(env, argc, argv, launch, "diag_linear", elem_size);
 }
 
 static ERL_NIF_TERM nif_fused_liquid_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    return nif_fused_2input_scan(env, argc, argv, s_liquid_launch, "liquid");
+    int dtype;
+    if (!enif_get_int(env, argv[6], &dtype)) return enif_make_badarg(env);
+    scan_2input_launch_fn launch = (dtype == 1) ? s_liquid_bf16_launch : s_liquid_launch;
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    return nif_fused_2input_scan(env, argc, argv, launch, "liquid", elem_size);
 }
 
 static ERL_NIF_TERM nif_fused_linear_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    return nif_fused_2input_scan(env, argc, argv, s_linear_launch, "linear");
+    int dtype;
+    if (!enif_get_int(env, argv[6], &dtype)) return enif_make_badarg(env);
+    scan_2input_launch_fn launch = (dtype == 1) ? s_linear_bf16_launch : s_linear_launch;
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    return nif_fused_2input_scan(env, argc, argv, launch, "linear", elem_size);
 }
 
 /* ========================================================================== */
@@ -627,10 +813,7 @@ static ERL_NIF_TERM nif_fused_delta_net_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t q_ptr, k_ptr, v_ptr, beta_ptr;
-    int batch, seq_len, num_heads, head_dim;
-
-    if (!s_delta_net_launch)
-        return make_error(env, "delta_net kernel not loaded");
+    int batch, seq_len, num_heads, head_dim, dtype;
 
     if (!enif_get_uint64(env, argv[0], &q_ptr) ||
         !enif_get_uint64(env, argv[1], &k_ptr) ||
@@ -639,15 +822,21 @@ static ERL_NIF_TERM nif_fused_delta_net_scan(
         !enif_get_int(env, argv[4], &batch) ||
         !enif_get_int(env, argv[5], &seq_len) ||
         !enif_get_int(env, argv[6], &num_heads) ||
-        !enif_get_int(env, argv[7], &head_dim))
+        !enif_get_int(env, argv[7], &head_dim) ||
+        !enif_get_int(env, argv[8], &dtype))
     {
         return enif_make_badarg(env);
     }
 
+    delta_net_launch_fn launch = (dtype == 1) ? s_delta_net_bf16_launch : s_delta_net_launch;
+    if (!launch)
+        return make_error(env, "delta_net kernel not loaded");
+
     if (batch <= 0 || seq_len <= 0 || num_heads <= 0 || head_dim <= 0)
         return make_error(env, "dimensions must be positive");
 
-    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -665,7 +854,7 @@ static ERL_NIF_TERM nif_fused_delta_net_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_delta_net_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)q_ptr,
         (const float*)(uintptr_t)k_ptr,
@@ -700,10 +889,7 @@ static ERL_NIF_TERM nif_fused_gated_delta_net_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t q_ptr, k_ptr, v_ptr, beta_ptr, alpha_ptr;
-    int batch, seq_len, num_heads, head_dim;
-
-    if (!s_gated_delta_net_launch)
-        return make_error(env, "gated_delta_net kernel not loaded");
+    int batch, seq_len, num_heads, head_dim, dtype;
 
     if (!enif_get_uint64(env, argv[0], &q_ptr) ||
         !enif_get_uint64(env, argv[1], &k_ptr) ||
@@ -713,15 +899,21 @@ static ERL_NIF_TERM nif_fused_gated_delta_net_scan(
         !enif_get_int(env, argv[5], &batch) ||
         !enif_get_int(env, argv[6], &seq_len) ||
         !enif_get_int(env, argv[7], &num_heads) ||
-        !enif_get_int(env, argv[8], &head_dim))
+        !enif_get_int(env, argv[8], &head_dim) ||
+        !enif_get_int(env, argv[9], &dtype))
     {
         return enif_make_badarg(env);
     }
 
+    gated_delta_net_launch_fn launch = (dtype == 1) ? s_gated_delta_net_bf16_launch : s_gated_delta_net_launch;
+    if (!launch)
+        return make_error(env, "gated_delta_net kernel not loaded");
+
     if (batch <= 0 || seq_len <= 0 || num_heads <= 0 || head_dim <= 0)
         return make_error(env, "dimensions must be positive");
 
-    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -739,7 +931,7 @@ static ERL_NIF_TERM nif_fused_gated_delta_net_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_gated_delta_net_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)q_ptr,
         (const float*)(uintptr_t)k_ptr,
@@ -775,10 +967,7 @@ static ERL_NIF_TERM nif_fused_delta_product_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t q_ptr, k_ptr, v_ptr, beta_ptr;
-    int batch, seq_len, num_householder, num_heads, head_dim;
-
-    if (!s_delta_product_launch)
-        return make_error(env, "delta_product kernel not loaded");
+    int batch, seq_len, num_householder, num_heads, head_dim, dtype;
 
     if (!enif_get_uint64(env, argv[0], &q_ptr) ||
         !enif_get_uint64(env, argv[1], &k_ptr) ||
@@ -788,16 +977,22 @@ static ERL_NIF_TERM nif_fused_delta_product_scan(
         !enif_get_int(env, argv[5], &seq_len) ||
         !enif_get_int(env, argv[6], &num_householder) ||
         !enif_get_int(env, argv[7], &num_heads) ||
-        !enif_get_int(env, argv[8], &head_dim))
+        !enif_get_int(env, argv[8], &head_dim) ||
+        !enif_get_int(env, argv[9], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    delta_product_launch_fn launch = (dtype == 1) ? s_delta_product_bf16_launch : s_delta_product_launch;
+    if (!launch)
+        return make_error(env, "delta_product kernel not loaded");
 
     if (batch <= 0 || seq_len <= 0 || num_householder <= 0 || num_heads <= 0 || head_dim <= 0)
         return make_error(env, "dimensions must be positive");
 
     /* Output is [B, T, H, d] */
-    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -815,7 +1010,7 @@ static ERL_NIF_TERM nif_fused_delta_product_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_delta_product_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)q_ptr,
         (const float*)(uintptr_t)k_ptr,
@@ -849,10 +1044,7 @@ static ERL_NIF_TERM nif_fused_slstm_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t wx_ptr, r_ptr, h0_ptr, c0_ptr;
-    int batch, seq_len, hidden;
-
-    if (!s_slstm_launch)
-        return make_error(env, "slstm kernel not loaded");
+    int batch, seq_len, hidden, dtype;
 
     if (!enif_get_uint64(env, argv[0], &wx_ptr) ||
         !enif_get_uint64(env, argv[1], &r_ptr) ||
@@ -860,16 +1052,22 @@ static ERL_NIF_TERM nif_fused_slstm_scan(
         !enif_get_uint64(env, argv[3], &c0_ptr) ||
         !enif_get_int(env, argv[4], &batch) ||
         !enif_get_int(env, argv[5], &seq_len) ||
-        !enif_get_int(env, argv[6], &hidden))
+        !enif_get_int(env, argv[6], &hidden) ||
+        !enif_get_int(env, argv[7], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    slstm_launch_fn launch = (dtype == 1) ? s_slstm_bf16_launch : s_slstm_launch;
+    if (!launch)
+        return make_error(env, "slstm kernel not loaded");
 
     if (batch <= 0 || seq_len <= 0 || hidden <= 0)
         return make_error(env, "dimensions must be positive");
 
     /* Output: [B, T, H] */
-    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * hidden * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -887,7 +1085,7 @@ static ERL_NIF_TERM nif_fused_slstm_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_slstm_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)wx_ptr,
         (const float*)(uintptr_t)r_ptr,
@@ -921,10 +1119,7 @@ static ERL_NIF_TERM nif_fused_lstm_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t wx_ptr, r_ptr, h0_ptr, c0_ptr;
-    int batch, seq_len, hidden;
-
-    if (!s_lstm_launch)
-        return make_error(env, "lstm kernel not loaded");
+    int batch, seq_len, hidden, dtype;
 
     if (!enif_get_uint64(env, argv[0], &wx_ptr) ||
         !enif_get_uint64(env, argv[1], &r_ptr) ||
@@ -932,16 +1127,22 @@ static ERL_NIF_TERM nif_fused_lstm_scan(
         !enif_get_uint64(env, argv[3], &c0_ptr) ||
         !enif_get_int(env, argv[4], &batch) ||
         !enif_get_int(env, argv[5], &seq_len) ||
-        !enif_get_int(env, argv[6], &hidden))
+        !enif_get_int(env, argv[6], &hidden) ||
+        !enif_get_int(env, argv[7], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    lstm_launch_fn launch = (dtype == 1) ? s_lstm_bf16_launch : s_lstm_launch;
+    if (!launch)
+        return make_error(env, "lstm kernel not loaded");
 
     if (batch <= 0 || seq_len <= 0 || hidden <= 0)
         return make_error(env, "dimensions must be positive");
 
     /* Output: [B, T, H] */
-    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * hidden * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -959,7 +1160,7 @@ static ERL_NIF_TERM nif_fused_lstm_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_lstm_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)wx_ptr,
         (const float*)(uintptr_t)r_ptr,
@@ -993,26 +1194,29 @@ static ERL_NIF_TERM nif_fused_gru_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t wx_ptr, r_ptr, h0_ptr;
-    int batch, seq_len, hidden;
-
-    if (!s_gru_launch)
-        return make_error(env, "gru kernel not loaded");
+    int batch, seq_len, hidden, dtype;
 
     if (!enif_get_uint64(env, argv[0], &wx_ptr) ||
         !enif_get_uint64(env, argv[1], &r_ptr) ||
         !enif_get_uint64(env, argv[2], &h0_ptr) ||
         !enif_get_int(env, argv[3], &batch) ||
         !enif_get_int(env, argv[4], &seq_len) ||
-        !enif_get_int(env, argv[5], &hidden))
+        !enif_get_int(env, argv[5], &hidden) ||
+        !enif_get_int(env, argv[6], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    gru_launch_fn launch = (dtype == 1) ? s_gru_bf16_launch : s_gru_launch;
+    if (!launch)
+        return make_error(env, "gru kernel not loaded");
 
     if (batch <= 0 || seq_len <= 0 || hidden <= 0)
         return make_error(env, "dimensions must be positive");
 
     /* Output: [B, T, H] */
-    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * hidden * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1030,7 +1234,7 @@ static ERL_NIF_TERM nif_fused_gru_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_gru_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)wx_ptr,
         (const float*)(uintptr_t)r_ptr,
@@ -1064,10 +1268,7 @@ static ERL_NIF_TERM nif_fused_ttt_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t q_ptr, k_ptr, v_ptr, eta_ptr, w0_ptr, lng_ptr, lnb_ptr;
-    int batch, seq_len, inner_size;
-
-    if (!s_ttt_launch)
-        return make_error(env, "ttt kernel not loaded");
+    int batch, seq_len, inner_size, dtype;
 
     if (!enif_get_uint64(env, argv[0], &q_ptr) ||
         !enif_get_uint64(env, argv[1], &k_ptr) ||
@@ -1078,16 +1279,22 @@ static ERL_NIF_TERM nif_fused_ttt_scan(
         !enif_get_uint64(env, argv[6], &lnb_ptr) ||
         !enif_get_int(env, argv[7], &batch) ||
         !enif_get_int(env, argv[8], &seq_len) ||
-        !enif_get_int(env, argv[9], &inner_size))
+        !enif_get_int(env, argv[9], &inner_size) ||
+        !enif_get_int(env, argv[10], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    ttt_launch_fn launch = (dtype == 1) ? s_ttt_bf16_launch : s_ttt_launch;
+    if (!launch)
+        return make_error(env, "ttt kernel not loaded");
 
     if (batch <= 0 || seq_len <= 0 || inner_size <= 0)
         return make_error(env, "dimensions must be positive");
 
     /* Output: [B, T, D] */
-    size_t out_bytes = (size_t)batch * seq_len * inner_size * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * inner_size * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1105,7 +1312,7 @@ static ERL_NIF_TERM nif_fused_ttt_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_ttt_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)q_ptr,
         (const float*)(uintptr_t)k_ptr,
@@ -1143,10 +1350,7 @@ static ERL_NIF_TERM nif_fused_selective_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t x_ptr, dt_ptr, a_ptr, b_ptr, c_ptr;
-    int batch, seq_len, hidden, state;
-
-    if (!s_selective_scan_launch)
-        return make_error(env, "selective_scan kernel not loaded");
+    int batch, seq_len, hidden, state, dtype;
 
     if (!enif_get_uint64(env, argv[0], &x_ptr) ||
         !enif_get_uint64(env, argv[1], &dt_ptr) ||
@@ -1156,16 +1360,22 @@ static ERL_NIF_TERM nif_fused_selective_scan(
         !enif_get_int(env, argv[5], &batch) ||
         !enif_get_int(env, argv[6], &seq_len) ||
         !enif_get_int(env, argv[7], &hidden) ||
-        !enif_get_int(env, argv[8], &state))
+        !enif_get_int(env, argv[8], &state) ||
+        !enif_get_int(env, argv[9], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    selective_scan_launch_fn launch = (dtype == 1) ? s_selective_scan_bf16_launch : s_selective_scan_launch;
+    if (!launch)
+        return make_error(env, "selective_scan kernel not loaded");
 
     if (batch <= 0 || seq_len <= 0 || hidden <= 0 || state <= 0)
         return make_error(env, "dimensions must be positive");
 
     /* Output: [B, T, H] */
-    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * hidden * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1183,7 +1393,7 @@ static ERL_NIF_TERM nif_fused_selective_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_selective_scan_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)x_ptr,
         (const float*)(uintptr_t)dt_ptr,
@@ -1219,10 +1429,7 @@ static ERL_NIF_TERM nif_fused_kda_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t q_ptr, k_ptr, v_ptr, alpha_ptr, beta_ptr;
-    int batch, seq_len, num_heads, head_dim;
-
-    if (!s_kda_launch)
-        return make_error(env, "kda kernel not loaded");
+    int batch, seq_len, num_heads, head_dim, dtype;
 
     if (!enif_get_uint64(env, argv[0], &q_ptr) ||
         !enif_get_uint64(env, argv[1], &k_ptr) ||
@@ -1232,16 +1439,22 @@ static ERL_NIF_TERM nif_fused_kda_scan(
         !enif_get_int(env, argv[5], &batch) ||
         !enif_get_int(env, argv[6], &seq_len) ||
         !enif_get_int(env, argv[7], &num_heads) ||
-        !enif_get_int(env, argv[8], &head_dim))
+        !enif_get_int(env, argv[8], &head_dim) ||
+        !enif_get_int(env, argv[9], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    kda_launch_fn launch = (dtype == 1) ? s_kda_bf16_launch : s_kda_launch;
+    if (!launch)
+        return make_error(env, "kda kernel not loaded");
 
     if (batch <= 0 || seq_len <= 0 || num_heads <= 0 || head_dim <= 0)
         return make_error(env, "dimensions must be positive");
 
     /* Output: [B, T, H, d] */
-    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1259,7 +1472,7 @@ static ERL_NIF_TERM nif_fused_kda_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_kda_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)q_ptr,
         (const float*)(uintptr_t)k_ptr,
@@ -1298,11 +1511,8 @@ static ERL_NIF_TERM nif_fused_rla_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t q_ptr, k_ptr, v_ptr, alpha_ptr, beta_ptr, gamma_ptr;
-    int batch, seq_len, num_heads, head_dim, variant;
+    int batch, seq_len, num_heads, head_dim, variant, dtype;
     double clip_d;
-
-    if (!s_rla_launch)
-        return make_error(env, "rla kernel not loaded");
 
     if (!enif_get_uint64(env, argv[0], &q_ptr) ||
         !enif_get_uint64(env, argv[1], &k_ptr) ||
@@ -1315,10 +1525,15 @@ static ERL_NIF_TERM nif_fused_rla_scan(
         !enif_get_int(env, argv[8], &num_heads) ||
         !enif_get_int(env, argv[9], &head_dim) ||
         !enif_get_int(env, argv[10], &variant) ||
-        !enif_get_double(env, argv[11], &clip_d))
+        !enif_get_double(env, argv[11], &clip_d) ||
+        !enif_get_int(env, argv[12], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    rla_launch_fn launch = (dtype == 1) ? s_rla_bf16_launch : s_rla_launch;
+    if (!launch)
+        return make_error(env, "rla kernel not loaded");
 
     if (batch <= 0 || seq_len <= 0 || num_heads <= 0 || head_dim <= 0)
         return make_error(env, "dimensions must be positive");
@@ -1326,7 +1541,8 @@ static ERL_NIF_TERM nif_fused_rla_scan(
     float clip_threshold = (float)clip_d;
 
     /* Output: [B, T, H, d] */
-    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1344,7 +1560,7 @@ static ERL_NIF_TERM nif_fused_rla_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_rla_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)q_ptr,
         (const float*)(uintptr_t)k_ptr,
@@ -1384,10 +1600,7 @@ static ERL_NIF_TERM nif_fused_flash_attention(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t q_ptr, k_ptr, v_ptr;
-    int batch, num_heads, seq_len, head_dim, causal;
-
-    if (!s_flash_attention_launch)
-        return make_error(env, "flash_attention kernel not loaded");
+    int batch, num_heads, seq_len, head_dim, causal, dtype;
 
     if (!enif_get_uint64(env, argv[0], &q_ptr) ||
         !enif_get_uint64(env, argv[1], &k_ptr) ||
@@ -1396,15 +1609,21 @@ static ERL_NIF_TERM nif_fused_flash_attention(
         !enif_get_int(env, argv[4], &num_heads) ||
         !enif_get_int(env, argv[5], &seq_len) ||
         !enif_get_int(env, argv[6], &head_dim) ||
-        !enif_get_int(env, argv[7], &causal))
+        !enif_get_int(env, argv[7], &causal) ||
+        !enif_get_int(env, argv[8], &dtype))
     {
         return enif_make_badarg(env);
     }
 
+    flash_attention_launch_fn launch = (dtype == 1) ? s_flash_attention_bf16_launch : s_flash_attention_launch;
+    if (!launch)
+        return make_error(env, "flash_attention kernel not loaded");
+
     if (batch <= 0 || num_heads <= 0 || seq_len <= 0 || head_dim <= 0)
         return make_error(env, "dimensions must be positive");
 
-    size_t out_bytes = (size_t)batch * num_heads * seq_len * head_dim * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * num_heads * seq_len * head_dim * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1422,7 +1641,7 @@ static ERL_NIF_TERM nif_fused_flash_attention(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_flash_attention_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)q_ptr,
         (const float*)(uintptr_t)k_ptr,
@@ -1454,10 +1673,7 @@ static ERL_NIF_TERM nif_fused_laser_attention(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t q_ptr, k_ptr, v_ptr, vmax_ptr;
-    int batch, num_heads, seq_len, head_dim, causal;
-
-    if (!s_laser_attention_launch)
-        return make_error(env, "laser_attention kernel not loaded");
+    int batch, num_heads, seq_len, head_dim, causal, dtype;
 
     if (!enif_get_uint64(env, argv[0], &q_ptr) ||
         !enif_get_uint64(env, argv[1], &k_ptr) ||
@@ -1467,15 +1683,21 @@ static ERL_NIF_TERM nif_fused_laser_attention(
         !enif_get_int(env, argv[5], &num_heads) ||
         !enif_get_int(env, argv[6], &seq_len) ||
         !enif_get_int(env, argv[7], &head_dim) ||
-        !enif_get_int(env, argv[8], &causal))
+        !enif_get_int(env, argv[8], &causal) ||
+        !enif_get_int(env, argv[9], &dtype))
     {
         return enif_make_badarg(env);
     }
 
+    laser_attention_launch_fn launch = (dtype == 1) ? s_laser_attention_bf16_launch : s_laser_attention_launch;
+    if (!launch)
+        return make_error(env, "laser_attention kernel not loaded");
+
     if (batch <= 0 || num_heads <= 0 || seq_len <= 0 || head_dim <= 0)
         return make_error(env, "dimensions must be positive");
 
-    size_t out_bytes = (size_t)batch * num_heads * seq_len * head_dim * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * num_heads * seq_len * head_dim * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1493,7 +1715,7 @@ static ERL_NIF_TERM nif_fused_laser_attention(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_laser_attention_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)q_ptr,
         (const float*)(uintptr_t)k_ptr,
@@ -1526,10 +1748,7 @@ static ERL_NIF_TERM nif_fused_fox_attention(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t q_ptr, k_ptr, v_ptr, cs_ptr;
-    int batch, num_heads, seq_len, head_dim;
-
-    if (!s_fox_attention_launch)
-        return make_error(env, "fox_attention kernel not loaded");
+    int batch, num_heads, seq_len, head_dim, dtype;
 
     if (!enif_get_uint64(env, argv[0], &q_ptr) ||
         !enif_get_uint64(env, argv[1], &k_ptr) ||
@@ -1538,15 +1757,21 @@ static ERL_NIF_TERM nif_fused_fox_attention(
         !enif_get_int(env, argv[4], &batch) ||
         !enif_get_int(env, argv[5], &num_heads) ||
         !enif_get_int(env, argv[6], &seq_len) ||
-        !enif_get_int(env, argv[7], &head_dim))
+        !enif_get_int(env, argv[7], &head_dim) ||
+        !enif_get_int(env, argv[8], &dtype))
     {
         return enif_make_badarg(env);
     }
 
+    fox_attention_launch_fn launch = (dtype == 1) ? s_fox_attention_bf16_launch : s_fox_attention_launch;
+    if (!launch)
+        return make_error(env, "fox_attention kernel not loaded");
+
     if (batch <= 0 || num_heads <= 0 || seq_len <= 0 || head_dim <= 0)
         return make_error(env, "dimensions must be positive");
 
-    size_t out_bytes = (size_t)batch * num_heads * seq_len * head_dim * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * num_heads * seq_len * head_dim * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1564,7 +1789,7 @@ static ERL_NIF_TERM nif_fused_fox_attention(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_fox_attention_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)q_ptr,
         (const float*)(uintptr_t)k_ptr,
@@ -1591,11 +1816,8 @@ static ERL_NIF_TERM nif_fused_reservoir_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t wx_ptr, wres_ptr, h0_ptr;
-    int batch, seq_len, hidden;
+    int batch, seq_len, hidden, dtype;
     double leak_rate_d;
-
-    if (!s_reservoir_launch)
-        return make_error(env, "reservoir kernel not loaded");
 
     if (!enif_get_uint64(env, argv[0], &wx_ptr) ||
         !enif_get_uint64(env, argv[1], &wres_ptr) ||
@@ -1603,10 +1825,15 @@ static ERL_NIF_TERM nif_fused_reservoir_scan(
         !enif_get_int(env, argv[3], &batch) ||
         !enif_get_int(env, argv[4], &seq_len) ||
         !enif_get_int(env, argv[5], &hidden) ||
-        !enif_get_double(env, argv[6], &leak_rate_d))
+        !enif_get_double(env, argv[6], &leak_rate_d) ||
+        !enif_get_int(env, argv[7], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    reservoir_launch_fn launch = (dtype == 1) ? s_reservoir_bf16_launch : s_reservoir_launch;
+    if (!launch)
+        return make_error(env, "reservoir kernel not loaded");
 
     float leak_rate = (float)leak_rate_d;
 
@@ -1614,7 +1841,8 @@ static ERL_NIF_TERM nif_fused_reservoir_scan(
         return make_error(env, "dimensions must be positive");
 
     /* Output: [batch, hidden] — final hidden state only */
-    size_t out_bytes = (size_t)batch * hidden * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * hidden * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1631,7 +1859,7 @@ static ERL_NIF_TERM nif_fused_reservoir_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_reservoir_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)wx_ptr,
         (const float*)(uintptr_t)wres_ptr,
@@ -1655,27 +1883,30 @@ static ERL_NIF_TERM nif_fused_titans_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t combined_ptr;
-    int batch, seq_len, mem_size;
+    int batch, seq_len, mem_size, dtype;
     double momentum_d;
-
-    if (!s_titans_launch)
-        return make_error(env, "titans kernel not loaded");
 
     if (!enif_get_uint64(env, argv[0], &combined_ptr) ||
         !enif_get_int(env, argv[1], &batch) ||
         !enif_get_int(env, argv[2], &seq_len) ||
         !enif_get_int(env, argv[3], &mem_size) ||
-        !enif_get_double(env, argv[4], &momentum_d))
+        !enif_get_double(env, argv[4], &momentum_d) ||
+        !enif_get_int(env, argv[5], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    titans_launch_fn launch = (dtype == 1) ? s_titans_bf16_launch : s_titans_launch;
+    if (!launch)
+        return make_error(env, "titans kernel not loaded");
 
     float momentum = (float)momentum_d;
 
     if (batch <= 0 || seq_len <= 0 || mem_size <= 0)
         return make_error(env, "dimensions must be positive");
 
-    size_t out_bytes = (size_t)batch * seq_len * mem_size * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * mem_size * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1692,7 +1923,7 @@ static ERL_NIF_TERM nif_fused_titans_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_titans_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)combined_ptr,
         (float*)(uintptr_t)out_ptr,
@@ -1714,27 +1945,30 @@ static ERL_NIF_TERM nif_fused_miras_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t combined_ptr;
-    int batch, seq_len, mem_size;
+    int batch, seq_len, mem_size, dtype;
     double momentum_d;
-
-    if (!s_miras_launch)
-        return make_error(env, "miras kernel not loaded");
 
     if (!enif_get_uint64(env, argv[0], &combined_ptr) ||
         !enif_get_int(env, argv[1], &batch) ||
         !enif_get_int(env, argv[2], &seq_len) ||
         !enif_get_int(env, argv[3], &mem_size) ||
-        !enif_get_double(env, argv[4], &momentum_d))
+        !enif_get_double(env, argv[4], &momentum_d) ||
+        !enif_get_int(env, argv[5], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    miras_launch_fn launch = (dtype == 1) ? s_miras_bf16_launch : s_miras_launch;
+    if (!launch)
+        return make_error(env, "miras kernel not loaded");
 
     float momentum = (float)momentum_d;
 
     if (batch <= 0 || seq_len <= 0 || mem_size <= 0)
         return make_error(env, "dimensions must be positive");
 
-    size_t out_bytes = (size_t)batch * seq_len * mem_size * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * mem_size * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1751,7 +1985,7 @@ static ERL_NIF_TERM nif_fused_miras_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_miras_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)combined_ptr,
         (float*)(uintptr_t)out_ptr,
@@ -1773,10 +2007,7 @@ static ERL_NIF_TERM nif_fused_gsa_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t q_ptr, ks_ptr, v_ptr, alpha_ptr;
-    int batch, seq_len, num_heads, num_slots, head_dim;
-
-    if (!s_gsa_launch)
-        return make_error(env, "gsa kernel not loaded");
+    int batch, seq_len, num_heads, num_slots, head_dim, dtype;
 
     if (!enif_get_uint64(env, argv[0], &q_ptr) ||
         !enif_get_uint64(env, argv[1], &ks_ptr) ||
@@ -1786,15 +2017,21 @@ static ERL_NIF_TERM nif_fused_gsa_scan(
         !enif_get_int(env, argv[5], &seq_len) ||
         !enif_get_int(env, argv[6], &num_heads) ||
         !enif_get_int(env, argv[7], &num_slots) ||
-        !enif_get_int(env, argv[8], &head_dim))
+        !enif_get_int(env, argv[8], &head_dim) ||
+        !enif_get_int(env, argv[9], &dtype))
     {
         return enif_make_badarg(env);
     }
 
+    gsa_launch_fn launch = (dtype == 1) ? s_gsa_bf16_launch : s_gsa_launch;
+    if (!launch)
+        return make_error(env, "gsa kernel not loaded");
+
     if (batch <= 0 || seq_len <= 0 || num_heads <= 0 || num_slots <= 0 || head_dim <= 0)
         return make_error(env, "dimensions must be positive");
 
-    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * num_heads * head_dim * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1811,7 +2048,7 @@ static ERL_NIF_TERM nif_fused_gsa_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_gsa_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)q_ptr,
         (const float*)(uintptr_t)ks_ptr,
@@ -1846,10 +2083,7 @@ static ERL_NIF_TERM nif_fused_linear_scan_backward(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t a_ptr, h0_ptr, fwd_ptr, grad_ptr;
-    int batch, seq_len, hidden;
-
-    if (!s_linear_scan_backward_launch)
-        return make_error(env, "linear_scan_backward kernel not loaded");
+    int batch, seq_len, hidden, dtype;
 
     if (!enif_get_uint64(env, argv[0], &a_ptr) ||
         !enif_get_uint64(env, argv[1], &h0_ptr) ||
@@ -1857,17 +2091,23 @@ static ERL_NIF_TERM nif_fused_linear_scan_backward(
         !enif_get_uint64(env, argv[3], &grad_ptr) ||
         !enif_get_int(env, argv[4], &batch) ||
         !enif_get_int(env, argv[5], &seq_len) ||
-        !enif_get_int(env, argv[6], &hidden))
+        !enif_get_int(env, argv[6], &hidden) ||
+        !enif_get_int(env, argv[7], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    linear_scan_backward_launch_fn launch = (dtype == 1) ? s_linear_scan_backward_bf16_launch : s_linear_scan_backward_launch;
+    if (!launch)
+        return make_error(env, "linear_scan_backward kernel not loaded");
 
     if (batch <= 0 || seq_len <= 0 || hidden <= 0)
         return make_error(env, "dimensions must be positive");
 
     /* Output: grad_a [B*T*H] + grad_b [B*T*H] + grad_h0 [B*H] */
+    size_t elem_size = (dtype == 1) ? 2 : 4;
     size_t bth = (size_t)batch * seq_len * hidden;
-    size_t out_bytes = (2 * bth + (size_t)batch * hidden) * sizeof(float);
+    size_t out_bytes = (2 * bth + (size_t)batch * hidden) * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1883,7 +2123,7 @@ static ERL_NIF_TERM nif_fused_linear_scan_backward(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_linear_scan_backward_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)a_ptr,
         (const float*)(uintptr_t)h0_ptr,
@@ -1914,10 +2154,7 @@ static ERL_NIF_TERM nif_fused_mingru_scan_backward(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t z_ptr, cand_ptr, h0_ptr, fwd_ptr, grad_ptr;
-    int batch, seq_len, hidden;
-
-    if (!s_mingru_backward_launch)
-        return make_error(env, "mingru_scan_backward kernel not loaded");
+    int batch, seq_len, hidden, dtype;
 
     if (!enif_get_uint64(env, argv[0], &z_ptr) ||
         !enif_get_uint64(env, argv[1], &cand_ptr) ||
@@ -1926,17 +2163,23 @@ static ERL_NIF_TERM nif_fused_mingru_scan_backward(
         !enif_get_uint64(env, argv[4], &grad_ptr) ||
         !enif_get_int(env, argv[5], &batch) ||
         !enif_get_int(env, argv[6], &seq_len) ||
-        !enif_get_int(env, argv[7], &hidden))
+        !enif_get_int(env, argv[7], &hidden) ||
+        !enif_get_int(env, argv[8], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    mingru_backward_launch_fn launch = (dtype == 1) ? s_mingru_backward_bf16_launch : s_mingru_backward_launch;
+    if (!launch)
+        return make_error(env, "mingru_scan_backward kernel not loaded");
 
     if (batch <= 0 || seq_len <= 0 || hidden <= 0)
         return make_error(env, "dimensions must be positive");
 
     /* Output: grad_z [B*T*H] + grad_cand [B*T*H] + grad_h0 [B*H] */
+    size_t elem_size = (dtype == 1) ? 2 : 4;
     size_t bth = (size_t)batch * seq_len * hidden;
-    size_t out_bytes = (2 * bth + (size_t)batch * hidden) * sizeof(float);
+    size_t out_bytes = (2 * bth + (size_t)batch * hidden) * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -1952,7 +2195,7 @@ static ERL_NIF_TERM nif_fused_mingru_scan_backward(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_mingru_backward_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)z_ptr,
         (const float*)(uintptr_t)cand_ptr,
@@ -1984,10 +2227,7 @@ static ERL_NIF_TERM nif_fused_minlstm_scan_backward(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t f_ptr, i_ptr, cand_ptr, h0_ptr, fwd_ptr, grad_ptr;
-    int batch, seq_len, hidden;
-
-    if (!s_minlstm_backward_launch)
-        return make_error(env, "minlstm_scan_backward kernel not loaded");
+    int batch, seq_len, hidden, dtype;
 
     if (!enif_get_uint64(env, argv[0], &f_ptr) ||
         !enif_get_uint64(env, argv[1], &i_ptr) ||
@@ -1997,17 +2237,23 @@ static ERL_NIF_TERM nif_fused_minlstm_scan_backward(
         !enif_get_uint64(env, argv[5], &grad_ptr) ||
         !enif_get_int(env, argv[6], &batch) ||
         !enif_get_int(env, argv[7], &seq_len) ||
-        !enif_get_int(env, argv[8], &hidden))
+        !enif_get_int(env, argv[8], &hidden) ||
+        !enif_get_int(env, argv[9], &dtype))
     {
         return enif_make_badarg(env);
     }
+
+    minlstm_backward_launch_fn launch = (dtype == 1) ? s_minlstm_backward_bf16_launch : s_minlstm_backward_launch;
+    if (!launch)
+        return make_error(env, "minlstm_scan_backward kernel not loaded");
 
     if (batch <= 0 || seq_len <= 0 || hidden <= 0)
         return make_error(env, "dimensions must be positive");
 
     /* Output: grad_f [B*T*H] + grad_i [B*T*H] + grad_cand [B*T*H] + grad_h0 [B*H] */
+    size_t elem_size = (dtype == 1) ? 2 : 4;
     size_t bth = (size_t)batch * seq_len * hidden;
-    size_t out_bytes = (3 * bth + (size_t)batch * hidden) * sizeof(float);
+    size_t out_bytes = (3 * bth + (size_t)batch * hidden) * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -2023,7 +2269,7 @@ static ERL_NIF_TERM nif_fused_minlstm_scan_backward(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_minlstm_backward_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)f_ptr,
         (const float*)(uintptr_t)i_ptr,
@@ -2046,6 +2292,377 @@ static ERL_NIF_TERM nif_fused_minlstm_scan_backward(
 }
 
 /* ========================================================================== */
+/* NIF: fused_elu_gru_scan_backward                                           */
+/* ========================================================================== */
+
+/*
+ * fused_elu_gru_scan_backward(z_ptr, c_ptr, h0_ptr, fwd_ptr, grad_ptr,
+ *                              batch, seq_len, hidden)
+ *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
+ *
+ * Output buffer layout: [grad_z (B*T*H) | grad_c (B*T*H) | grad_h0 (B*H)] floats
+ */
+static ERL_NIF_TERM nif_fused_elu_gru_scan_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t z_ptr, c_ptr, h0_ptr, fwd_ptr, grad_ptr;
+    int batch, seq_len, hidden, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &z_ptr) ||
+        !enif_get_uint64(env, argv[1], &c_ptr) ||
+        !enif_get_uint64(env, argv[2], &h0_ptr) ||
+        !enif_get_uint64(env, argv[3], &fwd_ptr) ||
+        !enif_get_uint64(env, argv[4], &grad_ptr) ||
+        !enif_get_int(env, argv[5], &batch) ||
+        !enif_get_int(env, argv[6], &seq_len) ||
+        !enif_get_int(env, argv[7], &hidden) ||
+        !enif_get_int(env, argv[8], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    elu_gru_backward_launch_fn launch = (dtype == 1) ? s_elu_gru_backward_bf16_launch : s_elu_gru_backward_launch;
+    if (!launch)
+        return make_error(env, "elu_gru_scan_backward kernel not loaded");
+
+    if (batch <= 0 || seq_len <= 0 || hidden <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t bth = (size_t)batch * seq_len * hidden;
+    size_t out_bytes = (2 * bth + (size_t)batch * hidden) * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)z_ptr,
+        (const float*)(uintptr_t)c_ptr,
+        (const float*)(uintptr_t)h0_ptr,
+        (const float*)(uintptr_t)fwd_ptr,
+        (const float*)(uintptr_t)grad_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, hidden
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "elu_gru_scan_backward kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused_real_gru_scan_backward                                          */
+/* ========================================================================== */
+
+static ERL_NIF_TERM nif_fused_real_gru_scan_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t z_ptr, cand_ptr, h0_ptr, fwd_ptr, grad_ptr;
+    int batch, seq_len, hidden, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &z_ptr) ||
+        !enif_get_uint64(env, argv[1], &cand_ptr) ||
+        !enif_get_uint64(env, argv[2], &h0_ptr) ||
+        !enif_get_uint64(env, argv[3], &fwd_ptr) ||
+        !enif_get_uint64(env, argv[4], &grad_ptr) ||
+        !enif_get_int(env, argv[5], &batch) ||
+        !enif_get_int(env, argv[6], &seq_len) ||
+        !enif_get_int(env, argv[7], &hidden) ||
+        !enif_get_int(env, argv[8], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    real_gru_backward_launch_fn launch = (dtype == 1) ? s_real_gru_backward_bf16_launch : s_real_gru_backward_launch;
+    if (!launch)
+        return make_error(env, "real_gru_scan_backward kernel not loaded");
+
+    if (batch <= 0 || seq_len <= 0 || hidden <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t bth = (size_t)batch * seq_len * hidden;
+    size_t out_bytes = (2 * bth + (size_t)batch * hidden) * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)z_ptr,
+        (const float*)(uintptr_t)cand_ptr,
+        (const float*)(uintptr_t)h0_ptr,
+        (const float*)(uintptr_t)fwd_ptr,
+        (const float*)(uintptr_t)grad_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, hidden
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "real_gru_scan_backward kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused_diag_linear_scan_backward                                       */
+/* ========================================================================== */
+
+static ERL_NIF_TERM nif_fused_diag_linear_scan_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t a_ptr, h0_ptr, fwd_ptr, grad_ptr;
+    int batch, seq_len, hidden, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &a_ptr) ||
+        !enif_get_uint64(env, argv[1], &h0_ptr) ||
+        !enif_get_uint64(env, argv[2], &fwd_ptr) ||
+        !enif_get_uint64(env, argv[3], &grad_ptr) ||
+        !enif_get_int(env, argv[4], &batch) ||
+        !enif_get_int(env, argv[5], &seq_len) ||
+        !enif_get_int(env, argv[6], &hidden) ||
+        !enif_get_int(env, argv[7], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    diag_linear_backward_launch_fn launch = (dtype == 1) ? s_diag_linear_backward_bf16_launch : s_diag_linear_backward_launch;
+    if (!launch)
+        return make_error(env, "diag_linear_scan_backward kernel not loaded");
+
+    if (batch <= 0 || seq_len <= 0 || hidden <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    /* Output: grad_a [B*T*H] + grad_b [B*T*H] + grad_h0 [B*H] */
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t bth = (size_t)batch * seq_len * hidden;
+    size_t out_bytes = (2 * bth + (size_t)batch * hidden) * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)a_ptr,
+        (const float*)(uintptr_t)h0_ptr,
+        (const float*)(uintptr_t)fwd_ptr,
+        (const float*)(uintptr_t)grad_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, hidden
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "diag_linear_scan_backward kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused_lstm_scan_backward                                              */
+/* ========================================================================== */
+
+/*
+ * fused_lstm_scan_backward(wx_ptr, r_ptr, h0_ptr, c0_ptr, fwd_ptr, grad_ptr,
+ *                          batch, seq_len, hidden)
+ *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
+ *
+ * Output buffer layout: [grad_wx (B*T*4H) | grad_h0 (B*H) | grad_c0 (B*H)] floats
+ */
+static ERL_NIF_TERM nif_fused_lstm_scan_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t wx_ptr, r_ptr, h0_ptr, c0_ptr, fwd_ptr, grad_ptr;
+    int batch, seq_len, hidden, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &wx_ptr) ||
+        !enif_get_uint64(env, argv[1], &r_ptr) ||
+        !enif_get_uint64(env, argv[2], &h0_ptr) ||
+        !enif_get_uint64(env, argv[3], &c0_ptr) ||
+        !enif_get_uint64(env, argv[4], &fwd_ptr) ||
+        !enif_get_uint64(env, argv[5], &grad_ptr) ||
+        !enif_get_int(env, argv[6], &batch) ||
+        !enif_get_int(env, argv[7], &seq_len) ||
+        !enif_get_int(env, argv[8], &hidden) ||
+        !enif_get_int(env, argv[9], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    lstm_backward_launch_fn launch = (dtype == 1) ? s_lstm_backward_bf16_launch : s_lstm_backward_launch;
+    if (!launch)
+        return make_error(env, "lstm_scan_backward kernel not loaded");
+
+    if (batch <= 0 || seq_len <= 0 || hidden <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    /* Output: grad_wx [B*T*4H] + grad_h0 [B*H] + grad_c0 [B*H] */
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t bt4h = (size_t)batch * seq_len * 4 * hidden;
+    size_t bh = (size_t)batch * hidden;
+    size_t out_bytes = (bt4h + 2 * bh) * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)wx_ptr,
+        (const float*)(uintptr_t)r_ptr,
+        (const float*)(uintptr_t)h0_ptr,
+        (const float*)(uintptr_t)c0_ptr,
+        (const float*)(uintptr_t)fwd_ptr,
+        (const float*)(uintptr_t)grad_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, hidden
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "lstm_scan_backward kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused_gru_scan_backward                                               */
+/* ========================================================================== */
+
+/*
+ * fused_gru_scan_backward(wx_ptr, r_ptr, h0_ptr, fwd_ptr, grad_ptr,
+ *                         batch, seq_len, hidden)
+ *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
+ *
+ * Output buffer layout: [grad_wx (B*T*3H) | grad_h0 (B*H)] floats
+ */
+static ERL_NIF_TERM nif_fused_gru_scan_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t wx_ptr, r_ptr, h0_ptr, fwd_ptr, grad_ptr;
+    int batch, seq_len, hidden, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &wx_ptr) ||
+        !enif_get_uint64(env, argv[1], &r_ptr) ||
+        !enif_get_uint64(env, argv[2], &h0_ptr) ||
+        !enif_get_uint64(env, argv[3], &fwd_ptr) ||
+        !enif_get_uint64(env, argv[4], &grad_ptr) ||
+        !enif_get_int(env, argv[5], &batch) ||
+        !enif_get_int(env, argv[6], &seq_len) ||
+        !enif_get_int(env, argv[7], &hidden) ||
+        !enif_get_int(env, argv[8], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    gru_backward_launch_fn launch = (dtype == 1) ? s_gru_backward_bf16_launch : s_gru_backward_launch;
+    if (!launch)
+        return make_error(env, "gru_scan_backward kernel not loaded");
+
+    if (batch <= 0 || seq_len <= 0 || hidden <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    /* Output: grad_wx [B*T*3H] + grad_rh [B*T*3H] + grad_h0 [B*H] */
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t bt3h = (size_t)batch * seq_len * 3 * hidden;
+    size_t bh = (size_t)batch * hidden;
+    size_t out_bytes = (2 * bt3h + bh) * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)wx_ptr,
+        (const float*)(uintptr_t)r_ptr,
+        (const float*)(uintptr_t)h0_ptr,
+        (const float*)(uintptr_t)fwd_ptr,
+        (const float*)(uintptr_t)grad_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, hidden
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "gru_scan_backward kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
 /* NIF: fused_mingru_block_scan                                               */
 /* ========================================================================== */
 
@@ -2053,10 +2670,7 @@ static ERL_NIF_TERM nif_fused_mingru_block_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t input_ptr, weights_ptr, h0_ptr;
-    int batch, seq_len, hidden, num_layers;
-
-    if (!s_mingru_block_launch)
-        return make_error(env, "mingru_block kernel not loaded");
+    int batch, seq_len, hidden, num_layers, dtype;
 
     if (!enif_get_uint64(env, argv[0], &input_ptr) ||
         !enif_get_uint64(env, argv[1], &weights_ptr) ||
@@ -2064,15 +2678,21 @@ static ERL_NIF_TERM nif_fused_mingru_block_scan(
         !enif_get_int(env, argv[3], &batch) ||
         !enif_get_int(env, argv[4], &seq_len) ||
         !enif_get_int(env, argv[5], &hidden) ||
-        !enif_get_int(env, argv[6], &num_layers))
+        !enif_get_int(env, argv[6], &num_layers) ||
+        !enif_get_int(env, argv[7], &dtype))
     {
         return enif_make_badarg(env);
     }
 
+    mingru_block_launch_fn launch = (dtype == 1) ? s_mingru_block_bf16_launch : s_mingru_block_launch;
+    if (!launch)
+        return make_error(env, "mingru_block kernel not loaded");
+
     if (batch <= 0 || seq_len <= 0 || hidden <= 0 || num_layers <= 0)
         return make_error(env, "dimensions must be positive");
 
-    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * hidden * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -2089,7 +2709,7 @@ static ERL_NIF_TERM nif_fused_mingru_block_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_mingru_block_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)input_ptr,
         (const float*)(uintptr_t)weights_ptr,
@@ -2116,10 +2736,7 @@ static ERL_NIF_TERM nif_fused_minlstm_block_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     uint64_t input_ptr, weights_ptr, h0_ptr;
-    int batch, seq_len, hidden, num_layers;
-
-    if (!s_minlstm_block_launch)
-        return make_error(env, "minlstm_block kernel not loaded");
+    int batch, seq_len, hidden, num_layers, dtype;
 
     if (!enif_get_uint64(env, argv[0], &input_ptr) ||
         !enif_get_uint64(env, argv[1], &weights_ptr) ||
@@ -2127,15 +2744,21 @@ static ERL_NIF_TERM nif_fused_minlstm_block_scan(
         !enif_get_int(env, argv[3], &batch) ||
         !enif_get_int(env, argv[4], &seq_len) ||
         !enif_get_int(env, argv[5], &hidden) ||
-        !enif_get_int(env, argv[6], &num_layers))
+        !enif_get_int(env, argv[6], &num_layers) ||
+        !enif_get_int(env, argv[7], &dtype))
     {
         return enif_make_badarg(env);
     }
 
+    minlstm_block_launch_fn launch = (dtype == 1) ? s_minlstm_block_bf16_launch : s_minlstm_block_launch;
+    if (!launch)
+        return make_error(env, "minlstm_block kernel not loaded");
+
     if (batch <= 0 || seq_len <= 0 || hidden <= 0 || num_layers <= 0)
         return make_error(env, "dimensions must be positive");
 
-    size_t out_bytes = (size_t)batch * seq_len * hidden * sizeof(float);
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = (size_t)batch * seq_len * hidden * elem_size;
     ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
 
     int arity;
@@ -2152,7 +2775,7 @@ static ERL_NIF_TERM nif_fused_minlstm_block_scan(
     uint64_t out_ptr;
     enif_get_uint64(env, tuple[1], &out_ptr);
 
-    int launch_err = s_minlstm_block_launch(
+    int launch_err = launch(
         NULL,
         (const float*)(uintptr_t)input_ptr,
         (const float*)(uintptr_t)weights_ptr,
@@ -2163,6 +2786,473 @@ static ERL_NIF_TERM nif_fused_minlstm_block_scan(
 
     if (launch_err != 0)
         return make_error(env, "minlstm_block kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused_liquid_scan_backward                                             */
+/* ========================================================================== */
+
+/*
+ * fused_liquid_scan_backward(tau_ptr, act_ptr, h0_ptr, fwd_ptr, grad_ptr,
+ *                            batch, seq_len, hidden, dtype)
+ * Output: [grad_tau (B*T*H) | grad_act (B*T*H) | grad_h0 (B*H)]
+ */
+static ERL_NIF_TERM nif_fused_liquid_scan_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t tau_ptr, act_ptr, h0_ptr, fwd_ptr, grad_ptr;
+    int batch, seq_len, hidden, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &tau_ptr) ||
+        !enif_get_uint64(env, argv[1], &act_ptr) ||
+        !enif_get_uint64(env, argv[2], &h0_ptr) ||
+        !enif_get_uint64(env, argv[3], &fwd_ptr) ||
+        !enif_get_uint64(env, argv[4], &grad_ptr) ||
+        !enif_get_int(env, argv[5], &batch) ||
+        !enif_get_int(env, argv[6], &seq_len) ||
+        !enif_get_int(env, argv[7], &hidden) ||
+        !enif_get_int(env, argv[8], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    liquid_backward_launch_fn launch = (dtype == 1) ? s_liquid_backward_bf16_launch : s_liquid_backward_launch;
+    if (!launch)
+        return make_error(env, "liquid_scan_backward kernel not loaded");
+
+    if (batch <= 0 || seq_len <= 0 || hidden <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t bth = (size_t)batch * seq_len * hidden;
+    size_t out_bytes = (2 * bth + (size_t)batch * hidden) * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)tau_ptr,
+        (const float*)(uintptr_t)act_ptr,
+        (const float*)(uintptr_t)h0_ptr,
+        (const float*)(uintptr_t)fwd_ptr,
+        (const float*)(uintptr_t)grad_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, hidden
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "liquid_scan_backward kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused_delta_rule_scan_backward                                         */
+/* ========================================================================== */
+
+/*
+ * fused_delta_rule_scan_backward(q, k, v, beta, fwd, grad,
+ *                                batch, seq, heads, head_dim, dtype)
+ * Output: [grad_q | grad_k | grad_v | grad_beta] each (B*T*H*d)
+ */
+static ERL_NIF_TERM nif_fused_delta_rule_scan_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t q_ptr, k_ptr, v_ptr, beta_ptr, fwd_ptr, grad_ptr;
+    int batch, seq_len, num_heads, head_dim, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &q_ptr) ||
+        !enif_get_uint64(env, argv[1], &k_ptr) ||
+        !enif_get_uint64(env, argv[2], &v_ptr) ||
+        !enif_get_uint64(env, argv[3], &beta_ptr) ||
+        !enif_get_uint64(env, argv[4], &fwd_ptr) ||
+        !enif_get_uint64(env, argv[5], &grad_ptr) ||
+        !enif_get_int(env, argv[6], &batch) ||
+        !enif_get_int(env, argv[7], &seq_len) ||
+        !enif_get_int(env, argv[8], &num_heads) ||
+        !enif_get_int(env, argv[9], &head_dim) ||
+        !enif_get_int(env, argv[10], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    delta_rule_backward_launch_fn launch = (dtype == 1) ? s_delta_rule_backward_bf16_launch : s_delta_rule_backward_launch;
+    if (!launch)
+        return make_error(env, "delta_rule_scan_backward kernel not loaded");
+
+    if (batch <= 0 || seq_len <= 0 || num_heads <= 0 || head_dim <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t total_4d = (size_t)batch * seq_len * num_heads * head_dim;
+    size_t out_bytes = 4 * total_4d * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)q_ptr,
+        (const float*)(uintptr_t)k_ptr,
+        (const float*)(uintptr_t)v_ptr,
+        (const float*)(uintptr_t)beta_ptr,
+        (const float*)(uintptr_t)fwd_ptr,
+        (const float*)(uintptr_t)grad_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, num_heads, head_dim
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "delta_rule_scan_backward kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused_gated_delta_net_scan_backward                                    */
+/* ========================================================================== */
+
+/*
+ * fused_gated_delta_net_scan_backward(q, k, v, beta, alpha, fwd, grad,
+ *                                     batch, seq, heads, head_dim, dtype)
+ * Output: [grad_q | grad_k | grad_v | grad_beta (each B*T*H*d) | grad_alpha (B*T*H)]
+ */
+static ERL_NIF_TERM nif_fused_gated_delta_net_scan_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t q_ptr, k_ptr, v_ptr, beta_ptr, alpha_ptr, fwd_ptr, grad_ptr;
+    int batch, seq_len, num_heads, head_dim, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &q_ptr) ||
+        !enif_get_uint64(env, argv[1], &k_ptr) ||
+        !enif_get_uint64(env, argv[2], &v_ptr) ||
+        !enif_get_uint64(env, argv[3], &beta_ptr) ||
+        !enif_get_uint64(env, argv[4], &alpha_ptr) ||
+        !enif_get_uint64(env, argv[5], &fwd_ptr) ||
+        !enif_get_uint64(env, argv[6], &grad_ptr) ||
+        !enif_get_int(env, argv[7], &batch) ||
+        !enif_get_int(env, argv[8], &seq_len) ||
+        !enif_get_int(env, argv[9], &num_heads) ||
+        !enif_get_int(env, argv[10], &head_dim) ||
+        !enif_get_int(env, argv[11], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    gated_delta_net_backward_launch_fn launch = (dtype == 1) ? s_gated_delta_net_backward_bf16_launch : s_gated_delta_net_backward_launch;
+    if (!launch)
+        return make_error(env, "gated_delta_net_scan_backward kernel not loaded");
+
+    if (batch <= 0 || seq_len <= 0 || num_heads <= 0 || head_dim <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t total_4d = (size_t)batch * seq_len * num_heads * head_dim;
+    size_t total_3d = (size_t)batch * seq_len * num_heads;
+    size_t out_bytes = (4 * total_4d + total_3d) * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)q_ptr,
+        (const float*)(uintptr_t)k_ptr,
+        (const float*)(uintptr_t)v_ptr,
+        (const float*)(uintptr_t)beta_ptr,
+        (const float*)(uintptr_t)alpha_ptr,
+        (const float*)(uintptr_t)fwd_ptr,
+        (const float*)(uintptr_t)grad_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, num_heads, head_dim
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "gated_delta_net_scan_backward kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused_delta_product_scan_backward                                      */
+/* ========================================================================== */
+
+/*
+ * fused_delta_product_scan_backward(q, k, v, beta, fwd, grad,
+ *                                   batch, seq, n_h, heads, head_dim, dtype)
+ * Output: [grad_q (B*T*H*d) | grad_k (B*T*nh*H*d) | grad_v (B*T*nh*H*d) | grad_beta (B*T*nh*H)]
+ */
+static ERL_NIF_TERM nif_fused_delta_product_scan_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t q_ptr, k_ptr, v_ptr, beta_ptr, fwd_ptr, grad_ptr;
+    int batch, seq_len, num_householder, num_heads, head_dim, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &q_ptr) ||
+        !enif_get_uint64(env, argv[1], &k_ptr) ||
+        !enif_get_uint64(env, argv[2], &v_ptr) ||
+        !enif_get_uint64(env, argv[3], &beta_ptr) ||
+        !enif_get_uint64(env, argv[4], &fwd_ptr) ||
+        !enif_get_uint64(env, argv[5], &grad_ptr) ||
+        !enif_get_int(env, argv[6], &batch) ||
+        !enif_get_int(env, argv[7], &seq_len) ||
+        !enif_get_int(env, argv[8], &num_householder) ||
+        !enif_get_int(env, argv[9], &num_heads) ||
+        !enif_get_int(env, argv[10], &head_dim) ||
+        !enif_get_int(env, argv[11], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    delta_product_backward_launch_fn launch = (dtype == 1) ? s_delta_product_backward_bf16_launch : s_delta_product_backward_launch;
+    if (!launch)
+        return make_error(env, "delta_product_scan_backward kernel not loaded");
+
+    if (batch <= 0 || seq_len <= 0 || num_householder <= 0 || num_heads <= 0 || head_dim <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t total_q = (size_t)batch * seq_len * num_heads * head_dim;
+    size_t total_kv = (size_t)batch * seq_len * num_householder * num_heads * head_dim;
+    size_t total_beta = (size_t)batch * seq_len * num_householder * num_heads;
+    size_t out_bytes = (total_q + 2 * total_kv + total_beta) * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)q_ptr,
+        (const float*)(uintptr_t)k_ptr,
+        (const float*)(uintptr_t)v_ptr,
+        (const float*)(uintptr_t)beta_ptr,
+        (const float*)(uintptr_t)fwd_ptr,
+        (const float*)(uintptr_t)grad_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, num_householder, num_heads, head_dim
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "delta_product_scan_backward kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused_slstm_scan_backward                                             */
+/* ========================================================================== */
+
+/*
+ * fused_slstm_scan_backward(wx_ptr, r_ptr, h0_ptr, c0_ptr, fwd_ptr, grad_ptr,
+ *                           batch, seq_len, hidden, dtype)
+ * Output: [grad_wx (B*T*4H) | grad_h0 (B*H) | grad_c0 (B*H)]
+ */
+static ERL_NIF_TERM nif_fused_slstm_scan_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t wx_ptr, r_ptr, h0_ptr, c0_ptr, fwd_ptr, grad_ptr;
+    int batch, seq_len, hidden, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &wx_ptr) ||
+        !enif_get_uint64(env, argv[1], &r_ptr) ||
+        !enif_get_uint64(env, argv[2], &h0_ptr) ||
+        !enif_get_uint64(env, argv[3], &c0_ptr) ||
+        !enif_get_uint64(env, argv[4], &fwd_ptr) ||
+        !enif_get_uint64(env, argv[5], &grad_ptr) ||
+        !enif_get_int(env, argv[6], &batch) ||
+        !enif_get_int(env, argv[7], &seq_len) ||
+        !enif_get_int(env, argv[8], &hidden) ||
+        !enif_get_int(env, argv[9], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    slstm_backward_launch_fn launch = (dtype == 1) ? s_slstm_backward_bf16_launch : s_slstm_backward_launch;
+    if (!launch)
+        return make_error(env, "slstm_scan_backward kernel not loaded");
+
+    if (batch <= 0 || seq_len <= 0 || hidden <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t bt4h = (size_t)batch * seq_len * 4 * hidden;
+    size_t bh = (size_t)batch * hidden;
+    size_t out_bytes = (bt4h + 2 * bh) * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)wx_ptr,
+        (const float*)(uintptr_t)r_ptr,
+        (const float*)(uintptr_t)h0_ptr,
+        (const float*)(uintptr_t)c0_ptr,
+        (const float*)(uintptr_t)fwd_ptr,
+        (const float*)(uintptr_t)grad_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, hidden
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "slstm_scan_backward kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused_selective_scan_backward                                          */
+/* ========================================================================== */
+
+/*
+ * fused_selective_scan_backward(x_ptr, dt_ptr, a_ptr, b_ptr, c_ptr, grad_ptr,
+ *                               batch, seq_len, hidden, state_size, dtype)
+ * Output: [grad_x (B*T*H) | grad_dt (B*T*H) | grad_B (B*T*S) | grad_C (B*T*S)]
+ */
+static ERL_NIF_TERM nif_fused_selective_scan_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t x_ptr, dt_ptr, a_ptr, b_ptr, c_ptr, grad_ptr;
+    int batch, seq_len, hidden, state_size, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &x_ptr) ||
+        !enif_get_uint64(env, argv[1], &dt_ptr) ||
+        !enif_get_uint64(env, argv[2], &a_ptr) ||
+        !enif_get_uint64(env, argv[3], &b_ptr) ||
+        !enif_get_uint64(env, argv[4], &c_ptr) ||
+        !enif_get_uint64(env, argv[5], &grad_ptr) ||
+        !enif_get_int(env, argv[6], &batch) ||
+        !enif_get_int(env, argv[7], &seq_len) ||
+        !enif_get_int(env, argv[8], &hidden) ||
+        !enif_get_int(env, argv[9], &state_size) ||
+        !enif_get_int(env, argv[10], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    selective_scan_backward_launch_fn launch = (dtype == 1) ? s_selective_scan_backward_bf16_launch : s_selective_scan_backward_launch;
+    if (!launch)
+        return make_error(env, "selective_scan_backward kernel not loaded");
+
+    if (batch <= 0 || seq_len <= 0 || hidden <= 0 || state_size <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    /* Output: grad_x [B*T*H] + grad_dt [B*T*H] + grad_B [B*T*S] + grad_C [B*T*S] */
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t bth = (size_t)batch * seq_len * hidden;
+    size_t bts = (size_t)batch * seq_len * state_size;
+    size_t out_bytes = (2 * bth + 2 * bts) * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)x_ptr,
+        (const float*)(uintptr_t)dt_ptr,
+        (const float*)(uintptr_t)a_ptr,
+        (const float*)(uintptr_t)b_ptr,
+        (const float*)(uintptr_t)c_ptr,
+        (const float*)(uintptr_t)grad_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, seq_len, hidden, state_size
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "selective_scan_backward kernel launch failed");
 
     cudaError_t err = s_cuda_sync();
     if (err != 0)
@@ -2287,10 +3377,134 @@ static int nif_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
         s_kernels_handle, "fused_mingru_scan_backward_launch");
     s_minlstm_backward_launch = (minlstm_backward_launch_fn)dlsym(
         s_kernels_handle, "fused_minlstm_scan_backward_launch");
+    s_elu_gru_backward_launch = (elu_gru_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_elu_gru_scan_backward_launch");
+    s_real_gru_backward_launch = (real_gru_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_real_gru_scan_backward_launch");
+    s_diag_linear_backward_launch = (diag_linear_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_diag_linear_scan_backward_launch");
+    s_lstm_backward_launch = (lstm_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_lstm_scan_backward_launch");
+    s_gru_backward_launch = (gru_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_gru_scan_backward_launch");
+    s_liquid_backward_launch = (liquid_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_liquid_scan_backward_launch");
+    s_delta_rule_backward_launch = (delta_rule_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_delta_rule_scan_backward_launch");
+    s_gated_delta_net_backward_launch = (gated_delta_net_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_gated_delta_net_scan_backward_launch");
+    s_delta_product_backward_launch = (delta_product_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_delta_product_scan_backward_launch");
+    s_slstm_backward_launch = (slstm_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_slstm_scan_backward_launch");
+    s_selective_scan_backward_launch = (selective_scan_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_selective_scan_backward_launch");
     s_mingru_block_launch = (mingru_block_launch_fn)dlsym(
         s_kernels_handle, "fused_mingru_block_scan_launch");
     s_minlstm_block_launch = (minlstm_block_launch_fn)dlsym(
         s_kernels_handle, "fused_minlstm_block_scan_launch");
+
+    /* Load bf16 kernel library (best-effort — bf16 dispatch returns error if missing) */
+    char bf16_path[512];
+    s_kernels_bf16_handle = dlopen("priv/cuda/libedifice_cuda_kernels_bf16.so", RTLD_NOW);
+    if (!s_kernels_bf16_handle) {
+        Dl_info info;
+        if (dladdr((void*)nif_load, &info) && info.dli_fname) {
+            const char* fname = info.dli_fname;
+            const char* last_slash = strrchr(fname, '/');
+            if (last_slash) {
+                size_t dir_len = (size_t)(last_slash - fname);
+                if (dir_len + 48 < sizeof(bf16_path)) {
+                    memcpy(bf16_path, fname, dir_len);
+                    strcpy(bf16_path + dir_len, "/cuda/libedifice_cuda_kernels_bf16.so");
+                    s_kernels_bf16_handle = dlopen(bf16_path, RTLD_NOW);
+                }
+            }
+        }
+    }
+
+    if (s_kernels_bf16_handle) {
+        s_mingru_bf16_launch = (mingru_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_mingru_scan_launch");
+        s_minlstm_bf16_launch = (minlstm_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_minlstm_scan_launch");
+        s_elu_gru_bf16_launch = (scan_2input_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_elu_gru_scan_launch");
+        s_real_gru_bf16_launch = (scan_2input_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_real_gru_scan_launch");
+        s_diag_linear_bf16_launch = (scan_2input_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_diag_linear_scan_launch");
+        s_liquid_bf16_launch = (scan_2input_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_liquid_scan_launch");
+        s_linear_bf16_launch = (scan_2input_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_linear_scan_launch");
+        s_delta_net_bf16_launch = (delta_net_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_delta_net_scan_launch");
+        s_gated_delta_net_bf16_launch = (gated_delta_net_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_gated_delta_net_scan_launch");
+        s_delta_product_bf16_launch = (delta_product_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_delta_product_scan_launch");
+        s_slstm_bf16_launch = (slstm_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_slstm_scan_launch");
+        s_lstm_bf16_launch = (lstm_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_lstm_scan_launch");
+        s_gru_bf16_launch = (gru_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_gru_scan_launch");
+        s_ttt_bf16_launch = (ttt_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_ttt_scan_launch");
+        s_selective_scan_bf16_launch = (selective_scan_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_selective_scan_launch");
+        s_kda_bf16_launch = (kda_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_kda_scan_launch");
+        s_rla_bf16_launch = (rla_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_rla_scan_launch");
+        s_flash_attention_bf16_launch = (flash_attention_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_flash_attention_launch");
+        s_laser_attention_bf16_launch = (laser_attention_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_laser_attention_launch");
+        s_fox_attention_bf16_launch = (fox_attention_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_fox_attention_launch");
+        s_reservoir_bf16_launch = (reservoir_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_reservoir_scan_launch");
+        s_titans_bf16_launch = (titans_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_titans_scan_launch");
+        s_miras_bf16_launch = (miras_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_miras_scan_launch");
+        s_gsa_bf16_launch = (gsa_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_gsa_scan_launch");
+        s_linear_scan_backward_bf16_launch = (linear_scan_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_linear_scan_backward_launch");
+        s_mingru_backward_bf16_launch = (mingru_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_mingru_scan_backward_launch");
+        s_minlstm_backward_bf16_launch = (minlstm_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_minlstm_scan_backward_launch");
+        s_elu_gru_backward_bf16_launch = (elu_gru_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_elu_gru_scan_backward_launch");
+        s_real_gru_backward_bf16_launch = (real_gru_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_real_gru_scan_backward_launch");
+        s_diag_linear_backward_bf16_launch = (diag_linear_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_diag_linear_scan_backward_launch");
+        s_lstm_backward_bf16_launch = (lstm_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_lstm_scan_backward_launch");
+        s_gru_backward_bf16_launch = (gru_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_gru_scan_backward_launch");
+        s_liquid_backward_bf16_launch = (liquid_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_liquid_scan_backward_launch");
+        s_delta_rule_backward_bf16_launch = (delta_rule_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_delta_rule_scan_backward_launch");
+        s_gated_delta_net_backward_bf16_launch = (gated_delta_net_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_gated_delta_net_scan_backward_launch");
+        s_delta_product_backward_bf16_launch = (delta_product_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_delta_product_scan_backward_launch");
+        s_slstm_backward_bf16_launch = (slstm_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_slstm_scan_backward_launch");
+        s_selective_scan_backward_bf16_launch = (selective_scan_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_selective_scan_backward_launch");
+        s_mingru_block_bf16_launch = (mingru_block_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_mingru_block_scan_launch");
+        s_minlstm_block_bf16_launch = (minlstm_block_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_minlstm_block_scan_launch");
+    }
 
     return 0;
 }
@@ -2303,10 +3517,15 @@ static void nif_unload(ErlNifEnv* env, void* priv_data) {
         dlclose(s_kernels_handle);
         s_kernels_handle = NULL;
     }
+    if (s_kernels_bf16_handle) {
+        dlclose(s_kernels_bf16_handle);
+        s_kernels_bf16_handle = NULL;
+    }
     if (s_cudart_handle) {
         dlclose(s_cudart_handle);
         s_cudart_handle = NULL;
     }
+    /* f32 pointers */
     s_mingru_launch          = NULL;
     s_minlstm_launch         = NULL;
     s_elu_gru_launch         = NULL;
@@ -2334,8 +3553,61 @@ static void nif_unload(ErlNifEnv* env, void* priv_data) {
     s_linear_scan_backward_launch = NULL;
     s_mingru_backward_launch      = NULL;
     s_minlstm_backward_launch     = NULL;
+    s_elu_gru_backward_launch     = NULL;
+    s_real_gru_backward_launch    = NULL;
+    s_diag_linear_backward_launch = NULL;
+    s_lstm_backward_launch        = NULL;
+    s_gru_backward_launch         = NULL;
+    s_liquid_backward_launch          = NULL;
+    s_delta_rule_backward_launch      = NULL;
+    s_gated_delta_net_backward_launch = NULL;
+    s_delta_product_backward_launch   = NULL;
+    s_slstm_backward_launch           = NULL;
+    s_selective_scan_backward_launch  = NULL;
     s_mingru_block_launch         = NULL;
     s_minlstm_block_launch        = NULL;
+    /* bf16 pointers */
+    s_mingru_bf16_launch          = NULL;
+    s_minlstm_bf16_launch         = NULL;
+    s_elu_gru_bf16_launch         = NULL;
+    s_real_gru_bf16_launch        = NULL;
+    s_diag_linear_bf16_launch     = NULL;
+    s_liquid_bf16_launch          = NULL;
+    s_linear_bf16_launch          = NULL;
+    s_delta_net_bf16_launch       = NULL;
+    s_gated_delta_net_bf16_launch = NULL;
+    s_delta_product_bf16_launch   = NULL;
+    s_slstm_bf16_launch           = NULL;
+    s_lstm_bf16_launch            = NULL;
+    s_gru_bf16_launch             = NULL;
+    s_ttt_bf16_launch             = NULL;
+    s_selective_scan_bf16_launch  = NULL;
+    s_kda_bf16_launch             = NULL;
+    s_rla_bf16_launch             = NULL;
+    s_flash_attention_bf16_launch = NULL;
+    s_laser_attention_bf16_launch = NULL;
+    s_fox_attention_bf16_launch   = NULL;
+    s_reservoir_bf16_launch       = NULL;
+    s_titans_bf16_launch          = NULL;
+    s_miras_bf16_launch           = NULL;
+    s_gsa_bf16_launch             = NULL;
+    s_linear_scan_backward_bf16_launch = NULL;
+    s_mingru_backward_bf16_launch      = NULL;
+    s_minlstm_backward_bf16_launch     = NULL;
+    s_elu_gru_backward_bf16_launch     = NULL;
+    s_real_gru_backward_bf16_launch    = NULL;
+    s_diag_linear_backward_bf16_launch = NULL;
+    s_lstm_backward_bf16_launch        = NULL;
+    s_gru_backward_bf16_launch         = NULL;
+    s_liquid_backward_bf16_launch          = NULL;
+    s_delta_rule_backward_bf16_launch      = NULL;
+    s_gated_delta_net_backward_bf16_launch = NULL;
+    s_delta_product_backward_bf16_launch   = NULL;
+    s_slstm_backward_bf16_launch           = NULL;
+    s_selective_scan_backward_bf16_launch  = NULL;
+    s_mingru_block_bf16_launch         = NULL;
+    s_minlstm_block_bf16_launch        = NULL;
+    /* CUDA runtime */
     s_cuda_malloc            = NULL;
     s_cuda_free          = NULL;
     s_cuda_sync          = NULL;
@@ -2346,35 +3618,46 @@ static void nif_unload(ErlNifEnv* env, void* priv_data) {
 /* ========================================================================== */
 
 static ErlNifFunc nif_funcs[] = {
-    {"fused_mingru_scan",       6, nif_fused_mingru_scan,       ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_minlstm_scan",      7, nif_fused_minlstm_scan,      ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_elu_gru_scan",      6, nif_fused_elu_gru_scan,      ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_real_gru_scan",     6, nif_fused_real_gru_scan,     ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_diag_linear_scan",  6, nif_fused_diag_linear_scan,  ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_liquid_scan",       6, nif_fused_liquid_scan,       ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_linear_scan",           6, nif_fused_linear_scan,           ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_delta_net_scan",        8, nif_fused_delta_net_scan,        ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_gated_delta_net_scan",  9, nif_fused_gated_delta_net_scan,  ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_delta_product_scan",    9, nif_fused_delta_product_scan,    ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_slstm_scan",            7, nif_fused_slstm_scan,            ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_lstm_scan",             7, nif_fused_lstm_scan,             ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_gru_scan",              6, nif_fused_gru_scan,              ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_ttt_scan",             10, nif_fused_ttt_scan,             ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_selective_scan",        9, nif_fused_selective_scan,        ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_kda_scan",              9, nif_fused_kda_scan,              ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_rla_scan",             12, nif_fused_rla_scan,             ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_flash_attention",        8, nif_fused_flash_attention,       ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_laser_attention",        9, nif_fused_laser_attention,       ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_fox_attention",          8, nif_fused_fox_attention,         ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_reservoir_scan",         7, nif_fused_reservoir_scan,        ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_titans_scan",            5, nif_fused_titans_scan,           ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_miras_scan",             5, nif_fused_miras_scan,            ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_gsa_scan",               9, nif_fused_gsa_scan,              ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_linear_scan_backward",   7, nif_fused_linear_scan_backward,  ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_mingru_scan_backward",   8, nif_fused_mingru_scan_backward,  ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_minlstm_scan_backward",  9, nif_fused_minlstm_scan_backward, ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_mingru_block_scan",      7, nif_fused_mingru_block_scan,     ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_minlstm_block_scan",     7, nif_fused_minlstm_block_scan,    ERL_NIF_DIRTY_JOB_IO_BOUND}
+    {"fused_mingru_scan",       7, nif_fused_mingru_scan,       ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_minlstm_scan",      8, nif_fused_minlstm_scan,      ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_elu_gru_scan",      7, nif_fused_elu_gru_scan,      ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_real_gru_scan",     7, nif_fused_real_gru_scan,     ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_diag_linear_scan",  7, nif_fused_diag_linear_scan,  ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_liquid_scan",       7, nif_fused_liquid_scan,       ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_linear_scan",           7, nif_fused_linear_scan,           ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_delta_net_scan",        9, nif_fused_delta_net_scan,        ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_gated_delta_net_scan", 10, nif_fused_gated_delta_net_scan,  ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_delta_product_scan",   10, nif_fused_delta_product_scan,    ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_slstm_scan",            8, nif_fused_slstm_scan,            ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_lstm_scan",              8, nif_fused_lstm_scan,             ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_gru_scan",               7, nif_fused_gru_scan,              ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_ttt_scan",              11, nif_fused_ttt_scan,             ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_selective_scan",        10, nif_fused_selective_scan,        ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_kda_scan",              10, nif_fused_kda_scan,              ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_rla_scan",              13, nif_fused_rla_scan,             ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_flash_attention",        9, nif_fused_flash_attention,       ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_laser_attention",       10, nif_fused_laser_attention,       ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_fox_attention",          9, nif_fused_fox_attention,         ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_reservoir_scan",         8, nif_fused_reservoir_scan,        ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_titans_scan",            6, nif_fused_titans_scan,           ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_miras_scan",             6, nif_fused_miras_scan,            ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_gsa_scan",              10, nif_fused_gsa_scan,              ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_linear_scan_backward",   8, nif_fused_linear_scan_backward,  ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_mingru_scan_backward",   9, nif_fused_mingru_scan_backward,  ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_minlstm_scan_backward", 10, nif_fused_minlstm_scan_backward, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_elu_gru_scan_backward",  9, nif_fused_elu_gru_scan_backward,  ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_real_gru_scan_backward", 9, nif_fused_real_gru_scan_backward, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_diag_linear_scan_backward", 8, nif_fused_diag_linear_scan_backward, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_lstm_scan_backward",    10, nif_fused_lstm_scan_backward,     ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_gru_scan_backward",      9, nif_fused_gru_scan_backward,      ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_mingru_block_scan",      8, nif_fused_mingru_block_scan,     ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_minlstm_block_scan",     8, nif_fused_minlstm_block_scan,    ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_liquid_scan_backward",             9, nif_fused_liquid_scan_backward,             ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_delta_rule_scan_backward",        11, nif_fused_delta_rule_scan_backward,        ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_gated_delta_net_scan_backward",   12, nif_fused_gated_delta_net_scan_backward,   ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_delta_product_scan_backward",     12, nif_fused_delta_product_scan_backward,     ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_slstm_scan_backward",             10, nif_fused_slstm_scan_backward,             ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_selective_scan_backward",         11, nif_fused_selective_scan_backward,          ERL_NIF_DIRTY_JOB_IO_BOUND}
 };
 
 ERL_NIF_INIT(Elixir.Edifice.CUDA.NIF, nif_funcs, nif_load, NULL, NULL, nif_unload)

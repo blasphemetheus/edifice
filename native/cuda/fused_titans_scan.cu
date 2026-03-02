@@ -23,12 +23,13 @@
 //   out: [batch, seq_len, memory_size]        — output hidden states
 
 #include <cuda_runtime.h>
+#include "precision.cuh"
 
 #define TITANS_MAX_MEM 128
 
 __global__ void fused_titans_scan_kernel(
-    const float* __restrict__ combined,  // [B, T, 4*M]
-    float* __restrict__ output,          // [B, T, M]
+    const io_type* __restrict__ combined,  // [B, T, 4*M]
+    io_type* __restrict__ output,          // [B, T, M]
     int batch, int seq_len, int mem_size,
     float momentum
 ) {
@@ -59,9 +60,9 @@ __global__ void fused_titans_scan_kernel(
         int base = b * seq_len * combined_stride + t * combined_stride;
 
         // Load k, v, gate_input into shared memory
-        k_shared[i]    = combined[base + mem_size + i];      // K offset
-        v_shared[i]    = combined[base + 2 * mem_size + i];  // V offset
-        gate_shared[i] = combined[base + 3 * mem_size + i];  // gate offset
+        k_shared[i]    = IO_LOAD(combined, base + mem_size + i);      // K offset
+        v_shared[i]    = IO_LOAD(combined, base + 2 * mem_size + i);  // V offset
+        gate_shared[i] = IO_LOAD(combined, base + 3 * mem_size + i);  // gate offset
         __syncthreads();
 
         // Step 1: pred_i = M[i,:] @ k (dot product row i with k)
@@ -100,7 +101,7 @@ __global__ void fused_titans_scan_kernel(
         // Step 5: Gradient = error_i * k^T (rank-1 update to row i)
         // Reload k since we used k_shared as temp
         __syncthreads();
-        k_shared[i] = combined[base + mem_size + i];
+        k_shared[i] = IO_LOAD(combined, base + mem_size + i);
         __syncthreads();
 
         // Step 6: Momentum update and gated memory update
@@ -113,7 +114,7 @@ __global__ void fused_titans_scan_kernel(
         // Step 7: Output o_i = M_updated[i,:] @ q
         // Load q into shared (reuse k_shared)
         __syncthreads();
-        k_shared[i] = combined[base + i];  // Q at offset 0
+        k_shared[i] = IO_LOAD(combined, base + i);  // Q at offset 0
         __syncthreads();
 
         float o_i = 0.0f;
@@ -121,7 +122,7 @@ __global__ void fused_titans_scan_kernel(
             o_i += M_row[j] * k_shared[j];
         }
 
-        output[b * seq_len * mem_size + t * mem_size + i] = o_i;
+        IO_STORE(output, b * seq_len * mem_size + t * mem_size + i, o_i);
         __syncthreads();
     }
 }
@@ -136,7 +137,7 @@ extern "C" {
 
 int fused_titans_scan_launch(
     cudaStream_t stream,
-    const float* combined, float* output,
+    const io_type* combined, io_type* output,
     int batch, int seq_len, int mem_size,
     float momentum
 ) {
@@ -170,9 +171,9 @@ namespace ffi = xla::ffi;
 
 ffi::Error fused_titans_scan_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<ffi::F32> combined,     // [B, T, 4*M]
+    ffi::Buffer<FFI_IO_TYPE> combined,     // [B, T, 4*M]
     ffi::Buffer<ffi::F32> momentum_t,   // scalar [1]
-    ffi::ResultBuffer<ffi::F32> output  // [B, T, M]
+    ffi::ResultBuffer<FFI_IO_TYPE> output  // [B, T, M]
 ) {
     auto dims = combined.dimensions();
     int batch    = static_cast<int>(dims[0]);
@@ -192,8 +193,8 @@ ffi::Error fused_titans_scan_ffi_impl(
     size_t smem_bytes = (3 * mem_size + 1) * sizeof(float);
 
     fused_titans_scan_kernel<<<grid, block, smem_bytes, stream>>>(
-        reinterpret_cast<const float*>(combined.untyped_data()),
-        reinterpret_cast<float*>(output->untyped_data()),
+        reinterpret_cast<const io_type*>(combined.untyped_data()),
+        reinterpret_cast<io_type*>(output->untyped_data()),
         batch, seq_len, mem_size, momentum
     );
 
@@ -209,12 +210,12 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
     fused_titans_scan, fused_titans_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
-        .Arg<ffi::Buffer<ffi::F32>>()   // combined
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // combined
         .Arg<ffi::Buffer<ffi::F32>>()   // momentum
-        .Ret<ffi::Buffer<ffi::F32>>()   // output
+        .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_titans_scan_f32", "CUDA", fused_titans_scan);
+    "exla_fused_titans_scan_" PRECISION_SUFFIX, "CUDA", fused_titans_scan);
 
 #endif  // EXLA_FFI
