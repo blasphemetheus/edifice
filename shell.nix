@@ -18,6 +18,7 @@ pkgs.mkShell {
     cuda.cuda_nvcc
     cuda.cuda_nvrtc
     cuda.cuda_cudart
+    cuda.cuda_cccl        # nv/target header needed by cuda_bf16.h
     cuda.cudnn
     cuda.libcublas
     cuda.libcusolver
