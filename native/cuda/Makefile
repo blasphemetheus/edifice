@@ -68,6 +68,9 @@ KERNEL_SOURCES := fused_mingru_scan.cu fused_minlstm_scan.cu \
                   fused_ttt_scan_backward.cu \
                   fused_mingru_block_scan.cu \
                   fused_minlstm_block_scan.cu \
+                  fused_linear_block_scan.cu \
+                  fused_lstm_block_scan.cu \
+                  fused_gru_block_scan.cu \
                   fused_flash_attention_backward.cu \
                   fused_laser_attention_backward.cu \
                   fused_fox_attention_backward.cu

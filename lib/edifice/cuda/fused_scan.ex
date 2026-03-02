@@ -1591,12 +1591,15 @@ defmodule Edifice.CUDA.FusedScan do
     ttype = Nx.type(q)
     grad_4d = Nx.template({batch, seq_len, num_heads, head_dim}, ttype)
     grad_3d = Nx.template({batch, seq_len, num_heads}, ttype)
+    variant_int = if variant == :rdn, do: 1, else: 0
+    variant_t = Nx.tensor(variant_int, type: {:s, 32})
+    clip_t = Nx.tensor(clip_threshold, type: {:f, 32})
 
     Nx.Shared.optional(
       :fused_rla_scan_backward,
-      [q, k, v, alpha, beta, gamma, forward_out, grad_output],
+      [q, k, v, alpha, beta, gamma, forward_out, grad_output, variant_t, clip_t],
       {grad_4d, grad_4d, grad_4d, grad_3d, grad_3d, grad_3d},
-      fn q, k, v, alpha, beta, gamma, _fwd, grad ->
+      fn q, k, v, alpha, beta, gamma, _fwd, grad, _variant, _clip ->
         rla_backward_fallback(q, k, v, alpha, beta, gamma, grad, variant, clip_threshold)
       end
     )
@@ -1606,6 +1609,12 @@ defmodule Edifice.CUDA.FusedScan do
   def rla_backward_fallback(q, k, v, alpha, beta, gamma, grad_output, variant, clip_threshold) do
     {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
     ttype = Nx.type(q)
+
+    # Normalize gates to [B, T, H, 1, 1] for broadcasting with [B, H, d, d] state matrices
+    alpha = Nx.reshape(alpha, {batch, seq_len, num_heads, 1, 1})
+    beta = Nx.reshape(beta, {batch, seq_len, num_heads, 1, 1})
+    gamma = Nx.reshape(gamma, {batch, seq_len, num_heads, 1, 1})
+
     zero_mat = Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, num_heads, head_dim, head_dim})
 
     grad_q = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
@@ -2593,10 +2602,13 @@ defmodule Edifice.CUDA.FusedScan do
     {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
     tensor_type = Nx.type(q)
     output = Nx.template({batch, seq_len, num_heads, head_dim}, tensor_type)
+    variant_int = if variant == :rdn, do: 1, else: 0
+    variant_t = Nx.tensor(variant_int, type: {:s, 32})
+    clip_t = Nx.tensor(clip_threshold, type: {:f, 32})
 
     forward_output =
-      Nx.Shared.optional(:fused_rla_scan, [q, k, v, alpha, beta, gamma], output,
-        fn q, k, v, alpha, beta, gamma ->
+      Nx.Shared.optional(:fused_rla_scan, [q, k, v, alpha, beta, gamma, variant_t, clip_t], output,
+        fn q, k, v, alpha, beta, gamma, _variant, _clip ->
           rla_scan_fallback(q, k, v, alpha, beta, gamma, variant, clip_threshold)
         end)
 
@@ -2611,6 +2623,11 @@ defmodule Edifice.CUDA.FusedScan do
     {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
     ttype = Nx.type(q)
 
+    # Normalize gates to [B, T, H, 1, 1] for broadcasting with [B, H, d, d] state matrices
+    alpha = Nx.reshape(alpha, {batch, seq_len, num_heads, 1, 1})
+    beta = Nx.reshape(beta, {batch, seq_len, num_heads, 1, 1})
+    gamma = Nx.reshape(gamma, {batch, seq_len, num_heads, 1, 1})
+
     s0 = Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, num_heads, head_dim, head_dim})
     r0 = Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, num_heads, head_dim, head_dim})
 
@@ -2622,9 +2639,6 @@ defmodule Edifice.CUDA.FusedScan do
         alpha_t = Nx.slice_along_axis(alpha, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         gamma_t = Nx.slice_along_axis(gamma, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-
-        # Gates are [B, H, 1, 1] (per-head scalar, broadcastable to [B, H, d, d])
-        # alpha/beta/gamma already shaped for broadcasting
 
         # Retrieval from base state: S @ k
         retrieval_s =
@@ -3254,6 +3268,11 @@ defmodule Edifice.CUDA.FusedScan do
     dtype = dtype_flag(q)
     esize = elem_size(q)
     ttype = tensor_type(q)
+
+    # Ensure gates are [B, T, H] for the CUDA kernel
+    alpha = Nx.reshape(alpha, {batch, seq_len, num_heads})
+    beta = Nx.reshape(beta, {batch, seq_len, num_heads})
+    gamma = Nx.reshape(gamma, {batch, seq_len, num_heads})
 
     q_ptr = Nx.to_pointer(q, mode: :local)
     k_ptr = Nx.to_pointer(k, mode: :local)
@@ -4596,12 +4615,441 @@ defmodule Edifice.CUDA.FusedScan do
     end)
   end
 
+  # ============================================================================
+  # Multi-layer block scan — Linear (h = a*h + b)
+  # ============================================================================
+
+  @doc """
+  Multi-layer fused linear block scan.
+
+  Processes all layers in a single kernel launch. LayerNorm, dense projections
+  (for a and b coefficients), linear scan update, and residual are all fused
+  per layer with activations kept in shared memory / registers.
+
+  ## Inputs
+    * `input` - [B, T, H] input sequence
+    * `weights` - flat packed weights, `[num_layers * (2*H*H + 4*H)]`
+    * `h0` - [B, num_layers, H] per-layer initial hidden states
+    * `num_layers` - number of layers
+
+  ## Returns
+    `[B, T, H]` — output of the final layer for all timesteps
+  """
+  def linear_block(input, weights, h0, num_layers) do
+    cond do
+      linear_block_custom_call_available?() ->
+        linear_block_custom_call(input, weights, h0, num_layers)
+
+      cuda_available?(input) ->
+        linear_block_fused(input, weights, h0, num_layers)
+
+      true ->
+        linear_block_fallback(input, weights, h0, num_layers)
+    end
+  end
+
+  defp linear_block_custom_call(input, weights, h0, num_layers) do
+    {batch, seq_len, hidden} = Nx.shape(input)
+    tensor_type = Nx.type(input)
+    output = Nx.template({batch, seq_len, hidden}, tensor_type)
+
+    Nx.Shared.optional(:fused_linear_block_scan, [input, weights, h0], output, fn inp, w, h ->
+      linear_block_fallback(inp, w, h, num_layers)
+    end)
+  end
+
+  defp linear_block_fused(input, weights, h0, num_layers) do
+    {batch, seq_len, hidden} = Nx.shape(input)
+    dtype = dtype_flag(input)
+    esize = elem_size(input)
+    ttype = tensor_type(input)
+
+    input_ptr = Nx.to_pointer(input, mode: :local)
+    weights_ptr = Nx.to_pointer(weights, mode: :local)
+    h0_ptr = Nx.to_pointer(h0, mode: :local)
+
+    case Edifice.CUDA.NIF.fused_linear_block_scan(
+           input_ptr.address, weights_ptr.address, h0_ptr.address,
+           batch, seq_len, hidden, num_layers, dtype
+         ) do
+      {:ok, out_addr, gc_ref} ->
+        hold_gc_ref(out_addr, gc_ref)
+        out_bytes = batch * seq_len * hidden * esize
+
+        Nx.from_pointer(
+          {backend_for(input), client: :cuda, device_id: 0},
+          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
+          ttype,
+          {batch, seq_len, hidden}
+        )
+
+      {:error, reason} ->
+        raise "CUDA fused linear block scan failed: #{reason}"
+    end
+  end
+
+  defp linear_block_fallback(input, weights, h0, num_layers) do
+    {_batch, _seq_len, hidden} = Nx.shape(input)
+    layer_stride = 2 * hidden * hidden + 4 * hidden
+
+    Enum.reduce(0..(num_layers - 1), input, fn layer, x ->
+      offset = layer * layer_stride
+
+      # Extract per-layer weights from packed buffer
+      w_a = Nx.slice(weights, [offset], [hidden * hidden]) |> Nx.reshape({hidden, hidden})
+      offset = offset + hidden * hidden
+      b_a = Nx.slice(weights, [offset], [hidden])
+      offset = offset + hidden
+      w_b = Nx.slice(weights, [offset], [hidden * hidden]) |> Nx.reshape({hidden, hidden})
+      offset = offset + hidden * hidden
+      b_b = Nx.slice(weights, [offset], [hidden])
+      offset = offset + hidden
+      gamma = Nx.slice(weights, [offset], [hidden])
+      offset = offset + hidden
+      beta = Nx.slice(weights, [offset], [hidden])
+
+      # LayerNorm
+      mean = Nx.mean(x, axes: [-1], keep_axes: true)
+      var = Nx.variance(x, axes: [-1], keep_axes: true)
+      normed = Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+      normed = Nx.add(normed, beta)
+
+      # Dense projections: [B,T,H] @ [H,H]^T -> [B,T,H]
+      a_pre = Nx.add(Nx.dot(normed, [2], w_a, [0]), b_a)
+      b_pre = Nx.add(Nx.dot(normed, [2], w_b, [0]), b_b)
+
+      # Run per-layer scan: h = a*h + b
+      h_layer_init = Nx.slice_along_axis(h0, layer, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+      {_batch_size, seq_len, _hidden} = Nx.shape(a_pre)
+      {_, h_list} =
+        Enum.reduce(0..(seq_len - 1), {h_layer_init, []}, fn t, {h_prev, acc} ->
+          a_t = Nx.slice_along_axis(a_pre, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          b_t = Nx.slice_along_axis(b_pre, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          h_t = Nx.add(Nx.multiply(a_t, h_prev), b_t)
+          {h_t, [h_t | acc]}
+        end)
+      scan_out = h_list |> Enum.reverse() |> Nx.stack(axis: 1)
+
+      # Residual
+      Nx.add(x, scan_out)
+    end)
+  end
+
+  # ============================================================================
+  # Multi-layer block scan — LSTM
+  # ============================================================================
+
+  @doc """
+  Multi-layer fused LSTM block scan.
+
+  Processes all layers in a single kernel launch. LayerNorm, input projection
+  (W_x@normed), recurrent projection (R@h via shared memory), 4-gate LSTM
+  update, and residual are all fused per layer with h and c state in registers.
+
+  ## Inputs
+    * `input` - [B, T, H] input sequence
+    * `weights` - flat packed weights, `[num_layers * (8*H*H + 6*H)]`
+    * `h0` - [B, num_layers, H] per-layer initial hidden states
+    * `c0` - [B, num_layers, H] per-layer initial cell states
+    * `num_layers` - number of layers
+
+  ## Returns
+    `[B, T, H]` — output of the final layer for all timesteps
+  """
+  def lstm_block(input, weights, h0, c0, num_layers) do
+    cond do
+      lstm_block_custom_call_available?() ->
+        lstm_block_custom_call(input, weights, h0, c0, num_layers)
+
+      cuda_available?(input) ->
+        lstm_block_fused(input, weights, h0, c0, num_layers)
+
+      true ->
+        lstm_block_fallback(input, weights, h0, c0, num_layers)
+    end
+  end
+
+  defp lstm_block_custom_call(input, weights, h0, c0, num_layers) do
+    {batch, seq_len, hidden} = Nx.shape(input)
+    tensor_type = Nx.type(input)
+    output = Nx.template({batch, seq_len, hidden}, tensor_type)
+
+    Nx.Shared.optional(:fused_lstm_block_scan, [input, weights, h0, c0], output, fn inp, w, h, c ->
+      lstm_block_fallback(inp, w, h, c, num_layers)
+    end)
+  end
+
+  defp lstm_block_fused(input, weights, h0, c0, num_layers) do
+    {batch, seq_len, hidden} = Nx.shape(input)
+    dtype = dtype_flag(input)
+    esize = elem_size(input)
+    ttype = tensor_type(input)
+
+    input_ptr = Nx.to_pointer(input, mode: :local)
+    weights_ptr = Nx.to_pointer(weights, mode: :local)
+    h0_ptr = Nx.to_pointer(h0, mode: :local)
+    c0_ptr = Nx.to_pointer(c0, mode: :local)
+
+    case Edifice.CUDA.NIF.fused_lstm_block_scan(
+           input_ptr.address, weights_ptr.address, h0_ptr.address, c0_ptr.address,
+           batch, seq_len, hidden, num_layers, dtype
+         ) do
+      {:ok, out_addr, gc_ref} ->
+        hold_gc_ref(out_addr, gc_ref)
+        out_bytes = batch * seq_len * hidden * esize
+
+        Nx.from_pointer(
+          {backend_for(input), client: :cuda, device_id: 0},
+          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
+          ttype,
+          {batch, seq_len, hidden}
+        )
+
+      {:error, reason} ->
+        raise "CUDA fused LSTM block scan failed: #{reason}"
+    end
+  end
+
+  defp lstm_block_fallback(input, weights, h0, c0, num_layers) do
+    {_batch, _seq_len, hidden} = Nx.shape(input)
+    layer_stride = 8 * hidden * hidden + 6 * hidden
+
+    Enum.reduce(0..(num_layers - 1), input, fn layer, x ->
+      offset = layer * layer_stride
+
+      # Extract per-layer weights: W_x[H,4H], b_x[4H], R[H,4H], gamma[H], beta[H]
+      w_x = Nx.slice(weights, [offset], [hidden * 4 * hidden]) |> Nx.reshape({hidden, 4 * hidden})
+      offset = offset + hidden * 4 * hidden
+      b_x = Nx.slice(weights, [offset], [4 * hidden])
+      offset = offset + 4 * hidden
+      r_w = Nx.slice(weights, [offset], [hidden * 4 * hidden]) |> Nx.reshape({hidden, 4 * hidden})
+      offset = offset + hidden * 4 * hidden
+      gamma = Nx.slice(weights, [offset], [hidden])
+      offset = offset + hidden
+      beta = Nx.slice(weights, [offset], [hidden])
+
+      # LayerNorm
+      mean = Nx.mean(x, axes: [-1], keep_axes: true)
+      var = Nx.variance(x, axes: [-1], keep_axes: true)
+      normed = Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+      normed = Nx.add(normed, beta)
+
+      # Input projection: [B,T,H] @ [H,4H]^T -> [B,T,4H]
+      wx_proj = Nx.add(Nx.dot(normed, [2], w_x, [0]), b_x)
+
+      # Split gates
+      wx_i = Nx.slice_along_axis(wx_proj, 0, hidden, axis: 2)
+      wx_f = Nx.slice_along_axis(wx_proj, hidden, hidden, axis: 2)
+      wx_g = Nx.slice_along_axis(wx_proj, 2 * hidden, hidden, axis: 2)
+      wx_o = Nx.slice_along_axis(wx_proj, 3 * hidden, hidden, axis: 2)
+
+      # Run per-layer scan with recurrent R@h
+      h_init = Nx.slice_along_axis(h0, layer, 1, axis: 1) |> Nx.squeeze(axes: [1])
+      c_init = Nx.slice_along_axis(c0, layer, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+      {_batch_size, seq_len, _hidden} = Nx.shape(wx_i)
+      {_, h_list} =
+        Enum.reduce(0..(seq_len - 1), {{h_init, c_init}, []}, fn t, {{h_prev, c_prev}, acc} ->
+          # R @ h_prev: [B,H] @ [H,4H]^T -> [B,4H]
+          rh = Nx.dot(h_prev, [1], r_w, [0])
+          rh_i = Nx.slice_along_axis(rh, 0, hidden, axis: 1)
+          rh_f = Nx.slice_along_axis(rh, hidden, hidden, axis: 1)
+          rh_g = Nx.slice_along_axis(rh, 2 * hidden, hidden, axis: 1)
+          rh_o = Nx.slice_along_axis(rh, 3 * hidden, hidden, axis: 1)
+
+          wi_t = Nx.slice_along_axis(wx_i, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          wf_t = Nx.slice_along_axis(wx_f, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          wg_t = Nx.slice_along_axis(wx_g, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          wo_t = Nx.slice_along_axis(wx_o, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+          i_gate = Nx.sigmoid(Nx.add(wi_t, rh_i))
+          f_gate = Nx.sigmoid(Nx.add(wf_t, rh_f))
+          g_gate = Nx.tanh(Nx.add(wg_t, rh_g))
+          o_gate = Nx.sigmoid(Nx.add(wo_t, rh_o))
+
+          c_t = Nx.add(Nx.multiply(f_gate, c_prev), Nx.multiply(i_gate, g_gate))
+          h_t = Nx.multiply(o_gate, Nx.tanh(c_t))
+          {{h_t, c_t}, [h_t | acc]}
+        end)
+      scan_out = h_list |> Enum.reverse() |> Nx.stack(axis: 1)
+
+      # Residual
+      Nx.add(x, scan_out)
+    end)
+  end
+
+  # ============================================================================
+  # Multi-layer block scan — GRU
+  # ============================================================================
+
+  @doc """
+  Multi-layer fused GRU block scan.
+
+  Processes all layers in a single kernel launch. LayerNorm, input projection
+  (W_x@normed), recurrent projection (R@h via shared memory), 3-gate GRU
+  update, and residual are all fused per layer with h state in registers.
+
+  ## Inputs
+    * `input` - [B, T, H] input sequence
+    * `weights` - flat packed weights, `[num_layers * (6*H*H + 5*H)]`
+    * `h0` - [B, num_layers, H] per-layer initial hidden states
+    * `num_layers` - number of layers
+
+  ## Returns
+    `[B, T, H]` — output of the final layer for all timesteps
+  """
+  def gru_block(input, weights, h0, num_layers) do
+    cond do
+      gru_block_custom_call_available?() ->
+        gru_block_custom_call(input, weights, h0, num_layers)
+
+      cuda_available?(input) ->
+        gru_block_fused(input, weights, h0, num_layers)
+
+      true ->
+        gru_block_fallback(input, weights, h0, num_layers)
+    end
+  end
+
+  defp gru_block_custom_call(input, weights, h0, num_layers) do
+    {batch, seq_len, hidden} = Nx.shape(input)
+    tensor_type = Nx.type(input)
+    output = Nx.template({batch, seq_len, hidden}, tensor_type)
+
+    Nx.Shared.optional(:fused_gru_block_scan, [input, weights, h0], output, fn inp, w, h ->
+      gru_block_fallback(inp, w, h, num_layers)
+    end)
+  end
+
+  defp gru_block_fused(input, weights, h0, num_layers) do
+    {batch, seq_len, hidden} = Nx.shape(input)
+    dtype = dtype_flag(input)
+    esize = elem_size(input)
+    ttype = tensor_type(input)
+
+    input_ptr = Nx.to_pointer(input, mode: :local)
+    weights_ptr = Nx.to_pointer(weights, mode: :local)
+    h0_ptr = Nx.to_pointer(h0, mode: :local)
+
+    case Edifice.CUDA.NIF.fused_gru_block_scan(
+           input_ptr.address, weights_ptr.address, h0_ptr.address,
+           batch, seq_len, hidden, num_layers, dtype
+         ) do
+      {:ok, out_addr, gc_ref} ->
+        hold_gc_ref(out_addr, gc_ref)
+        out_bytes = batch * seq_len * hidden * esize
+
+        Nx.from_pointer(
+          {backend_for(input), client: :cuda, device_id: 0},
+          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
+          ttype,
+          {batch, seq_len, hidden}
+        )
+
+      {:error, reason} ->
+        raise "CUDA fused GRU block scan failed: #{reason}"
+    end
+  end
+
+  defp gru_block_fallback(input, weights, h0, num_layers) do
+    {_batch, _seq_len, hidden} = Nx.shape(input)
+    layer_stride = 6 * hidden * hidden + 5 * hidden
+
+    Enum.reduce(0..(num_layers - 1), input, fn layer, x ->
+      offset = layer * layer_stride
+
+      # Extract per-layer weights: W_x[H,3H], b_x[3H], R[H,3H], gamma[H], beta[H]
+      w_x = Nx.slice(weights, [offset], [hidden * 3 * hidden]) |> Nx.reshape({hidden, 3 * hidden})
+      offset = offset + hidden * 3 * hidden
+      b_x = Nx.slice(weights, [offset], [3 * hidden])
+      offset = offset + 3 * hidden
+      r_w = Nx.slice(weights, [offset], [hidden * 3 * hidden]) |> Nx.reshape({hidden, 3 * hidden})
+      offset = offset + hidden * 3 * hidden
+      gamma = Nx.slice(weights, [offset], [hidden])
+      offset = offset + hidden
+      beta = Nx.slice(weights, [offset], [hidden])
+
+      # LayerNorm
+      mean = Nx.mean(x, axes: [-1], keep_axes: true)
+      var = Nx.variance(x, axes: [-1], keep_axes: true)
+      normed = Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+      normed = Nx.add(normed, beta)
+
+      # Input projection: [B,T,H] @ [H,3H]^T -> [B,T,3H]
+      wx_proj = Nx.add(Nx.dot(normed, [2], w_x, [0]), b_x)
+
+      # Split gates
+      wx_r = Nx.slice_along_axis(wx_proj, 0, hidden, axis: 2)
+      wx_z = Nx.slice_along_axis(wx_proj, hidden, hidden, axis: 2)
+      wx_n = Nx.slice_along_axis(wx_proj, 2 * hidden, hidden, axis: 2)
+
+      # Run per-layer scan with recurrent R@h
+      h_init = Nx.slice_along_axis(h0, layer, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+      {_batch_size, seq_len, _hidden} = Nx.shape(wx_r)
+      {_, h_list} =
+        Enum.reduce(0..(seq_len - 1), {h_init, []}, fn t, {h_prev, acc} ->
+          # R @ h_prev: [B,H] @ [H,3H]^T -> [B,3H]
+          rh = Nx.dot(h_prev, [1], r_w, [0])
+          rh_r = Nx.slice_along_axis(rh, 0, hidden, axis: 1)
+          rh_z = Nx.slice_along_axis(rh, hidden, hidden, axis: 1)
+          rh_n = Nx.slice_along_axis(rh, 2 * hidden, hidden, axis: 1)
+
+          wr_t = Nx.slice_along_axis(wx_r, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          wz_t = Nx.slice_along_axis(wx_z, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          wn_t = Nx.slice_along_axis(wx_n, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+          r_gate = Nx.sigmoid(Nx.add(wr_t, rh_r))
+          z_gate = Nx.sigmoid(Nx.add(wz_t, rh_z))
+          n_gate = Nx.tanh(Nx.add(wn_t, Nx.multiply(r_gate, rh_n)))
+
+          h_t = Nx.add(Nx.multiply(Nx.subtract(1.0, z_gate), h_prev), Nx.multiply(z_gate, n_gate))
+          {h_t, [h_t | acc]}
+        end)
+      scan_out = h_list |> Enum.reverse() |> Nx.stack(axis: 1)
+
+      # Residual
+      Nx.add(x, scan_out)
+    end)
+  end
+
   @doc false
   def block_custom_call_available? do
     exla_value = Module.concat([EXLA, MLIR, Value])
 
     Code.ensure_loaded?(exla_value) and
       function_exported?(exla_value, :fused_mingru_block_scan, 4)
+  rescue
+    _ -> false
+  end
+
+  @doc false
+  def linear_block_custom_call_available? do
+    exla_value = Module.concat([EXLA, MLIR, Value])
+
+    Code.ensure_loaded?(exla_value) and
+      function_exported?(exla_value, :fused_linear_block_scan, 4)
+  rescue
+    _ -> false
+  end
+
+  @doc false
+  def lstm_block_custom_call_available? do
+    exla_value = Module.concat([EXLA, MLIR, Value])
+
+    Code.ensure_loaded?(exla_value) and
+      function_exported?(exla_value, :fused_lstm_block_scan, 5)
+  rescue
+    _ -> false
+  end
+
+  @doc false
+  def gru_block_custom_call_available? do
+    exla_value = Module.concat([EXLA, MLIR, Value])
+
+    Code.ensure_loaded?(exla_value) and
+      function_exported?(exla_value, :fused_gru_block_scan, 4)
   rescue
     _ -> false
   end

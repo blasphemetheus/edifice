@@ -131,6 +131,18 @@ defmodule Edifice.CUDA.NIF do
   def fused_minlstm_block_scan(_input_ptr, _weights_ptr, _h0_ptr, _batch, _seq_len, _hidden, _num_layers, _dtype),
     do: :erlang.nif_error(:not_loaded)
 
+  @doc false
+  def fused_linear_block_scan(_input_ptr, _weights_ptr, _h0_ptr, _batch, _seq_len, _hidden, _num_layers, _dtype),
+    do: :erlang.nif_error(:not_loaded)
+
+  @doc false
+  def fused_lstm_block_scan(_input_ptr, _weights_ptr, _h0_ptr, _c0_ptr, _batch, _seq_len, _hidden, _num_layers, _dtype),
+    do: :erlang.nif_error(:not_loaded)
+
+  @doc false
+  def fused_gru_block_scan(_input_ptr, _weights_ptr, _h0_ptr, _batch, _seq_len, _hidden, _num_layers, _dtype),
+    do: :erlang.nif_error(:not_loaded)
+
   # Backward kernels — multi-output via concatenated buffer
   @doc false
   def fused_linear_scan_backward(_a_ptr, _h0_ptr, _fwd_ptr, _grad_ptr, _batch, _seq, _hidden, _dtype),
