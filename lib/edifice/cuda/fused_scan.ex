@@ -1403,6 +1403,129 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   # ============================================================================
+  # Flash Attention (IO-aware exact attention)
+  # ============================================================================
+
+  @doc """
+  Flash Attention V2 — IO-aware exact attention.
+
+  Uses tiled loading with online softmax to avoid materializing the full
+  [seq, seq] attention matrix. Produces identical results to standard SDPA.
+
+  ## Arguments
+
+    * `q` - Query tensor `[batch, heads, seq, head_dim]` (f32)
+    * `k` - Key tensor `[batch, heads, seq, head_dim]` (f32)
+    * `v` - Value tensor `[batch, heads, seq, head_dim]` (f32)
+    * `opts` - Options:
+      * `:causal` - Apply causal mask (default: `false`)
+
+  ## Returns
+
+    Output tensor `[batch, heads, seq, head_dim]` (f32)
+  """
+  def flash_attention(q, k, v, opts \\ []) do
+    causal = if Keyword.get(opts, :causal, false), do: 1, else: 0
+
+    cond do
+      flash_attention_custom_call_available?() ->
+        flash_attention_custom_call(q, k, v, causal)
+
+      cuda_available?(q) ->
+        flash_attention_fused(q, k, v, causal)
+
+      true ->
+        flash_attention_fallback(q, k, v, causal)
+    end
+  end
+
+  @doc """
+  Check if flash attention is available (any tier).
+  """
+  def flash_attention_available? do
+    flash_attention_custom_call_available?() or nif_loaded?()
+  end
+
+  defp flash_attention_custom_call_available? do
+    exla_value = Module.concat([EXLA, MLIR, Value])
+
+    Code.ensure_loaded?(exla_value) and
+      function_exported?(exla_value, :fused_flash_attention, 5)
+  rescue
+    _ -> false
+  end
+
+  defp flash_attention_custom_call(q, k, v, causal) do
+    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
+    output = Nx.template({batch, num_heads, seq_len, head_dim}, {:f, 32})
+    causal_tensor = Nx.tensor(causal, type: {:s, 32})
+
+    Nx.Shared.optional(:fused_flash_attention, [q, k, v, causal_tensor], output, fn q, k, v, _causal ->
+      flash_attention_fallback(q, k, v, causal)
+    end)
+  end
+
+  defp flash_attention_fused(q, k, v, causal) do
+    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
+
+    q_ptr = Nx.to_pointer(q, mode: :local)
+    k_ptr = Nx.to_pointer(k, mode: :local)
+    v_ptr = Nx.to_pointer(v, mode: :local)
+
+    case Edifice.CUDA.NIF.fused_flash_attention(
+           q_ptr.address, k_ptr.address, v_ptr.address,
+           batch, num_heads, seq_len, head_dim, causal
+         ) do
+      {:ok, out_addr, gc_ref} ->
+        hold_gc_ref(out_addr, gc_ref)
+        out_bytes = batch * num_heads * seq_len * head_dim * 4
+
+        Nx.from_pointer(
+          {backend_for(q), client: :cuda, device_id: 0},
+          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
+          {:f, 32},
+          {batch, num_heads, seq_len, head_dim}
+        )
+
+      {:error, reason} ->
+        raise "CUDA flash attention failed: #{reason}"
+    end
+  end
+
+  defp flash_attention_fallback(q, k, v, causal) do
+    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
+
+    # Standard scaled dot-product attention
+    scale = Nx.sqrt(Nx.tensor(head_dim, type: {:f, 32}))
+    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
+
+    # Apply causal mask if requested
+    scores =
+      if causal == 1 do
+        # Build lower-triangular mask [seq, seq]
+        rows = Nx.iota({seq_len, seq_len}, axis: 0)
+        cols = Nx.iota({seq_len, seq_len}, axis: 1)
+        mask = Nx.greater_equal(rows, cols)
+
+        mask =
+          mask
+          |> Nx.reshape({1, 1, seq_len, seq_len})
+          |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
+
+        neg_inf = Nx.Constants.neg_infinity({:f, 32})
+        Nx.select(mask, scores, neg_inf)
+      else
+        scores
+      end
+
+    # Softmax + weighted sum
+    weights = Nx.exp(Nx.subtract(scores, Nx.reduce_max(scores, axes: [-1], keep_axes: true)))
+    weights = Nx.divide(weights, Nx.sum(weights, axes: [-1], keep_axes: true))
+
+    Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
+  end
+
+  # ============================================================================
   # Fallback: generic linear recurrence scan (CPU/BinaryBackend)
   # ============================================================================
 

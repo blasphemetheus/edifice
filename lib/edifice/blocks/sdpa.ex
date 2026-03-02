@@ -80,32 +80,40 @@ defmodule Edifice.Blocks.SDPA do
     k = k |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
     v = v |> Nx.reshape({batch, kv_len, num_heads, head_dim}) |> Nx.transpose(axes: [0, 2, 1, 3])
 
-    # Scaled dot-product attention
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
+    # Use flash attention when available and self-attention (q_len == kv_len)
+    # Flash attention handles causal masking internally, but not arbitrary masks
+    if q_len == kv_len and Edifice.CUDA.FusedScan.flash_attention_available?() do
+      causal = mask != nil
+      output = Edifice.CUDA.FusedScan.flash_attention(q, k, v, causal: causal)
 
-    # Apply mask if provided
-    scores =
-      if mask do
-        mask =
-          mask
-          |> Nx.reshape({1, 1, q_len, kv_len})
-          |> Nx.broadcast({batch, num_heads, q_len, kv_len})
+      output
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+      |> Nx.reshape({batch, q_len, num_heads * head_dim})
+    else
+      # Standard unfused path
+      scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
+      scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
 
-        neg_inf = Nx.Constants.neg_infinity(Nx.type(scores))
-        Nx.select(mask, scores, neg_inf)
-      else
-        scores
-      end
+      scores =
+        if mask do
+          mask =
+            mask
+            |> Nx.reshape({1, 1, q_len, kv_len})
+            |> Nx.broadcast({batch, num_heads, q_len, kv_len})
 
-    weights = FusedOps.fused_softmax(scores)
+          neg_inf = Nx.Constants.neg_infinity(Nx.type(scores))
+          Nx.select(mask, scores, neg_inf)
+        else
+          scores
+        end
 
-    # Apply to values: [batch, heads, q_len, head_dim]
-    output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
+      weights = FusedOps.fused_softmax(scores)
 
-    # Reshape back: [batch, q_len, hidden_dim]
-    output
-    |> Nx.transpose(axes: [0, 2, 1, 3])
-    |> Nx.reshape({batch, q_len, num_heads * head_dim})
+      output = Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
+
+      output
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+      |> Nx.reshape({batch, q_len, num_heads * head_dim})
+    end
   end
 end

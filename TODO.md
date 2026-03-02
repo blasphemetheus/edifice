@@ -145,7 +145,7 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
 - [x] **Cross-Layer Transcoder** — Extends Transcoder to all MLP layers simultaneously with shared dictionary (Anthropic, Feb 2025). Enables full circuit-level sparse analysis.
 
 ### Backlog
-- [ ] Flash Attention — IO-aware exact attention (requires EXLA backend work)
+- [x] Flash Attention — IO-aware exact attention with CUDA kernel + NIF + EXLA custom call + SDPA integration
 - [x] SPLA — Block-sparse + residual linear attention with 2nd-order Taylor selection
 - [x] InfLLM-V2 — Dense-sparse switchable attention with multi-level block selection
 - [x] F5-TTS — Non-autoregressive flow-matching TTS (DiT backbone + ConvNeXt V2 text encoder + RoPE + conv PE)
@@ -257,7 +257,7 @@ transformation between PyTorch and Axon conventions.
 **Phase 4 — Validation & docs:**
 
 - [x] **Round-trip tests** — For each reference model: (1) Build Edifice model, (2) Init random weights, (3) `Safetensors.write!` -> `Pretrained.load` round-trip, (4) Assert all params match. Covers ViT (with QKV concat), Whisper (encoder + decoder), and ConvNeXt. 81 pretrained tests total.
-- [ ] **Numerical validation** — For ViT and Whisper: compare Edifice forward pass output against known PyTorch outputs on reference inputs. Store expected outputs as fixtures. Tolerance: 1e-4 for f32.
+- [x] **Numerical validation** — For ViT and Whisper: compare Edifice forward pass output against known PyTorch outputs on reference inputs. Store expected outputs as fixtures. Tolerance: 1e-4 for f32. Fixture generator: `scripts/generate_numerical_fixtures.py`. Tests: `test/edifice/pretrained/numerical_validation_test.exs` (tagged `:external`).
 - [x] **Guide** — `guides/loading_pretrained_weights.md`. Walk through: installing dep, downloading checkpoint, loading into model, running inference. Includes troubleshooting for shape mismatches, missing keys, LayerNorm naming, and writing custom key maps.
 
 ### Axon.ModelState Deprecation Warnings (Priority: Medium)

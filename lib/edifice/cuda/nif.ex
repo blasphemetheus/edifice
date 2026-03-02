@@ -82,4 +82,8 @@ defmodule Edifice.CUDA.NIF do
   @doc false
   def fused_rla_scan(_q, _k, _v, _alpha, _beta, _gamma, _batch, _seq, _heads, _head_dim, _variant, _clip),
     do: :erlang.nif_error(:not_loaded)
+
+  @doc false
+  def fused_flash_attention(_q, _k, _v, _batch, _heads, _seq, _head_dim, _causal),
+    do: :erlang.nif_error(:not_loaded)
 end

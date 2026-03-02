@@ -127,6 +127,15 @@ typedef int (*rla_launch_fn)(
     int variant, float clip_threshold
 );
 
+/* Flash Attention launch wrapper */
+typedef int (*flash_attention_launch_fn)(
+    cudaStream_t stream,
+    const float* q, const float* k, const float* v,
+    float* output,
+    int batch, int num_heads, int seq_len, int head_dim,
+    int causal
+);
+
 /* cudaMalloc / cudaFree — resolved from libcudart */
 typedef cudaError_t (*cuda_malloc_fn)(void** devPtr, size_t size);
 typedef cudaError_t (*cuda_free_fn)(void* devPtr);
@@ -148,6 +157,7 @@ static ttt_launch_fn             s_ttt_launch             = NULL;
 static selective_scan_launch_fn  s_selective_scan_launch  = NULL;
 static kda_launch_fn             s_kda_launch             = NULL;
 static rla_launch_fn             s_rla_launch             = NULL;
+static flash_attention_launch_fn s_flash_attention_launch = NULL;
 static cuda_malloc_fn    s_cuda_malloc    = NULL;
 static cuda_free_fn      s_cuda_free      = NULL;
 static cuda_device_synchronize_fn s_cuda_sync = NULL;
@@ -1090,6 +1100,81 @@ static ERL_NIF_TERM nif_fused_rla_scan(
 }
 
 /* ========================================================================== */
+/* NIF: fused_flash_attention                                                  */
+/* ========================================================================== */
+
+/*
+ * fused_flash_attention(q_ptr, k_ptr, v_ptr, batch, heads, seq, d, causal)
+ *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
+ *
+ * q/k/v layout: [B, H, T, d]
+ * causal: 0 = full attention, 1 = causal mask
+ */
+static ERL_NIF_TERM nif_fused_flash_attention(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t q_ptr, k_ptr, v_ptr;
+    int batch, num_heads, seq_len, head_dim, causal;
+
+    if (!s_flash_attention_launch)
+        return make_error(env, "flash_attention kernel not loaded");
+
+    if (!enif_get_uint64(env, argv[0], &q_ptr) ||
+        !enif_get_uint64(env, argv[1], &k_ptr) ||
+        !enif_get_uint64(env, argv[2], &v_ptr) ||
+        !enif_get_int(env, argv[3], &batch) ||
+        !enif_get_int(env, argv[4], &num_heads) ||
+        !enif_get_int(env, argv[5], &seq_len) ||
+        !enif_get_int(env, argv[6], &head_dim) ||
+        !enif_get_int(env, argv[7], &causal))
+    {
+        return enif_make_badarg(env);
+    }
+
+    if (batch <= 0 || num_heads <= 0 || seq_len <= 0 || head_dim <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t out_bytes = (size_t)batch * num_heads * seq_len * head_dim * sizeof(float);
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2) {
+        return alloc_result;
+    }
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0) {
+        return alloc_result;
+    }
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = s_flash_attention_launch(
+        NULL,
+        (const float*)(uintptr_t)q_ptr,
+        (const float*)(uintptr_t)k_ptr,
+        (const float*)(uintptr_t)v_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, num_heads, seq_len, head_dim,
+        causal
+    );
+
+    if (launch_err != 0) {
+        return make_error(env, "flash_attention kernel launch failed");
+    }
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0) {
+        return make_error(env, "cudaDeviceSynchronize failed");
+    }
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
 /* NIF Load — resolve all symbols                                             */
 /* ========================================================================== */
 
@@ -1181,6 +1266,8 @@ static int nif_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
         s_kernels_handle, "fused_kda_scan_launch");
     s_rla_launch = (rla_launch_fn)dlsym(
         s_kernels_handle, "fused_rla_scan_launch");
+    s_flash_attention_launch = (flash_attention_launch_fn)dlsym(
+        s_kernels_handle, "fused_flash_attention_launch");
 
     return 0;
 }
@@ -1236,7 +1323,8 @@ static ErlNifFunc nif_funcs[] = {
     {"fused_ttt_scan",             10, nif_fused_ttt_scan,             ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_selective_scan",        9, nif_fused_selective_scan,        ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_kda_scan",              9, nif_fused_kda_scan,              ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_rla_scan",             12, nif_fused_rla_scan,             ERL_NIF_DIRTY_JOB_IO_BOUND}
+    {"fused_rla_scan",             12, nif_fused_rla_scan,             ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_flash_attention",        8, nif_fused_flash_attention,       ERL_NIF_DIRTY_JOB_IO_BOUND}
 };
 
 ERL_NIF_INIT(Elixir.Edifice.CUDA.NIF, nif_funcs, nif_load, NULL, NULL, nif_unload)
