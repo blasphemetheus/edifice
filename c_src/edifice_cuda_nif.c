@@ -371,6 +371,35 @@ typedef int (*ttt_backward_launch_fn)(
     int batch, int seq_len, int inner_size
 );
 
+/* Flash Attention backward launch wrapper */
+typedef int (*flash_attention_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* q, const float* k, const float* v,
+    const float* o, const float* grad_o,
+    float* output_concat,
+    int batch, int num_heads, int seq_len, int head_dim,
+    int causal
+);
+
+/* LASER Attention backward launch wrapper */
+typedef int (*laser_attention_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* q, const float* k, const float* v,
+    const float* v_max, const float* o, const float* grad_o,
+    float* output_concat,
+    int batch, int num_heads, int seq_len, int head_dim,
+    int causal
+);
+
+/* FoX Attention backward launch wrapper */
+typedef int (*fox_attention_backward_launch_fn)(
+    cudaStream_t stream,
+    const float* q, const float* k, const float* v,
+    const float* cs, const float* o, const float* grad_o,
+    float* output_concat,
+    int batch, int num_heads, int seq_len, int head_dim
+);
+
 /* Multi-layer block scan launch wrappers */
 typedef int (*mingru_block_launch_fn)(
     cudaStream_t stream,
@@ -433,6 +462,9 @@ static selective_scan_backward_launch_fn  s_selective_scan_backward_launch  = NU
 static kda_backward_launch_fn            s_kda_backward_launch            = NULL;
 static rla_backward_launch_fn            s_rla_backward_launch            = NULL;
 static ttt_backward_launch_fn            s_ttt_backward_launch            = NULL;
+static flash_attention_backward_launch_fn s_flash_attention_backward_launch = NULL;
+static laser_attention_backward_launch_fn s_laser_attention_backward_launch = NULL;
+static fox_attention_backward_launch_fn   s_fox_attention_backward_launch   = NULL;
 static mingru_block_launch_fn         s_mingru_block_launch         = NULL;
 static minlstm_block_launch_fn        s_minlstm_block_launch        = NULL;
 static cuda_malloc_fn    s_cuda_malloc    = NULL;
@@ -485,6 +517,9 @@ static selective_scan_backward_launch_fn  s_selective_scan_backward_bf16_launch 
 static kda_backward_launch_fn            s_kda_backward_bf16_launch            = NULL;
 static rla_backward_launch_fn            s_rla_backward_bf16_launch            = NULL;
 static ttt_backward_launch_fn            s_ttt_backward_bf16_launch            = NULL;
+static flash_attention_backward_launch_fn s_flash_attention_backward_bf16_launch = NULL;
+static laser_attention_backward_launch_fn s_laser_attention_backward_bf16_launch = NULL;
+static fox_attention_backward_launch_fn   s_fox_attention_backward_bf16_launch   = NULL;
 static mingru_block_launch_fn         s_mingru_block_bf16_launch         = NULL;
 static minlstm_block_launch_fn        s_minlstm_block_bf16_launch        = NULL;
 
@@ -1843,6 +1878,240 @@ static ERL_NIF_TERM nif_fused_fox_attention(
     if (err != 0) {
         return make_error(env, "cudaDeviceSynchronize failed");
     }
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused_flash_attention_backward                                        */
+/* ========================================================================== */
+
+/*
+ * fused_flash_attention_backward(q, k, v, o, grad_o, batch, heads, seq, d, causal, dtype)
+ *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
+ *
+ * Output: [dQ (B*H*T*d) | dK (B*H*T*d) | dV (B*H*T*d)]
+ */
+static ERL_NIF_TERM nif_fused_flash_attention_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t q_ptr, k_ptr, v_ptr, o_ptr, grad_o_ptr;
+    int batch, num_heads, seq_len, head_dim, causal, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &q_ptr) ||
+        !enif_get_uint64(env, argv[1], &k_ptr) ||
+        !enif_get_uint64(env, argv[2], &v_ptr) ||
+        !enif_get_uint64(env, argv[3], &o_ptr) ||
+        !enif_get_uint64(env, argv[4], &grad_o_ptr) ||
+        !enif_get_int(env, argv[5], &batch) ||
+        !enif_get_int(env, argv[6], &num_heads) ||
+        !enif_get_int(env, argv[7], &seq_len) ||
+        !enif_get_int(env, argv[8], &head_dim) ||
+        !enif_get_int(env, argv[9], &causal) ||
+        !enif_get_int(env, argv[10], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    flash_attention_backward_launch_fn launch = (dtype == 1) ? s_flash_attention_backward_bf16_launch : s_flash_attention_backward_launch;
+    if (!launch)
+        return make_error(env, "flash_attention_backward kernel not loaded");
+
+    if (batch <= 0 || num_heads <= 0 || seq_len <= 0 || head_dim <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = 3 * (size_t)batch * num_heads * seq_len * head_dim * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)q_ptr,
+        (const float*)(uintptr_t)k_ptr,
+        (const float*)(uintptr_t)v_ptr,
+        (const float*)(uintptr_t)o_ptr,
+        (const float*)(uintptr_t)grad_o_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, num_heads, seq_len, head_dim,
+        causal
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "flash_attention_backward kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused_laser_attention_backward                                        */
+/* ========================================================================== */
+
+/*
+ * fused_laser_attention_backward(q, k, v, v_max, o, grad_o, batch, heads, seq, d, causal, dtype)
+ *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
+ *
+ * Output: [dQ (B*H*T*d) | dK (B*H*T*d) | dV (B*H*T*d)]
+ */
+static ERL_NIF_TERM nif_fused_laser_attention_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t q_ptr, k_ptr, v_ptr, vmax_ptr, o_ptr, grad_o_ptr;
+    int batch, num_heads, seq_len, head_dim, causal, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &q_ptr) ||
+        !enif_get_uint64(env, argv[1], &k_ptr) ||
+        !enif_get_uint64(env, argv[2], &v_ptr) ||
+        !enif_get_uint64(env, argv[3], &vmax_ptr) ||
+        !enif_get_uint64(env, argv[4], &o_ptr) ||
+        !enif_get_uint64(env, argv[5], &grad_o_ptr) ||
+        !enif_get_int(env, argv[6], &batch) ||
+        !enif_get_int(env, argv[7], &num_heads) ||
+        !enif_get_int(env, argv[8], &seq_len) ||
+        !enif_get_int(env, argv[9], &head_dim) ||
+        !enif_get_int(env, argv[10], &causal) ||
+        !enif_get_int(env, argv[11], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    laser_attention_backward_launch_fn launch = (dtype == 1) ? s_laser_attention_backward_bf16_launch : s_laser_attention_backward_launch;
+    if (!launch)
+        return make_error(env, "laser_attention_backward kernel not loaded");
+
+    if (batch <= 0 || num_heads <= 0 || seq_len <= 0 || head_dim <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    size_t out_bytes = 3 * (size_t)batch * num_heads * seq_len * head_dim * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)q_ptr,
+        (const float*)(uintptr_t)k_ptr,
+        (const float*)(uintptr_t)v_ptr,
+        (const float*)(uintptr_t)vmax_ptr,
+        (const float*)(uintptr_t)o_ptr,
+        (const float*)(uintptr_t)grad_o_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, num_heads, seq_len, head_dim,
+        causal
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "laser_attention_backward kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
+
+    return alloc_result;
+}
+
+/* ========================================================================== */
+/* NIF: fused_fox_attention_backward                                          */
+/* ========================================================================== */
+
+/*
+ * fused_fox_attention_backward(q, k, v, cs, o, grad_o, batch, heads, seq, d, dtype)
+ *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
+ *
+ * Output: [dQ (B*H*T*d) | dK (B*H*T*d) | dV (B*H*T*d) | grad_cs (B*H*T)]
+ */
+static ERL_NIF_TERM nif_fused_fox_attention_backward(
+    ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    uint64_t q_ptr, k_ptr, v_ptr, cs_ptr, o_ptr, grad_o_ptr;
+    int batch, num_heads, seq_len, head_dim, dtype;
+
+    if (!enif_get_uint64(env, argv[0], &q_ptr) ||
+        !enif_get_uint64(env, argv[1], &k_ptr) ||
+        !enif_get_uint64(env, argv[2], &v_ptr) ||
+        !enif_get_uint64(env, argv[3], &cs_ptr) ||
+        !enif_get_uint64(env, argv[4], &o_ptr) ||
+        !enif_get_uint64(env, argv[5], &grad_o_ptr) ||
+        !enif_get_int(env, argv[6], &batch) ||
+        !enif_get_int(env, argv[7], &num_heads) ||
+        !enif_get_int(env, argv[8], &seq_len) ||
+        !enif_get_int(env, argv[9], &head_dim) ||
+        !enif_get_int(env, argv[10], &dtype))
+    {
+        return enif_make_badarg(env);
+    }
+
+    fox_attention_backward_launch_fn launch = (dtype == 1) ? s_fox_attention_backward_bf16_launch : s_fox_attention_backward_launch;
+    if (!launch)
+        return make_error(env, "fox_attention_backward kernel not loaded");
+
+    if (batch <= 0 || num_heads <= 0 || seq_len <= 0 || head_dim <= 0)
+        return make_error(env, "dimensions must be positive");
+
+    size_t elem_size = (dtype == 1) ? 2 : 4;
+    /* 3 * B*H*T*d for dQ/dK/dV + B*H*T for grad_cs */
+    size_t out_bytes = (3 * (size_t)batch * num_heads * seq_len * head_dim + (size_t)batch * num_heads * seq_len) * elem_size;
+    ERL_NIF_TERM alloc_result = alloc_gpu_buffer(env, out_bytes);
+
+    int arity;
+    const ERL_NIF_TERM* tuple;
+    if (!enif_get_tuple(env, alloc_result, &arity, &tuple) || arity < 2)
+        return alloc_result;
+
+    char atom_buf[8];
+    if (enif_get_atom(env, tuple[0], atom_buf, sizeof(atom_buf), ERL_NIF_LATIN1)
+        && strcmp(atom_buf, "error") == 0)
+        return alloc_result;
+
+    uint64_t out_ptr;
+    enif_get_uint64(env, tuple[1], &out_ptr);
+
+    int launch_err = launch(
+        NULL,
+        (const float*)(uintptr_t)q_ptr,
+        (const float*)(uintptr_t)k_ptr,
+        (const float*)(uintptr_t)v_ptr,
+        (const float*)(uintptr_t)cs_ptr,
+        (const float*)(uintptr_t)o_ptr,
+        (const float*)(uintptr_t)grad_o_ptr,
+        (float*)(uintptr_t)out_ptr,
+        batch, num_heads, seq_len, head_dim
+    );
+
+    if (launch_err != 0)
+        return make_error(env, "fox_attention_backward kernel launch failed");
+
+    cudaError_t err = s_cuda_sync();
+    if (err != 0)
+        return make_error(env, "cudaDeviceSynchronize failed");
 
     return alloc_result;
 }
@@ -3693,6 +3962,12 @@ static int nif_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
         s_kernels_handle, "fused_rla_scan_backward_launch");
     s_ttt_backward_launch = (ttt_backward_launch_fn)dlsym(
         s_kernels_handle, "fused_ttt_scan_backward_launch");
+    s_flash_attention_backward_launch = (flash_attention_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_flash_attention_backward_launch");
+    s_laser_attention_backward_launch = (laser_attention_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_laser_attention_backward_launch");
+    s_fox_attention_backward_launch = (fox_attention_backward_launch_fn)dlsym(
+        s_kernels_handle, "fused_fox_attention_backward_launch");
     s_mingru_block_launch = (mingru_block_launch_fn)dlsym(
         s_kernels_handle, "fused_mingru_block_scan_launch");
     s_minlstm_block_launch = (minlstm_block_launch_fn)dlsym(
@@ -3800,6 +4075,12 @@ static int nif_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
             s_kernels_bf16_handle, "fused_rla_scan_backward_launch");
         s_ttt_backward_bf16_launch = (ttt_backward_launch_fn)dlsym(
             s_kernels_bf16_handle, "fused_ttt_scan_backward_launch");
+        s_flash_attention_backward_bf16_launch = (flash_attention_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_flash_attention_backward_launch");
+        s_laser_attention_backward_bf16_launch = (laser_attention_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_laser_attention_backward_launch");
+        s_fox_attention_backward_bf16_launch = (fox_attention_backward_launch_fn)dlsym(
+            s_kernels_bf16_handle, "fused_fox_attention_backward_launch");
         s_mingru_block_bf16_launch = (mingru_block_launch_fn)dlsym(
             s_kernels_bf16_handle, "fused_mingru_block_scan_launch");
         s_minlstm_block_bf16_launch = (minlstm_block_launch_fn)dlsym(
@@ -3867,6 +4148,9 @@ static void nif_unload(ErlNifEnv* env, void* priv_data) {
     s_kda_backward_launch            = NULL;
     s_rla_backward_launch            = NULL;
     s_ttt_backward_launch            = NULL;
+    s_flash_attention_backward_launch = NULL;
+    s_laser_attention_backward_launch = NULL;
+    s_fox_attention_backward_launch   = NULL;
     s_mingru_block_launch         = NULL;
     s_minlstm_block_launch        = NULL;
     /* bf16 pointers */
@@ -3911,6 +4195,9 @@ static void nif_unload(ErlNifEnv* env, void* priv_data) {
     s_kda_backward_bf16_launch            = NULL;
     s_rla_backward_bf16_launch            = NULL;
     s_ttt_backward_bf16_launch            = NULL;
+    s_flash_attention_backward_bf16_launch = NULL;
+    s_laser_attention_backward_bf16_launch = NULL;
+    s_fox_attention_backward_bf16_launch   = NULL;
     s_mingru_block_bf16_launch         = NULL;
     s_minlstm_block_bf16_launch        = NULL;
     /* CUDA runtime */
@@ -3966,7 +4253,10 @@ static ErlNifFunc nif_funcs[] = {
     {"fused_selective_scan_backward",         11, nif_fused_selective_scan_backward,          ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_kda_scan_backward",               12, nif_fused_kda_scan_backward,                ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_rla_scan_backward",               15, nif_fused_rla_scan_backward,                ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_ttt_scan_backward",               12, nif_fused_ttt_scan_backward,                ERL_NIF_DIRTY_JOB_IO_BOUND}
+    {"fused_ttt_scan_backward",               12, nif_fused_ttt_scan_backward,                ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_flash_attention_backward",        11, nif_fused_flash_attention_backward,         ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_laser_attention_backward",        12, nif_fused_laser_attention_backward,         ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_fox_attention_backward",          11, nif_fused_fox_attention_backward,           ERL_NIF_DIRTY_JOB_IO_BOUND}
 };
 
 ERL_NIF_INIT(Elixir.Edifice.CUDA.NIF, nif_funcs, nif_load, NULL, NULL, nif_unload)

@@ -201,4 +201,17 @@ defmodule Edifice.CUDA.NIF do
   @doc false
   def fused_ttt_scan_backward(_q, _k, _v, _eta, _w0, _lng, _lnb, _grad, _batch, _seq, _inner, _dtype),
     do: :erlang.nif_error(:not_loaded)
+
+  # Attention backward kernels
+  @doc false
+  def fused_flash_attention_backward(_q, _k, _v, _o, _grad_o, _batch, _heads, _seq, _dim, _causal, _dtype),
+    do: :erlang.nif_error(:not_loaded)
+
+  @doc false
+  def fused_laser_attention_backward(_q, _k, _v, _vmax, _o, _grad_o, _batch, _heads, _seq, _dim, _causal, _dtype),
+    do: :erlang.nif_error(:not_loaded)
+
+  @doc false
+  def fused_fox_attention_backward(_q, _k, _v, _cs, _o, _grad_o, _batch, _heads, _seq, _dim, _dtype),
+    do: :erlang.nif_error(:not_loaded)
 end

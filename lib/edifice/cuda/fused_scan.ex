@@ -1118,8 +1118,9 @@ defmodule Edifice.CUDA.FusedScan do
   # Liquid backward dispatch
   defp liquid_backward_dispatch(tau, activation, h0, forward_out, grad_output) do
     {batch, seq_len, hidden} = Nx.shape(tau)
-    grad_template = Nx.template({batch, seq_len, hidden}, {:f, 32})
-    grad_h0_template = Nx.template({batch, hidden}, {:f, 32})
+    ttype = Nx.type(tau)
+    grad_template = Nx.template({batch, seq_len, hidden}, ttype)
+    grad_h0_template = Nx.template({batch, hidden}, ttype)
 
     Nx.Shared.optional(
       :fused_liquid_scan_backward,
@@ -1173,7 +1174,8 @@ defmodule Edifice.CUDA.FusedScan do
   # DeltaNet (delta rule) backward dispatch
   defp delta_rule_backward_dispatch(q, k, v, beta, forward_out, grad_output) do
     {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
-    grad_template = Nx.template({batch, seq_len, num_heads, head_dim}, {:f, 32})
+    ttype = Nx.type(q)
+    grad_template = Nx.template({batch, seq_len, num_heads, head_dim}, ttype)
 
     Nx.Shared.optional(
       :fused_delta_rule_scan_backward,
@@ -1205,7 +1207,7 @@ defmodule Edifice.CUDA.FusedScan do
         retr = Nx.dot(s_prev, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
         error = Nx.subtract(v_t, retr)
         scaled_err = Nx.multiply(beta_t, error)
-        s_new = Nx.add(s_prev, Nx.dot(Nx.new_axis(scaled_err, 3), [3], [], Nx.new_axis(k_t, 2), [2], []))
+        s_new = Nx.add(s_prev, Nx.multiply(Nx.new_axis(scaled_err, 3), Nx.new_axis(k_t, 2)))
         {s_new, [s_prev | acc]}
       end)
 
@@ -1226,10 +1228,10 @@ defmodule Edifice.CUDA.FusedScan do
 
         retr = Nx.dot(s_prev, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
         error = Nx.subtract(v_t, retr)
-        s_new = Nx.add(s_prev, Nx.dot(Nx.new_axis(Nx.multiply(beta_t, error), 3), [3], [], Nx.new_axis(k_t, 2), [2], []))
+        s_new = Nx.add(s_prev, Nx.multiply(Nx.new_axis(Nx.multiply(beta_t, error), 3), Nx.new_axis(k_t, 2)))
 
         # dS from output: dS += outer(do, q)
-        ds_from_out = Nx.dot(Nx.new_axis(do_t, 3), [3], [], Nx.new_axis(q_t, 2), [2], [])
+        ds_from_out = Nx.multiply(Nx.new_axis(do_t, 3), Nx.new_axis(q_t, 2))
         ds_total = Nx.add(ds, ds_from_out)
 
         # dq = S_new^T @ do
@@ -1237,7 +1239,7 @@ defmodule Edifice.CUDA.FusedScan do
 
         # Through state update
         ds_k = Nx.dot(ds_total, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
-        ds_prev = Nx.subtract(ds_total, Nx.multiply(beta_t, Nx.dot(Nx.new_axis(ds_k, 3), [3], [], Nx.new_axis(k_t, 2), [2], [])))
+        ds_prev = Nx.subtract(ds_total, Nx.multiply(Nx.new_axis(Nx.multiply(beta_t, ds_k), 3), Nx.new_axis(k_t, 2)))
 
         gv_t = Nx.multiply(beta_t, ds_k)
         gbeta_t = Nx.multiply(error, ds_k)
@@ -1261,8 +1263,9 @@ defmodule Edifice.CUDA.FusedScan do
   # GatedDeltaNet backward dispatch — extends DeltaNet with alpha decay gradient
   defp gated_delta_net_backward_dispatch(q, k, v, beta, alpha, forward_out, grad_output) do
     {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
-    grad_template = Nx.template({batch, seq_len, num_heads, head_dim}, {:f, 32})
-    grad_alpha_template = Nx.template({batch, seq_len, num_heads}, {:f, 32})
+    ttype = Nx.type(q)
+    grad_template = Nx.template({batch, seq_len, num_heads, head_dim}, ttype)
+    grad_alpha_template = Nx.template({batch, seq_len, num_heads}, ttype)
 
     Nx.Shared.optional(
       :fused_gated_delta_net_scan_backward,
@@ -1324,17 +1327,17 @@ defmodule Edifice.CUDA.FusedScan do
         s_decayed = Nx.multiply(alpha_broad, s_prev)
         sk = Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
         error = Nx.subtract(v_t, sk)
-        s_new = Nx.add(s_decayed, Nx.dot(Nx.new_axis(Nx.multiply(beta_t, error), 3), [3], [], Nx.new_axis(k_t, 2), [2], []))
+        s_new = Nx.add(s_decayed, Nx.multiply(Nx.new_axis(Nx.multiply(beta_t, error), 3), Nx.new_axis(k_t, 2)))
 
         # dS from output
-        ds_from_out = Nx.dot(Nx.new_axis(do_t, 3), [3], [], Nx.new_axis(q_t, 2), [2], [])
+        ds_from_out = Nx.multiply(Nx.new_axis(do_t, 3), Nx.new_axis(q_t, 2))
         ds_total = Nx.add(ds, ds_from_out)
 
         gq_t = Nx.dot(Nx.transpose(s_new, axes: [0, 1, 3, 2]), [3], [0, 1], Nx.new_axis(do_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
 
         # Through delta update
         ds_k = Nx.dot(ds_total, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
-        ds_to_decayed = Nx.subtract(ds_total, Nx.multiply(beta_t, Nx.dot(Nx.new_axis(ds_k, 3), [3], [], Nx.new_axis(k_t, 2), [2], [])))
+        ds_to_decayed = Nx.subtract(ds_total, Nx.multiply(Nx.new_axis(Nx.multiply(beta_t, ds_k), 3), Nx.new_axis(k_t, 2)))
 
         gv_t = Nx.multiply(beta_t, ds_k)
         gbeta_t = Nx.multiply(error, ds_k)
@@ -1363,11 +1366,12 @@ defmodule Edifice.CUDA.FusedScan do
   # Selective scan backward dispatch
   defp selective_scan_backward_dispatch(x, dt, a, b, c, _forward_out, grad_output) do
     {batch, seq_len, hidden} = Nx.shape(x)
+    ttype = Nx.type(x)
     state_size = Nx.axis_size(a, 1)
-    grad_x_template = Nx.template({batch, seq_len, hidden}, {:f, 32})
-    grad_dt_template = Nx.template({batch, seq_len, hidden}, {:f, 32})
-    grad_b_template = Nx.template({batch, seq_len, state_size}, {:f, 32})
-    grad_c_template = Nx.template({batch, seq_len, state_size}, {:f, 32})
+    grad_x_template = Nx.template({batch, seq_len, hidden}, ttype)
+    grad_dt_template = Nx.template({batch, seq_len, hidden}, ttype)
+    grad_b_template = Nx.template({batch, seq_len, state_size}, ttype)
+    grad_c_template = Nx.template({batch, seq_len, state_size}, ttype)
 
     Nx.Shared.optional(
       :fused_selective_scan_backward,
@@ -1464,8 +1468,9 @@ defmodule Edifice.CUDA.FusedScan do
   # KDA backward dispatch
   defp kda_backward_dispatch(q, k, v, alpha, beta, forward_out, grad_output) do
     {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
-    grad_4d = Nx.template({batch, seq_len, num_heads, head_dim}, {:f, 32})
-    grad_3d = Nx.template({batch, seq_len, num_heads}, {:f, 32})
+    ttype = Nx.type(q)
+    grad_4d = Nx.template({batch, seq_len, num_heads, head_dim}, ttype)
+    grad_3d = Nx.template({batch, seq_len, num_heads}, ttype)
 
     Nx.Shared.optional(
       :fused_kda_scan_backward,
@@ -1562,8 +1567,8 @@ defmodule Edifice.CUDA.FusedScan do
         # dbeta: sum over d,d
         gbeta_t = Nx.sum(Nx.multiply(error, ds_k), axes: [-1])
 
-        # d_alpha: sum_j(ds_to_decayed[i][j] * s_prev[i][j])
-        galpha_t = Nx.sum(Nx.multiply(ds_to_decayed, s_prev), axes: [2, 3])
+        # d_alpha: sum over second D dimension (broadcast dim of decay)
+        galpha_t = Nx.sum(Nx.multiply(ds_to_decayed, s_prev), axes: [3])
 
         # Propagate ds through decay
         ds_prev = Nx.multiply(decay, ds_to_decayed)
@@ -1583,8 +1588,9 @@ defmodule Edifice.CUDA.FusedScan do
   # RLA backward dispatch
   defp rla_backward_dispatch(q, k, v, alpha, beta, gamma, forward_out, grad_output, variant, clip_threshold) do
     {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
-    grad_4d = Nx.template({batch, seq_len, num_heads, head_dim}, {:f, 32})
-    grad_3d = Nx.template({batch, seq_len, num_heads}, {:f, 32})
+    ttype = Nx.type(q)
+    grad_4d = Nx.template({batch, seq_len, num_heads, head_dim}, ttype)
+    grad_3d = Nx.template({batch, seq_len, num_heads}, ttype)
 
     Nx.Shared.optional(
       :fused_rla_scan_backward,
@@ -1730,9 +1736,10 @@ defmodule Edifice.CUDA.FusedScan do
   # TTT backward dispatch
   defp ttt_backward_dispatch(q, k, v, eta, w0, ln_gamma, ln_beta, forward_out, grad_output) do
     {batch, seq_len, inner_size} = Nx.shape(q)
-    grad_3d = Nx.template({batch, seq_len, inner_size}, {:f, 32})
-    grad_w0 = Nx.template({batch, inner_size, inner_size}, {:f, 32})
-    grad_ln = Nx.template({inner_size}, {:f, 32})
+    ttype = Nx.type(q)
+    grad_3d = Nx.template({batch, seq_len, inner_size}, ttype)
+    grad_w0 = Nx.template({batch, inner_size, inner_size}, ttype)
+    grad_ln = Nx.template({inner_size}, ttype)
 
     Nx.Shared.optional(
       :fused_ttt_scan_backward,
@@ -1819,7 +1826,7 @@ defmodule Edifice.CUDA.FusedScan do
         d_scaled_error = Nx.negate(Nx.dot(dw_new, [2], [0], Nx.new_axis(k_t, 2), [1], [0]) |> Nx.squeeze(axes: [2]))
 
         # dk_update = -scaled_error^T @ dW (cross-batch dot)
-        dk_update = Nx.negate(Nx.dot(Nx.new_axis(scaled_error, 1), [1], [0], dw_new, [1], [0]) |> Nx.squeeze(axes: [1]))
+        dk_update = Nx.negate(Nx.dot(Nx.new_axis(scaled_error, 1), [2], [0], dw_new, [1], [0]) |> Nx.squeeze(axes: [1]))
 
         # Step 4: d_eta = d_scaled_error * error, d_error = d_scaled_error * eta
         geta_t = Nx.multiply(d_scaled_error, error)
@@ -1945,7 +1952,7 @@ defmodule Edifice.CUDA.FusedScan do
           end)
 
         # dS from output
-        ds_from_out = Nx.dot(Nx.new_axis(d_o_raw, 3), [3], [], Nx.new_axis(q_t, 2), [2], [])
+        ds_from_out = Nx.multiply(Nx.new_axis(d_o_raw, 3), Nx.new_axis(q_t, 2))
         ds_total = Nx.add(ds, ds_from_out)
 
         # dq
@@ -1997,7 +2004,7 @@ defmodule Edifice.CUDA.FusedScan do
             dot_gkn_kn = Nx.sum(Nx.multiply(gkn_t, k_normalized), axes: [-1], keep_axes: true)
             gk_tj = Nx.divide(Nx.subtract(gkn_t, Nx.multiply(k_normalized, dot_gkn_kn)), k_norm)
 
-            ds_prev_step = Nx.subtract(ds_cur, Nx.multiply(beta_tj, Nx.dot(Nx.new_axis(ds_kn, 3), [3], [], Nx.new_axis(k_normalized, 2), [2], [])))
+            ds_prev_step = Nx.subtract(ds_cur, Nx.multiply(beta_tj |> Nx.new_axis(-1) |> Nx.new_axis(-1), Nx.multiply(Nx.new_axis(ds_kn, 3), Nx.new_axis(k_normalized, 2))))
 
             gk_acc = Nx.put_slice(gk_acc, [0, t, j, 0, 0], Nx.reshape(gk_tj, {batch, 1, 1, num_heads, head_dim}))
             gv_acc = Nx.put_slice(gv_acc, [0, t, j, 0, 0], Nx.reshape(gv_tj, {batch, 1, 1, num_heads, head_dim}))
@@ -3336,8 +3343,15 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, num_heads, seq_len, head_dim}, tensor_type)
     causal_tensor = Nx.tensor(causal, type: {:s, 32})
 
-    Nx.Shared.optional(:fused_flash_attention, [q, k, v, causal_tensor], output, fn q, k, v, _causal ->
-      flash_attention_fallback(q, k, v, causal)
+    forward_output =
+      Nx.Shared.optional(:fused_flash_attention, [q, k, v, causal_tensor], output, fn q, k, v, _causal ->
+        flash_attention_fallback(q, k, v, causal)
+      end)
+
+    Nx.Defn.Kernel.custom_grad(forward_output, [q, k, v], fn grad_output ->
+      {grad_q, grad_k, grad_v} =
+        flash_attention_backward_dispatch(q, k, v, causal, forward_output, grad_output)
+      [grad_q, grad_k, grad_v]
     end)
   end
 
@@ -3371,7 +3385,8 @@ defmodule Edifice.CUDA.FusedScan do
     end
   end
 
-  defp flash_attention_fallback(q, k, v, causal) do
+  @doc false
+  def flash_attention_fallback(q, k, v, causal) do
     {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
     ttype = Nx.type(q)
 
@@ -3403,6 +3418,68 @@ defmodule Edifice.CUDA.FusedScan do
     weights = Nx.divide(weights, Nx.sum(weights, axes: [-1], keep_axes: true))
 
     Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
+  end
+
+  defp flash_attention_backward_dispatch(q, k, v, causal, forward_out, grad_output) do
+    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
+    ttype = Nx.type(q)
+    grad_template = Nx.template({batch, num_heads, seq_len, head_dim}, ttype)
+    causal_tensor = Nx.tensor(causal, type: {:s, 32})
+
+    Nx.Shared.optional(
+      :fused_flash_attention_backward,
+      [q, k, v, forward_out, grad_output, causal_tensor],
+      {grad_template, grad_template, grad_template},
+      fn q, k, v, _fwd, grad, _causal ->
+        flash_attention_backward_fallback(q, k, v, causal, grad)
+      end
+    )
+  end
+
+  @doc false
+  def flash_attention_backward_fallback(q, k, v, causal, grad_output) do
+    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
+    ttype = Nx.type(q)
+
+    # Recompute forward: standard SDPA
+    scale = Nx.sqrt(Nx.tensor(head_dim, type: ttype))
+    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
+
+    scores =
+      if causal == 1 do
+        rows = Nx.iota({seq_len, seq_len}, axis: 0)
+        cols = Nx.iota({seq_len, seq_len}, axis: 1)
+        mask = Nx.greater_equal(rows, cols)
+        mask = mask |> Nx.reshape({1, 1, seq_len, seq_len}) |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
+        neg_inf = Nx.Constants.neg_infinity(ttype)
+        Nx.select(mask, scores, neg_inf)
+      else
+        scores
+      end
+
+    # Softmax weights
+    weights = Nx.exp(Nx.subtract(scores, Nx.reduce_max(scores, axes: [-1], keep_axes: true)))
+    weights = Nx.divide(weights, Nx.sum(weights, axes: [-1], keep_axes: true))
+
+    # dV = weights^T @ grad_output
+    grad_v = Nx.dot(weights, [2], [0, 1], grad_output, [2], [0, 1])
+
+    # dWeights = grad_output @ V^T
+    d_weights = Nx.dot(grad_output, [3], [0, 1], v, [3], [0, 1])
+
+    # dScores = weights * (dWeights - sum(dWeights * weights, axis=-1, keepdims=True))
+    d_scores = Nx.multiply(weights, Nx.subtract(d_weights, Nx.sum(Nx.multiply(d_weights, weights), axes: [-1], keep_axes: true)))
+
+    # Scale dScores
+    d_scores = Nx.divide(d_scores, scale)
+
+    # dQ = dScores @ K
+    grad_q = Nx.dot(d_scores, [3], [0, 1], k, [2], [0, 1])
+
+    # dK = dScores^T @ Q
+    grad_k = Nx.dot(d_scores, [2], [0, 1], q, [2], [0, 1])
+
+    {grad_q, grad_k, grad_v}
   end
 
   # ============================================================================
@@ -3459,8 +3536,16 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, num_heads, seq_len, head_dim}, tensor_type)
     causal_tensor = Nx.tensor(causal, type: {:s, 32})
 
-    Nx.Shared.optional(:fused_laser_attention, [q, k, v, v_max, causal_tensor], output, fn q, k, v, v_max, _causal ->
-      laser_attention_fallback(q, k, v, v_max, causal)
+    forward_output =
+      Nx.Shared.optional(:fused_laser_attention, [q, k, v, v_max, causal_tensor], output, fn q, k, v, v_max, _causal ->
+        laser_attention_fallback(q, k, v, v_max, causal)
+      end)
+
+    # v_max captured from closure, not a custom_grad input (derived from v)
+    Nx.Defn.Kernel.custom_grad(forward_output, [q, k, v], fn grad_output ->
+      {grad_q, grad_k, grad_v} =
+        laser_attention_backward_dispatch(q, k, v, v_max, causal, forward_output, grad_output)
+      [grad_q, grad_k, grad_v]
     end)
   end
 
@@ -3495,7 +3580,8 @@ defmodule Edifice.CUDA.FusedScan do
     end
   end
 
-  defp laser_attention_fallback(q, k, v, v_max, causal) do
+  @doc false
+  def laser_attention_fallback(q, k, v, v_max, causal) do
     {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
     ttype = Nx.type(q)
 
@@ -3532,6 +3618,73 @@ defmodule Edifice.CUDA.FusedScan do
 
     # log(max(result, 1e-7)) + v_max
     Nx.add(Nx.log(Nx.max(attn_out, 1.0e-7)), v_max)
+  end
+
+  defp laser_attention_backward_dispatch(q, k, v, v_max, causal, forward_out, grad_output) do
+    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
+    ttype = Nx.type(q)
+    grad_template = Nx.template({batch, num_heads, seq_len, head_dim}, ttype)
+    causal_tensor = Nx.tensor(causal, type: {:s, 32})
+
+    Nx.Shared.optional(
+      :fused_laser_attention_backward,
+      [q, k, v, v_max, forward_out, grad_output, causal_tensor],
+      {grad_template, grad_template, grad_template},
+      fn q, k, v, v_max, _fwd, grad, _causal ->
+        laser_attention_backward_fallback(q, k, v, v_max, causal, grad)
+      end
+    )
+  end
+
+  @doc false
+  def laser_attention_backward_fallback(q, k, v, v_max, causal, grad_output) do
+    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
+    ttype = Nx.type(q)
+
+    # Recompute forward
+    exp_v = Nx.exp(Nx.subtract(v, v_max))
+    scale = Nx.sqrt(Nx.tensor(head_dim, type: ttype))
+    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
+
+    scores =
+      if causal == 1 do
+        rows = Nx.iota({seq_len, seq_len}, axis: 0)
+        cols = Nx.iota({seq_len, seq_len}, axis: 1)
+        mask = Nx.greater_equal(rows, cols)
+        mask = mask |> Nx.reshape({1, 1, seq_len, seq_len}) |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
+        neg_inf = Nx.Constants.neg_infinity(ttype)
+        Nx.select(mask, scores, neg_inf)
+      else
+        scores
+      end
+
+    weights = Nx.exp(Nx.subtract(scores, Nx.reduce_max(scores, axes: [-1], keep_axes: true)))
+    weights = Nx.divide(weights, Nx.sum(weights, axes: [-1], keep_axes: true))
+
+    attn_out = Nx.dot(weights, [3], [0, 1], exp_v, [2], [0, 1])
+    # Forward output: O = log(max(attn_out, 1e-7)) + v_max
+    o_val = Nx.add(Nx.log(Nx.max(attn_out, 1.0e-7)), v_max)
+
+    # Effective gradient: dR = dO * exp(v_max - O)
+    d_r = Nx.multiply(grad_output, Nx.exp(Nx.subtract(v_max, o_val)))
+
+    # dV_exp = weights^T @ dR
+    grad_v_exp = Nx.dot(weights, [2], [0, 1], d_r, [2], [0, 1])
+
+    # dV = dV_exp * exp(V - v_max)
+    grad_v = Nx.multiply(grad_v_exp, exp_v)
+
+    # dWeights = dR @ exp(V)^T
+    d_weights = Nx.dot(d_r, [3], [0, 1], exp_v, [3], [0, 1])
+
+    # dScores = weights * (dWeights - sum(dWeights * weights, keepdims))
+    d_scores = Nx.multiply(weights, Nx.subtract(d_weights, Nx.sum(Nx.multiply(d_weights, weights), axes: [-1], keep_axes: true)))
+    d_scores = Nx.divide(d_scores, scale)
+
+    grad_q = Nx.dot(d_scores, [3], [0, 1], k, [2], [0, 1])
+    grad_k = Nx.dot(d_scores, [2], [0, 1], q, [2], [0, 1])
+
+    {grad_q, grad_k, grad_v}
   end
 
   # ============================================================================
@@ -3584,8 +3737,15 @@ defmodule Edifice.CUDA.FusedScan do
     tensor_type = Nx.type(q)
     output = Nx.template({batch, num_heads, seq_len, head_dim}, tensor_type)
 
-    Nx.Shared.optional(:fused_fox_attention, [q, k, v, cs], output, fn q, k, v, cs ->
-      fox_attention_fallback(q, k, v, cs)
+    forward_output =
+      Nx.Shared.optional(:fused_fox_attention, [q, k, v, cs], output, fn q, k, v, cs ->
+        fox_attention_fallback(q, k, v, cs)
+      end)
+
+    Nx.Defn.Kernel.custom_grad(forward_output, [q, k, v, cs], fn grad_output ->
+      {grad_q, grad_k, grad_v, grad_cs} =
+        fox_attention_backward_dispatch(q, k, v, cs, forward_output, grad_output)
+      [grad_q, grad_k, grad_v, grad_cs]
     end)
   end
 
@@ -3620,7 +3780,8 @@ defmodule Edifice.CUDA.FusedScan do
     end
   end
 
-  defp fox_attention_fallback(q, k, v, cs) do
+  @doc false
+  def fox_attention_fallback(q, k, v, cs) do
     {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
     ttype = Nx.type(q)
 
@@ -3664,6 +3825,83 @@ defmodule Edifice.CUDA.FusedScan do
     weights = Nx.divide(weights, Nx.sum(weights, axes: [-1], keep_axes: true))
 
     Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
+  end
+
+  defp fox_attention_backward_dispatch(q, k, v, cs, forward_out, grad_output) do
+    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
+    ttype = Nx.type(q)
+    grad_4d = Nx.template({batch, num_heads, seq_len, head_dim}, ttype)
+    grad_cs_template = Nx.template({batch, num_heads, seq_len}, ttype)
+
+    Nx.Shared.optional(
+      :fused_fox_attention_backward,
+      [q, k, v, cs, forward_out, grad_output],
+      {grad_4d, grad_4d, grad_4d, grad_cs_template},
+      fn q, k, v, cs, _fwd, grad ->
+        fox_attention_backward_fallback(q, k, v, cs, grad)
+      end
+    )
+  end
+
+  @doc false
+  def fox_attention_backward_fallback(q, k, v, cs, grad_output) do
+    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
+    ttype = Nx.type(q)
+
+    # Recompute forward
+    scale = Nx.sqrt(Nx.tensor(head_dim, type: ttype))
+    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
+
+    cs_i = Nx.new_axis(cs, -1)
+    cs_j = Nx.new_axis(cs, -2)
+    forget_bias = Nx.subtract(cs_i, cs_j)
+
+    diag_mask =
+      Nx.equal(
+        Nx.iota({seq_len, seq_len}, axis: 0),
+        Nx.iota({seq_len, seq_len}, axis: 1)
+      )
+      |> Nx.reshape({1, 1, seq_len, seq_len})
+      |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
+
+    forget_bias = Nx.select(diag_mask, Nx.tensor(0.0, type: ttype), forget_bias)
+    scores = Nx.add(scores, forget_bias)
+
+    # Causal mask
+    rows = Nx.iota({seq_len, seq_len}, axis: 0)
+    cols = Nx.iota({seq_len, seq_len}, axis: 1)
+    causal_mask = Nx.greater_equal(rows, cols)
+    causal_mask = causal_mask |> Nx.reshape({1, 1, seq_len, seq_len}) |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
+    neg_inf = Nx.Constants.neg_infinity(ttype)
+    scores = Nx.select(causal_mask, scores, neg_inf)
+
+    weights = Nx.exp(Nx.subtract(scores, Nx.reduce_max(scores, axes: [-1], keep_axes: true)))
+    weights = Nx.divide(weights, Nx.sum(weights, axes: [-1], keep_axes: true))
+
+    # dV = weights^T @ grad_output
+    grad_v = Nx.dot(weights, [2], [0, 1], grad_output, [2], [0, 1])
+
+    # dWeights = grad_output @ V^T
+    d_weights = Nx.dot(grad_output, [3], [0, 1], v, [3], [0, 1])
+
+    # dScores through softmax
+    d_scores = Nx.multiply(weights, Nx.subtract(d_weights, Nx.sum(Nx.multiply(d_weights, weights), axes: [-1], keep_axes: true)))
+
+    # Zero diagonal in dScores for forget bias gradient
+    d_scores_no_diag = Nx.select(diag_mask, Nx.tensor(0.0, type: ttype), d_scores)
+
+    # grad_cs: row_sum - col_sum of dScores (excluding diagonal)
+    row_sums = Nx.sum(d_scores_no_diag, axes: [-1])
+    col_sums = Nx.sum(d_scores_no_diag, axes: [-2])
+    grad_cs = Nx.subtract(row_sums, col_sums)
+
+    # dScores / scale for Q,K gradients
+    d_scores = Nx.divide(d_scores, scale)
+
+    grad_q = Nx.dot(d_scores, [3], [0, 1], k, [2], [0, 1])
+    grad_k = Nx.dot(d_scores, [2], [0, 1], q, [2], [0, 1])
+
+    {grad_q, grad_k, grad_v, grad_cs}
   end
 
   # ============================================================================

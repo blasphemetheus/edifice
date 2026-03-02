@@ -67,7 +67,10 @@ KERNEL_SOURCES := fused_mingru_scan.cu fused_minlstm_scan.cu \
                   fused_rla_scan_backward.cu \
                   fused_ttt_scan_backward.cu \
                   fused_mingru_block_scan.cu \
-                  fused_minlstm_block_scan.cu
+                  fused_minlstm_block_scan.cu \
+                  fused_flash_attention_backward.cu \
+                  fused_laser_attention_backward.cu \
+                  fused_fox_attention_backward.cu
 
 # f32 objects (default compilation)
 KERNEL_OBJECTS     := $(patsubst %.cu,$(OBJ_DIR)/%.o,$(KERNEL_SOURCES))
