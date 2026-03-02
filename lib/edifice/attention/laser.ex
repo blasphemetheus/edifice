@@ -143,7 +143,7 @@ defmodule Edifice.Attention.LASER do
     # Project to Q, K, V
     qkv = Axon.dense(input, hidden_size * 3, name: "#{name}_qkv")
 
-    # LASER attention computation
+    # LASER attention computation (dispatches through 3-tier CUDA pipeline)
     attended =
       Axon.nx(
         qkv,
@@ -160,39 +160,8 @@ defmodule Edifice.Attention.LASER do
           key = reshape_to_heads(key, batch, seq_len, num_heads, head_dim)
           value = reshape_to_heads(value, batch, seq_len, num_heads, head_dim)
 
-          # LWSE trick: subtract max(V) per column for numerical stability
-          # m: [batch, heads, 1, head_dim]
-          v_max = Nx.reduce_max(value, axes: [2], keep_axes: true)
-
-          # V_hat = V - m (shifted values)
-          v_hat = Nx.subtract(value, v_max)
-
-          # exp(V_hat): element-wise exp of shifted values
-          exp_v = Nx.exp(v_hat)
-
-          # Standard attention: softmax(QK^T / sqrt(d)) @ exp(V_hat)
-          scale = :math.sqrt(head_dim)
-          scores = Nx.divide(Nx.dot(query, [3], [0, 1], key, [3], [0, 1]), scale)
-
-          # Causal mask
-          scores =
-            if causal do
-              mask = causal_mask(seq_len)
-              Nx.add(scores, mask)
-            else
-              scores
-            end
-
-          # Softmax over key dimension
-          weights = softmax_last_axis(scores)
-
-          # Weighted sum of exp(V_hat)
-          # weights: [batch, heads, seq_q, seq_k], exp_v: [batch, heads, seq_k, head_dim]
-          attn_out = Nx.dot(weights, [3], [0, 1], exp_v, [2], [0, 1])
-
-          # Log + add back max: log(attn_out) + m
-          # v_max is [batch, heads, 1, head_dim], broadcasts with [batch, heads, seq, head_dim]
-          output = Nx.add(Nx.log(Nx.max(attn_out, 1.0e-7)), v_max)
+          # Dispatch through fused LASER attention (handles LWSE internally)
+          output = Edifice.CUDA.FusedScan.laser_attention(query, key, value, causal: causal)
 
           # Reshape back: [batch, heads, seq, head_dim] -> [batch, seq, hidden_size]
           reshape_from_heads(output, batch, seq_len, num_heads, head_dim)
@@ -216,21 +185,7 @@ defmodule Edifice.Attention.LASER do
     |> Nx.reshape({batch, seq_len, num_heads * head_dim})
   end
 
-  defp causal_mask(seq_len) do
-    # Lower triangular mask: 0 for valid, -1e9 for invalid
-    rows = Nx.iota({seq_len, seq_len}, axis: 0)
-    cols = Nx.iota({seq_len, seq_len}, axis: 1)
-    mask = Nx.select(Nx.greater_equal(rows, cols), 0.0, -1.0e9)
-    Nx.reshape(mask, {1, 1, seq_len, seq_len})
-  end
-
-  defp softmax_last_axis(tensor) do
-    max_val = Nx.reduce_max(tensor, axes: [-1], keep_axes: true)
-    shifted = Nx.subtract(tensor, max_val)
-    exp_vals = Nx.exp(shifted)
-    sum_exp = Nx.sum(exp_vals, axes: [-1], keep_axes: true)
-    Nx.divide(exp_vals, sum_exp)
-  end
+  # causal_mask/1, softmax_last_axis/1 removed — now handled by FusedScan.laser_attention
 
   @doc """
   Get the output size of a LASER model.

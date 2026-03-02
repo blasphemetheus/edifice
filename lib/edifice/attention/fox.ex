@@ -161,7 +161,7 @@ defmodule Edifice.Attention.FoX do
     Axon.dense(output, hidden_size, name: "#{name}_out_proj")
   end
 
-  # FoX attention implementation
+  # FoX attention implementation (dispatches through 3-tier CUDA pipeline)
   # Q, K, V: [batch, seq, hidden], forget_logits: [batch, seq, num_heads]
   defp fox_attention_impl(q, k, v, forget_logits, opts) do
     num_heads = opts[:num_heads]
@@ -174,99 +174,31 @@ defmodule Edifice.Attention.FoX do
     k = reshape_to_heads(k, batch, seq_len, num_heads, head_dim)
     v = reshape_to_heads(v, batch, seq_len, num_heads, head_dim)
 
-    # Scale factor
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-
-    # Attention scores: [batch, heads, seq_q, seq_k]
-    scores = Nx.dot(q, [3], [0, 1], k, [3], [0, 1])
-    scores = Nx.divide(scores, scale)
-
-    # Compute cumulative forget bias
+    # Compute cumulative log-forget: cs = cumsum(log(sigmoid(f)))
     # forget_logits: [batch, seq, num_heads] -> [batch, heads, seq]
     forget_logits =
       forget_logits
       |> Nx.transpose(axes: [0, 2, 1])
 
-    # log(sigmoid(f_t)) for each position, clamped for stability
-    # log(sigmoid(x)) = -softplus(-x) = x - softplus(x)
+    # log(sigmoid(x)) = x - softplus(x)
     log_forget = Nx.subtract(forget_logits, softplus(forget_logits))
 
-    # Build the cumulative forget bias matrix F[i,j]
-    # F[i,j] = sum_{t=j+1}^{i} log_forget[t]
-    # This is: cumsum(log_forget)[i] - cumsum(log_forget)[j]
-    # which creates an upper-triangular decay matrix
-    forget_bias = build_forget_bias(log_forget, seq_len)
-    # forget_bias: [batch, heads, seq, seq]
+    # Cumulative sum: cs[i] = sum_{t=0}^{i} log_forget[t]
+    # cs: [batch, heads, seq]
+    cs = Nx.cumulative_sum(log_forget, axis: -1)
 
-    scores = Nx.add(scores, forget_bias)
-
-    # Causal mask
-    rows = Nx.iota({seq_len, seq_len}, axis: 0)
-    cols = Nx.iota({seq_len, seq_len}, axis: 1)
-    causal_mask = Nx.greater_equal(rows, cols)
-
-    causal_mask =
-      causal_mask
-      |> Nx.new_axis(0)
-      |> Nx.new_axis(0)
-      |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
-
-    scores =
-      Nx.select(
-        causal_mask,
-        scores,
-        Nx.broadcast(Nx.tensor(-1.0e9, type: Nx.type(scores)), Nx.shape(scores))
-      )
-
-    attn_weights = Nx.exp(Nx.subtract(scores, log_sum_exp(scores)))
-
-    # Attention output: [batch, heads, seq, head_dim]
-    attn_out = Nx.dot(attn_weights, [3], [0, 1], v, [2], [0, 1])
+    # Dispatch through fused FoX attention (handles forget bias + causal internally)
+    attn_out = Edifice.CUDA.FusedScan.fox_attention(q, k, v, cs)
 
     # Reshape back: [batch, seq, hidden]
     reshape_from_heads(attn_out, batch, seq_len, num_heads, head_dim)
   end
 
-  # Build the forget bias matrix F[i,j] = sum_{t=j+1}^{i} log_forget[t]
-  # log_forget: [batch, heads, seq] -> F: [batch, heads, seq, seq]
-  defp build_forget_bias(log_forget, seq_len) do
-    # Cumulative sum: cs[i] = sum_{t=0}^{i} log_forget[t]
-    cs = Nx.cumulative_sum(log_forget, axis: -1)
-
-    # F[i, j] = cs[i] - cs[j] for causal positions (i >= j)
-    # cs_i: [batch, heads, seq, 1] - cs_j: [batch, heads, 1, seq]
-    cs_i = Nx.new_axis(cs, -1)
-    cs_j = Nx.new_axis(cs, -2)
-
-    # Broadcast subtraction: [batch, heads, seq, seq]
-    bias = Nx.subtract(cs_i, cs_j)
-
-    # Zero out the diagonal (no forgetting for attending to self)
-    diag_mask =
-      Nx.equal(
-        Nx.iota({seq_len, seq_len}, axis: 0),
-        Nx.iota({seq_len, seq_len}, axis: 1)
-      )
-
-    diag_mask =
-      diag_mask
-      |> Nx.new_axis(0)
-      |> Nx.new_axis(0)
-      |> Nx.broadcast(Nx.shape(bias))
-
-    Nx.select(diag_mask, Nx.tensor(0.0, type: Nx.type(bias)), bias)
-  end
+  # build_forget_bias/2, log_sum_exp/1 removed — now handled by FusedScan.fox_attention
 
   # Numerically stable softplus: log(1 + exp(x))
   defp softplus(x) do
     Nx.log1p(Nx.exp(x))
-  end
-
-  # Log-sum-exp along last axis for stable softmax
-  defp log_sum_exp(x) do
-    max_x = Nx.reduce_max(x, axes: [-1], keep_axes: true)
-    shifted = Nx.subtract(x, max_x)
-    Nx.add(max_x, Nx.log(Nx.sum(Nx.exp(shifted), axes: [-1], keep_axes: true)))
   end
 
   # Reshape [batch, seq, hidden] -> [batch, heads, seq, head_dim]

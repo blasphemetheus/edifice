@@ -264,46 +264,11 @@ defmodule Edifice.Attention.InfiniAttention do
     |> Nx.reshape({batch, seq_len, num_heads * head_dim})
   end
 
-  # Standard scaled dot-product attention for a segment
+  # Standard scaled dot-product attention for a segment.
   # Q, K, V: [batch, heads, seg_size, head_dim]
+  # Dispatches through 3-tier CUDA pipeline (flash attention when available).
   defp local_attention(q, k, v) do
-    head_dim = Nx.axis_size(q, 3)
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-
-    # scores: [batch, heads, seg_size, seg_size]
-    scores = Nx.dot(q, [3], [0, 1], k, [3], [0, 1])
-    scores = Nx.divide(scores, scale)
-
-    # Causal mask within segment
-    seg_len = Nx.axis_size(q, 2)
-    rows = Nx.iota({seg_len, seg_len}, axis: 0)
-    cols = Nx.iota({seg_len, seg_len}, axis: 1)
-    causal_mask = Nx.greater_equal(rows, cols)
-
-    batch = Nx.axis_size(q, 0)
-    heads = Nx.axis_size(q, 1)
-
-    causal_mask =
-      causal_mask
-      |> Nx.reshape({1, 1, seg_len, seg_len})
-      |> Nx.broadcast({batch, heads, seg_len, seg_len})
-
-    scores =
-      Nx.select(
-        causal_mask,
-        scores,
-        Nx.broadcast(-1.0e9, Nx.shape(scores))
-      )
-
-    # Softmax
-    max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
-    exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-
-    weights =
-      Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-9))
-
-    # weighted sum: [batch, heads, seg_size, head_dim]
-    Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
+    Edifice.CUDA.FusedScan.flash_attention(q, k, v, causal: true)
   end
 
   defp reshape_to_heads(x, batch, seq_len, num_heads, head_dim) do
