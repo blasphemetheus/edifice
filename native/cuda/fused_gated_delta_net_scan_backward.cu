@@ -65,7 +65,7 @@ __global__ void fused_gated_delta_net_scan_backward_kernel(
 
     extern __shared__ float smem[];
     float* S = smem;                                 // [d][d]
-    float* S_prev = smem + head_dim * head_dim;      // [d][d] — S before alpha decay
+    // smem[d*d..2*d*d-1] reserved for layout alignment
     float* k_shared = smem + 2 * head_dim * head_dim; // [d]
     float* q_shared = k_shared + head_dim;            // [d]
     float* temp_shared = q_shared + head_dim;         // [d]
@@ -277,7 +277,6 @@ int fused_gated_delta_net_scan_backward_launch(
     int batch, int seq_len, int num_heads, int head_dim
 ) {
     int total_4d = batch * seq_len * num_heads * head_dim;
-    int total_3d = batch * seq_len * num_heads;
     io_type* grad_q     = output_concat;
     io_type* grad_k     = output_concat + total_4d;
     io_type* grad_v     = output_concat + 2 * total_4d;

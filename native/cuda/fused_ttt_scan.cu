@@ -137,7 +137,6 @@ __global__ void fused_ttt_scan_kernel(
         }
 
         // Step 6: Compute output o_i = W_updated[i,:] @ q
-        float q_i_val;
         // Reuse k_shared to load q (sync first to ensure k reads are done)
         __syncthreads();
         k_shared[i] = IO_LOAD(q, tk_idx + i);

@@ -139,7 +139,6 @@ __global__ void fused_delta_product_scan_backward_kernel(
 
             // Update S
             float beta_val = IO_LOAD(beta, beta_offset);
-            float v_j_val = IO_LOAD(v, kv_offset + i);
             float beta_k_i = beta_val * k_normed_i;
 
             for (int jj = 0; jj < head_dim; jj++) {
@@ -192,15 +191,11 @@ __global__ void fused_delta_product_scan_backward_kernel(
         float sum_do_o = rms_shared[0];
 
         float rms_sq = 1.0f / (rms_inv * rms_inv);  // = mean(o^2) + eps
-        float d_o_raw_i = do_i * rms_inv - o_raw_i * sum_do_o / ((float)head_dim * rms_sq * rms_inv * rms_sq / rms_sq);
-        // Simplified: d_o_raw = rms_inv * (do - o_normed * mean(do * o_normed))
-        float o_normed_i = o_raw_i * rms_inv;
-        float mean_do_o_normed = sum_do_o * rms_inv / (float)head_dim;
-        // Wait, let me redo RMS backward properly:
+        // RMS backward properly:
         // o = o_raw / rms, rms = sqrt(mean(o_raw^2) + eps)
         // d_o_raw[i] = do[i] / rms - o_raw[i] * sum_j(do[j] * o_raw[j]) / (d * rms^3)
         float rms_cubed = rms_sq / rms_inv;  // rms^3 = rms^2 * rms = (1/rms_inv^2) * (1/rms_inv)
-        d_o_raw_i = do_i * rms_inv - o_raw_i * sum_do_o / ((float)head_dim * rms_cubed);
+        float d_o_raw_i = do_i * rms_inv - o_raw_i * sum_do_o / ((float)head_dim * rms_cubed);
 
         // grad_q: o_raw = S @ q, so dq = S^T @ d_o_raw
         k_shared[i] = d_o_raw_i;
@@ -228,9 +223,6 @@ __global__ void fused_delta_product_scan_backward_kernel(
             float k_normed_i = local_k_normed[t * num_householder + j];
             float beta_val = IO_LOAD(beta, beta_offset);
 
-            // Retrieve stored (S^T @ k_normed) values
-            float stk_i = local_stk[t * num_householder + j];
-
             // The update was: S += beta * k_normed * (v - S^T@k_normed)^T
             //                 S[i][j] += beta * k_normed[i] * (v[j] - stk[j])
             //
@@ -239,7 +231,6 @@ __global__ void fused_delta_product_scan_backward_kernel(
             // But we need v[j] - stk[j] for all j, which requires reading from global.
 
             // First undo this Householder step to get S before it
-            float v_i_val = IO_LOAD(v, kv_offset + i);
             k_shared[i] = k_normed_i;
             __syncthreads();
 
@@ -411,7 +402,6 @@ int fused_delta_product_scan_backward_launch(
 ) {
     int total_q = batch * seq_len * num_heads * head_dim;
     int total_kv = batch * seq_len * num_householder * num_heads * head_dim;
-    int total_beta = batch * seq_len * num_householder * num_heads;
     io_type* gq = output_concat;
     io_type* gk = output_concat + total_q;
     io_type* gv = output_concat + total_q + total_kv;

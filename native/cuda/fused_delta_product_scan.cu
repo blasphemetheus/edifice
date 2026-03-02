@@ -254,8 +254,6 @@ __global__ void fused_delta_product_scan_kernel(
             // Now q_shared[j] = (S^T @ k)[j]
             // S_new[i][j] = S[i][j] - beta * k[i] * (S^T @ k)[j] + beta * k[i] * v[j]
             //             = S[i][j] + beta * k[i] * (v[j] - (S^T @ k)[j])
-            float v_i_val = IO_LOAD(v, kv_offset + i);
-
             // Load v into shared for the update (but we need v[j] not v[i])
             // Thread i can only write v[i] to shared, then read v[j] from shared
             // Reuse another shared buffer... but we're running low.

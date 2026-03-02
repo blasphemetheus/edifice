@@ -341,7 +341,6 @@ __global__ void fused_ttt_scan_backward_kernel(
         __syncthreads();
 
         float sum_dxhat = 0.0f;
-        float sum_dxhat_xhat = 0.0f;
         if (i == 0) {
             for (int j = 0; j < D; j++) {
                 sum_dxhat += reduce_buf[j];

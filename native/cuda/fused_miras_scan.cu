@@ -38,13 +38,12 @@ __global__ void fused_miras_scan_kernel(
 
     if (b >= batch || i >= mem_size) return;
 
-    // Shared memory: k[M] + v[M] + alpha[M] + eta[M] + reduce[1]
+    // Shared memory: k[M] + v[M] + alpha[M] + eta[M]
     extern __shared__ float shared_mem[];
     float* k_shared     = shared_mem;                       // [M]
     float* v_shared     = shared_mem + mem_size;            // [M]
     float* alpha_shared = shared_mem + 2 * mem_size;        // [M]
     float* eta_shared   = shared_mem + 3 * mem_size;        // [M]
-    float* reduce_shared = shared_mem + 4 * mem_size;       // [1]
 
     int combined_stride = 5 * mem_size;
 
@@ -135,7 +134,7 @@ int fused_miras_scan_launch(
     dim3 grid(batch);
     dim3 block(threads_per_block);
     // k + v + alpha + eta + reduce
-    size_t smem_bytes = (4 * mem_size + 1) * sizeof(float);
+    size_t smem_bytes = 4 * mem_size * sizeof(float);
 
     fused_miras_scan_kernel<<<grid, block, smem_bytes, stream>>>(
         combined, output,
@@ -180,7 +179,7 @@ ffi::Error fused_miras_scan_ffi_impl(
     int threads_per_block = mem_size;
     dim3 grid(batch);
     dim3 block(threads_per_block);
-    size_t smem_bytes = (4 * mem_size + 1) * sizeof(float);
+    size_t smem_bytes = 4 * mem_size * sizeof(float);
 
     fused_miras_scan_kernel<<<grid, block, smem_bytes, stream>>>(
         reinterpret_cast<const io_type*>(combined.untyped_data()),

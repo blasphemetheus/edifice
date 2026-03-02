@@ -105,8 +105,7 @@ __global__ void fused_delta_rule_scan_backward_kernel(
     // Store S snapshots: S_prev[t] = S before timestep t's update
     // Each thread stores its row: local_S[t][j] for j in 0..d-1
     // This is d*T floats per thread — stored in local memory (GPU L1/L2)
-    float local_S_row[MAX_SEQ_LEN];  // Flattened: local_S_row[t*d + j] — but too large
-    // Instead, we'll do a single reverse pass that recomputes S from forward outputs.
+    // We'll do a single reverse pass that recomputes S from forward outputs.
 
     // Actually, let's use a simpler approach: store per-timestep retrieval values
     // and reconstruct what we need. For the delta rule backward, we need S_{t} at each
