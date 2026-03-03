@@ -57,8 +57,8 @@ defmodule FusedKernelSweep do
   @phase2_warmup 5
   @phase2_iters 50
 
-  # Architectures that segfault even through the Axon pipeline (kernel bugs).
-  @phase2_skip MapSet.new([:titans, :miras, :laser, :infini_attention])
+  # Architectures that previously segfaulted (fixed via scalar packing / causal hardcoding).
+  @phase2_skip MapSet.new([])
 
   @fps_target_ms 16.0
 
