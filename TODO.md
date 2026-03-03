@@ -259,7 +259,7 @@ have dedicated test files. Remaining gaps are leaf modules or minor variants.
 
 ### CI/CD Improvements (Priority: Medium)
 
-- [ ] **Multi-version test matrix** — Test against Elixir 1.18 + 1.19 + 1.20 on OTP 27 + 28. The `mix.exs` claims `~> 1.18` compatibility; CI should verify it.
+- [ ] **Multi-version test matrix** (deferred) — Test against Elixir 1.18 + 1.19 + 1.20 on OTP 27 + 28. Low priority — revisit when upstream breakage is observed.
 - [ ] **Benchmark regression CI** — Run Benchee on 5-10 key architectures in CI. Store baseline timings, fail if >10% regression. Candidate architectures: MLP, LSTM, Mamba, GQA, ViT, DETR (covers major families and input patterns).
 - [x] **Normalize git tag format** — All tags now use `v` prefix (`v0.1.1`, `v0.2.0`).
 
@@ -306,15 +306,19 @@ transformation between PyTorch and Axon conventions.
 ### Fused Kernel Benchmark — Failures to Fix (Priority: Medium)
 
 **Caught errors (non-crashing):**
-- [ ] **RLA custom call missing attributes** — "Wrong number of attributes: expected 2 but got 0" (inference + training). Root cause: `fused_scan.ex:rla_custom_call` passes `[q,k,v,alpha,beta,gamma]` via `Nx.Shared.optional` but does NOT pass `variant` (int) and `clip_threshold` (float). The CUDA FFI handler expects these as XLA attributes. Fix: (1) `value.ex:fused_rla_scan` — add `variant` and `clip_threshold` params, emit as `attr_i32`/`attr_f32` attributes (the backward function already does this correctly at line ~1591). (2) `defn.ex` pattern match — extract and forward these values. (3) `fused_scan.ex:rla_custom_call` — embed variant/clip_threshold in the optional call metadata.
-- [ ] **Reservoir EXLA compilation failure** — "exception found when compiling layer Edifice.Recur..." (inference + training). Root cause: `reservoir.ex` uses `Axon.layer(&reservoir_forward/4, ...)` which JIT-compiles the callback. The callback hits `FusedScan.reservoir_scan`'s runtime `cond do` dispatch, which EXLA can't trace. Fix: change `Axon.layer` to `Axon.nx` pattern (matching DeltaNet, Titans, TTT which all work correctly).
-- [ ] **RLA training gradient shape mismatch** — "invalid slice for put_slice, rank of slice must ma..." (training only, separate from attribute error). Likely a shape mismatch in the backward pass custom_grad wiring for RLA.
+- [x] **RLA custom call missing attributes** — Fixed: XLA has a 7-operand limit for `stablehlo.custom_call` (segfaults with 8+). Hardcoded variant=0 and clip_threshold=1.0 in C++ FFI handler, stripping them from operands. Forward: 6 operands, backward: 7 operands (forward_out+grad_output packed into `[2,B,T,H,d]`). Also fixed gate shape mismatch (`[B,T,H,1,1]` → `[B,T,H]` reshape in defn.ex).
+- [x] **Reservoir EXLA compilation failure** — Fixed: `Axon.constant` passes concrete tensors into callbacks, which `Nx.Shared.optional` can't trace. Changed to `Axon.nx` with closure-captured frozen weights, calling `reservoir_scan_fallback` directly (EXLA compiles Nx ops to efficient XLA graph). EXLA vs CPU diff: 3.6e-7.
+- [x] **RLA training gradient shape mismatch** — Fixed: backward fallback gate tensors `[B,H,1,1]` couldn't broadcast with `[B,H,d]` vectors. Added reshape to `[B,H,1]` before vector gradient computations.
 
-**Segfaults (process crash, needs kernel-level debugging):**
-- [ ] **Titans segfault** — Crashes both eager and Axon pipeline. Likely dimension mismatch in `fused_titans_scan.cu` when called with benchmark dimensions (memory_size=64, batch=1, seq=32).
-- [ ] **MIRAS segfault** — Same pattern as Titans. Likely in `fused_miras_scan.cu`. May be related to the `reduce_shared` removal (verify smem layout is correct).
-- [ ] **LASER attention segfault** — Crashes through Axon pipeline. Likely in `fused_laser_attention.cu` — check v_max precomputation and tile boundary conditions.
-- [ ] **InfiniAttention segfault** — Crashes through Axon pipeline. Uses standard flash attention via SDPA. Likely the segment-level flash attention call hits a dimension the kernel doesn't handle (window_size != seq_len).
+**Segfaults (all fixed — root cause: scalar buffer operands in XLA custom calls):**
+- [x] **Titans segfault** — Fixed: Scalar `ffi::Buffer<ffi::F32>` momentum operand caused XLA MLIR compilation segfault. Momentum now packed into combined tensor as extra column `[B,T,4*M+1]`, read via `cudaMemcpy` in FFI handler.
+- [x] **MIRAS segfault** — Fixed: Same scalar momentum operand issue as Titans. Momentum packed into combined tensor `[B,T,5*M+1]`.
+- [x] **LASER attention segfault** — Fixed: Scalar `ffi::AnyBuffer` causal flag caused segfault. Hardcoded causal=1 in both forward and backward FFI handlers.
+- [x] **Flash attention segfault** — Fixed: Same scalar causal flag issue. Hardcoded causal=1 in both forward and backward FFI handlers.
+- [x] **InfiniAttention segfault** — Fixed: Uses flash attention internally, fixed by flash attention fix above.
+- [x] **Reservoir custom call** — Fixed: Scalar `ffi::Buffer<ffi::F32>` leak_rate operand. Leak_rate now packed into h0 tensor as extra column `[B, H+1]`, read via `cudaMemcpy` in FFI handler.
+
+See `docs/cuda_custom_call_debugging.md` for the full debugging methodology and known XLA FFI pitfalls.
 
 ### cuDNN Algorithm Warning (Priority: Low)
 

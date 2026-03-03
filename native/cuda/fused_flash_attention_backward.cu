@@ -413,6 +413,7 @@ int fused_flash_attention_backward_launch(
 
 namespace ffi = xla::ffi;
 
+// Causal hardcoded to 1 to avoid scalar buffer operand segfault in XLA.
 ffi::Error fused_flash_attention_backward_ffi_impl(
     cudaStream_t stream,
     ffi::Buffer<FFI_IO_TYPE> q,
@@ -420,7 +421,6 @@ ffi::Error fused_flash_attention_backward_ffi_impl(
     ffi::Buffer<FFI_IO_TYPE> v,
     ffi::Buffer<FFI_IO_TYPE> o,
     ffi::Buffer<FFI_IO_TYPE> grad_o,
-    ffi::AnyBuffer causal_flag,
     ffi::ResultBuffer<FFI_IO_TYPE> dq,
     ffi::ResultBuffer<FFI_IO_TYPE> dk,
     ffi::ResultBuffer<FFI_IO_TYPE> dv
@@ -431,9 +431,7 @@ ffi::Error fused_flash_attention_backward_ffi_impl(
     int seq_len  = static_cast<int>(dims[2]);
     int head_dim = static_cast<int>(dims[3]);
 
-    int causal = static_cast<int>(
-        reinterpret_cast<const int32_t*>(causal_flag.untyped_data())[0]
-    );
+    int causal = 1;  // hardcoded causal
 
     // Allocate temp buffers for D and lse
     size_t bht = (size_t)batch * num_heads * seq_len;
@@ -505,7 +503,6 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // v       [B, H, T, d]
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // o       [B, H, T, d]
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // grad_o  [B, H, T, d]
-        .Arg<ffi::AnyBuffer>()             // causal (scalar i32)
         .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // dQ      [B, H, T, d]
         .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // dK      [B, H, T, d]
         .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // dV      [B, H, T, d]

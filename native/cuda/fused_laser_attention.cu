@@ -25,9 +25,9 @@
 // Causal: when causal=1, positions j > i are masked.
 
 #include <cuda_runtime.h>
-#include "precision.cuh"
 #include <float.h>
 #include <math.h>
+#include "precision.cuh"
 
 #define TILE_SIZE 32
 
@@ -54,7 +54,7 @@ __global__ void fused_laser_attention_kernel(
     int BH_stride = seq_len * head_dim;
     int base = (b * gridDim.y + h) * BH_stride;
 
-    // Base offset for V_max: [B, H, 1, d] → stride = head_dim per (b,h)
+    // Base offset for V_max: [B, H, 1, d]
     int vmax_base = (b * gridDim.y + h) * head_dim;
 
     int num_tiles = (seq_len + TILE_SIZE - 1) / TILE_SIZE;
@@ -66,7 +66,6 @@ __global__ void fused_laser_attention_kernel(
         float m_i = -FLT_MAX;
         float l_i = 0.0f;
 
-        // Accumulator for softmax(QK^T) @ exp(V - v_max)
         float o_acc[128];
         for (int dd = 0; dd < head_dim; dd++) {
             o_acc[dd] = 0.0f;
@@ -109,14 +108,13 @@ __global__ void fused_laser_attention_kernel(
                 }
                 s *= scale;
 
-                // Online softmax update (same as standard flash attention)
+                // Online softmax update
                 float m_new = fmaxf(m_i, s);
                 float exp_diff = expf(m_i - m_new);
                 float exp_s = expf(s - m_new);
 
                 l_i = l_i * exp_diff + exp_s;
 
-                // Accumulate exp(V - v_max) weighted by softmax
                 for (int dd = 0; dd < head_dim; dd++) {
                     o_acc[dd] = o_acc[dd] * exp_diff + exp_s * Vj[j * head_dim + dd];
                 }
@@ -127,13 +125,11 @@ __global__ void fused_laser_attention_kernel(
             __syncthreads();
         }
 
-        // Final: o_acc now contains softmax(QK^T) @ exp(V - v_max)
-        // Apply normalization, then log + v_max
+        // Final: apply normalization, then log + v_max
         if (i < seq_len && l_i > 0.0f) {
             float inv_l = 1.0f / l_i;
             for (int dd = 0; dd < head_dim; dd++) {
                 float normalized = o_acc[dd] * inv_l;
-                // log(max(result, 1e-7)) + v_max
                 float vm = IO_LOAD(V_max, vmax_base + dd);
                 IO_STORE(O, base + i * head_dim + dd, logf(fmaxf(normalized, 1.0e-7f)) + vm);
             }
@@ -188,13 +184,13 @@ int fused_laser_attention_launch(
 
 namespace ffi = xla::ffi;
 
+// Causal hardcoded to 1 to avoid scalar buffer operand segfault in XLA.
 ffi::Error fused_laser_attention_ffi_impl(
     cudaStream_t stream,
     ffi::Buffer<FFI_IO_TYPE> q,
     ffi::Buffer<FFI_IO_TYPE> k,
     ffi::Buffer<FFI_IO_TYPE> v,
     ffi::Buffer<FFI_IO_TYPE> v_max,
-    ffi::AnyBuffer causal_flag,
     ffi::ResultBuffer<FFI_IO_TYPE> output
 ) {
     auto dims = q.dimensions();
@@ -203,9 +199,7 @@ ffi::Error fused_laser_attention_ffi_impl(
     int seq_len   = static_cast<int>(dims[2]);
     int head_dim  = static_cast<int>(dims[3]);
 
-    int causal = static_cast<int>(
-        reinterpret_cast<const int32_t*>(causal_flag.untyped_data())[0]
-    );
+    int causal = 1;  // hardcoded causal
 
     dim3 grid(batch, num_heads);
     dim3 block(TILE_SIZE);
@@ -236,7 +230,6 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // k      [B, H, T, d]
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // v      [B, H, T, d]
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // v_max  [B, H, 1, d]
-        .Arg<ffi::AnyBuffer>()          // causal (scalar i32)
         .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output [B, H, T, d]
 );
 

@@ -3978,9 +3978,13 @@ defmodule Edifice.CUDA.FusedScan do
     {batch, _seq_len, hidden} = Nx.shape(wx)
     tensor_type = Nx.type(wx)
     output = Nx.template({batch, hidden}, tensor_type)
-    leak_tensor = Nx.tensor(leak_rate, type: tensor_type)
 
-    Nx.Shared.optional(:fused_reservoir_scan, [wx, w_res, Nx.broadcast(0.0, {batch, hidden}), leak_tensor], output, fn wx, w_res, _h0, _leak ->
+    # Pack leak_rate into h0: [B, H] → [B, H+1] with leak_rate as extra column
+    h0 = Nx.broadcast(Nx.tensor(0.0, type: tensor_type), {batch, hidden})
+    leak_col = Nx.broadcast(Nx.tensor(leak_rate, type: tensor_type), {batch, 1})
+    h0_packed = Nx.concatenate([h0, leak_col], axis: 1)
+
+    Nx.Shared.optional(:fused_reservoir_scan, [wx, w_res, h0_packed], output, fn wx, w_res, _h0_packed ->
       reservoir_scan_fallback(wx, w_res, leak_rate)
     end)
   end

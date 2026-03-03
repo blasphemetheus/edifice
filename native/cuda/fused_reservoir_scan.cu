@@ -16,8 +16,8 @@
 // Inputs:
 //   wx:    [batch, seq_len, reservoir_size]  -- pre-computed W_in @ x
 //   w_res: [reservoir_size, reservoir_size]  -- fixed reservoir weights
-//   h0:    [batch, reservoir_size]           -- initial hidden state
-//   leak:  scalar float                      -- leak rate (1.0 = no leaking)
+//   h0:    NIF path:  [batch, reservoir_size]     -- initial hidden state (leak_rate passed separately)
+//          FFI path:  [batch, reservoir_size + 1]  -- leak_rate packed as extra column
 //
 // Output:
 //   out:   [batch, reservoir_size]           -- final hidden state only
@@ -50,7 +50,6 @@ __global__ void fused_reservoir_scan_kernel(
         __syncthreads();
 
         // Compute W_res @ h for dimension i
-        // rh_i = sum_j(h_shared[j] * w_res[j * H + i])
         float rh_i = 0.0f;
         for (int j = 0; j < hidden; j++) {
             rh_i += h_shared[j] * IO_LOAD(w_res, j * hidden + i);
@@ -121,12 +120,14 @@ int fused_reservoir_scan_launch(
 
 namespace ffi = xla::ffi;
 
+// 3 operands: wx, w_res, h0_packed (with leak_rate as extra column in h0).
+// This avoids the scalar buffer operand segfault in XLA while still
+// passing the actual leak_rate value configured by the user.
 ffi::Error fused_reservoir_scan_ffi_impl(
     cudaStream_t stream,
     ffi::Buffer<FFI_IO_TYPE> wx,       // [B, T, H]
     ffi::Buffer<FFI_IO_TYPE> w_res,    // [H, H]
-    ffi::Buffer<FFI_IO_TYPE> h0,       // [B, H]
-    ffi::Buffer<ffi::F32> leak_t,   // scalar [1]
+    ffi::Buffer<FFI_IO_TYPE> h0,       // [B, H+1] (leak_rate packed as extra column)
     ffi::ResultBuffer<FFI_IO_TYPE> output  // [B, H]
 ) {
     auto wx_dims = wx.dimensions();
@@ -134,7 +135,17 @@ ffi::Error fused_reservoir_scan_ffi_impl(
     int seq_len = static_cast<int>(wx_dims[1]);
     int hidden  = static_cast<int>(wx_dims[2]);
 
-    float leak_rate = reinterpret_cast<const float*>(leak_t.untyped_data())[0];
+    // Read leak_rate from packed h0 (last column of first row)
+    const io_type* h0_ptr = reinterpret_cast<const io_type*>(h0.untyped_data());
+    io_type leak_raw;
+    cudaMemcpyAsync(&leak_raw, h0_ptr + hidden,
+                    sizeof(io_type), cudaMemcpyDeviceToHost, stream);
+    cudaStreamSynchronize(stream);
+#ifdef USE_BF16
+    float leak_rate = __bfloat162float(leak_raw);
+#else
+    float leak_rate = leak_raw;
+#endif
 
     int threads_per_block = (hidden < 256) ? hidden : 256;
     int blocks_y = (hidden + threads_per_block - 1) / threads_per_block;
@@ -146,7 +157,7 @@ ffi::Error fused_reservoir_scan_ffi_impl(
     fused_reservoir_scan_kernel<<<grid, block, smem_bytes, stream>>>(
         reinterpret_cast<const io_type*>(wx.untyped_data()),
         reinterpret_cast<const io_type*>(w_res.untyped_data()),
-        reinterpret_cast<const io_type*>(h0.untyped_data()),
+        h0_ptr,
         reinterpret_cast<io_type*>(output->untyped_data()),
         batch, seq_len, hidden, leak_rate
     );
@@ -166,7 +177,6 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // wx
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // w_res
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // h0
-        .Arg<ffi::Buffer<ffi::F32>>()   // leak_rate
         .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 

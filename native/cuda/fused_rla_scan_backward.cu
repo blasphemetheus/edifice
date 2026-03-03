@@ -677,18 +677,18 @@ int fused_rla_scan_backward_launch(
 
 namespace ffi = xla::ffi;
 
+// 7 operands only — variant/clip hardcoded to avoid XLA 7-operand limit.
+// RLA variant (0) with clip=1.0. RDN variant falls back to Elixir.
+// fwd_grad_packed is [2, B, T, H, d]: forward_out at offset 0, grad_output at offset B*T*H*d.
 ffi::Error fused_rla_scan_backward_ffi_impl(
     cudaStream_t stream,
-    ffi::Buffer<FFI_IO_TYPE> q,            // [B, T, H, d]
-    ffi::Buffer<FFI_IO_TYPE> k,            // [B, T, H, d]
-    ffi::Buffer<FFI_IO_TYPE> v,            // [B, T, H, d]
-    ffi::Buffer<FFI_IO_TYPE> alpha,        // [B, T, H]
-    ffi::Buffer<FFI_IO_TYPE> beta,         // [B, T, H]
-    ffi::Buffer<FFI_IO_TYPE> gamma,        // [B, T, H]
-    ffi::Buffer<FFI_IO_TYPE> forward_out,  // [B, T, H, d]
-    ffi::Buffer<FFI_IO_TYPE> grad_output,  // [B, T, H, d]
-    ffi::AnyBuffer variant_buf,                // scalar i32
-    ffi::AnyBuffer clip_buf,                   // scalar f32
+    ffi::Buffer<FFI_IO_TYPE> q,               // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> k,               // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> v,               // [B, T, H, d]
+    ffi::Buffer<FFI_IO_TYPE> alpha,           // [B, T, H]
+    ffi::Buffer<FFI_IO_TYPE> beta,            // [B, T, H]
+    ffi::Buffer<FFI_IO_TYPE> gamma,           // [B, T, H]
+    ffi::Buffer<FFI_IO_TYPE> fwd_grad_packed, // [2, B, T, H, d]
     ffi::ResultBuffer<FFI_IO_TYPE> grad_q,     // [B, T, H, d]
     ffi::ResultBuffer<FFI_IO_TYPE> grad_k,     // [B, T, H, d]
     ffi::ResultBuffer<FFI_IO_TYPE> grad_v,     // [B, T, H, d]
@@ -696,15 +696,22 @@ ffi::Error fused_rla_scan_backward_ffi_impl(
     ffi::ResultBuffer<FFI_IO_TYPE> grad_beta,  // [B, T, H]
     ffi::ResultBuffer<FFI_IO_TYPE> grad_gamma  // [B, T, H]
 ) {
-    int32_t variant = reinterpret_cast<const int32_t*>(variant_buf.untyped_data())[0];
-    float clip_threshold = reinterpret_cast<const float*>(clip_buf.untyped_data())[0];
+    int variant = 0;             // RLA variant (hardcoded)
+    float clip_threshold = 1.0f; // default clip threshold
+
     auto dims = q.dimensions();
     int batch     = static_cast<int>(dims[0]);
     int seq_len   = static_cast<int>(dims[1]);
     int num_heads = static_cast<int>(dims[2]);
     int head_dim  = static_cast<int>(dims[3]);
 
+    int total_4d = batch * seq_len * num_heads * head_dim;
     int total_3d = batch * seq_len * num_heads;
+
+    // Unpack forward_out and grad_output from [2, B, T, H, d]
+    const io_type* packed_ptr = reinterpret_cast<const io_type*>(fwd_grad_packed.untyped_data());
+    const io_type* forward_out_ptr = packed_ptr;                  // first B*T*H*d elements
+    const io_type* grad_output_ptr = packed_ptr + total_4d;       // second B*T*H*d elements
 
     // Zero scalar gradient buffers (atomicAdd targets)
     cudaMemsetAsync(grad_alpha->untyped_data(), 0, total_3d * sizeof(io_type), stream);
@@ -724,8 +731,8 @@ ffi::Error fused_rla_scan_backward_ffi_impl(
         reinterpret_cast<const io_type*>(alpha.untyped_data()),
         reinterpret_cast<const io_type*>(beta.untyped_data()),
         reinterpret_cast<const io_type*>(gamma.untyped_data()),
-        reinterpret_cast<const io_type*>(forward_out.untyped_data()),
-        reinterpret_cast<const io_type*>(grad_output.untyped_data()),
+        forward_out_ptr,
+        grad_output_ptr,
         reinterpret_cast<io_type*>(grad_q->untyped_data()),
         reinterpret_cast<io_type*>(grad_k->untyped_data()),
         reinterpret_cast<io_type*>(grad_v->untyped_data()),
@@ -733,7 +740,7 @@ ffi::Error fused_rla_scan_backward_ffi_impl(
         reinterpret_cast<io_type*>(grad_beta->untyped_data()),
         reinterpret_cast<io_type*>(grad_gamma->untyped_data()),
         seq_len, num_heads, head_dim,
-        static_cast<int>(variant), clip_threshold
+        variant, clip_threshold
     );
 
     cudaError_t err = cudaGetLastError();
@@ -754,10 +761,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // alpha
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // beta
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // gamma
-        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // forward_out
-        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // grad_output
-        .Arg<ffi::AnyBuffer>()             // variant (scalar i32)
-        .Arg<ffi::AnyBuffer>()             // clip_threshold (scalar f32)
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // fwd_grad_packed [2,B,T,H,d]
         .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // grad_q
         .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // grad_k
         .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // grad_v

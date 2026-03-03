@@ -54,7 +54,7 @@ defmodule Edifice.SSM.MambaSSD do
 
   alias Edifice.SSM.Common
 
-  @default_chunk_size 16
+  @default_chunk_size 32
 
   @doc """
   Build an SSD Mamba model.
@@ -62,7 +62,7 @@ defmodule Edifice.SSM.MambaSSD do
   ## Options
 
     - `:training_mode` - If true, uses matmul formulation for tensor cores (default: false)
-    - `:chunk_size` - Size of chunks for SSD algorithm (default: 16)
+    - `:chunk_size` - Size of chunks for SSD algorithm (default: 32)
     - `:structured_mask` - If true, uses structured semi-separable mask that combines
       causal masking with SSM decay: `M[i,j] = prod(a[k], k=j+1..i)` for `i >= j`.
       This replaces the simple lower-triangular mask. (default: false)
@@ -137,12 +137,20 @@ defmodule Edifice.SSM.MambaSSD do
         {a_bar, bx}
       end
 
-    # Use SSD algorithm (training or inference mode)
+    # Use SSD algorithm — short sequences skip chunking entirely
+    seq_len = Nx.axis_size(a_bar, 1)
+
     h =
-      if training_mode do
-        ssd_matmul_scan(a_bar, bx, c, chunk_size)
-      else
-        ssd_scan(a_bar, bx, chunk_size)
+      cond do
+        seq_len <= chunk_size ->
+          # Sequence fits in one chunk: direct matmul, no chunking overhead
+          ssd_matmul_chunk(a_bar, bx)
+
+        training_mode ->
+          ssd_matmul_scan(a_bar, bx, c, chunk_size)
+
+        true ->
+          ssd_scan(a_bar, bx, chunk_size)
       end
 
     # Compute output
@@ -202,6 +210,17 @@ defmodule Edifice.SSM.MambaSSD do
   defp ssd_matmul_chunk(a_chunk, bx_chunk) do
     # a_chunk: [batch, chunk_len, hidden, state]
     # bx_chunk: [batch, chunk_len, hidden, state]
+    chunk_len = Nx.axis_size(a_chunk, 1)
+
+    if chunk_len == 1 do
+      # Single position: output is just bx (no accumulation needed)
+      bx_chunk
+    else
+      ssd_matmul_chunk_impl(a_chunk, bx_chunk)
+    end
+  end
+
+  defp ssd_matmul_chunk_impl(a_chunk, bx_chunk) do
     batch = Nx.axis_size(a_chunk, 0)
     chunk_len = Nx.axis_size(a_chunk, 1)
     hidden = Nx.axis_size(a_chunk, 2)
@@ -255,7 +274,8 @@ defmodule Edifice.SSM.MambaSSD do
     s_indices = Nx.iota({1, chunk_len})
     mask = Nx.greater_equal(t_indices, s_indices)
     # Broadcast mask to full shape: [batch, chunk_len, chunk_len, hidden, state]
-    mask = Nx.broadcast(mask, {batch, chunk_len, chunk_len, hidden, state})
+    # Explicit axes needed: mask dims are (seq_t, seq_s) mapping to axes 1 and 2
+    mask = Nx.broadcast(mask, {batch, chunk_len, chunk_len, hidden, state}, axes: [1, 2])
 
     # Apply mask
     transfer = Nx.select(mask, transfer, Nx.broadcast(0.0, Nx.shape(transfer)))
@@ -522,23 +542,7 @@ defmodule Edifice.SSM.MambaSSD do
   # Compute cumulative product along sequence dimension
   # Returns tensor where position t contains prod(a[0..t])
   defp compute_cumulative_products(a) do
-    seq_len = Nx.axis_size(a, 1)
-
-    {_, cumprods} =
-      Enum.reduce(0..(seq_len - 1), {nil, []}, fn t, {prev_prod, acc} ->
-        a_t = Nx.slice_along_axis(a, t, 1, axis: 1)
-
-        new_prod =
-          if prev_prod == nil do
-            a_t
-          else
-            Nx.multiply(prev_prod, a_t)
-          end
-
-        {new_prod, acc ++ [new_prod]}
-      end)
-
-    Nx.concatenate(cumprods, axis: 1)
+    Nx.cumulative_product(a, axis: 1)
   end
 
   # ============================================================================
@@ -559,7 +563,7 @@ defmodule Edifice.SSM.MambaSSD do
   @spec recommended_defaults() :: keyword()
   def recommended_defaults do
     Common.recommended_defaults()
-    |> Keyword.put(:chunk_size, 16)
+    |> Keyword.put(:chunk_size, 32)
     |> Keyword.put(:training_mode, false)
   end
 

@@ -108,38 +108,29 @@ defmodule Edifice.Recurrent.Reservoir do
     scale = spectral_radius / max(est_spectral, 1.0e-8)
     w_res_data = Nx.multiply(w_res_data, scale)
 
-    # Inject as Axon.constant nodes (frozen, never trained)
-    w_in_const = Axon.constant(w_in_data, name: "w_in")
-    w_res_const = Axon.constant(w_res_data, name: "w_res")
-
-    # Reservoir dynamics with fixed weights
+    # Reservoir dynamics: input projection + recurrent scan
+    # Uses Axon.nx with closure-captured frozen weights. Axon.constant nodes
+    # pass concrete tensors into callbacks, which Nx.Shared.optional can't
+    # trace for custom_call dispatch. Closure capture + Axon.nx avoids this.
     reservoir_output =
-      Axon.layer(
-        &reservoir_forward/4,
-        [input, w_in_const, w_res_const],
-        name: "reservoir",
-        reservoir_size: reservoir_size,
-        leak_rate: leak_rate,
-        op_name: :reservoir
+      Axon.nx(
+        input,
+        fn x ->
+          batch_size = Nx.axis_size(x, 0)
+          s_len = Nx.axis_size(x, 1)
+
+          # Pre-compute W_in @ x for all timesteps: [batch, seq_len, reservoir_size]
+          input_2d = Nx.reshape(x, {batch_size * s_len, Nx.axis_size(x, 2)})
+          wx = Nx.dot(input_2d, w_in_data) |> Nx.reshape({batch_size, s_len, reservoir_size})
+
+          # Reservoir scan (fallback path — EXLA compiles Nx ops to XLA graph directly)
+          Edifice.CUDA.FusedScan.reservoir_scan_fallback(wx, w_res_data, leak_rate)
+        end,
+        name: "reservoir"
       )
 
     # Trainable readout (only this gets optimized)
     Axon.dense(reservoir_output, output_size, name: "readout")
-  end
-
-  # Reservoir forward pass using pre-computed fixed weights.
-  # Dispatches through 3-tier CUDA pipeline when available.
-  defp reservoir_forward(input, w_in, w_res, opts) do
-    leak_rate = opts[:leak_rate]
-
-    # Pre-compute W_in @ x for all timesteps: [batch, seq_len, reservoir_size]
-    batch_size = Nx.axis_size(input, 0)
-    seq_len = Nx.axis_size(input, 1)
-    input_2d = Nx.reshape(input, {batch_size * seq_len, Nx.axis_size(input, 2)})
-    wx = Nx.dot(input_2d, w_in) |> Nx.reshape({batch_size, seq_len, Nx.axis_size(w_res, 0)})
-
-    # Dispatch: fused kernel handles W_res @ h internally
-    Edifice.CUDA.FusedScan.reservoir_scan(wx, w_res, leak_rate: leak_rate)
   end
 
   @doc """

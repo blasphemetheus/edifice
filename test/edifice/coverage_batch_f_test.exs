@@ -22,7 +22,7 @@ defmodule Edifice.CoverageBatchFTest do
     test "recommended_defaults returns keyword list with chunk_size and training_mode" do
       defaults = MambaSSD.recommended_defaults()
       assert Keyword.keyword?(defaults)
-      assert Keyword.get(defaults, :chunk_size) == 16
+      assert Keyword.get(defaults, :chunk_size) == 32
       assert Keyword.get(defaults, :training_mode) == false
     end
 

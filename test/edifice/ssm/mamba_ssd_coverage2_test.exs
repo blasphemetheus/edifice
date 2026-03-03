@@ -54,8 +54,8 @@ defmodule Edifice.SSM.MambaSSDCoverage2Test do
   # ============================================================================
 
   describe "inference mode - single chunk (seq_len <= chunk_size)" do
-    test "seq_len fits in one chunk, uses Common.sequential_scan" do
-      # seq_len=4 <= chunk_size=16 and chunk_len <= 4 -> sequential_scan
+    test "seq_len fits in one chunk, uses direct matmul" do
+      # seq_len=4 <= chunk_size=16 -> direct ssd_matmul_chunk (fast path)
       opts = base_opts(seq_len: 4, chunk_size: 16, training_mode: false)
       {_model, _params, output} = build_and_run(opts)
 
@@ -63,8 +63,8 @@ defmodule Edifice.SSM.MambaSSDCoverage2Test do
       assert Nx.all(Nx.is_nan(output) |> Nx.logical_not()) |> Nx.to_number() == 1
     end
 
-    test "seq_len fits in one chunk but > 4, uses blelloch_scan" do
-      # seq_len=8 <= chunk_size=16 but chunk_len > 4 -> blelloch_scan
+    test "seq_len fits in one chunk but > 4, uses direct matmul" do
+      # seq_len=8 <= chunk_size=16 -> direct ssd_matmul_chunk (fast path)
       opts = base_opts(seq_len: 8, chunk_size: 16, training_mode: false)
       {_model, _params, output} = build_and_run(opts)
 
@@ -333,7 +333,7 @@ defmodule Edifice.SSM.MambaSSDCoverage2Test do
       assert Keyword.has_key?(defaults, :training_mode)
       assert Keyword.has_key?(defaults, :hidden_size)
       assert defaults[:training_mode] == false
-      assert defaults[:chunk_size] == 16
+      assert defaults[:chunk_size] == 32
     end
   end
 

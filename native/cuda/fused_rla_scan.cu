@@ -219,7 +219,8 @@ int fused_rla_scan_launch(
 
 namespace ffi = xla::ffi;
 
-// variant and clip_threshold passed as scalar buffer operands
+// 6 operands only — variant/clip hardcoded to avoid XLA 7-operand limit.
+// RLA variant (0) with clip=1.0. RDN variant falls back to Elixir.
 ffi::Error fused_rla_scan_ffi_impl(
     cudaStream_t stream,
     ffi::Buffer<FFI_IO_TYPE> q,       // [B, T, H, d]
@@ -228,12 +229,10 @@ ffi::Error fused_rla_scan_ffi_impl(
     ffi::Buffer<FFI_IO_TYPE> alpha,   // [B, T, H]
     ffi::Buffer<FFI_IO_TYPE> beta,    // [B, T, H]
     ffi::Buffer<FFI_IO_TYPE> gamma,   // [B, T, H]
-    ffi::AnyBuffer variant_buf,             // scalar i32
-    ffi::AnyBuffer clip_buf,                // scalar f32
     ffi::ResultBuffer<FFI_IO_TYPE> output   // [B, T, H, d]
 ) {
-    int32_t variant = reinterpret_cast<const int32_t*>(variant_buf.untyped_data())[0];
-    float clip_threshold = reinterpret_cast<const float*>(clip_buf.untyped_data())[0];
+    int variant = 0;             // RLA variant (hardcoded)
+    float clip_threshold = 1.0f; // default clip threshold
     auto dims = q.dimensions();
     int batch     = static_cast<int>(dims[0]);
     int seq_len   = static_cast<int>(dims[1]);
@@ -254,7 +253,7 @@ ffi::Error fused_rla_scan_ffi_impl(
         reinterpret_cast<const io_type*>(gamma.untyped_data()),
         reinterpret_cast<io_type*>(output->untyped_data()),
         seq_len, num_heads, head_dim,
-        static_cast<int>(variant), clip_threshold
+        variant, clip_threshold
     );
 
     cudaError_t err = cudaGetLastError();
@@ -275,8 +274,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // alpha
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // beta
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // gamma
-        .Arg<ffi::AnyBuffer>()             // variant (scalar i32)
-        .Arg<ffi::AnyBuffer>()             // clip_threshold (scalar f32)
+        // variant/clip hardcoded in handler (XLA 7-operand limit)
         .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 

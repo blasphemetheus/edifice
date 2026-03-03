@@ -150,6 +150,74 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
   end
 
   # ============================================================================
+  # Reservoir scan leak_rate correctness
+  # ============================================================================
+
+  describe "reservoir_scan leak_rate correctness" do
+    for leak_rate <- [0.3, 0.5, 1.0] do
+      @leak_rate leak_rate
+
+      test "leak_rate=#{leak_rate} produces finite output" do
+        batch = 2
+        seq = 4
+        hidden = 8
+        key = Nx.Random.key(42)
+        {wx, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, hidden}, type: {:f, 32})
+        {w_res, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, hidden}, type: {:f, 32})
+
+        result = FusedScan.reservoir_scan(wx, w_res, leak_rate: @leak_rate)
+
+        assert Nx.shape(result) == {batch, hidden}
+        assert Nx.type(result) == {:f, 32}
+        assert Nx.all(Nx.is_nan(result) |> Nx.logical_not()) |> Nx.to_number() == 1
+        assert Nx.all(Nx.is_infinity(result) |> Nx.logical_not()) |> Nx.to_number() == 1
+      end
+    end
+
+    test "leak_rate=1.0 matches no-leak reference (h = tanh(wx + W_res@h))" do
+      batch = 1
+      seq = 3
+      hidden = 4
+      key = Nx.Random.key(99)
+      {wx, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq, hidden}, type: {:f, 32})
+      {w_res, _key} = Nx.Random.uniform(key, -0.2, 0.2, shape: {hidden, hidden}, type: {:f, 32})
+
+      result = FusedScan.reservoir_scan(wx, w_res, leak_rate: 1.0)
+
+      # Manual computation: h_t = tanh(wx_t + W_res @ h_{t-1})
+      h = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
+
+      h = Enum.reduce(0..(seq - 1), h, fn t, h_prev ->
+        wx_t = Nx.slice_along_axis(wx, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        Nx.tanh(Nx.add(wx_t, Nx.dot(h_prev, w_res)))
+      end)
+
+      max_diff = Nx.subtract(result, h) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
+      assert max_diff < 1.0e-5, "leak_rate=1.0 should match manual computation (diff=#{max_diff})"
+    end
+
+    test "different leak_rates produce different outputs" do
+      batch = 1
+      seq = 8
+      hidden = 8
+      key = Nx.Random.key(456)
+      {wx, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, hidden}, type: {:f, 32})
+      {w_res, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, hidden}, type: {:f, 32})
+
+      result_full = FusedScan.reservoir_scan(wx, w_res, leak_rate: 1.0)
+      result_half = FusedScan.reservoir_scan(wx, w_res, leak_rate: 0.5)
+
+      max_diff = Nx.subtract(result_full, result_half)
+                 |> Nx.abs()
+                 |> Nx.reduce_max()
+                 |> Nx.to_number()
+
+      assert max_diff > 1.0e-4,
+        "leak_rate=1.0 vs 0.5 should produce different outputs (max_diff=#{max_diff})"
+    end
+  end
+
+  # ============================================================================
   # Flash attention causal correctness
   # ============================================================================
 
@@ -280,6 +348,27 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       assert max_diff > 1.0e-4,
         "MIRAS: momentum=0.1 vs 0.99 should produce different outputs (max_diff=#{max_diff}). " <>
         "If this fails, the momentum parameter may be ignored by the dispatch path."
+    end
+
+    test "reservoir_scan: changing leak_rate changes output" do
+      batch = 2
+      seq = 8
+      hidden = 8
+      key = Nx.Random.key(2024)
+      {wx, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, hidden}, type: {:f, 32})
+      {w_res, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, hidden}, type: {:f, 32})
+
+      result_full = FusedScan.reservoir_scan(wx, w_res, leak_rate: 1.0)
+      result_half = FusedScan.reservoir_scan(wx, w_res, leak_rate: 0.5)
+
+      max_diff = Nx.subtract(result_full, result_half)
+                 |> Nx.abs()
+                 |> Nx.reduce_max()
+                 |> Nx.to_number()
+
+      assert max_diff > 1.0e-4,
+        "Reservoir: leak_rate=1.0 vs 0.5 should produce different outputs (max_diff=#{max_diff}). " <>
+        "If this fails, the leak_rate parameter may be ignored by the dispatch path."
     end
   end
 
