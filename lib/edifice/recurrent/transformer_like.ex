@@ -14,7 +14,7 @@ defmodule Edifice.Recurrent.TransformerLike do
   Dense projection -> hidden_size  (if embed_dim != hidden_size)
         |
   Per layer:
-    1. x = x + LSTM(x)                              # bare residual recurrence
+    1. x = x + Dense_zeros(LSTM(x))                  # zero-init gated residual recurrence
     2. x = x + [LayerNorm -> up -> act -> down](x)   # pre-norm FFN residual
         |
   Final LayerNorm -> last timestep -> [batch, hidden_size]
@@ -127,7 +127,10 @@ defmodule Edifice.Recurrent.TransformerLike do
     )
   end
 
-  # Block 1: optional_norm -> LSTM/GRU -> dropout -> residual add
+  # Block 1: optional_norm -> LSTM/GRU -> zero-init decoder -> dropout -> residual add
+  # The zero-initialized decoder ensures the network starts as identity (LSTM
+  # contribution is zero initially), preventing gradient explosion from bare
+  # residual addition. This matches DeepResLSTM's working pattern.
   defp recurrent_block(x, hidden_size, cell_type, dropout, norm, recurrent_norm, layer_idx) do
     rnn_input =
       if recurrent_norm do
@@ -141,14 +144,22 @@ defmodule Edifice.Recurrent.TransformerLike do
         name: "#{cell_type}_#{layer_idx}"
       )
 
-    output_seq =
+    # Zero-initialized projection gates the LSTM contribution
+    decoded =
+      Axon.dense(output_seq, hidden_size,
+        name: "rnn_#{layer_idx}_decoder",
+        kernel_initializer: :zeros,
+        bias_initializer: :zeros
+      )
+
+    decoded =
       if dropout > 0 do
-        Axon.dropout(output_seq, rate: dropout, name: "rnn_#{layer_idx}_dropout")
+        Axon.dropout(decoded, rate: dropout, name: "rnn_#{layer_idx}_dropout")
       else
-        output_seq
+        decoded
       end
 
-    Axon.add(x, output_seq, name: "rnn_#{layer_idx}_residual")
+    Axon.add(x, decoded, name: "rnn_#{layer_idx}_residual")
   end
 
   # Block 2: norm -> FFN(up -> act -> down) -> dropout -> residual add
