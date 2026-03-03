@@ -246,7 +246,16 @@ defmodule Edifice.RegistryIntegrityTest do
     vision_kan: [channels: [8, 16], depths: [1, 1]],
     # Wave 5 attention
     gsa: [num_slots: 4],
-    mta: [c_q: 2, c_k: 3, c_h: 2]
+    mta: [c_q: 2, c_k: 3, c_h: 2],
+    # Game AI modules
+    entity_encoder: [entity_dim: 8, num_types: 4, type_embed_dim: 4],
+    autoregressive_head: [
+      components: [
+        %{name: "a", num_actions: 4, embed_dim: 4},
+        %{name: "b", num_actions: 3, embed_dim: 4}
+      ]
+    ],
+    pointer_network: [entity_dim: 8, key_dim: 4]
   }
 
   for arch <- Edifice.list_architectures() do

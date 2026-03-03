@@ -89,6 +89,7 @@ defmodule Edifice do
     transformer_like: Edifice.Recurrent.TransformerLike,
     deep_res_lstm: Edifice.Recurrent.DeepResLSTM,
     huginn: Edifice.Recurrent.Huginn,
+    multi_timescale_recurrence: Edifice.Recurrent.MultiTimescaleRecurrence,
     delta_product: Edifice.Recurrent.DeltaProduct,
     # SSM
     mamba: Edifice.SSM.Mamba,
@@ -238,6 +239,7 @@ defmodule Edifice do
     deep_sets: Edifice.Sets.DeepSets,
     pointnet: Edifice.Sets.PointNet,
     pointnet_pp: Edifice.Sets.PointNetPP,
+    entity_encoder: Edifice.Sets.EntityEncoder,
     # Energy
     ebm: Edifice.Energy.EBM,
     hopfield: Edifice.Energy.Hopfield,
@@ -315,6 +317,8 @@ defmodule Edifice do
     # RL
     policy_value: Edifice.RL.PolicyValue,
     decision_transformer: Edifice.RL.DecisionTransformer,
+    autoregressive_head: Edifice.RL.AutoregressiveHead,
+    pointer_network: Edifice.RL.PointerNetwork,
     # Lightning Attention
     lightning_attention: Edifice.Attention.LightningAttention,
     # Dual Chunk Attention
@@ -401,6 +405,7 @@ defmodule Edifice do
         :transformer_like,
         :deep_res_lstm,
         :huginn,
+        :multi_timescale_recurrence,
         :delta_product
       ],
       ssm: [
@@ -547,7 +552,7 @@ defmodule Edifice do
         :gps,
         :ka_gnn
       ],
-      sets: [:deep_sets, :pointnet, :pointnet_pp],
+      sets: [:deep_sets, :pointnet, :pointnet_pp, :entity_encoder],
       energy: [:ebm, :hopfield, :neural_ode],
       probabilistic: [:bayesian, :mc_dropout, :evidential],
       memory: [:ntm, :memory_network, :engram, :memory_layer],
@@ -616,7 +621,7 @@ defmodule Edifice do
       ],
       world_model: [:world_model],
       multimodal: [:multimodal_mlp_fusion],
-      rl: [:policy_value, :decision_transformer],
+      rl: [:policy_value, :decision_transformer, :autoregressive_head, :pointer_network],
       liquid: [:liquid],
       scientific: [:fno, :deep_onet, :tno],
       neuromorphic: [:snn, :ann2snn],
