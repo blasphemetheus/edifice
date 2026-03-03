@@ -278,6 +278,41 @@ The target user builds a swarm system using LangGraph or similar, and uses
 Edifice `AgentSwarm` / `StatefulAgent` as the neural backbone for each agent
 or for the coordination layer itself.
 
+## Post-Implementation Assessment (2026-03-03)
+
+All 4 modules implemented and tested. Combined with pre-existing `MixtureOfAgents`,
+Edifice now has 5 agent swarm building blocks.
+
+### Coverage Matrix
+
+| Coordination Pattern | Covered By |
+|---------------------|------------|
+| Debate/Critique | AgentSwarm (R communication rounds) |
+| Coordinator-Worker | RouterNetwork (dispatch) + MessagePassingAgents (hierarchical adj) |
+| Voting/Ensemble | MixtureOfAgents + AgentSwarm + RouterNetwork |
+| Hierarchical Teams | MessagePassingAgents (tree-shaped adjacency) |
+| Relay/Pipeline | Compose StatefulAgents in sequence (no dedicated module needed) |
+| Blackboard/Shared Memory | Existing NTM + Memory Layers modules |
+
+### Gaps Considered But Not Filled
+
+- **Shared blackboard module** — Could build a shared read/write memory multiple
+  agents access. Decided against: NTM and Memory Layers already cover shared memory
+  as architecture components. Wiring them into a multi-agent system is an orchestration
+  concern, not an architecture concern.
+- **Pipeline/relay module** — Sequential agent handoff. Trivially composed by chaining
+  StatefulAgents. Not worth a dedicated module.
+- **Higher-level orchestration layer** — Combining all 4 modules into an end-to-end
+  swarm system. Decided against: this is framework territory (LangGraph, CrewAI),
+  not architecture territory. Edifice provides the neural backbones; users compose
+  them in their application framework.
+
+### Verdict
+
+**Complete.** The building block space is well covered. No further agent swarm
+modules planned unless a specific use case (e.g., ExPhil Melee bot) reveals a
+concrete gap.
+
 ## References
 
 1. Du et al., "Improving Factuality and Reasoning in Language Models through Multiagent Debate", 2023

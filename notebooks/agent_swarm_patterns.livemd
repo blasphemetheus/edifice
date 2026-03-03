@@ -1,0 +1,419 @@
+# Agent Swarm Patterns
+
+## Setup
+
+**Choose one of the two cells below** depending on how you started Livebook.
+
+### Standalone (default)
+
+Use this if you started Livebook normally (`livebook server`).
+
+```elixir
+edifice_dep =
+  if File.dir?(Path.expand("~/edifice")) do
+    {:edifice, path: Path.expand("~/edifice")}
+  else
+    {:edifice, "~> 0.2.0"}
+  end
+
+Mix.install([
+  edifice_dep,
+  # {:exla, "~> 0.10"},
+  {:kino, "~> 0.14"}
+])
+
+# Nx.global_default_backend(EXLA.Backend)
+```
+
+### Attached to project (recommended for Nix/CUDA)
+
+Use this if you started Livebook via `./scripts/livebook.sh`.
+
+```elixir
+Nx.global_default_backend(EXLA.Backend)
+IO.puts("Attached mode — using EXLA backend from project node")
+```
+
+## Introduction
+
+Edifice includes four **agent swarm building blocks** — neural architecture
+modules that implement multi-agent coordination patterns as differentiable,
+end-to-end trainable components. These are *not* an orchestration framework
+(like LangGraph or CrewAI). They're the neural backbone that agents use to
+process information, communicate, and make decisions.
+
+### What you'll learn
+
+- How each module structures inter-agent communication differently
+- The shape flow through each architecture (what goes in, what comes out)
+- Parameter counts at T400-friendly dimensions
+- How StatefulAgent maintains memory across turns
+- How MessagePassingAgents supports sparse communication topologies
+
+All examples use tiny dimensions (hidden=32, seq=8, batch=2) so they run
+instantly on CPU or a 2GB GPU like the T400.
+
+```elixir
+# Shared dimensions — intentionally small for fast iteration
+batch = 2
+seq_len = 8
+embed_dim = 32
+hidden = 32
+num_agents = 3
+num_heads = 4
+
+IO.puts("Shared config:")
+IO.puts("  batch=#{batch}  seq=#{seq_len}  embed=#{embed_dim}  hidden=#{hidden}")
+IO.puts("  agents=#{num_agents}  heads=#{num_heads}")
+```
+
+## Helper: Build, Run, Inspect
+
+```elixir
+defmodule SwarmHelper do
+  def run_model(name, model, inputs) do
+    templates = Map.new(inputs, fn {k, v} -> {k, Nx.template(Nx.shape(v), Nx.type(v))} end)
+    {init_fn, predict_fn} = Axon.build(model, mode: :inference)
+    params = init_fn.(templates, Axon.ModelState.empty())
+    output = predict_fn.(params, inputs)
+    param_count = count_params(params)
+
+    IO.puts("#{name}")
+    IO.puts("  Inputs:")
+
+    for {k, v} <- inputs do
+      IO.puts("    #{k}: #{inspect(Nx.shape(v))}")
+    end
+
+    IO.puts("  Output: #{format_output(output)}")
+    IO.puts("  Params: #{fmt(param_count)}")
+    IO.puts("")
+
+    {output, params, predict_fn}
+  end
+
+  def count_params(%Axon.ModelState{} = state) do
+    state |> Axon.ModelState.trainable_parameters() |> count_nested(0)
+  end
+
+  defp count_nested(%Nx.Tensor{} = t, acc), do: acc + Nx.size(t)
+  defp count_nested(map, acc) when is_map(map) do
+    Enum.reduce(map, acc, fn {_k, v}, a -> count_nested(v, a) end)
+  end
+  defp count_nested(_other, acc), do: acc
+
+  def fmt(n) when n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)}M"
+  def fmt(n) when n >= 1_000, do: "#{Float.round(n / 1_000, 1)}K"
+  def fmt(n), do: "#{n}"
+
+  defp format_output({a, b}), do: "{#{inspect(Nx.shape(a))}, #{inspect(Nx.shape(b))}}"
+  defp format_output(%Nx.Tensor{} = t), do: inspect(Nx.shape(t))
+  defp format_output(other), do: inspect(other)
+end
+```
+
+## 1. AgentSwarm — Multi-Agent Debate
+
+The **AgentSwarm** implements the "multi-agent debate" pattern: N independent
+agent transformer stacks produce proposals, then agents attend to each other
+across R communication rounds, and an aggregator transformer merges everything
+into a final output.
+
+### What to look for
+
+- The output is `[batch, aggregator_hidden]` — a single consensus vector
+- More communication rounds (R) means more debate iterations
+- Parameter count scales with `num_agents * agent_layers` (each agent has its own weights)
+
+```elixir
+alias Edifice.Meta.AgentSwarm
+
+model = AgentSwarm.build(
+  embed_dim: embed_dim,
+  num_agents: num_agents,
+  agent_hidden_size: hidden,
+  agent_layers: 1,
+  communication_rounds: 2,
+  aggregator_hidden_size: hidden,
+  aggregator_layers: 1,
+  num_heads: num_heads,
+  dropout: 0.0,
+  window_size: seq_len
+)
+
+input = Nx.broadcast(0.5, {batch, seq_len, embed_dim})
+
+{swarm_output, _params, _predict} =
+  SwarmHelper.run_model("AgentSwarm (3 agents, 2 comm rounds)", model, %{
+    "state_sequence" => input
+  })
+
+IO.puts("Output sample (first 8 values):")
+swarm_output |> Nx.slice_along_axis(0, 1, axis: 0) |> Nx.flatten() |> Nx.slice([0], [8]) |> Nx.to_list() |> Enum.map(&Float.round(&1, 4)) |> IO.inspect()
+```
+
+## 2. RouterNetwork — Specialist Dispatch
+
+The **RouterNetwork** learns to route inputs to specialist sub-models. A small
+MLP router scores each specialist, then either soft-mixes all outputs (weighted
+sum) or hard-selects top-k specialists. Think mixture-of-experts but at the
+full-model level.
+
+### What to look for
+
+- Soft routing: all specialists contribute (weighted by router scores)
+- Hard routing (top_k): only k specialists run, the rest are zeroed
+- The router is tiny (2-layer MLP on mean-pooled input) — most params are in specialists
+
+```elixir
+alias Edifice.Meta.RouterNetwork
+
+# Soft routing — all specialists contribute
+soft_model = RouterNetwork.build(
+  embed_dim: embed_dim,
+  num_specialists: num_agents,
+  specialist_hidden_size: hidden,
+  specialist_layers: 1,
+  num_heads: num_heads,
+  dropout: 0.0,
+  routing: :soft,
+  window_size: seq_len
+)
+
+{soft_out, _, _} =
+  SwarmHelper.run_model("RouterNetwork (soft, 3 specialists)", soft_model, %{
+    "state_sequence" => input
+  })
+
+# Hard routing — only top 1 specialist
+hard_model = RouterNetwork.build(
+  embed_dim: embed_dim,
+  num_specialists: num_agents,
+  specialist_hidden_size: hidden,
+  specialist_layers: 1,
+  num_heads: num_heads,
+  dropout: 0.0,
+  routing: {:top_k, 1},
+  window_size: seq_len
+)
+
+{hard_out, _, _} =
+  SwarmHelper.run_model("RouterNetwork (top_k=1, 3 specialists)", hard_model, %{
+    "state_sequence" => input
+  })
+
+# Compare: soft blends all, hard picks one
+diff = Nx.subtract(soft_out, hard_out) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
+IO.puts("Max difference between soft and hard routing: #{Float.round(diff, 6)}")
+IO.puts("(Non-zero means the routing strategies produce different outputs — expected!)")
+```
+
+## 3. StatefulAgent — Multi-Turn Memory
+
+The **StatefulAgent** wraps a backbone transformer with persistent state that
+carries across turns. Each turn takes the current input + previous state and
+produces output + updated state. Three state update modes:
+
+- **Compressive**: Gated linear blend (inspired by InfiniAttention)
+- **EMA**: Exponential moving average (simplest)
+- **GRU**: Full GRU cell update (most expressive)
+
+### What to look for
+
+- The model returns a **tuple**: `{output, new_state}`
+- State shape is separate from output shape (`state_size` vs `hidden_size`)
+- State should change between turns — if it doesn't, memory isn't working
+- Try: same input both turns vs different inputs — state should diverge more with different inputs
+
+```elixir
+alias Edifice.Meta.StatefulAgent
+
+state_size = 16
+
+model = StatefulAgent.build(
+  embed_dim: embed_dim,
+  hidden_size: hidden,
+  num_layers: 1,
+  num_heads: num_heads,
+  state_size: state_size,
+  state_mode: :compressive,
+  dropout: 0.0,
+  window_size: seq_len
+)
+
+zero_state = Nx.broadcast(0.0, {batch, state_size})
+
+templates = %{
+  "state_sequence" => Nx.template({batch, seq_len, embed_dim}, :f32),
+  "agent_state" => Nx.template({batch, state_size}, :f32)
+}
+
+{init_fn, predict_fn} = Axon.build(model, mode: :inference)
+params = init_fn.(templates, Axon.ModelState.empty())
+param_count = SwarmHelper.count_params(params)
+
+IO.puts("StatefulAgent (compressive, state_size=#{state_size})")
+IO.puts("  Params: #{SwarmHelper.fmt(param_count)}")
+
+# Simulate 3 turns with random input
+key = Nx.Random.key(42)
+state = zero_state
+
+for turn <- 1..3, reduce: {key, state} do
+  {k, prev_state} ->
+    {turn_input, k} = Nx.Random.uniform(k, -1.0, 1.0,
+      shape: {batch, seq_len, embed_dim}, type: {:f, 32})
+
+    {output, new_state} = predict_fn.(params, %{
+      "state_sequence" => turn_input,
+      "agent_state" => prev_state
+    })
+
+    state_norm = Nx.mean(Nx.abs(new_state)) |> Nx.to_number() |> Float.round(4)
+    state_delta =
+      Nx.subtract(new_state, prev_state)
+      |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number() |> Float.round(4)
+
+    IO.puts("  Turn #{turn}: output=#{inspect(Nx.shape(output))}  " <>
+            "state_norm=#{state_norm}  state_delta=#{state_delta}")
+
+    {k, new_state}
+end
+
+IO.puts("\n  State should change each turn (state_delta > 0) — that's memory working!")
+```
+
+### Compare state modes
+
+```elixir
+# Quick comparison of all 3 state modes
+for mode <- [:compressive, :ema, :gru] do
+  m = StatefulAgent.build(
+    embed_dim: embed_dim,
+    hidden_size: hidden,
+    num_layers: 1,
+    num_heads: num_heads,
+    state_size: state_size,
+    state_mode: mode,
+    dropout: 0.0,
+    window_size: seq_len
+  )
+
+  {init, pred} = Axon.build(m, mode: :inference)
+  p = init.(templates, Axon.ModelState.empty())
+  pc = SwarmHelper.count_params(p)
+
+  key = Nx.Random.key(99)
+  {inp, _} = Nx.Random.uniform(key, -1.0, 1.0,
+    shape: {batch, seq_len, embed_dim}, type: {:f, 32})
+
+  {_out, st1} = pred.(p, %{"state_sequence" => inp, "agent_state" => zero_state})
+
+  state_mag = Nx.mean(Nx.abs(st1)) |> Nx.to_number() |> Float.round(4)
+  IO.puts("  #{String.pad_trailing(to_string(mode), 14)} params=#{String.pad_trailing(SwarmHelper.fmt(pc), 8)} state_magnitude=#{state_mag}")
+end
+```
+
+## 4. MessagePassingAgents — Graph Communication
+
+The **MessagePassingAgents** models agents as nodes in a graph. Instead of
+all-to-all attention (AgentSwarm), communication follows edges in an adjacency
+matrix. Each round: project sender/receiver features, aggregate neighbor
+messages via the adjacency, update node state with a GRU cell.
+
+This is the right choice when you want **structured communication** — not every
+agent needs to talk to every other agent.
+
+### What to look for
+
+- Different adjacency matrices → different communication patterns → different outputs
+- Fully-connected (all 1s) approximates AgentSwarm's all-to-all pattern
+- Ring topology (each agent talks to neighbors only) produces sparser information flow
+- Isolated agents (no edges) only see their own proposal — no communication benefit
+
+```elixir
+alias Edifice.Meta.MessagePassingAgents
+
+model = MessagePassingAgents.build(
+  embed_dim: embed_dim,
+  num_agents: num_agents,
+  agent_hidden_size: hidden,
+  agent_layers: 1,
+  message_rounds: 3,
+  output_size: hidden,
+  num_heads: num_heads,
+  dropout: 0.0,
+  aggregation: :mean,
+  pool_mode: :mean,
+  window_size: seq_len
+)
+
+adj_templates = %{
+  "state_sequence" => Nx.template({batch, seq_len, embed_dim}, :f32),
+  "adjacency" => Nx.template({batch, num_agents, num_agents}, :f32)
+}
+
+{init_fn, predict_fn} = Axon.build(model, mode: :inference)
+params = init_fn.(adj_templates, Axon.ModelState.empty())
+param_count = SwarmHelper.count_params(params)
+
+IO.puts("MessagePassingAgents (3 agents, 3 rounds)")
+IO.puts("  Params: #{SwarmHelper.fmt(param_count)}\n")
+
+# Use random input so different topologies produce meaningfully different results
+key = Nx.Random.key(77)
+{rand_input, _} = Nx.Random.uniform(key, -1.0, 1.0,
+  shape: {batch, seq_len, embed_dim}, type: {:f, 32})
+
+# Compare 3 topologies
+topologies = %{
+  "Fully-connected" => Nx.broadcast(1.0, {batch, num_agents, num_agents}),
+  "Ring" => Nx.stack([
+    Nx.tensor([[1, 1, 0], [1, 1, 1], [0, 1, 1]], type: :f32),
+    Nx.tensor([[1, 1, 0], [1, 1, 1], [0, 1, 1]], type: :f32)
+  ]),
+  "Isolated" => Nx.stack([
+    Nx.eye(num_agents, type: :f32),
+    Nx.eye(num_agents, type: :f32)
+  ])
+}
+
+outputs =
+  for {name, adj} <- topologies do
+    out = predict_fn.(params, %{"state_sequence" => rand_input, "adjacency" => adj})
+    out_norm = Nx.mean(Nx.abs(out)) |> Nx.to_number() |> Float.round(4)
+    IO.puts("  #{String.pad_trailing(name, 18)} output_norm=#{out_norm}")
+    {name, out}
+  end
+
+# Pairwise differences
+IO.puts("")
+pairs = for {n1, o1} <- outputs, {n2, o2} <- outputs, n1 < n2 do
+  diff = Nx.subtract(o1, o2) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number() |> Float.round(4)
+  IO.puts("  #{n1} vs #{n2}: max_diff=#{diff}")
+  diff
+end
+
+IO.puts("\nDifferent topologies should produce different outputs.")
+IO.puts("Isolated agents get no messages — their output diverges most from fully-connected.")
+```
+
+## Summary
+
+```elixir
+IO.puts("=== Agent Swarm Building Blocks ===\n")
+IO.puts("Module                    Pattern                         Inputs")
+IO.puts("─────────────────────────────────────────────────────────────────────────")
+IO.puts("AgentSwarm                Dense all-to-all attention       state_sequence")
+IO.puts("RouterNetwork             Learned specialist dispatch      state_sequence")
+IO.puts("StatefulAgent             Persistent memory across turns   state_sequence + agent_state")
+IO.puts("MessagePassingAgents      Graph-structured communication   state_sequence + adjacency")
+IO.puts("")
+IO.puts("All four are neural building blocks — combine them with any Edifice")
+IO.puts("backbone (Mamba, GRU, Transformer, etc.) for your specific use case.")
+IO.puts("")
+IO.puts("Suggested combinations:")
+IO.puts("  • Melee bot: StatefulAgent + MinGRU backbone (fast, remembers game state)")
+IO.puts("  • Strategy game: MessagePassingAgents (unit types as nodes, command hierarchy as edges)")
+IO.puts("  • Ensemble LLM: AgentSwarm with 3-5 agents + RouterNetwork for final routing")
+```
