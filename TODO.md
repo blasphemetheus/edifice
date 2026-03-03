@@ -162,7 +162,12 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
 - [x] Wav2Vec 2.0 — Self-supervised speech backbone (7-layer CNN encoder + conv PE + Transformer + product quantizer)
 - [x] Janus Multimodal — Decoupled visual encoding (ViT encoder + MLP aligner + VQ gen head)
 - [x] GPS — General Powerful Scalable graph transformer (GIN MPNN + global attention dual-branch with RWSE PE)
-- [ ] Agent swarm patterns — Multi-agent coordination framework
+- [ ] Agent swarm patterns — Multi-agent coordination building blocks (see `notebooks/research/agent_swarm_patterns.md`)
+  - [ ] **AgentSwarm** — Communication-augmented ensemble. N proposers + R rounds of inter-agent cross-attention + aggregator. Differentiable "debate" pattern.
+  - [ ] **RouterNetwork** — Learned input-level dispatch to specialist models. Soft (weighted sum) and hard (top-k straight-through) routing.
+  - [ ] **StatefulAgent** — Multi-turn wrapper pairing any architecture with persistent state (compressive/episodic/matrix memory).
+  - [ ] **MessagePassingAgents** — GNN-inspired agent graph. Agents as nodes, communication as edges, GRU state updates.
+  - [ ] **Re-evaluate agent swarm direction** — After modules above are done, assess: coverage gaps, integration patterns, whether a higher-level orchestration layer makes sense.
 
 ---
 
@@ -250,7 +255,7 @@ have dedicated test files. Remaining gaps are leaf modules or minor variants.
 
 - [x] **Composition guide** — `guides/composing_architectures.md`. Covers TransformerBlock callbacks (attention_fn, cross_attention_fn, custom_ffn), ModelBuilder skeletons (sequence + vision), shared blocks table, and 3 composition recipes (custom attention, hybrid encoder-decoder, SSM+attention interleaving).
 - [ ] **Livebook notebooks** — Create 3-5 `.livemd` notebooks: (1) "Build your first model" — walk through build/init/predict cycle, (2) "Architecture comparison" — benchmark 5 architectures on same task, (3) "Custom architecture from blocks" — compose a novel model from shared blocks, (4) "Whisper ASR demo" — end-to-end encoder-decoder usage, (5) "Training a small model" — connect to Axon training loop.
-- [ ] **CODE_OF_CONDUCT.md** — Copy Contributor Covenant from contributor-covenant.org (content filters block generation). Manual task.
+- [x] **CODE_OF_CONDUCT.md** — Contributor Covenant v2.1, downloaded from contributor-covenant.org.
 
 ### Module Decomposition (Priority: Low-Medium)
 
