@@ -42,6 +42,10 @@ native/cuda/build/
 native/cuda/.nix-mix/
 native/cuda/.nix-hex/
 
+# Compiled CUDA test binaries
+native/cuda/test_*
+!native/cuda/test_*.cu
+
 # Compiled NIF and CUDA shared libraries
 /priv/
 
