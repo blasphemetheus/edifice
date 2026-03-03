@@ -109,7 +109,8 @@ defmodule Edifice.Attention.FlashLinearAttention do
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_heads = Keyword.get(opts, :num_heads, @default_num_heads)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
-    chunk_size = Keyword.get(opts, :chunk_size, @default_chunk_size)
+    seq_len = Keyword.get(opts, :seq_len, Keyword.get(opts, :window_size, @default_chunk_size))
+    chunk_size = min(Keyword.get(opts, :chunk_size, @default_chunk_size), seq_len)
     feature_map = Keyword.get(opts, :feature_map, @default_feature_map)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
 

@@ -99,7 +99,8 @@ defmodule Edifice.Attention.LightningAttention do
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     num_heads = Keyword.get(opts, :num_heads, @default_num_heads)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
-    block_size = Keyword.get(opts, :block_size, @default_block_size)
+    seq_len = Keyword.get(opts, :seq_len, Keyword.get(opts, :window_size, @default_block_size))
+    block_size = min(Keyword.get(opts, :block_size, @default_block_size), seq_len)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
 
     head_dim = div(hidden_size, num_heads)

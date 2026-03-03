@@ -54,6 +54,9 @@ defmodule MeleeArchComparison do
   # Architectures known to segfault through Axon pipeline
   @skip_archs MapSet.new([])
 
+  # When BENCH_ONLY_NEW=1, run only architectures added after the initial 23
+  @only_new System.get_env("BENCH_ONLY_NEW", "0") == "1"
+
   # ── Shared opts ────────────────────────────────────────────────
 
   @shared_opts [
@@ -70,51 +73,144 @@ defmodule MeleeArchComparison do
 
   # ── Architecture tiers ─────────────────────────────────────────
 
-  # {atom, tier, opts | :mlp_temporal | :reservoir | :decision_transformer}
+  # {atom, tier, opts | :mlp_temporal | :reservoir, new?}
+  # new? = true for architectures added after initial 23 (for BENCH_ONLY_NEW filtering)
   defp architecture_specs do
-    tier1_fast() ++ tier2_classic() ++ tier3_heavy() ++ tier4_exotic()
+    all = tier1_fast() ++ tier2_classic() ++ tier3_heavy() ++ tier4_exotic() ++
+          tier5_attention() ++ tier6_ssm() ++ tier7_recurrent() ++ tier8_feedforward()
+
+    if @only_new do
+      Enum.filter(all, fn {_, _, _, new?} -> new? end)
+    else
+      all
+    end
   end
 
+  # Original 23 (new? = false)
   defp tier1_fast do
     [
-      {:mlp_temporal, 1, :mlp_temporal},
-      {:min_gru, 1, @shared_opts},
-      {:min_lstm, 1, @shared_opts},
-      {:gated_ssm, 1, @shared_opts},
-      {:fnet, 1, @shared_opts},
-      {:native_recurrence, 1, @shared_opts}
+      {:mlp_temporal, 1, :mlp_temporal, false},
+      {:min_gru, 1, @shared_opts, false},
+      {:min_lstm, 1, @shared_opts, false},
+      {:gated_ssm, 1, @shared_opts, false},
+      {:fnet, 1, @shared_opts, false},
+      {:native_recurrence, 1, @shared_opts, false}
     ]
   end
 
   defp tier2_classic do
     [
-      {:lstm, 2, @shared_opts},
-      {:gru, 2, @shared_opts},
-      {:mamba, 2, @shared_opts},
-      {:liquid, 2, @shared_opts},
-      {:s4, 2, @shared_opts},
-      {:griffin, 2, @shared_opts}
+      {:lstm, 2, @shared_opts, false},
+      {:gru, 2, @shared_opts, false},
+      {:mamba, 2, @shared_opts, false},
+      {:liquid, 2, @shared_opts, false},
+      {:s4, 2, @shared_opts, false},
+      {:griffin, 2, @shared_opts, false}
     ]
   end
 
   defp tier3_heavy do
     [
-      {:gqa, 3, @shared_opts},
-      {:retnet, 3, @shared_opts},
-      {:samba, 3, @shared_opts},
-      {:xlstm, 3, Keyword.merge(@shared_opts, hidden_size: @hidden)},
-      {:slstm, 3, @shared_opts},
-      {:hawk, 3, @shared_opts}
+      {:gqa, 3, @shared_opts, false},
+      {:retnet, 3, @shared_opts, false},
+      {:samba, 3, @shared_opts, false},
+      {:xlstm, 3, Keyword.merge(@shared_opts, hidden_size: @hidden), false},
+      {:slstm, 3, @shared_opts, false},
+      {:hawk, 3, @shared_opts, false}
     ]
   end
 
   defp tier4_exotic do
     [
-      {:delta_net, 4, @shared_opts},
-      {:ttt, 4, @shared_opts},
-      {:titans, 4, @shared_opts},
-      {:reservoir, 4, :reservoir},
-      {:huginn, 4, @shared_opts}
+      {:delta_net, 4, @shared_opts, false},
+      {:ttt, 4, @shared_opts, false},
+      {:titans, 4, @shared_opts, false},
+      {:reservoir, 4, :reservoir, false},
+      {:huginn, 4, @shared_opts, false}
+    ]
+  end
+
+  # New attention architectures
+  defp tier5_attention do
+    rwkv_opts = Keyword.merge(@shared_opts, head_size: max(div(@hidden, 4), 4))
+    [
+      {:rwkv, 5, rwkv_opts, true},
+      {:gla, 5, @shared_opts, true},
+      {:hgrn, 5, @shared_opts, true},
+      {:mega, 5, @shared_opts, true},
+      {:based, 5, @shared_opts, true},
+      {:linear_transformer, 5, @shared_opts, true},
+      {:nystromformer, 5, @shared_opts, true},
+      {:performer, 5, @shared_opts, true},
+      {:mla, 5, @shared_opts, true},
+      {:diff_transformer, 5, @shared_opts, true},
+      {:retnet_v2, 5, @shared_opts, true},
+      {:megalodon, 5, @shared_opts, true},
+      {:lightning_attention, 5, @shared_opts, true},
+      {:gla_v2, 5, @shared_opts, true},
+      {:hgrn_v2, 5, @shared_opts, true},
+      {:flash_linear_attention, 5, @shared_opts, true},
+      {:kda, 5, @shared_opts, true},
+      {:gated_attention, 5, @shared_opts, true},
+      {:sigmoid_attention, 5, @shared_opts, true},
+      {:fox, 5, @shared_opts, true},
+      {:log_linear, 5, @shared_opts, true},
+      {:nha, 5, @shared_opts, true},
+      {:laser, 5, @shared_opts, true},
+      {:rla, 5, @shared_opts, true},
+      {:rdn, 5, @shared_opts, true},
+      {:tnn, 5, @shared_opts, true},
+      {:spla, 5, @shared_opts, true},
+      {:gsa, 5, @shared_opts, true},
+      {:infini_attention, 5, @shared_opts, true},
+      {:conformer, 5, @shared_opts, true}
+    ]
+  end
+
+  # New SSM architectures
+  defp tier6_ssm do
+    [
+      {:mamba_ssd, 6, @shared_opts, true},
+      {:mamba_cumsum, 6, @shared_opts, true},
+      {:mamba_hillis_steele, 6, @shared_opts, true},
+      {:s4d, 6, @shared_opts, true},
+      {:s5, 6, @shared_opts, true},
+      {:h3, 6, @shared_opts, true},
+      {:hyena, 6, @shared_opts, true},
+      {:bimamba, 6, @shared_opts, true},
+      {:jamba, 6, @shared_opts, true},
+      {:zamba, 6, @shared_opts, true},
+      {:striped_hyena, 6, @shared_opts, true},
+      {:mamba3, 6, @shared_opts, true},
+      {:gss, 6, @shared_opts, true},
+      {:hyena_v2, 6, @shared_opts, true},
+      {:hymba, 6, @shared_opts, true},
+      {:ss_transformer, 6, @shared_opts, true},
+      {:longhorn, 6, @shared_opts, true}
+    ]
+  end
+
+  # New recurrent architectures
+  defp tier7_recurrent do
+    [
+      {:mlstm, 7, @shared_opts, true},
+      {:gated_delta_net, 7, @shared_opts, true},
+      {:ttt_e2e, 7, @shared_opts, true},
+      {:miras, 7, @shared_opts, true},
+      {:xlstm_v2, 7, @shared_opts, true},
+      {:transformer_like, 7, @shared_opts, true},
+      {:deep_res_lstm, 7, @shared_opts, true},
+      {:delta_product, 7, @shared_opts, true}
+    ]
+  end
+
+  # New feedforward architectures
+  defp tier8_feedforward do
+    [
+      {:kan, 8, @shared_opts, true},
+      {:kat, 8, @shared_opts, true},
+      {:bitnet, 8, @shared_opts, true},
+      {:decoder_only, 8, @shared_opts, true}
     ]
   end
 
@@ -344,7 +440,7 @@ defmodule MeleeArchComparison do
     IO.puts("  " <> String.duplicate("-", 60))
 
     results =
-      for {arch, tier, opts} <- architecture_specs() do
+      for {arch, tier, opts, _new?} <- architecture_specs() do
         IO.write(
           "  #{String.pad_trailing(to_string(arch), 22)}" <>
             "#{String.pad_trailing("T#{tier}", 6)}"
@@ -439,7 +535,7 @@ defmodule MeleeArchComparison do
     IO.puts("  " <> String.duplicate("-", 54))
 
     results =
-      for {arch, tier, opts} <- architecture_specs() do
+      for {arch, tier, opts, _new?} <- architecture_specs() do
         IO.write(
           "  #{String.pad_trailing(to_string(arch), 22)}" <>
             "#{String.pad_trailing("T#{tier}", 6)}"
@@ -541,7 +637,7 @@ defmodule MeleeArchComparison do
     IO.puts("  " <> String.duplicate("-", 52 + if(has_gpu, do: 12, else: 0)))
 
     results =
-      for {arch, tier, opts} <- architecture_specs() do
+      for {arch, tier, opts, _new?} <- architecture_specs() do
         IO.write(
           "  #{String.pad_trailing(to_string(arch), 22)}" <>
             "#{String.pad_trailing("T#{tier}", 6)}"
@@ -638,7 +734,7 @@ defmodule MeleeArchComparison do
 
     specs =
       architecture_specs()
-      |> Enum.filter(fn {arch, _, _} -> MapSet.member?(viable, arch) end)
+      |> Enum.filter(fn {arch, _, _, _} -> MapSet.member?(viable, arch) end)
 
     if specs == [] do
       IO.puts("  No architectures within 2x target latency — skipping Phase 4.")
@@ -661,7 +757,7 @@ defmodule MeleeArchComparison do
       IO.puts("  " <> String.duplicate("-", 28 + 12 * length(@seq_lengths)))
 
       results =
-        for {arch, tier, opts} <- specs do
+        for {arch, tier, opts, _new?} <- specs do
           IO.write(
             "  #{String.pad_trailing(to_string(arch), 22)}" <>
               "#{String.pad_trailing("T#{tier}", 6)}"
@@ -756,7 +852,7 @@ defmodule MeleeArchComparison do
 
     specs = architecture_specs()
 
-    for {arch, tier, _opts} <- specs do
+    for {arch, tier, _opts, _new?} <- specs do
       infer_us = Map.get(infer_map, arch)
       train_us = Map.get(train_map, arch)
       mem = Map.get(mem_map, arch)
@@ -815,11 +911,11 @@ defmodule MeleeArchComparison do
     # T400 recommendation: strict <16ms + smallest memory
     t400_candidates =
       specs
-      |> Enum.filter(fn {arch, _, _} ->
+      |> Enum.filter(fn {arch, _, _, _} ->
         infer_us = Map.get(infer_map, arch)
         infer_us != nil and infer_us / 1000 < @fps_target_ms
       end)
-      |> Enum.sort_by(fn {arch, _, _} ->
+      |> Enum.sort_by(fn {arch, _, _, _} ->
         case Map.get(mem_map, arch) do
           {_pc, pb, _} -> pb
           nil -> :infinity
@@ -827,7 +923,7 @@ defmodule MeleeArchComparison do
       end)
 
     if t400_candidates != [] do
-      {best, tier, _} = hd(t400_candidates)
+      {best, tier, _, _} = hd(t400_candidates)
       infer_ms = Map.get(infer_map, best) / 1000
 
       IO.puts(
@@ -840,7 +936,7 @@ defmodule MeleeArchComparison do
           t400_candidates
           |> tl()
           |> Enum.take(3)
-          |> Enum.map_join(", ", fn {a, t, _} -> "#{a}(T#{t})" end)
+          |> Enum.map_join(", ", fn {a, t, _, _} -> "#{a}(T#{t})" end)
 
         IO.puts("    Runners-up: #{runners_up}")
       end
@@ -853,13 +949,13 @@ defmodule MeleeArchComparison do
     # 4090 recommendation: best training throughput among viable archs
     train_candidates =
       specs
-      |> Enum.filter(fn {arch, _, _} ->
+      |> Enum.filter(fn {arch, _, _, _} ->
         Map.get(train_map, arch) != nil
       end)
-      |> Enum.sort_by(fn {arch, _, _} -> Map.get(train_map, arch) end)
+      |> Enum.sort_by(fn {arch, _, _, _} -> Map.get(train_map, arch) end)
 
     if train_candidates != [] do
-      {best, tier, _} = hd(train_candidates)
+      {best, tier, _, _} = hd(train_candidates)
       train_ms = Map.get(train_map, best) / 1000
       sps = Float.round(@batch_train * 1000.0 / train_ms, 1)
 
@@ -873,7 +969,7 @@ defmodule MeleeArchComparison do
           train_candidates
           |> tl()
           |> Enum.take(3)
-          |> Enum.map_join(", ", fn {a, t, _} -> "#{a}(T#{t})" end)
+          |> Enum.map_join(", ", fn {a, t, _, _} -> "#{a}(T#{t})" end)
 
         IO.puts("    Runners-up: #{runners_up}")
       end
