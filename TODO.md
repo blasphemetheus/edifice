@@ -162,12 +162,12 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
 - [x] Wav2Vec 2.0 — Self-supervised speech backbone (7-layer CNN encoder + conv PE + Transformer + product quantizer)
 - [x] Janus Multimodal — Decoupled visual encoding (ViT encoder + MLP aligner + VQ gen head)
 - [x] GPS — General Powerful Scalable graph transformer (GIN MPNN + global attention dual-branch with RWSE PE)
-- [ ] Agent swarm patterns — Multi-agent coordination building blocks (see `notebooks/research/agent_swarm_patterns.md`)
+- [x] Agent swarm patterns — Multi-agent coordination building blocks (see `notebooks/research/agent_swarm_patterns.md`)
   - [x] **AgentSwarm** — Communication-augmented ensemble. N proposers + R rounds of inter-agent cross-attention + aggregator. Differentiable "debate" pattern.
   - [x] **RouterNetwork** — Learned input-level dispatch to specialist models. Soft (weighted sum) and hard (top-k straight-through) routing.
   - [x] **StatefulAgent** — Multi-turn wrapper pairing any architecture with persistent state (compressive/ema/gru memory).
   - [x] **MessagePassingAgents** — GNN-inspired agent graph. Agents as nodes, communication as edges, GRU state updates.
-  - [ ] **Re-evaluate agent swarm direction** — After modules above are done, assess: coverage gaps, integration patterns, whether a higher-level orchestration layer makes sense.
+  - [x] **Re-evaluate** — 5 modules cover all 6 coordination patterns (debate, dispatch, ensemble, hierarchical, pipeline via composition, blackboard via NTM/MemoryLayers). No higher-level orchestration layer needed — that's framework territory, not architecture.
 
 ---
 
@@ -307,6 +307,10 @@ transformation between PyTorch and Axon conventions.
 - [x] **Profile Griffin vs Mamba gap** — **Root cause: missing `compiler: EXLA`**. Without graph compilation, `pred_fn` re-traces all Axon layer callbacks on every call (~700-2800ms depending on layer count). With `compiler: EXLA`, Griffin 6L runs in **1.9ms** (faster than Mamba 2L at 2.9ms). The gap was 100% Axon re-tracing overhead, not kernel or architecture differences. Fix: add `compiler: EXLA` to exphil's benchmark and inference paths. See `scripts/profile_griffin_mamba.exs`.
 - [x] **Broad fused-kernel benchmark** — `bench/fused_kernel_sweep.exs`. Phase 1: raw kernel latency (eager dispatch). Phase 2: full model inference via `Axon.build(compiler: EXLA)`. 15/21 architectures complete a forward pass, all under 16ms (60 FPS). Top: min_gru/liquid/min_lstm at 1.36ms (~735 FPS). delta_product/slstm eager speedups: 100-110x vs Elixir fallback.
 - [x] **Training benchmark (Phase 3)** — `bench/fused_kernel_sweep.exs` Phase 3: `value_and_grad` training throughput. 15/21 archs complete. Top: liquid 1.53ms (654 FPS), min_gru 1.56ms (639 FPS). Matrix-state models slower: slstm 26ms, gsa 19ms, ttt 18ms.
+
+### Mamba Training Performance Bug (Priority: High)
+
+- [x] **Mamba fwd+bwd pathologically slow at small hidden dims** — **Root cause:** `h_prev_store[1024][32]` = 128KB per-thread local memory in `fused_selective_scan_backward.cu`. At batch=64, hidden=128: 8192 threads × 128KB = 1GB DRAM-backed local memory thrashing 72MB L2 cache → 764ms. **Fix:** Reduced `MAX_SEQ_LEN` from 1024 to 128 (16KB/thread). Result: 764ms → 7.5ms (100x speedup), ratio now 4.8x matching other architectures. Sequences >128 fall back to Elixir.
 
 ### Fused Kernel Benchmark — Failures to Fix (Priority: Medium)
 
