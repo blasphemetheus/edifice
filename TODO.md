@@ -2,7 +2,7 @@
 
 ## Current Status
 
-234 registered architectures across 26 families, 20 shared blocks, 2500+ tests.
+238 registered architectures across 26 families, 20 shared blocks, 2500+ tests.
 
 ## Completed Milestones
 
@@ -168,6 +168,11 @@ Full research notes in `notebooks/research/interpretability_architectures.md`.
   - [x] **StatefulAgent** — Multi-turn wrapper pairing any architecture with persistent state (compressive/ema/gru memory).
   - [x] **MessagePassingAgents** — GNN-inspired agent graph. Agents as nodes, communication as edges, GRU state updates.
   - [x] **Re-evaluate** — 5 modules cover all 6 coordination patterns (debate, dispatch, ensemble, hierarchical, pipeline via composition, blackboard via NTM/MemoryLayers). No higher-level orchestration layer needed — that's framework territory, not architecture.
+- [x] **Game-AI structural modules** — 4 modules for game AI patterns (AlphaStar/FTW-inspired). See `notebooks/research/exphil_architecture_opportunities.md`.
+  - [x] **EntityEncoder** — Type-conditioned set encoder with self-attention + 3 pooling modes (mean/max/attention). For heterogeneous game entities.
+  - [x] **MultiTimescaleRecurrence** — Parallel GRU cores at different temporal strides (e.g. 1/4/16 frames). FTW-inspired hierarchical temporal processing.
+  - [x] **AutoregressiveHead** — Cross-component conditioned action head. Teacher forcing + greedy inference modes. AlphaStar-style.
+  - [x] **PointerNetwork** — Attention-based entity selection with optional masking. Variable-length target selection.
 
 ---
 
@@ -255,6 +260,7 @@ have dedicated test files. Remaining gaps are leaf modules or minor variants.
 
 - [x] **Composition guide** — `guides/composing_architectures.md`. Covers TransformerBlock callbacks (attention_fn, cross_attention_fn, custom_ffn), ModelBuilder skeletons (sequence + vision), shared blocks table, and 3 composition recipes (custom attention, hybrid encoder-decoder, SSM+attention interleaving).
 - [x] **Livebook notebooks** — 13 notebooks: training_mlp, architecture_zoo, architecture_comparison, lm_architecture_shootout, sequence_modeling, graph_classification, generative_models, small_language_model, liquid_neural_networks, softmax_shootout, agent_swarm_patterns, composing_from_blocks, whisper_asr_demo.
+- [ ] **Verify new notebooks** — Run each of the 3 newest notebooks (composing_from_blocks, whisper_asr_demo, agent_swarm_patterns) end-to-end in Livebook. Check: cells execute without errors, visualizations render, prose is accurate, setup cells work in both standalone and attached modes.
 - [x] **CODE_OF_CONDUCT.md** — Contributor Covenant v2.1, downloaded from contributor-covenant.org.
 
 ### Module Decomposition (Priority: Low-Medium)
@@ -336,3 +342,58 @@ See `docs/cuda_custom_call_debugging.md` for the full debugging methodology and 
 - [x] **ONNX integration guide** — `guides/onnx_integration.md`. Covers axon_onnx export/import, ortex (ONNX Runtime bindings), when to use which, Edifice-specific limitations (custom kernels export via fallback), and troubleshooting.
 - [x] **Architecture visualization** — `mix edifice.viz mamba` prints layer structure as table (default), ASCII tree (`--format tree`), or Mermaid diagram (`--format mermaid`). Handles tuple-returning models via `--component`. See `Edifice.Display` module.
 - [x] **Gradient smoke tests** — 176 passing tests across all 26 families (analytical gradients via `value_and_grad` + parameter sensitivity fallback). Covers sequence models, transformers, vision, detection, audio, robotics, RL, generative, graph, meta/PEFT, contrastive, interpretability, world model, multimodal, scientific, and memory architectures.
+
+---
+
+## Open — Next Phase (from `notebooks/research/future_directions.md`)
+
+### Phase 1 — Trust & Usability (Priority: High)
+
+#### Numerical Correctness Suite
+Expand PyTorch reference validation beyond ViT/Whisper to 10 key architectures. Pre-generate fixtures via `scripts/generate_numerical_fixtures.py`, compare forward pass at `atol=1e-4`. Gradient validation for architectures with CUDA backward kernels. See Direction 4 in `notebooks/research/future_directions.md`.
+
+- [ ] **LSTM numerical validation** — PyTorch reference fixture + cross-framework forward pass comparison
+- [ ] **Mamba numerical validation** — PyTorch reference fixture + cross-framework forward pass comparison
+- [ ] **GQA numerical validation** — PyTorch reference fixture + cross-framework forward pass comparison
+- [ ] **MinGRU numerical validation** — PyTorch reference fixture + cross-framework forward pass comparison
+- [ ] **DeltaNet numerical validation** — PyTorch reference fixture + forward + backward gradient comparison
+- [ ] **DETR numerical validation** — PyTorch reference fixture + cross-framework forward pass comparison
+- [ ] **DiT numerical validation** — PyTorch reference fixture + cross-framework forward pass comparison
+- [ ] **ResNet numerical validation** — PyTorch reference fixture + cross-framework forward pass comparison
+- [ ] **GAT numerical validation** — PyTorch reference fixture + cross-framework forward pass comparison
+- [ ] **ConvNeXt numerical validation** — PyTorch reference fixture (key map already exists) + forward pass comparison
+
+#### Applied Task Benchmarks
+`bench/tasks/` suite evaluating architectures on small standardized tasks. Answers "which architecture for my problem?" See Direction 1 in `notebooks/research/future_directions.md`.
+
+- [ ] **Sequence classification task** — Synthetic length-generalization dataset. Compare LSTM, Mamba, GQA, MinGRU, RetNet. Metric: accuracy + latency.
+- [ ] **Image classification task** — MNIST/FashionMNIST subset. Compare MLP, ResNet, ViT, ConvNeXt, EfficientViT. Metric: accuracy + params.
+- [ ] **Graph classification task** — Synthetic community detection. Compare GCN, GAT, GIN, EGNN, GPS. Metric: accuracy.
+- [ ] **Autoregressive generation task** — Char-level Shakespeare. Compare Decoder-only, Mamba, RWKV, Hyena. Metric: perplexity + throughput.
+- [ ] **Copy/recall task** — Synthetic. Compare LSTM, Mamba, Titans, SSM variants. Metric: accuracy vs sequence length.
+
+### Phase 2 — Production Path (Priority: Medium)
+
+#### Inference Serving Layer
+`Edifice.Serving` — from "I loaded weights" to "I'm serving predictions." See Direction 2 in `notebooks/research/future_directions.md`.
+
+- [ ] **Batched inference server** — GenServer wrapping `Axon.build(model, compiler: EXLA)` with request batching and timeout. Architecture-aware `Nx.Serving` wrapper.
+- [ ] **Autoregressive generation loop** — `Edifice.Serving.generate(model, params, prompt, max_tokens: N)` with KV cache management, temperature/top-k/top-p sampling. Wire existing `Edifice.Blocks.KVCache`.
+- [ ] **Speculative decoding integration** — Wire Medusa/SpeculativeDecoding into generation loop for accelerated inference.
+- [ ] **Streaming output** — Token streaming via `Stream` or Phoenix.PubSub.
+
+#### Training Recipes
+`Edifice.Recipes` — pre-built training configurations with sensible defaults. See Direction 6 in `notebooks/research/future_directions.md`.
+
+- [ ] **Classification recipe** — `Edifice.Recipes.classify/3`. Cross-entropy, Adam, cosine LR, early stopping.
+- [ ] **Sequence modeling recipe** — `Edifice.Recipes.language_model/3`. Causal LM loss, gradient clipping, warmup.
+- [ ] **Contrastive recipe** — `Edifice.Recipes.contrastive/3`. InfoNCE, projection head, EMA target.
+- [ ] **Fine-tuning recipe** — `Edifice.Recipes.fine_tune/4`. Freeze base + train head. LoRA/DoRA support via existing meta modules.
+
+### Phase 3 — Discovery & Polish (Priority: Low-Medium)
+
+#### Interactive Model Explorer
+- [ ] **Livebook Smart Cell** — Architecture browser with filter/search, side-by-side comparison, interactive opt builder, benchmark dashboard. Alternative: Phoenix LiveView app. See Direction 7 in `notebooks/research/future_directions.md`.
+
+#### Architecture Recommender
+- [ ] **Edifice.AutoML.recommend/2** — Given task type + constraints (latency, params, GPU/CPU), suggest top-3 architectures with hyperparameters. Rule-based + benchmark data from task suite. See Direction 3 in `notebooks/research/future_directions.md`.
