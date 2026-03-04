@@ -60,8 +60,7 @@ defmodule Edifice.Pretrained.ArchitectureNumericalTest do
         {"final_norm.bias", ["final_norm", "beta"], :identity}
       ]
 
-      params = build_params_from_fixture(fixture, key_mapping, model, template)
-      {predict_fn, _} = Axon.build(model, mode: :inference)
+      {params, predict_fn} = build_params_from_fixture(fixture, key_mapping, model, template)
       output = predict_fn.(params, %{"state_sequence" => input})
 
       expected = fixture["expected_output"]
@@ -89,39 +88,48 @@ defmodule Edifice.Pretrained.ArchitectureNumericalTest do
 
       template = %{"state_sequence" => Nx.template({2, 8, 32}, :f32)}
 
-      # First, discover actual param keys so we can build the mapping.
-      # DeepResLSTM uses build_raw_rnn which dispatches to Axon.lstm on CPU.
-      # Axon.lstm creates: input_kernel [in, 4H], hidden_kernel [H, 4H], bias [4H]
-      # Our PyTorch ManualLSTM stores: input_kernel [H, 4H], hidden_kernel [H, 4H], bias [4H]
-      # The Axon input_kernel is already [in, 4H] (Nx.dot contracts axis 1 of input with axis 0 of kernel)
-      # So PyTorch input_kernel [H, 4H] maps to Axon input_kernel [H, 4H] with :identity
-      key_mapping = [
-        # Encoder
-        {"encoder.weight", ["encoder", "kernel"], :transpose_2d},
-        {"encoder.bias", ["encoder", "bias"], :identity},
-        # Block 1
-        {"blocks.0.prenorm.weight", ["block_1_prenorm", "gamma"], :identity},
-        {"blocks.0.prenorm.bias", ["block_1_prenorm", "beta"], :identity},
-        {"blocks.0.lstm.input_kernel", ["lstm_1", "input_kernel"], :identity},
-        {"blocks.0.lstm.hidden_kernel", ["lstm_1", "hidden_kernel"], :identity},
-        {"blocks.0.lstm.bias", ["lstm_1", "bias"], :identity},
-        {"blocks.0.decoder.weight", ["decoder_1", "kernel"], :transpose_2d},
-        {"blocks.0.decoder.bias", ["decoder_1", "bias"], :identity},
-        # Block 2
-        {"blocks.1.prenorm.weight", ["block_2_prenorm", "gamma"], :identity},
-        {"blocks.1.prenorm.bias", ["block_2_prenorm", "beta"], :identity},
-        {"blocks.1.lstm.input_kernel", ["lstm_2", "input_kernel"], :identity},
-        {"blocks.1.lstm.hidden_kernel", ["lstm_2", "hidden_kernel"], :identity},
-        {"blocks.1.lstm.bias", ["lstm_2", "bias"], :identity},
-        {"blocks.1.decoder.weight", ["decoder_2", "kernel"], :transpose_2d},
-        {"blocks.1.decoder.bias", ["decoder_2", "bias"], :identity},
-        # Final norm
-        {"final_norm.weight", ["final_norm", "gamma"], :identity},
-        {"final_norm.bias", ["final_norm", "beta"], :identity}
-      ]
+      # Axon.lstm stores per-gate params:
+      #   input_kernel.{wii,wif,wig,wio} [H, H], hidden_kernel.{whi,whf,whg,who} [H, H]
+      #   bias.{bi,bf,bg,bo} [H]
+      # PyTorch ManualLSTM matches this structure with ParameterDict.
+      key_mapping =
+        [
+          # Encoder
+          {"encoder.weight", ["encoder", "kernel"], :transpose_2d},
+          {"encoder.bias", ["encoder", "bias"], :identity},
+          # Final norm
+          {"final_norm.weight", ["final_norm", "gamma"], :identity},
+          {"final_norm.bias", ["final_norm", "beta"], :identity}
+        ] ++
+          Enum.flat_map(0..1, fn i ->
+            block_idx = i + 1
+            [
+              {"blocks.#{i}.prenorm.weight", ["block_#{block_idx}_prenorm", "gamma"], :identity},
+              {"blocks.#{i}.prenorm.bias", ["block_#{block_idx}_prenorm", "beta"], :identity},
+              {"blocks.#{i}.decoder.weight", ["decoder_#{block_idx}", "kernel"], :transpose_2d},
+              {"blocks.#{i}.decoder.bias", ["decoder_#{block_idx}", "bias"], :identity}
+            ] ++
+              Enum.flat_map(
+                [{"wii", "wii"}, {"wif", "wif"}, {"wig", "wig"}, {"wio", "wio"}],
+                fn {pt_gate, ax_gate} ->
+                  [{"blocks.#{i}.lstm.input_kernel.#{pt_gate}", ["lstm_#{block_idx}", "input_kernel", ax_gate], :transpose_2d}]
+                end
+              ) ++
+              Enum.flat_map(
+                [{"whi", "whi"}, {"whf", "whf"}, {"whg", "whg"}, {"who", "who"}],
+                fn {pt_gate, ax_gate} ->
+                  [{"blocks.#{i}.lstm.hidden_kernel.#{pt_gate}", ["lstm_#{block_idx}", "hidden_kernel", ax_gate], :transpose_2d}]
+                end
+              ) ++
+              Enum.map(
+                [{"bi", "bi"}, {"bf", "bf"}, {"bg", "bg"}, {"bo", "bo"}],
+                fn {pt_gate, ax_gate} ->
+                  {"blocks.#{i}.lstm.bias.#{pt_gate}", ["lstm_#{block_idx}", "bias", ax_gate], :identity}
+                end
+              )
+          end)
 
-      params = build_params_from_fixture(fixture, key_mapping, model, template)
-      {predict_fn, _} = Axon.build(model, mode: :inference)
+      {params, predict_fn} = build_params_from_fixture(fixture, key_mapping, model, template)
       output = predict_fn.(params, %{"state_sequence" => input})
 
       expected = fixture["expected_output"]
@@ -167,8 +175,7 @@ defmodule Edifice.Pretrained.ArchitectureNumericalTest do
         {"output_layer.attn_tgt.weight", ["gat_output_attn_tgt", "kernel"], :transpose_2d}
       ]
 
-      params = build_params_from_fixture(fixture, key_mapping, model, template)
-      {predict_fn, _} = Axon.build(model, mode: :inference)
+      {params, predict_fn} = build_params_from_fixture(fixture, key_mapping, model, template)
       output = predict_fn.(params, %{"nodes" => nodes, "adjacency" => adjacency})
 
       expected = fixture["expected_output"]
@@ -217,10 +224,10 @@ defmodule Edifice.Pretrained.ArchitectureNumericalTest do
         {"blocks.0.attn.out_proj.bias", ["gqa_block_1_attn_out_proj", "bias"], :identity},
         {"blocks.0.ffn_norm.weight", ["gqa_block_1_ffn_norm", "gamma"], :identity},
         {"blocks.0.ffn_norm.bias", ["gqa_block_1_ffn_norm", "beta"], :identity},
-        {"blocks.0.ffn_up.weight", ["gqa_block_1_ffn_ffn_up", "kernel"], :transpose_2d},
-        {"blocks.0.ffn_up.bias", ["gqa_block_1_ffn_ffn_up", "bias"], :identity},
-        {"blocks.0.ffn_down.weight", ["gqa_block_1_ffn_ffn_down", "kernel"], :transpose_2d},
-        {"blocks.0.ffn_down.bias", ["gqa_block_1_ffn_ffn_down", "bias"], :identity},
+        {"blocks.0.ffn_up.weight", ["gqa_block_1_ffn_up", "kernel"], :transpose_2d},
+        {"blocks.0.ffn_up.bias", ["gqa_block_1_ffn_up", "bias"], :identity},
+        {"blocks.0.ffn_down.weight", ["gqa_block_1_ffn_down", "kernel"], :transpose_2d},
+        {"blocks.0.ffn_down.bias", ["gqa_block_1_ffn_down", "bias"], :identity},
         # Block 2
         {"blocks.1.attn_norm.weight", ["gqa_block_2_attn_norm", "gamma"], :identity},
         {"blocks.1.attn_norm.bias", ["gqa_block_2_attn_norm", "beta"], :identity},
@@ -234,17 +241,16 @@ defmodule Edifice.Pretrained.ArchitectureNumericalTest do
         {"blocks.1.attn.out_proj.bias", ["gqa_block_2_attn_out_proj", "bias"], :identity},
         {"blocks.1.ffn_norm.weight", ["gqa_block_2_ffn_norm", "gamma"], :identity},
         {"blocks.1.ffn_norm.bias", ["gqa_block_2_ffn_norm", "beta"], :identity},
-        {"blocks.1.ffn_up.weight", ["gqa_block_2_ffn_ffn_up", "kernel"], :transpose_2d},
-        {"blocks.1.ffn_up.bias", ["gqa_block_2_ffn_ffn_up", "bias"], :identity},
-        {"blocks.1.ffn_down.weight", ["gqa_block_2_ffn_ffn_down", "kernel"], :transpose_2d},
-        {"blocks.1.ffn_down.bias", ["gqa_block_2_ffn_ffn_down", "bias"], :identity},
+        {"blocks.1.ffn_up.weight", ["gqa_block_2_ffn_up", "kernel"], :transpose_2d},
+        {"blocks.1.ffn_up.bias", ["gqa_block_2_ffn_up", "bias"], :identity},
+        {"blocks.1.ffn_down.weight", ["gqa_block_2_ffn_down", "kernel"], :transpose_2d},
+        {"blocks.1.ffn_down.bias", ["gqa_block_2_ffn_down", "bias"], :identity},
         # Final norm
         {"final_norm.weight", ["final_norm", "gamma"], :identity},
         {"final_norm.bias", ["final_norm", "beta"], :identity}
       ]
 
-      params = build_params_from_fixture(fixture, key_mapping, model, template)
-      {predict_fn, _} = Axon.build(model, mode: :inference)
+      {params, predict_fn} = build_params_from_fixture(fixture, key_mapping, model, template)
       output = predict_fn.(params, %{"state_sequence" => input})
 
       expected = fixture["expected_output"]
@@ -295,8 +301,7 @@ defmodule Edifice.Pretrained.ArchitectureNumericalTest do
         {"final_norm.bias", ["final_norm", "beta"], :identity}
       ]
 
-      params = build_params_from_fixture(fixture, key_mapping, model, template)
-      {predict_fn, _} = Axon.build(model, mode: :inference)
+      {params, predict_fn} = build_params_from_fixture(fixture, key_mapping, model, template)
       output = predict_fn.(params, %{"state_sequence" => input})
 
       expected = fixture["expected_output"]
@@ -336,8 +341,7 @@ defmodule Edifice.Pretrained.ArchitectureNumericalTest do
         {"final_norm.bias", ["final_norm", "beta"], :identity}
       ]
 
-      params = build_params_from_fixture(fixture, key_mapping, model, template)
-      {_init_fn, predict_fn} = Axon.build(model, mode: :inference)
+      {params, predict_fn} = build_params_from_fixture(fixture, key_mapping, model, template)
 
       # Compute gradient w.r.t. input using value_and_grad
       grad_fn = fn input_tensor ->
@@ -384,7 +388,7 @@ defmodule Edifice.Pretrained.ArchitectureNumericalTest do
         {"blocks.0.norm.bias", ["mamba_block_1_norm", "beta"], :identity},
         {"blocks.0.in_proj.weight", ["mamba_block_1_in_proj", "kernel"], :transpose_2d},
         {"blocks.0.in_proj.bias", ["mamba_block_1_in_proj", "bias"], :identity},
-        {"blocks.0.dw_conv.weight", ["mamba_block_1_conv_dw_conv", "kernel"], :identity},
+        {"blocks.0.dw_conv.weight", ["mamba_block_1_conv_dw_conv", "kernel"], :transpose_conv},
         {"blocks.0.dw_conv.bias", ["mamba_block_1_conv_dw_conv", "bias"], :identity},
         {"blocks.0.bc_proj.weight", ["mamba_block_1_ssm_bc_proj", "kernel"], :transpose_2d},
         {"blocks.0.bc_proj.bias", ["mamba_block_1_ssm_bc_proj", "bias"], :identity},
@@ -399,7 +403,7 @@ defmodule Edifice.Pretrained.ArchitectureNumericalTest do
         {"blocks.1.norm.bias", ["mamba_block_2_norm", "beta"], :identity},
         {"blocks.1.in_proj.weight", ["mamba_block_2_in_proj", "kernel"], :transpose_2d},
         {"blocks.1.in_proj.bias", ["mamba_block_2_in_proj", "bias"], :identity},
-        {"blocks.1.dw_conv.weight", ["mamba_block_2_conv_dw_conv", "kernel"], :identity},
+        {"blocks.1.dw_conv.weight", ["mamba_block_2_conv_dw_conv", "kernel"], :transpose_conv},
         {"blocks.1.dw_conv.bias", ["mamba_block_2_conv_dw_conv", "bias"], :identity},
         {"blocks.1.bc_proj.weight", ["mamba_block_2_ssm_bc_proj", "kernel"], :transpose_2d},
         {"blocks.1.bc_proj.bias", ["mamba_block_2_ssm_bc_proj", "bias"], :identity},
@@ -411,8 +415,7 @@ defmodule Edifice.Pretrained.ArchitectureNumericalTest do
         {"blocks.1.out_proj.bias", ["mamba_block_2_out_proj", "bias"], :identity}
       ]
 
-      params = build_params_from_fixture(fixture, key_mapping, model, template)
-      {predict_fn, _} = Axon.build(model, mode: :inference)
+      {params, predict_fn} = build_params_from_fixture(fixture, key_mapping, model, template)
       output = predict_fn.(params, %{"state_sequence" => input})
 
       expected = fixture["expected_output"]
@@ -504,8 +507,7 @@ defmodule Edifice.Pretrained.ArchitectureNumericalTest do
         {"output_proj.bias", ["output_proj", "bias"], :identity}
       ]
 
-      params = build_params_from_fixture(fixture, key_mapping, model, template)
-      {predict_fn, _} = Axon.build(model, mode: :inference)
+      {params, predict_fn} = build_params_from_fixture(fixture, key_mapping, model, template)
       output = predict_fn.(params, %{"noisy_input" => noisy_input, "timestep" => timestep})
 
       expected = fixture["expected_output"]

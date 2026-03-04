@@ -133,15 +133,40 @@ def generate_min_gru():
 # =============================================================================
 
 class ManualLSTM(nn.Module):
-    """Manual LSTM matching Axon.lstm param structure (flat input_kernel, hidden_kernel, bias)."""
+    """Manual LSTM matching Axon.lstm per-gate param structure.
+
+    Axon stores LSTM params as nested per-gate maps:
+      input_kernel.wii, .wif, .wig, .wio  (each [H, H])
+      hidden_kernel.whi, .whf, .whg, .who (each [H, H])
+      bias.bi, .bf, .bg, .bo              (each [H])
+    Gate order: i=input, f=forget, g=cell, o=output.
+    """
     def __init__(self, hidden_size):
         super().__init__()
-        # Match Axon param names: input_kernel [H, 4H], hidden_kernel [H, 4H], bias [4H]
-        self.input_kernel = nn.Parameter(torch.empty(hidden_size, 4 * hidden_size))
-        self.hidden_kernel = nn.Parameter(torch.empty(hidden_size, 4 * hidden_size))
-        self.bias = nn.Parameter(torch.zeros(4 * hidden_size))
-        nn.init.xavier_uniform_(self.input_kernel)
-        nn.init.xavier_uniform_(self.hidden_kernel)
+        H = hidden_size
+        # Per-gate input kernels (match Axon: input_kernel.wii, .wif, .wig, .wio)
+        self.input_kernel = nn.ParameterDict({
+            "wii": nn.Parameter(torch.empty(H, H)),
+            "wif": nn.Parameter(torch.empty(H, H)),
+            "wig": nn.Parameter(torch.empty(H, H)),
+            "wio": nn.Parameter(torch.empty(H, H)),
+        })
+        # Per-gate hidden kernels
+        self.hidden_kernel = nn.ParameterDict({
+            "whi": nn.Parameter(torch.empty(H, H)),
+            "whf": nn.Parameter(torch.empty(H, H)),
+            "whg": nn.Parameter(torch.empty(H, H)),
+            "who": nn.Parameter(torch.empty(H, H)),
+        })
+        # Per-gate biases
+        self.bias = nn.ParameterDict({
+            "bi": nn.Parameter(torch.zeros(H)),
+            "bf": nn.Parameter(torch.zeros(H)),
+            "bg": nn.Parameter(torch.zeros(H)),
+            "bo": nn.Parameter(torch.zeros(H)),
+        })
+        for p in [*self.input_kernel.values(), *self.hidden_kernel.values()]:
+            nn.init.xavier_uniform_(p)
 
     def forward(self, x):
         batch, seq_len, H = x.shape
@@ -149,11 +174,13 @@ class ManualLSTM(nn.Module):
         c = torch.zeros(batch, H, device=x.device)
         outputs = []
         for t in range(seq_len):
-            # gates = x @ input_kernel + h @ hidden_kernel + bias
-            gates = x[:, t] @ self.input_kernel + h @ self.hidden_kernel + self.bias
-            i_gate, f_gate, g_gate, o_gate = gates.chunk(4, dim=-1)
-            c = torch.sigmoid(f_gate) * c + torch.sigmoid(i_gate) * torch.tanh(g_gate)
-            h = torch.sigmoid(o_gate) * torch.tanh(c)
+            xt = x[:, t]
+            i_gate = torch.sigmoid(xt @ self.input_kernel["wii"] + h @ self.hidden_kernel["whi"] + self.bias["bi"])
+            f_gate = torch.sigmoid(xt @ self.input_kernel["wif"] + h @ self.hidden_kernel["whf"] + self.bias["bf"])
+            g_gate = torch.tanh(xt @ self.input_kernel["wig"] + h @ self.hidden_kernel["whg"] + self.bias["bg"])
+            o_gate = torch.sigmoid(xt @ self.input_kernel["wio"] + h @ self.hidden_kernel["who"] + self.bias["bo"])
+            c = f_gate * c + i_gate * g_gate
+            h = o_gate * torch.tanh(c)
             outputs.append(h)
         return torch.stack(outputs, dim=1)
 
@@ -370,14 +397,16 @@ class GQAModel(nn.Module):
     """Matches Edifice.Attention.GQA.build/1."""
     def __init__(self, embed_dim, hidden_size, num_heads, num_kv_heads, num_layers):
         super().__init__()
-        self.input_projection = nn.Linear(embed_dim, hidden_size)
+        # Edifice skips input_projection when embed_dim == hidden_size
+        self.input_projection = nn.Linear(embed_dim, hidden_size) if embed_dim != hidden_size else None
         self.blocks = nn.ModuleList([
             GQABlock(hidden_size, num_heads, num_kv_heads) for _ in range(num_layers)
         ])
         self.final_norm = nn.LayerNorm(hidden_size)
 
     def forward(self, x):
-        x = self.input_projection(x)
+        if self.input_projection is not None:
+            x = self.input_projection(x)
         for block in self.blocks:
             x = block(x)
         x = self.final_norm(x)
@@ -468,14 +497,16 @@ class DeltaNetModel(nn.Module):
     """Matches Edifice.Recurrent.DeltaNet.build/1."""
     def __init__(self, embed_dim, hidden_size, num_heads, num_layers):
         super().__init__()
-        self.input_projection = nn.Linear(embed_dim, hidden_size)
+        # Edifice skips input_projection when embed_dim == hidden_size
+        self.input_projection = nn.Linear(embed_dim, hidden_size) if embed_dim != hidden_size else None
         self.layers = nn.ModuleList([
             DeltaNetLayer(hidden_size, num_heads) for _ in range(num_layers)
         ])
         self.final_norm = nn.LayerNorm(hidden_size)
 
     def forward(self, x):
-        x = self.input_projection(x)
+        if self.input_projection is not None:
+            x = self.input_projection(x)
         for layer in self.layers:
             x = layer(x)
         x = self.final_norm(x)
@@ -612,14 +643,16 @@ class MambaModel(nn.Module):
     """Matches Edifice.SSM.Mamba.build/1 via Common.build_model."""
     def __init__(self, embed_dim, hidden_size, state_size, num_layers, expand_factor=2, conv_size=4):
         super().__init__()
-        self.input_projection = nn.Linear(embed_dim, hidden_size)
+        # Edifice skips input_projection when embed_dim == hidden_size
+        self.input_projection = nn.Linear(embed_dim, hidden_size) if embed_dim != hidden_size else None
         self.blocks = nn.ModuleList([
             MambaBlock(hidden_size, state_size, expand_factor, conv_size)
             for _ in range(num_layers)
         ])
 
     def forward(self, x):
-        x = self.input_projection(x)
+        if self.input_projection is not None:
+            x = self.input_projection(x)
         for block in self.blocks:
             x = x + block(x)  # residual in Common.build_model
         return x[:, -1]  # last timestep
@@ -675,7 +708,7 @@ class DiTBlock(nn.Module):
 
         x_mod = (1 + scale) * self.attn_norm(x) + shift
         attn_out = self._self_attention(x_mod)
-        attn_out = torch.sigmoid(gate) * attn_out
+        attn_out = gate * attn_out  # Edifice AdaLN gate uses raw gate, no sigmoid
         x = x + attn_out
 
         # MLP sublayer with AdaLN-Zero
@@ -685,7 +718,7 @@ class DiTBlock(nn.Module):
         x_mod2 = (1 + scale2) * self.mlp_norm(x) + shift2
         mlp_out = F.gelu(self.mlp_up(x_mod2))
         mlp_out = self.mlp_down(mlp_out)
-        mlp_out = torch.sigmoid(gate2) * mlp_out
+        mlp_out = gate2 * mlp_out  # Edifice AdaLN gate uses raw gate, no sigmoid
         return x + mlp_out
 
     def _self_attention(self, x):

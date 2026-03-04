@@ -17,6 +17,19 @@ in
   # Rust (for ortex/rustler NIFs)
   languages.rust.enable = true;
 
+  # Python (for PyTorch fixture generation scripts)
+  languages.python = {
+    enable = true;
+    package = pkgs.python312;
+    venv.enable = true;
+    venv.requirements = ''
+      torch
+      safetensors
+      packaging
+      numpy
+    '';
+  };
+
   # System packages
   packages = [
     pkgs.git

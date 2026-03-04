@@ -41,7 +41,7 @@ defmodule Edifice.NumericalFixtureHelper do
     - `{:sum, key2}` - Sum with another fixture key (for LSTM bias_ih + bias_hh)
   """
   def build_params_from_fixture(fixture, key_mapping, model, template) do
-    {init_fn, _} = Axon.build(model, mode: :inference)
+    {init_fn, predict_fn} = Axon.build(model, mode: :inference)
     model_state = init_fn.(template, Axon.ModelState.empty())
 
     data =
@@ -51,11 +51,12 @@ defmodule Edifice.NumericalFixtureHelper do
         put_nested(acc, axon_path, transformed)
       end)
 
-    %{model_state | data: data}
+    {%{model_state | data: data}, predict_fn}
   end
 
   defp apply_transform(tensor, :identity, _fixture), do: tensor
   defp apply_transform(tensor, :transpose_2d, _fixture), do: Nx.transpose(tensor)
+  defp apply_transform(tensor, :transpose_conv, _fixture), do: Nx.transpose(tensor, axes: [2, 1, 0])
 
   defp apply_transform(tensor, {:sum, key2}, fixture) do
     tensor2 = Map.fetch!(fixture, "weight.#{key2}")
