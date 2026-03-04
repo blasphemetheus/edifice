@@ -420,6 +420,9 @@ Beyond fused CUDA kernels — compiler, runtime, and serving optimizations for f
 - [ ] **Run mixed precision benchmark on GPU** — Execute `bench/mixed_precision_bench.exs` with EXLA on RTX 5090. Measure actual bf16 speedup (expect ~1.5-2x on Ampere+). Compare with CUDA kernel bf16 variants.
 - [ ] **Mixed precision training integration** — Wire `MixedPrecision.with_loss_scaling/2` into an Axon.Loop training example. End-to-end bf16 training with loss scaling on a small decoder_only LM. Validate gradients don't diverge.
 - [x] **Gradient checkpointing / remat** — `Edifice.Training` module. `remat/2` wraps predict_fn for forward-pass reuse. `checkpointed_grad/4` separates forward/backward for true activation recomputation. `estimate_memory/3` + `format_memory/1` for memory savings estimation. `checkpoint/1` for segment-level control. 14 tests including decoder_only integration.
+- [ ] **Remat GPU memory validation** — Run `checkpointed_grad` vs normal `value_and_grad` on a large decoder_only model (4+ layers, 256+ embed) with EXLA on GPU. Measure actual peak memory reduction via `EXLA.Client.get_memory_statistics`. Target: `bench/remat_memory_bench.exs`.
+- [ ] **Segment-level checkpointing** — Extend `Edifice.Training` with `remat_segments/2` that splits an Axon model into N segments, checkpointing each independently. Achieves O(sqrt(N)) memory with ~1.5x compute (vs 2x for full checkpoint). Requires Axon graph partitioning.
+- [ ] **Training loop integration** — `Edifice.Training.train_step/4` combining `checkpointed_grad` + `MixedPrecision` + optimizer update in one function. Wire into `Axon.Loop` as a custom train_step.
 #### Using the Serving Layer
 Exercises for the new `Edifice.Serving.*` modules. Validates real-world usage and finds rough edges.
 
