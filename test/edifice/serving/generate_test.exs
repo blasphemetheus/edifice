@@ -224,4 +224,147 @@ defmodule Edifice.Serving.GenerateTest do
       assert token >= 0 and token < 5
     end
   end
+
+  describe "generate_stream/3" do
+    test "streams tokens via callback" do
+      model = build_raw_lm()
+      {predict_fn, params} = init_model(model)
+
+      prompt = Nx.tensor([[1, 2, 3]])
+      streamed = :ets.new(:streamed, [:set, :public])
+
+      result =
+        Generate.generate_stream(predict_fn, params,
+          prompt: prompt,
+          embed_fn: make_embed_fn(),
+          max_tokens: 5,
+          seq_len: @seq_len,
+          temperature: 0.0,
+          on_token: fn token ->
+            count = :ets.info(streamed, :size)
+            :ets.insert(streamed, {count, token})
+            :cont
+          end
+        )
+
+      token_count = :ets.info(streamed, :size)
+      :ets.delete(streamed)
+
+      assert token_count >= 1
+      assert Nx.axis_size(result, 1) >= 4
+    end
+
+    test "halt stops generation early" do
+      model = build_raw_lm()
+      {predict_fn, params} = init_model(model)
+
+      prompt = Nx.tensor([[1]])
+
+      result =
+        Generate.generate_stream(predict_fn, params,
+          prompt: prompt,
+          embed_fn: make_embed_fn(),
+          max_tokens: 50,
+          seq_len: @seq_len,
+          temperature: 0.0,
+          on_token: fn _token -> :halt end
+        )
+
+      # Should have prompt + 1 token only (halted after first)
+      assert Nx.axis_size(result, 1) == 2
+    end
+  end
+
+  describe "token_stream/3" do
+    test "returns a Stream of token IDs" do
+      model = build_raw_lm()
+      {predict_fn, params} = init_model(model)
+
+      prompt = Nx.tensor([[1, 2]])
+
+      stream =
+        Generate.token_stream(predict_fn, params,
+          prompt: prompt,
+          embed_fn: make_embed_fn(),
+          max_tokens: 5,
+          seq_len: @seq_len,
+          temperature: 0.0
+        )
+
+      tokens = Enum.take(stream, 3)
+      assert length(tokens) >= 1
+      assert Enum.all?(tokens, &is_integer/1)
+    end
+  end
+
+  describe "InferenceServer" do
+    alias Edifice.Serving.InferenceServer
+
+    test "serves single prediction" do
+      model = build_raw_lm()
+      {predict_fn, params} = init_model(model)
+
+      {:ok, pid} =
+        InferenceServer.start_link(
+          predict_fn: predict_fn,
+          params: params,
+          max_batch_size: 4,
+          batch_timeout_ms: 10
+        )
+
+      {input, _key} = Nx.Random.uniform(Nx.Random.key(1), shape: {1, @seq_len, @embed_dim})
+      result = InferenceServer.predict(pid, %{"state_sequence" => input})
+
+      assert is_struct(result, Nx.Tensor) or is_map(result)
+      InferenceServer.stop(pid)
+    end
+
+    test "tracks metrics" do
+      model = build_raw_lm()
+      {predict_fn, params} = init_model(model)
+
+      {:ok, pid} =
+        InferenceServer.start_link(
+          predict_fn: predict_fn,
+          params: params,
+          max_batch_size: 4,
+          batch_timeout_ms: 10
+        )
+
+      {input, _key} = Nx.Random.uniform(Nx.Random.key(1), shape: {1, @seq_len, @embed_dim})
+      _result = InferenceServer.predict(pid, %{"state_sequence" => input})
+
+      metrics = InferenceServer.metrics(pid)
+      assert metrics.requests >= 1
+      assert metrics.batches >= 1
+      InferenceServer.stop(pid)
+    end
+  end
+
+  describe "Speculative" do
+    alias Edifice.Serving.Speculative
+
+    test "generates tokens with draft+verify" do
+      # Use same model for both draft and verifier (simplified test)
+      model = build_raw_lm()
+      {predict_fn, params} = init_model(model)
+
+      prompt = Nx.tensor([[1, 2, 3]])
+
+      result =
+        Speculative.generate(predict_fn, params, predict_fn, params,
+          prompt: prompt,
+          embed_fn: make_embed_fn(),
+          seq_len: @seq_len,
+          draft_steps: 3,
+          max_tokens: 10,
+          temperature: 0.0
+        )
+
+      # Should have generated tokens
+      assert Nx.axis_size(result, 1) >= 4
+      # Prompt preserved
+      assert Nx.to_flat_list(result[[0, 0..2]]) == [1, 2, 3]
+    end
+  end
 end

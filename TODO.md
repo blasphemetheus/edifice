@@ -417,5 +417,16 @@ Beyond fused CUDA kernels — compiler, runtime, and serving optimizations for f
 #### Interactive Model Explorer
 - [ ] **Livebook Smart Cell** — Architecture browser with filter/search, side-by-side comparison, interactive opt builder, benchmark dashboard. Alternative: Phoenix LiveView app. See Direction 7 in `notebooks/research/future_directions.md`.
 
-#### Architecture Recommender
-- [ ] **Edifice.AutoML.recommend/2** — Given task type + constraints (latency, params, GPU/CPU), suggest top-3 architectures with hyperparameters. Rule-based + benchmark data from task suite. See Direction 3 in `notebooks/research/future_directions.md`.
+#### Architecture Recommender / AutoML
+- [ ] **Edifice.AutoML.recommend/2** — Given task type + constraints (latency, params, GPU/CPU), suggest top-3 architectures with hyperparameters. Rule-based + benchmark data from task suite.
+- [ ] **Hyperparameter search** — Wrap Axon.Loop with Bayesian optimization over architecture opts (hidden_size, num_layers, num_heads). Small search space, few epochs.
+- [ ] **Architecture morphisms** — Given a trained small model, grow into larger architecture (Net2Net-style). Leverage pretrained weight loading infrastructure.
+
+#### Applied Task Benchmarks
+`bench/tasks/` suite — train small models on real tasks to answer "which architecture for my problem?"
+
+- [ ] **Sequence classification** — Synthetic length-generalization dataset. LSTM, Mamba, GQA, MinGRU, RetNet. Accuracy + latency.
+- [ ] **Image classification** — MNIST/FashionMNIST subset. MLP, ResNet, ViT, ConvNeXt, EfficientViT. Accuracy + params.
+- [ ] **Graph classification** — Synthetic community detection. GCN, GAT, GIN, EGNN, GPS. Accuracy.
+- [ ] **Autoregressive generation** — Char-level Shakespeare. Decoder-only, Mamba, RWKV, Hyena. Perplexity + throughput.
+- [ ] **Copy/recall task** — Synthetic. LSTM, Mamba, Titans, SSM variants. Accuracy vs sequence length.

@@ -267,6 +267,216 @@ defmodule Edifice.Serving.Generate do
   end
 
   # ============================================================================
+  # Streaming Generation
+  # ============================================================================
+
+  @doc """
+  Generate tokens with a per-token callback for streaming output.
+
+  Same options as `generate/3`, plus:
+
+    - `:on_token` - `fn token_id :: integer() -> :cont | :halt` callback.
+      Called with each generated token ID (scalar integer). Return `:halt`
+      to stop generation early, `:cont` (or anything else) to continue.
+
+  ## Returns
+
+    `[batch, prompt_len + generated_len]` tensor of token IDs (same as `generate/3`).
+  """
+  def generate_stream(predict_fn, params, opts) do
+    prompt = Keyword.fetch!(opts, :prompt)
+    embed_fn = Keyword.fetch!(opts, :embed_fn)
+    max_tokens = Keyword.get(opts, :max_tokens, @default_max_tokens)
+    temperature = Keyword.get(opts, :temperature, @default_temperature)
+    top_k = Keyword.get(opts, :top_k, @default_top_k)
+    top_p = Keyword.get(opts, :top_p, @default_top_p)
+    seed = Keyword.get(opts, :seed, @default_seed)
+    stop_token = Keyword.get(opts, :stop_token, nil)
+    seq_len = Keyword.fetch!(opts, :seq_len)
+    on_token = Keyword.fetch!(opts, :on_token)
+
+    batch_size = Nx.axis_size(prompt, 0)
+    prompt_len = Nx.axis_size(prompt, 1)
+
+    key = Nx.Random.key(seed)
+    sampling_opts = [temperature: temperature, top_k: top_k, top_p: top_p]
+
+    generated = [prompt]
+
+    # Prefill
+    prompt_embedded = pad_and_embed(prompt, embed_fn, seq_len)
+    logits = predict_fn.(params, %{"state_sequence" => prompt_embedded})
+    last_logits = logits[[.., prompt_len - 1, ..]]
+
+    {next_token, key} = sample_token(last_logits, key, temperature, sampling_opts)
+    next_token = Nx.reshape(next_token, {batch_size, 1})
+    generated = [next_token | generated]
+
+    # Stream first token
+    token_val = next_token |> Nx.squeeze() |> Nx.to_number()
+    halt? = on_token.(token_val) == :halt
+
+    # Decode loop
+    {generated, _key} =
+      if halt? do
+        {generated, key}
+      else
+        Enum.reduce_while(2..max_tokens, {generated, key}, fn _step, {acc, key} ->
+          current_token = hd(acc)
+          current_len = prompt_len + length(acc) - 1
+
+          if stop_token && token_matches_stop?(current_token, stop_token) do
+            {:halt, {acc, key}}
+          else
+            token_embedded = pad_and_embed_single(current_token, embed_fn, seq_len, current_len - 1)
+            logits = predict_fn.(params, %{"state_sequence" => token_embedded})
+
+            pos = min(current_len - 1, seq_len - 1)
+            step_logits = logits[[.., pos, ..]]
+
+            {next_token, key} = sample_token(step_logits, key, temperature, sampling_opts)
+            next_token = Nx.reshape(next_token, {batch_size, 1})
+
+            token_val = next_token |> Nx.squeeze() |> Nx.to_number()
+
+            case on_token.(token_val) do
+              :halt -> {:halt, {[next_token | acc], key}}
+              _ -> {:cont, {[next_token | acc], key}}
+            end
+          end
+        end)
+      end
+
+    generated |> Enum.reverse() |> Nx.concatenate(axis: 1)
+  end
+
+  @doc """
+  Return a `Stream` that lazily generates tokens one at a time.
+
+  Each element in the stream is an integer token ID.
+
+  ## Options
+
+    Same as `generate/3`.
+  """
+  def token_stream(predict_fn, params, opts) do
+    Stream.resource(
+      fn -> init_stream_state(predict_fn, params, opts) end,
+      fn state -> next_stream_token(state) end,
+      fn _state -> :ok end
+    )
+  end
+
+  defp init_stream_state(predict_fn, params, opts) do
+    prompt = Keyword.fetch!(opts, :prompt)
+    embed_fn = Keyword.fetch!(opts, :embed_fn)
+    max_tokens = Keyword.get(opts, :max_tokens, @default_max_tokens)
+    temperature = Keyword.get(opts, :temperature, @default_temperature)
+    top_k = Keyword.get(opts, :top_k, @default_top_k)
+    top_p = Keyword.get(opts, :top_p, @default_top_p)
+    seed = Keyword.get(opts, :seed, @default_seed)
+    stop_token = Keyword.get(opts, :stop_token, nil)
+    seq_len = Keyword.fetch!(opts, :seq_len)
+
+    batch_size = Nx.axis_size(prompt, 0)
+    prompt_len = Nx.axis_size(prompt, 1)
+    key = Nx.Random.key(seed)
+    sampling_opts = [temperature: temperature, top_k: top_k, top_p: top_p]
+
+    # Prefill
+    prompt_embedded = pad_and_embed(prompt, embed_fn, seq_len)
+    logits = predict_fn.(params, %{"state_sequence" => prompt_embedded})
+    last_logits = logits[[.., prompt_len - 1, ..]]
+    {next_token, key} = sample_token(last_logits, key, temperature, sampling_opts)
+    next_token = Nx.reshape(next_token, {batch_size, 1})
+
+    %{
+      predict_fn: predict_fn,
+      params: params,
+      embed_fn: embed_fn,
+      seq_len: seq_len,
+      batch_size: batch_size,
+      prompt_len: prompt_len,
+      temperature: temperature,
+      sampling_opts: sampling_opts,
+      stop_token: stop_token,
+      max_tokens: max_tokens,
+      key: key,
+      tokens_generated: 0,
+      pending_token: next_token,
+      generated: [next_token, prompt]
+    }
+  end
+
+  defp next_stream_token(%{pending_token: nil} = state) do
+    {:halt, state}
+  end
+
+  defp next_stream_token(state) do
+    %{
+      pending_token: current_token,
+      tokens_generated: count,
+      max_tokens: max_tokens,
+      stop_token: stop_token
+    } = state
+
+    token_val = current_token |> Nx.squeeze() |> Nx.to_number()
+
+    cond do
+      count >= max_tokens ->
+        {:halt, state}
+
+      stop_token && token_val == stop_token ->
+        {:halt, state}
+
+      true ->
+        # Generate next token
+        %{
+          predict_fn: predict_fn,
+          params: params,
+          embed_fn: embed_fn,
+          seq_len: seq_len,
+          batch_size: batch_size,
+          prompt_len: prompt_len,
+          temperature: temperature,
+          sampling_opts: sampling_opts,
+          key: key,
+          generated: generated
+        } = state
+
+        current_len = prompt_len + length(generated) - 1
+
+        token_embedded =
+          pad_and_embed_single(current_token, embed_fn, seq_len, current_len - 1)
+
+        logits = predict_fn.(params, %{"state_sequence" => token_embedded})
+        pos = min(current_len - 1, seq_len - 1)
+        step_logits = logits[[.., pos, ..]]
+
+        {next_token, key} = sample_token(step_logits, key, temperature, sampling_opts)
+        next_token = Nx.reshape(next_token, {batch_size, 1})
+
+        new_state = %{
+          state
+          | key: key,
+            tokens_generated: count + 1,
+            pending_token: next_token,
+            generated: [next_token | generated]
+        }
+
+        {[token_val], new_state}
+    end
+  end
+
+  defp sample_token(logits, key, temperature, sampling_opts) do
+    if temperature == 0.0 do
+      {Sampling.greedy(logits), key}
+    else
+      Sampling.sample(logits, key, sampling_opts)
+    end
+  end
+
+  # ============================================================================
   # Helpers
   # ============================================================================
 
