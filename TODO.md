@@ -389,10 +389,10 @@ Expand PyTorch reference validation beyond ViT/Whisper to 10 key architectures. 
 #### Inference Serving Layer
 `Edifice.Serving` — from "I loaded weights" to "I'm serving predictions." See Direction 2 in `notebooks/research/future_directions.md`.
 
-- [ ] **Batched inference server** — GenServer wrapping `Axon.build(model, compiler: EXLA)` with request batching and timeout. Architecture-aware `Nx.Serving` wrapper.
-- [ ] **Autoregressive generation loop** — `Edifice.Serving.generate(model, params, prompt, max_tokens: N)` with KV cache management, temperature/top-k/top-p sampling. Wire existing `Edifice.Blocks.KVCache`.
-- [ ] **Speculative decoding integration** — Wire Medusa/SpeculativeDecoding into generation loop for accelerated inference.
-- [ ] **Streaming output** — Token streaming via `Stream` or Phoenix.PubSub.
+- [x] **Batched inference server** — `Edifice.Serving.InferenceServer` GenServer with request batching, timeout dispatch, metrics.
+- [x] **Autoregressive generation loop** — `Edifice.Serving.Generate` with KV cache management, temperature/top-k/top-p sampling, Gumbel-max.
+- [x] **Speculative decoding integration** — `Edifice.Serving.Speculative` + `Edifice.Serving.MedusaGenerate` wired into generation loop.
+- [x] **Streaming output** — `Generate.generate_stream/3` (callback) + `Generate.token_stream/3` (lazy Stream).
 
 #### Training Recipes
 `Edifice.Recipes` — pre-built training configurations with sensible defaults. See Direction 6 in `notebooks/research/future_directions.md`.
@@ -417,6 +417,8 @@ Beyond fused CUDA kernels — compiler, runtime, and serving optimizations for f
 - [x] **Batched inference server** — `Edifice.Serving.InferenceServer` GenServer with request batching, timeout dispatch, metrics.
 - [x] **Persistent compilation cache** — `Edifice.Compiler` module wrapping `Axon.build/2` with EXLA disk cache (`cache: path` option). XLA autotune cache via `--xla_gpu_per_fusion_autotune_cache_dir` in devenv.nix. Benchmark: `bench/compilation_cache_bench.exs`.
 - [x] **Nx-level mixed precision auto-casting** — `Edifice.MixedPrecision` module. Presets (`:bf16`, `:fp16`) auto-cast all layers except normalization (layer_norm, batch_norm, rms_norm, adaptive_norm, group_norm) via `Axon.MixedPrecision`. Dynamic gradient loss scaling (`init_loss_scale/1`, `scale_loss/2`, `unscale_grads/2`) with growth/backoff. Model summary for precision audit. Benchmark: `bench/mixed_precision_bench.exs`.
+- [ ] **Run mixed precision benchmark on GPU** — Execute `bench/mixed_precision_bench.exs` with EXLA on RTX 5090. Measure actual bf16 speedup (expect ~1.5-2x on Ampere+). Compare with CUDA kernel bf16 variants.
+- [ ] **Mixed precision training integration** — Wire `MixedPrecision.with_loss_scaling/2` into an Axon.Loop training example. End-to-end bf16 training with loss scaling on a small decoder_only LM. Validate gradients don't diverge.
 - [ ] **Gradient checkpointing / remat** — `Edifice.Training.remat/2`. Selective recomputation of forward activations during backward pass to reduce peak memory. Target: 2-4x memory reduction for training large models.
 #### Using the Serving Layer
 Exercises for the new `Edifice.Serving.*` modules. Validates real-world usage and finds rough edges.
