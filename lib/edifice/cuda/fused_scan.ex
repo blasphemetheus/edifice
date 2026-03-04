@@ -3364,12 +3364,7 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   defp flash_attention_custom_call_available? do
-    exla_value = Module.concat([EXLA, MLIR, Value])
-
-    Code.ensure_loaded?(exla_value) and
-      function_exported?(exla_value, :fused_flash_attention, 5)
-  rescue
-    _ -> false
+    custom_call_available?()
   end
 
   defp flash_attention_custom_call(q, k, v, causal) do
@@ -3561,12 +3556,7 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   defp laser_attention_custom_call_available? do
-    exla_value = Module.concat([EXLA, MLIR, Value])
-
-    Code.ensure_loaded?(exla_value) and
-      function_exported?(exla_value, :fused_laser_attention, 6)
-  rescue
-    _ -> false
+    custom_call_available?()
   end
 
   defp laser_attention_custom_call(q, k, v, v_max, causal) do
@@ -3763,12 +3753,7 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   defp fox_attention_custom_call_available? do
-    exla_value = Module.concat([EXLA, MLIR, Value])
-
-    Code.ensure_loaded?(exla_value) and
-      function_exported?(exla_value, :fused_fox_attention, 5)
-  rescue
-    _ -> false
+    custom_call_available?()
   end
 
   defp fox_attention_custom_call(q, k, v, cs) do
@@ -5048,44 +5033,16 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   @doc false
-  def block_custom_call_available? do
-    exla_value = Module.concat([EXLA, MLIR, Value])
-
-    Code.ensure_loaded?(exla_value) and
-      function_exported?(exla_value, :fused_mingru_block_scan, 4)
-  rescue
-    _ -> false
-  end
+  def block_custom_call_available?, do: custom_call_available?()
 
   @doc false
-  def linear_block_custom_call_available? do
-    exla_value = Module.concat([EXLA, MLIR, Value])
-
-    Code.ensure_loaded?(exla_value) and
-      function_exported?(exla_value, :fused_linear_block_scan, 4)
-  rescue
-    _ -> false
-  end
+  def linear_block_custom_call_available?, do: custom_call_available?()
 
   @doc false
-  def lstm_block_custom_call_available? do
-    exla_value = Module.concat([EXLA, MLIR, Value])
-
-    Code.ensure_loaded?(exla_value) and
-      function_exported?(exla_value, :fused_lstm_block_scan, 5)
-  rescue
-    _ -> false
-  end
+  def lstm_block_custom_call_available?, do: custom_call_available?()
 
   @doc false
-  def gru_block_custom_call_available? do
-    exla_value = Module.concat([EXLA, MLIR, Value])
-
-    Code.ensure_loaded?(exla_value) and
-      function_exported?(exla_value, :fused_gru_block_scan, 4)
-  rescue
-    _ -> false
-  end
+  def gru_block_custom_call_available?, do: custom_call_available?()
 
   # ============================================================================
   # GC reference tracking
@@ -5129,7 +5086,7 @@ defmodule Edifice.CUDA.FusedScan do
     exla_value = Module.concat([EXLA, MLIR, Value])
 
     Code.ensure_loaded?(exla_value) and
-      function_exported?(exla_value, :fused_mingru_scan, 4)
+      function_exported?(exla_value, :custom_call_fused, 4)
   rescue
     _ -> false
   end

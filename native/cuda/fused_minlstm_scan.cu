@@ -30,6 +30,10 @@ constexpr float NORM_EPS = 1.0e-6f;
 // Kernel (always compiled)
 // ============================================================================
 
+#ifdef EXLA_FFI
+namespace {  // anonymous namespace — internal linkage per compilation unit
+#endif
+
 __global__ void fused_minlstm_scan_kernel(
     const io_type* __restrict__ forget_gates,  // [B, T, H] sigmoid values
     const io_type* __restrict__ input_gates,   // [B, T, H] sigmoid values
@@ -67,6 +71,10 @@ __global__ void fused_minlstm_scan_kernel(
 // ============================================================================
 // Standalone launch wrapper (C-linkage for NIF / dlopen)
 // ============================================================================
+
+#ifdef EXLA_FFI
+}  // anonymous namespace
+#endif
 
 #ifndef EXLA_FFI
 
@@ -108,6 +116,8 @@ int fused_minlstm_scan_launch(
 
 namespace ffi = xla::ffi;
 
+namespace {  // anonymous namespace — prevents symbol collision between f32/bf16
+
 ffi::Error fused_minlstm_scan_ffi_impl(
     cudaStream_t stream,
     ffi::Buffer<FFI_IO_TYPE> forget_gates,
@@ -143,8 +153,10 @@ ffi::Error fused_minlstm_scan_ffi_impl(
     return ffi::Error::Success();
 }
 
+}  // anonymous namespace
+
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
-    fused_minlstm_scan, fused_minlstm_scan_ffi_impl,
+    HANDLER_SYMBOL(fused_minlstm_scan), fused_minlstm_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // forget_gates
@@ -155,6 +167,6 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_minlstm_scan_" PRECISION_SUFFIX, "CUDA", fused_minlstm_scan);
+    "exla_fused_minlstm_scan_" PRECISION_SUFFIX, "CUDA", HANDLER_SYMBOL(fused_minlstm_scan));
 
 #endif  // EXLA_FFI

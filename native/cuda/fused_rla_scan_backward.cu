@@ -55,6 +55,10 @@
 // Kernel
 // ============================================================================
 
+#ifdef EXLA_FFI
+namespace {  // anonymous namespace — internal linkage per compilation unit
+#endif
+
 __global__ void fused_rla_scan_backward_kernel(
     const io_type* __restrict__ q,            // [B, T, H, d]
     const io_type* __restrict__ k,            // [B, T, H, d]
@@ -617,6 +621,10 @@ __global__ void fused_rla_scan_backward_kernel(
 // Standalone launch wrapper (C-linkage for NIF / dlopen)
 // ============================================================================
 
+#ifdef EXLA_FFI
+}  // anonymous namespace
+#endif
+
 #ifndef EXLA_FFI
 
 extern "C" {
@@ -676,6 +684,8 @@ int fused_rla_scan_backward_launch(
 #include "xla/ffi/api/ffi.h"
 
 namespace ffi = xla::ffi;
+
+namespace {  // anonymous namespace — prevents symbol collision between f32/bf16
 
 // 7 operands only — variant/clip hardcoded to avoid XLA 7-operand limit.
 // RLA variant (0) with clip=1.0. RDN variant falls back to Elixir.
@@ -751,8 +761,10 @@ ffi::Error fused_rla_scan_backward_ffi_impl(
     return ffi::Error::Success();
 }
 
+}  // anonymous namespace
+
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
-    fused_rla_scan_backward, fused_rla_scan_backward_ffi_impl,
+    HANDLER_SYMBOL(fused_rla_scan_backward), fused_rla_scan_backward_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // q
@@ -772,6 +784,6 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
     "exla_fused_rla_scan_backward_" PRECISION_SUFFIX, "CUDA",
-    fused_rla_scan_backward);
+    HANDLER_SYMBOL(fused_rla_scan_backward));
 
 #endif  // EXLA_FFI

@@ -42,6 +42,10 @@
 // Kernel
 // ============================================================================
 
+#ifdef EXLA_FFI
+namespace {  // anonymous namespace — internal linkage per compilation unit
+#endif
+
 __global__ void fused_flash_attention_backward_kernel(
     const io_type* __restrict__ Q,       // [B, H, T, d]
     const io_type* __restrict__ K,       // [B, H, T, d]
@@ -339,6 +343,10 @@ __global__ void flash_attention_backward_precompute_kernel(
 // Standalone launch wrapper (C-linkage for NIF / dlopen)
 // ============================================================================
 
+#ifdef EXLA_FFI
+}  // anonymous namespace
+#endif
+
 #ifndef EXLA_FFI
 
 extern "C" {
@@ -412,6 +420,8 @@ int fused_flash_attention_backward_launch(
 #include "xla/ffi/api/ffi.h"
 
 namespace ffi = xla::ffi;
+
+namespace {  // anonymous namespace — prevents symbol collision between f32/bf16
 
 // Causal hardcoded to 1 to avoid scalar buffer operand segfault in XLA.
 ffi::Error fused_flash_attention_backward_ffi_impl(
@@ -494,8 +504,10 @@ ffi::Error fused_flash_attention_backward_ffi_impl(
     return ffi::Error::Success();
 }
 
+}  // anonymous namespace
+
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
-    fused_flash_attention_backward, fused_flash_attention_backward_ffi_impl,
+    HANDLER_SYMBOL(fused_flash_attention_backward), fused_flash_attention_backward_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // q       [B, H, T, d]
@@ -509,6 +521,6 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_flash_attention_backward_" PRECISION_SUFFIX, "CUDA", fused_flash_attention_backward);
+    "exla_fused_flash_attention_backward_" PRECISION_SUFFIX, "CUDA", HANDLER_SYMBOL(fused_flash_attention_backward));
 
 #endif  // EXLA_FFI

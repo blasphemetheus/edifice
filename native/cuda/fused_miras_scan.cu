@@ -29,6 +29,10 @@
 
 #define MIRAS_MAX_MEM 128
 
+#ifdef EXLA_FFI
+namespace {  // anonymous namespace — internal linkage per compilation unit
+#endif
+
 __global__ void fused_miras_scan_kernel(
     const io_type* __restrict__ combined,  // [B, T, combined_stride]
     io_type* __restrict__ output,          // [B, T, M]
@@ -119,6 +123,10 @@ __global__ void fused_miras_scan_kernel(
 // Standalone launch wrapper
 // ============================================================================
 
+#ifdef EXLA_FFI
+}  // anonymous namespace
+#endif
+
 #ifndef EXLA_FFI
 
 extern "C" {
@@ -156,6 +164,8 @@ int fused_miras_scan_launch(
 #include "xla/ffi/api/ffi.h"
 
 namespace ffi = xla::ffi;
+
+namespace {  // anonymous namespace — prevents symbol collision between f32/bf16
 
 // 1 operand: packed tensor [B, T, 5*M+1] with momentum in the extra column.
 // This avoids the scalar buffer operand segfault in XLA while still
@@ -207,8 +217,10 @@ ffi::Error fused_miras_scan_ffi_impl(
     return ffi::Error::Success();
 }
 
+}  // anonymous namespace
+
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
-    fused_miras_scan, fused_miras_scan_ffi_impl,
+    HANDLER_SYMBOL(fused_miras_scan), fused_miras_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // combined
@@ -216,6 +228,6 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_miras_scan_" PRECISION_SUFFIX, "CUDA", fused_miras_scan);
+    "exla_fused_miras_scan_" PRECISION_SUFFIX, "CUDA", HANDLER_SYMBOL(fused_miras_scan));
 
 #endif  // EXLA_FFI

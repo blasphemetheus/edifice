@@ -41,6 +41,10 @@
 //   [2H..3H-1]   = h_shared      (hidden state for R GEMV)
 //   [3H..4H-1]   = reduce_buf    (reduction workspace)
 
+#ifdef EXLA_FFI
+namespace {  // anonymous namespace — internal linkage per compilation unit
+#endif
+
 __global__ void fused_gru_block_scan_kernel(
     const io_type* __restrict__ input,    // [B, T, H]
     const io_type* __restrict__ weights,  // [num_layers * (6*H*H + 5*H)]
@@ -166,6 +170,10 @@ __global__ void fused_gru_block_scan_kernel(
 // Standalone launch wrapper (C-linkage for NIF / dlopen)
 // ============================================================================
 
+#ifdef EXLA_FFI
+}  // anonymous namespace
+#endif
+
 #ifndef EXLA_FFI
 
 extern "C" {
@@ -205,6 +213,8 @@ int fused_gru_block_scan_launch(
 
 namespace ffi = xla::ffi;
 
+namespace {  // anonymous namespace — prevents symbol collision between f32/bf16
+
 ffi::Error fused_gru_block_scan_ffi_impl(
     cudaStream_t stream,
     ffi::Buffer<FFI_IO_TYPE> input,
@@ -238,8 +248,10 @@ ffi::Error fused_gru_block_scan_ffi_impl(
     return ffi::Error::Success();
 }
 
+}  // anonymous namespace
+
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
-    fused_gru_block_scan, fused_gru_block_scan_ffi_impl,
+    HANDLER_SYMBOL(fused_gru_block_scan), fused_gru_block_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // input
@@ -250,6 +262,6 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_gru_block_scan_" PRECISION_SUFFIX, "CUDA", fused_gru_block_scan);
+    "exla_fused_gru_block_scan_" PRECISION_SUFFIX, "CUDA", HANDLER_SYMBOL(fused_gru_block_scan));
 
 #endif  // EXLA_FFI

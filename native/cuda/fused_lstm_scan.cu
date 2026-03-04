@@ -40,6 +40,10 @@
 // Phase 2: Each thread computes sum_j(h[j] * R[j, gate_offset + i])
 //          by reading all h[j] from shared memory
 
+#ifdef EXLA_FFI
+namespace {  // anonymous namespace — internal linkage per compilation unit
+#endif
+
 __global__ void fused_lstm_scan_kernel(
     const io_type* __restrict__ wx,     // [B, T, 4*H]
     const io_type* __restrict__ R,      // [H, 4*H]
@@ -106,6 +110,10 @@ __global__ void fused_lstm_scan_kernel(
 // Standalone launch wrapper
 // ============================================================================
 
+#ifdef EXLA_FFI
+}  // anonymous namespace
+#endif
+
 #ifndef EXLA_FFI
 
 extern "C" {
@@ -145,6 +153,8 @@ int fused_lstm_scan_launch(
 #include "xla/ffi/api/ffi.h"
 
 namespace ffi = xla::ffi;
+
+namespace {  // anonymous namespace — prevents symbol collision between f32/bf16
 
 ffi::Error fused_lstm_scan_ffi_impl(
     cudaStream_t stream,
@@ -190,8 +200,10 @@ ffi::Error fused_lstm_scan_ffi_impl(
     return ffi::Error::Success();
 }
 
+}  // anonymous namespace
+
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
-    fused_lstm_scan, fused_lstm_scan_ffi_impl,
+    HANDLER_SYMBOL(fused_lstm_scan), fused_lstm_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // wx
@@ -202,6 +214,6 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_lstm_scan_" PRECISION_SUFFIX, "CUDA", fused_lstm_scan);
+    "exla_fused_lstm_scan_" PRECISION_SUFFIX, "CUDA", HANDLER_SYMBOL(fused_lstm_scan));
 
 #endif  // EXLA_FFI

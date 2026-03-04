@@ -44,6 +44,10 @@
 // Kernel
 // ============================================================================
 
+#ifdef EXLA_FFI
+namespace {  // anonymous namespace — internal linkage per compilation unit
+#endif
+
 __global__ void fused_delta_rule_scan_kernel(
     const io_type* __restrict__ q,       // [B, T, H, d]
     const io_type* __restrict__ k,       // [B, T, H, d]
@@ -144,6 +148,10 @@ __global__ void fused_delta_rule_scan_kernel(
 // Standalone launch wrappers (C-linkage for NIF / dlopen)
 // ============================================================================
 
+#ifdef EXLA_FFI
+}  // anonymous namespace
+#endif
+
 #ifndef EXLA_FFI
 
 extern "C" {
@@ -212,6 +220,8 @@ int fused_gated_delta_net_scan_launch(
 #include "xla/ffi/ffi_api.h"
 
 namespace ffi = xla::ffi;
+
+namespace {  // anonymous namespace — prevents symbol collision between f32/bf16
 
 // DeltaNet (no alpha gate)
 ffi::Error fused_delta_net_scan_ffi_impl(
@@ -288,8 +298,10 @@ ffi::Error fused_gated_delta_net_scan_ffi_impl(
     return ffi::Error::Success();
 }
 
+}  // anonymous namespace
+
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
-    fused_delta_net_scan, fused_delta_net_scan_ffi_impl,
+    HANDLER_SYMBOL(fused_delta_net_scan), fused_delta_net_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // q
@@ -300,7 +312,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 );
 
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
-    fused_gated_delta_net_scan, fused_gated_delta_net_scan_ffi_impl,
+    HANDLER_SYMBOL(fused_gated_delta_net_scan), fused_gated_delta_net_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // q
@@ -312,9 +324,11 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_delta_net_scan_" PRECISION_SUFFIX, "CUDA", fused_delta_net_scan);
+    "exla_fused_delta_net_scan_" PRECISION_SUFFIX, "CUDA",
+    HANDLER_SYMBOL(fused_delta_net_scan));
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_gated_delta_net_scan_" PRECISION_SUFFIX, "CUDA", fused_gated_delta_net_scan);
+    "exla_fused_gated_delta_net_scan_" PRECISION_SUFFIX, "CUDA",
+    HANDLER_SYMBOL(fused_gated_delta_net_scan));
 
 #endif  // EXLA_FFI

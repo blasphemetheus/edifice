@@ -38,4 +38,16 @@
   #else
     #define FFI_IO_TYPE ffi::F32
   #endif
+
+  // When f32 and bf16 variants are linked into the same binary (EXLA),
+  // handler symbol names must be unique per precision. Use HANDLER_SYMBOL(name)
+  // in XLA_FFI_DEFINE_HANDLER_SYMBOL and XLA_FFI_REGISTER_HANDLER.
+  #define _HANDLER_CAT2(a, b) a ## b
+  #define _HANDLER_CAT(a, b)  _HANDLER_CAT2(a, b)
+
+  #ifdef USE_BF16
+    #define HANDLER_SYMBOL(name) _HANDLER_CAT(name, _bf16)
+  #else
+    #define HANDLER_SYMBOL(name) _HANDLER_CAT(name, _f32)
+  #endif
 #endif

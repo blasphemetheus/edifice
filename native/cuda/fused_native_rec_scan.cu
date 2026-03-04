@@ -43,6 +43,10 @@ __device__ __forceinline__ float d_elu(float x) {
 // z = sigmoid(gate), c = 1 + elu(cand), h = (1-z)*h + z*c
 // ============================================================================
 
+#ifdef EXLA_FFI
+namespace {  // anonymous namespace — internal linkage per compilation unit
+#endif
+
 __global__ void fused_elu_gru_scan_kernel(
     const io_type* __restrict__ gates,       // [B, T, H] raw pre-sigmoid
     const io_type* __restrict__ candidates,  // [B, T, H] raw pre-elu
@@ -129,6 +133,10 @@ __global__ void fused_diag_linear_scan_kernel(
 // Standalone launch wrappers (C-linkage for NIF / dlopen)
 // ============================================================================
 
+#ifdef EXLA_FFI
+}  // anonymous namespace
+#endif
+
 #ifndef EXLA_FFI
 
 extern "C" {
@@ -202,6 +210,8 @@ int fused_diag_linear_scan_launch(
 
 namespace ffi = xla::ffi;
 
+namespace {  // anonymous namespace — prevents symbol collision between f32/bf16
+
 // --- ELU-GRU FFI ---
 
 ffi::Error fused_elu_gru_scan_ffi_impl(
@@ -236,8 +246,10 @@ ffi::Error fused_elu_gru_scan_ffi_impl(
     return ffi::Error::Success();
 }
 
+}  // anonymous namespace
+
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
-    fused_elu_gru_scan, fused_elu_gru_scan_ffi_impl,
+    HANDLER_SYMBOL(fused_elu_gru_scan), fused_elu_gru_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // gates
@@ -247,9 +259,11 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_elu_gru_scan_" PRECISION_SUFFIX, "CUDA", fused_elu_gru_scan);
+    "exla_fused_elu_gru_scan_" PRECISION_SUFFIX, "CUDA", HANDLER_SYMBOL(fused_elu_gru_scan));
 
 // --- Real-GRU FFI ---
+
+namespace {
 
 ffi::Error fused_real_gru_scan_ffi_impl(
     cudaStream_t stream,
@@ -283,8 +297,10 @@ ffi::Error fused_real_gru_scan_ffi_impl(
     return ffi::Error::Success();
 }
 
+}  // anonymous namespace
+
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
-    fused_real_gru_scan, fused_real_gru_scan_ffi_impl,
+    HANDLER_SYMBOL(fused_real_gru_scan), fused_real_gru_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // gates
@@ -294,9 +310,11 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_real_gru_scan_" PRECISION_SUFFIX, "CUDA", fused_real_gru_scan);
+    "exla_fused_real_gru_scan_" PRECISION_SUFFIX, "CUDA", HANDLER_SYMBOL(fused_real_gru_scan));
 
 // --- Diag-Linear FFI ---
+
+namespace {
 
 ffi::Error fused_diag_linear_scan_ffi_impl(
     cudaStream_t stream,
@@ -330,8 +348,10 @@ ffi::Error fused_diag_linear_scan_ffi_impl(
     return ffi::Error::Success();
 }
 
+}  // anonymous namespace
+
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
-    fused_diag_linear_scan, fused_diag_linear_scan_ffi_impl,
+    HANDLER_SYMBOL(fused_diag_linear_scan), fused_diag_linear_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // a_vals
@@ -341,6 +361,6 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_diag_linear_scan_" PRECISION_SUFFIX, "CUDA", fused_diag_linear_scan);
+    "exla_fused_diag_linear_scan_" PRECISION_SUFFIX, "CUDA", HANDLER_SYMBOL(fused_diag_linear_scan));
 
 #endif  // EXLA_FFI

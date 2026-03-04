@@ -35,6 +35,10 @@
 // Kernel
 // ============================================================================
 
+#ifdef EXLA_FFI
+namespace {  // anonymous namespace — internal linkage per compilation unit
+#endif
+
 __global__ void fused_linear_scan_kernel(
     const io_type* __restrict__ a_vals,  // [B, T, H] multiplicative coefficients
     const io_type* __restrict__ b_vals,  // [B, T, H] additive terms
@@ -62,6 +66,10 @@ __global__ void fused_linear_scan_kernel(
 // ============================================================================
 // Standalone launch wrapper (C-linkage for NIF / dlopen)
 // ============================================================================
+
+#ifdef EXLA_FFI
+}  // anonymous namespace
+#endif
 
 #ifndef EXLA_FFI
 
@@ -100,6 +108,8 @@ int fused_linear_scan_launch(
 
 namespace ffi = xla::ffi;
 
+namespace {  // anonymous namespace — prevents symbol collision between f32/bf16
+
 ffi::Error fused_linear_scan_ffi_impl(
     cudaStream_t stream,
     ffi::Buffer<FFI_IO_TYPE> a_vals,
@@ -133,8 +143,10 @@ ffi::Error fused_linear_scan_ffi_impl(
     return ffi::Error::Success();
 }
 
+}  // anonymous namespace
+
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
-    fused_linear_scan, fused_linear_scan_ffi_impl,
+    HANDLER_SYMBOL(fused_linear_scan), fused_linear_scan_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // a_vals
@@ -144,6 +156,6 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_linear_scan_" PRECISION_SUFFIX, "CUDA", fused_linear_scan);
+    "exla_fused_linear_scan_" PRECISION_SUFFIX, "CUDA", HANDLER_SYMBOL(fused_linear_scan));
 
 #endif  // EXLA_FFI

@@ -38,6 +38,10 @@
 // Kernel
 // ============================================================================
 
+#ifdef EXLA_FFI
+namespace {  // anonymous namespace — internal linkage per compilation unit
+#endif
+
 __global__ void fused_elu_gru_scan_backward_kernel(
     const io_type* __restrict__ z,            // [B, T, H] post-sigmoid gates
     const io_type* __restrict__ c,            // [B, T, H] post-elu+1 candidates
@@ -83,6 +87,10 @@ __global__ void fused_elu_gru_scan_backward_kernel(
 // ============================================================================
 // Standalone launch wrapper (C-linkage for NIF / dlopen)
 // ============================================================================
+
+#ifdef EXLA_FFI
+}  // anonymous namespace
+#endif
 
 #ifndef EXLA_FFI
 
@@ -130,6 +138,8 @@ int fused_elu_gru_scan_backward_launch(
 
 namespace ffi = xla::ffi;
 
+namespace {  // anonymous namespace — prevents symbol collision between f32/bf16
+
 ffi::Error fused_elu_gru_scan_backward_ffi_impl(
     cudaStream_t stream,
     ffi::Buffer<FFI_IO_TYPE> z,
@@ -171,8 +181,10 @@ ffi::Error fused_elu_gru_scan_backward_ffi_impl(
     return ffi::Error::Success();
 }
 
+}  // anonymous namespace
+
 XLA_FFI_DEFINE_HANDLER_SYMBOL(
-    fused_elu_gru_scan_backward, fused_elu_gru_scan_backward_ffi_impl,
+    HANDLER_SYMBOL(fused_elu_gru_scan_backward), fused_elu_gru_scan_backward_ffi_impl,
     ffi::Ffi::Bind()
         .Ctx<ffi::PlatformStream<cudaStream_t>>()
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // z
@@ -186,6 +198,6 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
 );
 
 XLA_FFI_REGISTER_HANDLER(XLA_FFI_GetApi(),
-    "exla_fused_elu_gru_scan_backward_" PRECISION_SUFFIX, "CUDA", fused_elu_gru_scan_backward);
+    "exla_fused_elu_gru_scan_backward_" PRECISION_SUFFIX, "CUDA", HANDLER_SYMBOL(fused_elu_gru_scan_backward));
 
 #endif  // EXLA_FFI
