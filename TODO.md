@@ -419,7 +419,7 @@ Beyond fused CUDA kernels — compiler, runtime, and serving optimizations for f
 - [x] **Nx-level mixed precision auto-casting** — `Edifice.MixedPrecision` module. Presets (`:bf16`, `:fp16`) auto-cast all layers except normalization (layer_norm, batch_norm, rms_norm, adaptive_norm, group_norm) via `Axon.MixedPrecision`. Dynamic gradient loss scaling (`init_loss_scale/1`, `scale_loss/2`, `unscale_grads/2`) with growth/backoff. Model summary for precision audit. Benchmark: `bench/mixed_precision_bench.exs`.
 - [ ] **Run mixed precision benchmark on GPU** — Execute `bench/mixed_precision_bench.exs` with EXLA on RTX 5090. Measure actual bf16 speedup (expect ~1.5-2x on Ampere+). Compare with CUDA kernel bf16 variants.
 - [ ] **Mixed precision training integration** — Wire `MixedPrecision.with_loss_scaling/2` into an Axon.Loop training example. End-to-end bf16 training with loss scaling on a small decoder_only LM. Validate gradients don't diverge.
-- [ ] **Gradient checkpointing / remat** — `Edifice.Training.remat/2`. Selective recomputation of forward activations during backward pass to reduce peak memory. Target: 2-4x memory reduction for training large models.
+- [x] **Gradient checkpointing / remat** — `Edifice.Training` module. `remat/2` wraps predict_fn for forward-pass reuse. `checkpointed_grad/4` separates forward/backward for true activation recomputation. `estimate_memory/3` + `format_memory/1` for memory savings estimation. `checkpoint/1` for segment-level control. 14 tests including decoder_only integration.
 #### Using the Serving Layer
 Exercises for the new `Edifice.Serving.*` modules. Validates real-world usage and finds rough edges.
 
