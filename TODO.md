@@ -369,8 +369,10 @@ Expand PyTorch reference validation beyond ViT/Whisper to 10 key architectures. 
   - [x] **Fix pretrained config test** — `supported_model_types/0` test expects `["convnext", "vit", "whisper"]` but now returns `["convnext", "resnet", "vit", "whisper"]` after adding the ResNet key map. Update assertion in `test/edifice/pretrained/config_test.exs:9`.
 - [x] **GAT numerical validation** — Random-weight fixture + cross-framework forward pass comparison (`architecture_numerical_test.exs`)
 - [x] **ConvNeXt numerical validation** — PyTorch fixture generator + forward pass test (key map already existed)
+- [ ] **Generate pretrained fixtures** — Run `python scripts/generate_numerical_fixtures.py` (requires `torch`, `transformers`, `safetensors`). Downloads ViT, Whisper, ConvNeXt, ResNet, DETR from HuggingFace and produces 5 fixtures in `test/fixtures/numerical/`.
+- [ ] **Run pretrained validation end-to-end** — `mix test test/edifice/pretrained/numerical_validation_test.exs --include external`. Validates ConvNeXt, ResNet, DETR key maps + forward pass against PyTorch reference. Fix any Axon param path mismatches.
 - [ ] **Generate random-weight fixtures** — Run `python scripts/generate_random_weight_fixtures.py` (requires `torch` + `safetensors` pip packages). Produces 7 SafeTensors files in `test/fixtures/numerical/`.
-- [ ] **Verify key mappings at runtime** — After generating fixtures, run tests and fix any Axon param path mismatches using `dump_param_keys/1` from `NumericalFixtureHelper`. Known risks: GQA FFN double-prefix (`gqa_block_1_ffn_ffn_up`), LSTM flat param shape, Mamba conv kernel format.
+- [ ] **Verify random-weight key mappings at runtime** — After generating fixtures, run tests and fix any Axon param path mismatches using `dump_param_keys/1` from `NumericalFixtureHelper`. Known risks: GQA FFN double-prefix (`gqa_block_1_ffn_ffn_up`), LSTM flat param shape, Mamba conv kernel format.
 - [ ] **Tune tolerances** — Some architectures (GQA, Mamba, DiT) may need `atol` loosened from `1e-4` to `5e-4` depending on numerical accumulation.
 
 #### Applied Task Benchmarks
