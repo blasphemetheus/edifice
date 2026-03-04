@@ -402,6 +402,12 @@ Expand PyTorch reference validation beyond ViT/Whisper to 10 key architectures. 
 - [x] **Contrastive recipe** — `Edifice.Recipes.contrastive/2`. InfoNCE/NT-Xent loss (public `infonce_loss/2`), AdamW, cosine LR.
 - [x] **Fine-tuning recipe** — `Edifice.Recipes.fine_tune/3`. Freeze base via `ModelState.freeze/unfreeze`, train head by pattern match. Strategies: `:head_only`, `:lora`, `:full`. Warmup+cosine schedule.
 - [x] **Recipe introspection** — `Edifice.Recipes.describe/2`. Returns config summary map for any recipe.
+- [ ] **Remat integration in recipes** — Add `:remat` option to all recipes. When `remat: true`, wrap the model's predict_fn with `Edifice.Training.remat/2` inside the Axon.Loop train step. Requires custom step_fn in `Axon.Loop.trainer`.
+- [ ] **LoRA adapter injection** — Wire `Edifice.Meta.LoRA.inject/3` into `fine_tune/3` when `strategy: :lora`. Currently `:lora` strategy only unfreezes lora-named params but doesn't inject adapters. Should accept `:rank` and `:alpha` options.
+- [ ] **Validation loop attachment** — Add `:validation_data` option to recipes. When provided, attach `Axon.Loop.validate` to log validation metrics each epoch. Add validation loss to early stopping criteria.
+- [ ] **Checkpoint saving** — Add `:checkpoint_path` option. When set, attach `Axon.Loop.checkpoint` to save `ModelState` at each epoch (or best-so-far by validation loss).
+- [ ] **Regression recipe** — `Edifice.Recipes.regress/2`. MSE/Huber loss, AdamW, cosine LR. Metrics: MSE, MAE. For continuous output tasks.
+- [ ] **End-to-end recipe Livebook** — `notebooks/training_recipes.livemd`. Demonstrates classify + fine_tune + contrastive on small synthetic data with Edifice models. Shows `describe/2`, training, evaluation.
 
 #### Non-Kernel Performance Optimizations
 Beyond fused CUDA kernels — compiler, runtime, and serving optimizations for faster inference and training.
@@ -437,7 +443,22 @@ Exercises for the new `Edifice.Serving.*` modules. Validates real-world usage an
 ### Phase 3 — Discovery & Polish (Priority: Low-Medium)
 
 #### Interactive Model Explorer
-- [ ] **Livebook Smart Cell** — Architecture browser with filter/search, side-by-side comparison, interactive opt builder, benchmark dashboard. Alternative: Phoenix LiveView app. See Direction 7 in `notebooks/research/future_directions.md`.
+Livebook Smart Cell (`kino_edifice`) for browsing, configuring, and comparing Edifice architectures interactively. Uses `Kino.SmartCell` behaviour with JS/CSS assets via `@livebook/kino-bundler`.
+
+**Smart Cell Core** (`lib/kino_edifice/model_cell.ex`):
+- [ ] **Model Cell module** — `use Kino.SmartCell, name: "Edifice Model"`. Callbacks: `init/2` (defaults from registry), `handle_connect/1` (push family/arch lists), `handle_event/3` (family select, arch select, opt changes), `to_attrs/1`, `to_source/1` (generates `Edifice.build(arch, opts)` code). Persists attrs for notebook reload.
+- [ ] **Architecture registry integration** — `scan_binding/3` callback to detect existing Axon models in notebook bindings. Populate family/architecture dropdowns from `Edifice.architectures/0` and `Edifice.families/0` at init.
+- [ ] **Option builder UI** — JavaScript form that dynamically renders architecture-specific options (embed_dim, num_heads, num_layers, etc.) based on selected architecture. Use `Edifice.valid_opts/1` or similar to drive form fields. Validate ranges client-side.
+- [ ] **Model summary panel** — After `to_source` evaluation, use `scan_eval_result/2` to capture the built Axon model and display: layer count, param count (via `Axon.reduce_nodes`), input/output shapes, architecture diagram (text tree or Kino.Tree).
+- [ ] **JS/CSS assets** — `assets/packs/model_cell/main.js` + `main.css`. Build with `@livebook/kino-bundler`. Vanilla JS (no React/Vue dependency). Livebook-palette Tailwind CSS. Form with: family dropdown, architecture dropdown, dynamic opt inputs, summary display area.
+
+**Comparison & Exploration**:
+- [ ] **Side-by-side comparison cell** — Second Smart Cell (`"Edifice Compare"`) that takes 2-4 architecture selections, builds each, and displays a comparison table: param count, layer depth, estimated memory (`Training.estimate_memory`), forward pass latency (optional, with EXLA).
+- [ ] **Recipe integration** — Dropdown to select a training recipe (`classify`, `language_model`, etc.) and auto-generate `Edifice.Recipes.describe/2` output alongside the model config. Shows recommended hyperparameters for the selected arch+recipe combo.
+
+**Package & Distribution**:
+- [ ] **kino_edifice hex package** — Separate Mix project (`kino_edifice/`) or subdirectory. Deps: `{:kino, "~> 0.14"}`, `{:edifice, path: ".."}`. Registers Smart Cell on `Application.start`. README with install instructions for Livebook.
+- [ ] **Demo Livebook** — `notebooks/model_explorer.livemd`. Showcases: build a model via Smart Cell, inspect summary, compare architectures, wire into a recipe, train on synthetic data.
 
 #### Architecture Recommender / AutoML
 - [ ] **Edifice.AutoML.recommend/2** — Given task type + constraints (latency, params, GPU/CPU), suggest top-3 architectures with hyperparameters. Rule-based + benchmark data from task suite.
