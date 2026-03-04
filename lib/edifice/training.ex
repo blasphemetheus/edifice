@@ -51,13 +51,6 @@ defmodule Edifice.Training do
   `Nx.Defn.value_and_grad`), the predict function is re-executed to
   recompute activations rather than caching them from the forward pass.
 
-  ## How It Works
-
-  The returned function computes the forward pass, then uses `stop_grad`
-  to prevent the AD system from tracing through the forward computation.
-  A separate `Nx.Defn.grad` call recomputes the forward pass during the
-  backward phase. This is equivalent to JAX's `jax.checkpoint`.
-
   ## Parameters
 
   - `predict_fn` — Compiled Axon prediction function (from `Axon.build/2`)
@@ -88,16 +81,7 @@ defmodule Edifice.Training do
 
       :full ->
         fn params, input ->
-          # Forward pass runs normally — the output value is correct
           predict_fn.(params, input)
-          # Note: when this runs inside Nx.Defn.value_and_grad, the AD
-          # system traces through predict_fn automatically. The "remat"
-          # benefit comes from the EXLA/XLA compiler's memory optimization:
-          # by structuring the computation this way, XLA can choose to
-          # rematerialize intermediate values instead of keeping them live.
-          #
-          # For explicit control, use checkpointed_grad/4 which separates
-          # the forward and backward passes.
         end
     end
   end
@@ -179,24 +163,11 @@ defmodule Edifice.Training do
   Wrap a segment of computation for gradient checkpointing.
 
   Use this inside a training step to checkpoint specific sub-computations.
-  The function `fun` is called immediately to produce its result, and its
-  activations may be recomputed during backpropagation.
+  The function `fun` is called immediately to produce its result.
 
   ## Parameters
 
   - `fun` — Zero-arity function that performs the computation
-
-  ## Examples
-
-      defn train_step(params, input) do
-        grad(params, fn p ->
-          # Checkpoint the expensive encoder
-          hidden = Edifice.Training.checkpoint(fn -> encoder(p, input) end)
-          # Decoder activations are kept normally
-          output = decoder(p, hidden)
-          loss(output)
-        end)
-      end
   """
   @spec checkpoint((-> Nx.Tensor.t())) :: Nx.Tensor.t()
   def checkpoint(fun) when is_function(fun, 0) do

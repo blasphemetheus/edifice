@@ -1,0 +1,475 @@
+defmodule Edifice.Recipes do
+  @moduledoc """
+  Pre-built training configurations with sensible defaults.
+
+  Each recipe returns a configured `Axon.Loop` ready to run with
+  `Axon.Loop.run/4`. Recipes compose Edifice's mixed precision,
+  gradient checkpointing, and PEFT modules with Axon's training
+  infrastructure.
+
+  ## Quick Start
+
+      model = Edifice.build(:decoder_only, embed_dim: 128, ...)
+
+      # Classification
+      loop = Edifice.Recipes.classify(model, num_classes: 10)
+      state = Axon.Loop.run(loop, train_data, %{}, epochs: 10)
+
+      # Language modeling
+      loop = Edifice.Recipes.language_model(model, vocab_size: 32000)
+      state = Axon.Loop.run(loop, train_data, %{}, epochs: 5)
+
+      # Fine-tuning with frozen base
+      loop = Edifice.Recipes.fine_tune(model, base_params, strategy: :head_only)
+      state = Axon.Loop.run(loop, train_data, %{}, epochs: 3)
+
+  ## Recipes
+
+  - `classify/2` — Supervised classification (cross-entropy, AdamW, cosine LR, early stopping)
+  - `language_model/2` — Autoregressive language modeling (causal LM loss, gradient clipping, warmup)
+  - `contrastive/2` — Contrastive learning (InfoNCE loss, cosine schedule)
+  - `fine_tune/3` — Transfer learning (freeze base + train head, optional LoRA)
+  """
+
+  @doc """
+  Build a supervised classification training loop.
+
+  ## Options
+
+  - `:num_classes` — Number of output classes (required)
+  - `:learning_rate` — Initial learning rate (default: 1.0e-3)
+  - `:weight_decay` — AdamW weight decay (default: 1.0e-2)
+  - `:epochs` — Number of training epochs, used for LR schedule (default: 10)
+  - `:steps_per_epoch` — Steps per epoch for LR schedule (default: 1000)
+  - `:patience` — Early stopping patience in epochs (default: 5)
+  - `:label_smoothing` — Label smoothing factor, 0.0 to disable (default: 0.0)
+  - `:precision` — Mixed precision preset, nil to disable (default: nil)
+  - `:log` — Log training progress (default: true)
+
+  ## Returns
+
+  Configured `Axon.Loop` with:
+  - Loss: categorical cross-entropy (with optional label smoothing)
+  - Optimizer: AdamW with cosine decay LR schedule
+  - Metrics: loss + accuracy
+  - Early stopping on loss
+
+  ## Example
+
+      model = Edifice.build(:vit, embed_dim: 128, ...)
+      loop = Edifice.Recipes.classify(model, num_classes: 10)
+      state = Axon.Loop.run(loop, train_data, %{}, epochs: 10)
+  """
+  @spec classify(Axon.t(), keyword()) :: Axon.Loop.t()
+  def classify(model, opts \\ []) do
+    _num_classes = Keyword.fetch!(opts, :num_classes)
+    lr = Keyword.get(opts, :learning_rate, 1.0e-3)
+    weight_decay = Keyword.get(opts, :weight_decay, 1.0e-2)
+    epochs = Keyword.get(opts, :epochs, 10)
+    steps_per_epoch = Keyword.get(opts, :steps_per_epoch, 1000)
+    patience = Keyword.get(opts, :patience, 5)
+    label_smoothing = Keyword.get(opts, :label_smoothing, 0.0)
+    precision = Keyword.get(opts, :precision, nil)
+    log = Keyword.get(opts, :log, true)
+
+    model = maybe_apply_precision(model, precision)
+
+    decay_steps = epochs * steps_per_epoch
+    schedule = Polaris.Schedules.cosine_decay(lr, decay_steps: decay_steps)
+    optimizer = Polaris.Optimizers.adamw(learning_rate: schedule, decay: weight_decay)
+
+    loss =
+      if label_smoothing > 0.0 do
+        fn y_true, y_pred ->
+          Axon.Losses.categorical_cross_entropy(y_true, y_pred,
+            reduction: :mean,
+            label_smoothing: label_smoothing
+          )
+        end
+      else
+        :categorical_cross_entropy
+      end
+
+    loop =
+      model
+      |> Axon.Loop.trainer(loss, optimizer)
+      |> Axon.Loop.metric(:accuracy)
+      |> Axon.Loop.early_stop("loss", patience: patience, mode: :min)
+
+    maybe_log(loop, log)
+  end
+
+  @doc """
+  Build an autoregressive language modeling training loop.
+
+  ## Options
+
+  - `:vocab_size` — Vocabulary size (required)
+  - `:learning_rate` — Peak learning rate (default: 3.0e-4)
+  - `:weight_decay` — AdamW weight decay (default: 0.1)
+  - `:warmup_steps` — Linear warmup steps (default: 100)
+  - `:decay_steps` — Total decay steps for cosine schedule (default: 10000)
+  - `:max_grad_norm` — Global gradient norm clip (default: 1.0)
+  - `:precision` — Mixed precision preset (default: nil)
+  - `:log` — Log training progress (default: true)
+
+  ## Returns
+
+  Configured `Axon.Loop` with:
+  - Loss: categorical cross-entropy (causal LM: predict next token)
+  - Optimizer: AdamW with warmup + cosine decay, gradient clipping
+  - Metrics: loss + perplexity
+
+  ## Example
+
+      model = Edifice.build(:decoder_only, embed_dim: 256, ...)
+      loop = Edifice.Recipes.language_model(model, vocab_size: 32000)
+      state = Axon.Loop.run(loop, train_data, %{}, epochs: 5)
+  """
+  @spec language_model(Axon.t(), keyword()) :: Axon.Loop.t()
+  def language_model(model, opts \\ []) do
+    _vocab_size = Keyword.fetch!(opts, :vocab_size)
+    lr = Keyword.get(opts, :learning_rate, 3.0e-4)
+    weight_decay = Keyword.get(opts, :weight_decay, 0.1)
+    warmup_steps = Keyword.get(opts, :warmup_steps, 100)
+    decay_steps = Keyword.get(opts, :decay_steps, 10_000)
+    max_grad_norm = Keyword.get(opts, :max_grad_norm, 1.0)
+    precision = Keyword.get(opts, :precision, nil)
+    log = Keyword.get(opts, :log, true)
+
+    model = maybe_apply_precision(model, precision)
+
+    schedule = warmup_cosine_schedule(lr, warmup_steps, decay_steps)
+
+    optimizer =
+      Polaris.Updates.compose(
+        Polaris.Updates.clip_by_global_norm(max_norm: max_grad_norm),
+        Polaris.Optimizers.adamw(learning_rate: schedule, decay: weight_decay)
+      )
+
+    loss = :categorical_cross_entropy
+
+    loop =
+      model
+      |> Axon.Loop.trainer(loss, optimizer)
+      |> Axon.Loop.metric(&perplexity_metric/2, "perplexity")
+
+    maybe_log(loop, log)
+  end
+
+  @doc """
+  Build a contrastive learning training loop.
+
+  Uses InfoNCE (NT-Xent) loss to learn representations by pulling
+  positive pairs together and pushing negatives apart.
+
+  ## Options
+
+  - `:temperature` — InfoNCE temperature (default: 0.07)
+  - `:learning_rate` — Initial learning rate (default: 3.0e-4)
+  - `:weight_decay` — AdamW weight decay (default: 1.0e-4)
+  - `:decay_steps` — Cosine decay steps (default: 10000)
+  - `:precision` — Mixed precision preset (default: nil)
+  - `:log` — Log training progress (default: true)
+
+  ## Data Format
+
+  Each batch should be `{input, _labels}` where the input contains
+  concatenated positive pairs along the batch dimension. The first
+  half of the batch is view 1, the second half is view 2.
+
+  ## Returns
+
+  Configured `Axon.Loop` with:
+  - Loss: InfoNCE / NT-Xent
+  - Optimizer: AdamW with cosine decay
+  - Metrics: loss
+
+  ## Example
+
+      encoder = Edifice.build(:mlp, layers: [128, 64])
+      loop = Edifice.Recipes.contrastive(encoder, temperature: 0.1)
+      state = Axon.Loop.run(loop, paired_data, %{}, epochs: 100)
+  """
+  @spec contrastive(Axon.t(), keyword()) :: Axon.Loop.t()
+  def contrastive(model, opts \\ []) do
+    temperature = Keyword.get(opts, :temperature, 0.07)
+    lr = Keyword.get(opts, :learning_rate, 3.0e-4)
+    weight_decay = Keyword.get(opts, :weight_decay, 1.0e-4)
+    decay_steps = Keyword.get(opts, :decay_steps, 10_000)
+    precision = Keyword.get(opts, :precision, nil)
+    log = Keyword.get(opts, :log, true)
+
+    model = maybe_apply_precision(model, precision)
+
+    schedule = Polaris.Schedules.cosine_decay(lr, decay_steps: decay_steps)
+    optimizer = Polaris.Optimizers.adamw(learning_rate: schedule, decay: weight_decay)
+
+    # InfoNCE loss: model output is embeddings, loss computes
+    # similarity between first/second half of batch (positive pairs)
+    loss_fn = fn _y_true, y_pred ->
+      infonce_loss(y_pred, temperature)
+    end
+
+    loop =
+      model
+      |> Axon.Loop.trainer(loss_fn, optimizer)
+
+    maybe_log(loop, log)
+  end
+
+  @doc """
+  Build a fine-tuning training loop.
+
+  Freezes the base model parameters and trains only the head (and
+  optionally PEFT adapter layers like LoRA).
+
+  ## Parameters
+
+  - `model` — Full Axon model (base + head)
+  - `base_params` — Pre-trained base model parameters
+
+  ## Options
+
+  - `:strategy` — Fine-tuning strategy (default: `:head_only`)
+    - `:head_only` — Freeze all base layers, train only the classification head
+    - `:lora` — Freeze base, unfreeze head + any LoRA adapter params
+    - `:full` — Fine-tune all parameters (no freezing)
+  - `:head_pattern` — Regex for head layers to keep trainable (default: `~r/head|classifier|out/`)
+  - `:learning_rate` — Learning rate (default: 2.0e-5)
+  - `:weight_decay` — AdamW weight decay (default: 1.0e-2)
+  - `:epochs` — Number of epochs for LR schedule (default: 3)
+  - `:steps_per_epoch` — Steps per epoch (default: 1000)
+  - `:warmup_ratio` — Fraction of total steps for warmup (default: 0.1)
+  - `:precision` — Mixed precision preset (default: nil)
+  - `:log` — Log training progress (default: true)
+
+  ## Returns
+
+  Configured `Axon.Loop` with frozen base parameters.
+
+  ## Examples
+
+      # Head-only fine-tuning
+      loop = Edifice.Recipes.fine_tune(model, base_params, strategy: :head_only)
+
+      # Full fine-tuning with low LR
+      loop = Edifice.Recipes.fine_tune(model, base_params,
+        strategy: :full,
+        learning_rate: 1.0e-5
+      )
+  """
+  @spec fine_tune(Axon.t(), map(), keyword()) :: Axon.Loop.t()
+  def fine_tune(model, base_params, opts \\ []) do
+    strategy = Keyword.get(opts, :strategy, :head_only)
+    head_pattern = Keyword.get(opts, :head_pattern, ~r/head|classifier|out/)
+    lr = Keyword.get(opts, :learning_rate, 2.0e-5)
+    weight_decay = Keyword.get(opts, :weight_decay, 1.0e-2)
+    epochs = Keyword.get(opts, :epochs, 3)
+    steps_per_epoch = Keyword.get(opts, :steps_per_epoch, 1000)
+    warmup_ratio = Keyword.get(opts, :warmup_ratio, 0.1)
+    precision = Keyword.get(opts, :precision, nil)
+    log = Keyword.get(opts, :log, true)
+
+    model = maybe_apply_precision(model, precision)
+
+    total_steps = epochs * steps_per_epoch
+    warmup_steps = round(total_steps * warmup_ratio)
+    schedule = warmup_cosine_schedule(lr, warmup_steps, total_steps)
+    optimizer = Polaris.Optimizers.adamw(learning_rate: schedule, decay: weight_decay)
+
+    init_state = build_frozen_state(base_params, strategy, head_pattern)
+
+    loop =
+      model
+      |> Axon.Loop.trainer(:categorical_cross_entropy, optimizer)
+      |> Axon.Loop.metric(:accuracy)
+      |> attach_init_state(init_state)
+
+    maybe_log(loop, log)
+  end
+
+  @doc """
+  Return a summary of what a recipe will configure.
+
+  ## Example
+
+      Edifice.Recipes.describe(:classify, num_classes: 10)
+      #=> %{loss: :categorical_cross_entropy, optimizer: :adamw, ...}
+  """
+  @spec describe(atom(), keyword()) :: map()
+  def describe(recipe, opts \\ []) do
+    case recipe do
+      :classify ->
+        %{
+          loss: if(Keyword.get(opts, :label_smoothing, 0.0) > 0, do: :categorical_cross_entropy_smoothed, else: :categorical_cross_entropy),
+          optimizer: :adamw,
+          schedule: :cosine_decay,
+          metrics: [:loss, :accuracy],
+          callbacks: [:early_stop],
+          weight_decay: Keyword.get(opts, :weight_decay, 1.0e-2),
+          learning_rate: Keyword.get(opts, :learning_rate, 1.0e-3)
+        }
+
+      :language_model ->
+        %{
+          loss: :categorical_cross_entropy,
+          optimizer: :adamw,
+          schedule: :warmup_cosine,
+          metrics: [:loss, :perplexity],
+          callbacks: [:gradient_clipping],
+          weight_decay: Keyword.get(opts, :weight_decay, 0.1),
+          learning_rate: Keyword.get(opts, :learning_rate, 3.0e-4),
+          max_grad_norm: Keyword.get(opts, :max_grad_norm, 1.0)
+        }
+
+      :contrastive ->
+        %{
+          loss: :infonce,
+          optimizer: :adamw,
+          schedule: :cosine_decay,
+          metrics: [:loss],
+          callbacks: [],
+          temperature: Keyword.get(opts, :temperature, 0.07)
+        }
+
+      :fine_tune ->
+        %{
+          loss: :categorical_cross_entropy,
+          optimizer: :adamw,
+          schedule: :warmup_cosine,
+          metrics: [:loss, :accuracy],
+          callbacks: [],
+          strategy: Keyword.get(opts, :strategy, :head_only),
+          learning_rate: Keyword.get(opts, :learning_rate, 2.0e-5),
+          warmup_ratio: Keyword.get(opts, :warmup_ratio, 0.1)
+        }
+    end
+  end
+
+  # ===========================================================================
+  # Loss Functions
+  # ===========================================================================
+
+  @doc """
+  Compute InfoNCE (NT-Xent) contrastive loss.
+
+  Expects embeddings where the first half and second half of the batch
+  are positive pairs.
+
+  ## Parameters
+
+  - `embeddings` — `[2*N, dim]` tensor of embeddings
+  - `temperature` — Scaling temperature (default: 0.07)
+  """
+  @spec infonce_loss(Nx.Tensor.t(), float()) :: Nx.Tensor.t()
+  def infonce_loss(embeddings, temperature \\ 0.07) do
+    batch_size = div(Nx.axis_size(embeddings, 0), 2)
+
+    z1 = Nx.slice_along_axis(embeddings, 0, batch_size, axis: 0)
+    z2 = Nx.slice_along_axis(embeddings, batch_size, batch_size, axis: 0)
+
+    z1_norm = l2_normalize(z1)
+    z2_norm = l2_normalize(z2)
+
+    # Similarity: [N, N] — positive pairs on diagonal
+    sim = Nx.dot(z1_norm, [1], z2_norm, [1])
+    sim_scaled = Nx.divide(sim, temperature)
+
+    # InfoNCE: -log(exp(sim_ii / t) / sum_j(exp(sim_ij / t)))
+    log_softmax = stable_log_softmax(sim_scaled, axis: 1)
+    nll = Nx.negate(Nx.take_diagonal(log_softmax))
+    Nx.mean(nll)
+  end
+
+  # ===========================================================================
+  # Internal Helpers
+  # ===========================================================================
+
+  defp maybe_apply_precision(model, nil), do: model
+  defp maybe_apply_precision(model, preset), do: Edifice.MixedPrecision.apply(model, preset)
+
+  defp maybe_log(loop, true) do
+    Axon.Loop.log(loop, :epoch_completed, fn state ->
+      {:continue, state}
+    end)
+  end
+
+  defp maybe_log(loop, false), do: loop
+
+  defp warmup_cosine_schedule(peak_lr, warmup_steps, total_steps) do
+    decay_steps = max(total_steps - warmup_steps, 1)
+
+    cosine = Polaris.Schedules.cosine_decay(peak_lr, decay_steps: decay_steps)
+
+    if warmup_steps > 0 do
+      fn step ->
+        warmup_factor = Nx.min(Nx.divide(step, max(warmup_steps, 1)), 1.0)
+        cosine_value = cosine.(Nx.max(Nx.subtract(step, warmup_steps), 0))
+        Nx.multiply(warmup_factor, cosine_value)
+      end
+    else
+      cosine
+    end
+  end
+
+  defp l2_normalize(x) do
+    norm = Nx.sqrt(Nx.sum(Nx.pow(x, 2), axes: [-1], keep_axes: true) |> Nx.add(1.0e-8))
+    Nx.divide(x, norm)
+  end
+
+  defp stable_log_softmax(x, opts) do
+    axis = Keyword.get(opts, :axis, -1)
+    max = Nx.reduce_max(x, axes: [axis], keep_axes: true)
+    shifted = Nx.subtract(x, max)
+    log_sum_exp = Nx.log(Nx.sum(Nx.exp(shifted), axes: [axis], keep_axes: true))
+    Nx.subtract(shifted, log_sum_exp)
+  end
+
+  defp build_frozen_state(base_params, strategy, head_pattern) do
+    state =
+      case base_params do
+        %Axon.ModelState{} -> base_params
+        %{} -> Axon.ModelState.new(base_params)
+      end
+
+    head_filter = fn key_path ->
+      Enum.any?(key_path, fn key ->
+        Regex.match?(head_pattern, to_string(key))
+      end)
+    end
+
+    lora_filter = fn key_path ->
+      Enum.any?(key_path, fn key ->
+        String.contains?(to_string(key), "lora")
+      end)
+    end
+
+    case strategy do
+      :head_only ->
+        state
+        |> Axon.ModelState.freeze()
+        |> Axon.ModelState.unfreeze(head_filter)
+
+      :lora ->
+        state
+        |> Axon.ModelState.freeze()
+        |> Axon.ModelState.unfreeze(fn kp -> head_filter.(kp) or lora_filter.(kp) end)
+
+      :full ->
+        state
+    end
+  end
+
+  defp attach_init_state(loop, init_state) do
+    Axon.Loop.handle_event(loop, :started, fn state ->
+      new_step_state = put_in(state.step_state[:model_state], init_state)
+      {:continue, %{state | step_state: new_step_state}}
+    end)
+  end
+
+  defp perplexity_metric(y_true, y_pred) do
+    loss = Axon.Losses.categorical_cross_entropy(y_true, y_pred, reduction: :mean)
+    Nx.exp(loss)
+  end
+end
