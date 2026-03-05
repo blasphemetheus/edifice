@@ -443,22 +443,19 @@ Exercises for the new `Edifice.Serving.*` modules. Validates real-world usage an
 ### Phase 3 — Discovery & Polish (Priority: Low-Medium)
 
 #### Interactive Model Explorer
-Livebook Smart Cell (`kino_edifice`) for browsing, configuring, and comparing Edifice architectures interactively. Uses `Kino.SmartCell` behaviour with JS/CSS assets via `@livebook/kino-bundler`.
+Livebook Smart Cell for browsing, configuring, and comparing Edifice architectures interactively. Uses `Kino.SmartCell` behaviour with inline JS/CSS assets.
 
-**Smart Cell Core** (`lib/kino_edifice/model_cell.ex`):
-- [ ] **Model Cell module** — `use Kino.SmartCell, name: "Edifice Model"`. Callbacks: `init/2` (defaults from registry), `handle_connect/1` (push family/arch lists), `handle_event/3` (family select, arch select, opt changes), `to_attrs/1`, `to_source/1` (generates `Edifice.build(arch, opts)` code). Persists attrs for notebook reload.
-- [ ] **Architecture registry integration** — `scan_binding/3` callback to detect existing Axon models in notebook bindings. Populate family/architecture dropdowns from `Edifice.architectures/0` and `Edifice.families/0` at init.
-- [ ] **Option builder UI** — JavaScript form that dynamically renders architecture-specific options (embed_dim, num_heads, num_layers, etc.) based on selected architecture. Use `Edifice.valid_opts/1` or similar to drive form fields. Validate ranges client-side.
-- [ ] **Model summary panel** — After `to_source` evaluation, use `scan_eval_result/2` to capture the built Axon model and display: layer count, param count (via `Axon.reduce_nodes`), input/output shapes, architecture diagram (text tree or Kino.Tree).
-- [ ] **JS/CSS assets** — `assets/packs/model_cell/main.js` + `main.css`. Build with `@livebook/kino-bundler`. Vanilla JS (no React/Vue dependency). Livebook-palette Tailwind CSS. Form with: family dropdown, architecture dropdown, dynamic opt inputs, summary display area.
+**Smart Cell Core** (`lib/edifice/smart_cell/model_explorer.ex`):
+- [x] **Model Cell module** — `use Kino.SmartCell, name: "Edifice Model Explorer"`. Callbacks: `init/2` (defaults from registry), `handle_connect/1` (push family/arch lists), `handle_event/3` (family select, arch select, opt changes), `to_attrs/1`, `to_source/1` (generates `Edifice.build(arch, opts)` code). Persists attrs for notebook reload. Compile-time guarded with `if Code.ensure_loaded?(Kino.SmartCell)`.
+- [x] **Architecture registry integration** — Populates family/architecture dropdowns from `Edifice.list_families/0` at init. `scan_eval_result/2` captures built Axon models for summary display.
+- [x] **Option builder UI** — JavaScript form dynamically renders common + family-specific options (embed_dim, num_heads, num_layers, state_size, etc.). 3-column grid, number inputs with change events.
+- [x] **Model summary panel** — After evaluation, `scan_eval_result/2` computes layer count (via `Axon.reduce_nodes`), param count and memory (via `Edifice.Display.as_table`), broadcasts to JS.
+- [x] **JS/CSS assets** — Inline `asset "main.js"` + `asset "main.css"`. Vanilla JS, no npm deps. Livebook-compatible CSS custom properties.
+- [x] **Demo Livebook** — `notebooks/model_explorer_demo.livemd`. Setup, Smart Cell usage, manual equivalent, model inspection, architecture comparison, recipe wiring.
 
-**Comparison & Exploration**:
+**Comparison & Exploration** (future):
 - [ ] **Side-by-side comparison cell** — Second Smart Cell (`"Edifice Compare"`) that takes 2-4 architecture selections, builds each, and displays a comparison table: param count, layer depth, estimated memory (`Training.estimate_memory`), forward pass latency (optional, with EXLA).
 - [ ] **Recipe integration** — Dropdown to select a training recipe (`classify`, `language_model`, etc.) and auto-generate `Edifice.Recipes.describe/2` output alongside the model config. Shows recommended hyperparameters for the selected arch+recipe combo.
-
-**Package & Distribution**:
-- [ ] **kino_edifice hex package** — Separate Mix project (`kino_edifice/`) or subdirectory. Deps: `{:kino, "~> 0.14"}`, `{:edifice, path: ".."}`. Registers Smart Cell on `Application.start`. README with install instructions for Livebook.
-- [ ] **Demo Livebook** — `notebooks/model_explorer.livemd`. Showcases: build a model via Smart Cell, inspect summary, compare architectures, wire into a recipe, train on synthetic data.
 
 #### Architecture Recommender / AutoML
 - [ ] **Edifice.AutoML.recommend/2** — Given task type + constraints (latency, params, GPU/CPU), suggest top-3 architectures with hyperparameters. Rule-based + benchmark data from task suite.
