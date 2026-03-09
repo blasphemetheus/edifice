@@ -4,6 +4,13 @@
 
 238 registered architectures across 26 families, 20 shared blocks, 2500+ tests.
 
+## Local nx/exla fork (`EDIFICE_LOCAL_NX=1`)
+
+Points to `../nx` (blasphemetheus/nx fork). Key branches:
+- `feat/edifice-lazy-callback-allocator` — lazy CallbackServer + configurable GPU allocator (use for training)
+- `fix/lazy-callback-server` — just the CallbackServer leak fix (PR #1682 upstream)
+- `fix/blackwell-test-compat` — test tolerance fixes for RTX 5090 (cherry-pick for clean local tests)
+
 ## Completed Milestones
 
 ### v0.2.0
