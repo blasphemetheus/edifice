@@ -38,6 +38,21 @@ defmodule Edifice.RecipesTest do
     |> Enum.take(n)
   end
 
+  defp build_regressor do
+    Axon.input("x", shape: {nil, @embed_dim})
+    |> Axon.dense(@embed_dim, name: "hidden", activation: :relu)
+    |> Axon.dense(1, name: "out")
+  end
+
+  defp make_regression_data(n \\ 10) do
+    Stream.repeatedly(fn ->
+      {input, _key} = Nx.Random.uniform(Nx.Random.key(:rand.uniform(10000)), shape: {@batch, @embed_dim})
+      target = Nx.broadcast(1.0, {@batch, 1})
+      {%{"x" => input}, target}
+    end)
+    |> Enum.take(n)
+  end
+
   defp make_contrastive_data(n \\ 10) do
     Stream.repeatedly(fn ->
       # Concatenated positive pairs: first half = view1, second half = view2
@@ -151,6 +166,58 @@ defmodule Edifice.RecipesTest do
     end
   end
 
+  describe "regress/2" do
+    test "returns an Axon.Loop" do
+      model = build_regressor()
+      loop = Recipes.regress(model, log: false)
+      assert %Axon.Loop{} = loop
+    end
+
+    test "trains on data" do
+      model = build_regressor()
+      data = make_regression_data(5)
+      loop = Recipes.regress(model, log: false, patience: 100)
+      state = Axon.Loop.run(loop, data, %{}, epochs: 1, iterations: 5)
+      assert %Axon.ModelState{} = state
+    end
+
+    test "accepts huber loss" do
+      model = build_regressor()
+      loop = Recipes.regress(model, loss: :huber, log: false)
+      assert %Axon.Loop{} = loop
+    end
+  end
+
+  describe "validation_data option" do
+    test "classify accepts validation_data" do
+      model = build_classifier()
+      val_data = make_classification_data(3)
+      loop = Recipes.classify(model, num_classes: @num_classes, validation_data: val_data, log: false)
+      assert %Axon.Loop{} = loop
+    end
+
+    test "regress accepts validation_data" do
+      model = build_regressor()
+      val_data = make_regression_data(3)
+      loop = Recipes.regress(model, validation_data: val_data, log: false)
+      assert %Axon.Loop{} = loop
+    end
+  end
+
+  describe "checkpoint_path option" do
+    test "classify accepts checkpoint_path" do
+      model = build_classifier()
+      loop = Recipes.classify(model, num_classes: @num_classes, checkpoint_path: "/tmp/ckpt", log: false)
+      assert %Axon.Loop{} = loop
+    end
+
+    test "regress accepts checkpoint_path" do
+      model = build_regressor()
+      loop = Recipes.regress(model, checkpoint_path: "/tmp/ckpt", log: false)
+      assert %Axon.Loop{} = loop
+    end
+  end
+
   describe "describe/2" do
     test "returns classify config" do
       desc = Recipes.describe(:classify, num_classes: 10)
@@ -182,12 +249,24 @@ defmodule Edifice.RecipesTest do
       assert desc.warmup_ratio == 0.1
     end
 
+    test "returns regress config" do
+      desc = Recipes.describe(:regress)
+      assert desc.loss == :mean_squared_error
+      assert desc.optimizer == :adamw
+      assert desc.schedule == :cosine_decay
+      assert :mae in desc.metrics
+      assert :early_stop in desc.callbacks
+    end
+
     test "respects custom options" do
       desc = Recipes.describe(:classify, label_smoothing: 0.1)
       assert desc.loss == :categorical_cross_entropy_smoothed
 
       desc = Recipes.describe(:language_model, max_grad_norm: 0.5)
       assert desc.max_grad_norm == 0.5
+
+      desc = Recipes.describe(:regress, loss: :huber)
+      assert desc.loss == :huber
     end
   end
 
@@ -214,6 +293,73 @@ defmodule Edifice.RecipesTest do
       loss = Recipes.infonce_loss(embeddings, 0.07)
       # Should be higher than perfect similarity
       assert Nx.to_number(loss) > 0.5
+    end
+  end
+
+  # ===========================================================================
+  # Monitor / Adaptive option integration
+  # ===========================================================================
+
+  describe "monitor option" do
+    test "classify accepts monitor: true" do
+      loop = Recipes.classify(build_classifier(), num_classes: @num_classes, monitor: true, log: false)
+      assert %Axon.Loop{} = loop
+    end
+
+    test "classify accepts monitor keyword opts" do
+      loop = Recipes.classify(build_classifier(),
+        num_classes: @num_classes,
+        monitor: [metrics: [:loss], every: 5],
+        log: false
+      )
+      assert %Axon.Loop{} = loop
+    end
+
+    test "language_model accepts monitor: true" do
+      loop = Recipes.language_model(build_lm(), vocab_size: @num_classes, monitor: true, log: false)
+      assert %Axon.Loop{} = loop
+    end
+
+    test "regress accepts monitor: true" do
+      model = Axon.input("x", shape: {nil, @embed_dim}) |> Axon.dense(1, name: "out")
+      loop = Recipes.regress(model, monitor: true, log: false)
+      assert %Axon.Loop{} = loop
+    end
+  end
+
+  describe "adaptive option" do
+    test "classify accepts adaptive with skip_spikes" do
+      loop = Recipes.classify(build_classifier(),
+        num_classes: @num_classes,
+        adaptive: [skip_spikes: true],
+        log: false
+      )
+      assert %Axon.Loop{} = loop
+    end
+
+    test "language_model accepts adaptive with nan_halt" do
+      loop = Recipes.language_model(build_lm(),
+        vocab_size: @num_classes,
+        adaptive: [nan_halt: [patience: 3]],
+        log: false
+      )
+      assert %Axon.Loop{} = loop
+    end
+
+    test "regress accepts adaptive with log_grad_norm" do
+      model = Axon.input("x", shape: {nil, @embed_dim}) |> Axon.dense(1, name: "out")
+      loop = Recipes.regress(model, adaptive: [log_grad_norm: [every: 10]], log: false)
+      assert %Axon.Loop{} = loop
+    end
+
+    test "classify accepts both monitor and adaptive" do
+      loop = Recipes.classify(build_classifier(),
+        num_classes: @num_classes,
+        monitor: true,
+        adaptive: [skip_spikes: true, nan_halt: true],
+        log: false
+      )
+      assert %Axon.Loop{} = loop
     end
   end
 end

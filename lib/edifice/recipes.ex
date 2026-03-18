@@ -84,6 +84,8 @@ defmodule Edifice.Recipes do
     precision = Keyword.get(opts, :precision, nil)
     validation_data = Keyword.get(opts, :validation_data, nil)
     checkpoint_path = Keyword.get(opts, :checkpoint_path, nil)
+    monitor = Keyword.get(opts, :monitor, nil)
+    adaptive = Keyword.get(opts, :adaptive, nil)
     log = Keyword.get(opts, :log, true)
 
     model = maybe_apply_precision(model, precision)
@@ -111,6 +113,8 @@ defmodule Edifice.Recipes do
       |> maybe_validate(model, validation_data)
       |> Axon.Loop.early_stop("loss", patience: patience, mode: :min)
       |> maybe_checkpoint(checkpoint_path, validation_data)
+      |> maybe_attach_monitor(monitor)
+      |> maybe_attach_adaptive(adaptive)
 
     maybe_log(loop, log)
   end
@@ -155,6 +159,8 @@ defmodule Edifice.Recipes do
     precision = Keyword.get(opts, :precision, nil)
     validation_data = Keyword.get(opts, :validation_data, nil)
     checkpoint_path = Keyword.get(opts, :checkpoint_path, nil)
+    monitor = Keyword.get(opts, :monitor, nil)
+    adaptive = Keyword.get(opts, :adaptive, nil)
     log = Keyword.get(opts, :log, true)
 
     model = maybe_apply_precision(model, precision)
@@ -175,6 +181,8 @@ defmodule Edifice.Recipes do
       |> Axon.Loop.metric(&perplexity_metric/2, "perplexity")
       |> maybe_validate(model, validation_data)
       |> maybe_checkpoint(checkpoint_path, validation_data)
+      |> maybe_attach_monitor(monitor)
+      |> maybe_attach_adaptive(adaptive)
 
     maybe_log(loop, log)
   end
@@ -224,6 +232,8 @@ defmodule Edifice.Recipes do
     precision = Keyword.get(opts, :precision, nil)
     validation_data = Keyword.get(opts, :validation_data, nil)
     checkpoint_path = Keyword.get(opts, :checkpoint_path, nil)
+    monitor = Keyword.get(opts, :monitor, nil)
+    adaptive = Keyword.get(opts, :adaptive, nil)
     log = Keyword.get(opts, :log, true)
 
     model = maybe_apply_precision(model, precision)
@@ -240,6 +250,8 @@ defmodule Edifice.Recipes do
       |> Axon.Loop.trainer(loss_fn, optimizer)
       |> maybe_validate(model, validation_data)
       |> maybe_checkpoint(checkpoint_path, validation_data)
+      |> maybe_attach_monitor(monitor)
+      |> maybe_attach_adaptive(adaptive)
 
     maybe_log(loop, log)
   end
@@ -297,6 +309,8 @@ defmodule Edifice.Recipes do
     precision = Keyword.get(opts, :precision, nil)
     validation_data = Keyword.get(opts, :validation_data, nil)
     checkpoint_path = Keyword.get(opts, :checkpoint_path, nil)
+    monitor = Keyword.get(opts, :monitor, nil)
+    adaptive = Keyword.get(opts, :adaptive, nil)
     log = Keyword.get(opts, :log, true)
 
     model = maybe_apply_precision(model, precision)
@@ -315,6 +329,8 @@ defmodule Edifice.Recipes do
       |> maybe_validate(model, validation_data)
       |> attach_init_state(init_state)
       |> maybe_checkpoint(checkpoint_path, validation_data)
+      |> maybe_attach_monitor(monitor)
+      |> maybe_attach_adaptive(adaptive)
 
     maybe_log(loop, log)
   end
@@ -360,6 +376,8 @@ defmodule Edifice.Recipes do
     precision = Keyword.get(opts, :precision, nil)
     validation_data = Keyword.get(opts, :validation_data, nil)
     checkpoint_path = Keyword.get(opts, :checkpoint_path, nil)
+    monitor = Keyword.get(opts, :monitor, nil)
+    adaptive = Keyword.get(opts, :adaptive, nil)
     log = Keyword.get(opts, :log, true)
 
     model = maybe_apply_precision(model, precision)
@@ -395,6 +413,8 @@ defmodule Edifice.Recipes do
       |> maybe_validate(model, validation_data)
       |> Axon.Loop.early_stop("loss", patience: patience, mode: :min)
       |> maybe_checkpoint(checkpoint_path, validation_data)
+      |> maybe_attach_monitor(monitor)
+      |> maybe_attach_adaptive(adaptive)
 
     maybe_log(loop, log)
   end
@@ -531,6 +551,31 @@ defmodule Edifice.Recipes do
   end
 
   defp maybe_log(loop, false), do: loop
+
+  defp maybe_attach_monitor(loop, nil), do: loop
+  defp maybe_attach_monitor(loop, true), do: Edifice.Training.Monitor.attach(loop)
+  defp maybe_attach_monitor(loop, opts) when is_list(opts), do: Edifice.Training.Monitor.attach(loop, opts)
+
+  defp maybe_attach_adaptive(loop, nil), do: loop
+
+  defp maybe_attach_adaptive(loop, opts) when is_list(opts) do
+    loop
+    |> maybe_skip_spikes(Keyword.get(opts, :skip_spikes))
+    |> maybe_nan_halt(Keyword.get(opts, :nan_halt))
+    |> maybe_log_grad_norm(Keyword.get(opts, :log_grad_norm))
+  end
+
+  defp maybe_skip_spikes(loop, nil), do: loop
+  defp maybe_skip_spikes(loop, true), do: Edifice.Training.Adaptive.skip_on_loss_spike(loop)
+  defp maybe_skip_spikes(loop, opts) when is_list(opts), do: Edifice.Training.Adaptive.skip_on_loss_spike(loop, opts)
+
+  defp maybe_nan_halt(loop, nil), do: loop
+  defp maybe_nan_halt(loop, true), do: Edifice.Training.Adaptive.halt_on_persistent_nan(loop)
+  defp maybe_nan_halt(loop, opts) when is_list(opts), do: Edifice.Training.Adaptive.halt_on_persistent_nan(loop, opts)
+
+  defp maybe_log_grad_norm(loop, nil), do: loop
+  defp maybe_log_grad_norm(loop, true), do: Edifice.Training.Adaptive.log_grad_norm(loop)
+  defp maybe_log_grad_norm(loop, opts) when is_list(opts), do: Edifice.Training.Adaptive.log_grad_norm(loop, opts)
 
   defp warmup_cosine_schedule(peak_lr, warmup_steps, total_steps) do
     decay_steps = max(total_steps - warmup_steps, 1)

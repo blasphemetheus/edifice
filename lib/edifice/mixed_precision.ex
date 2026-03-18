@@ -67,7 +67,7 @@ defmodule Edifice.MixedPrecision do
     :adaln_gate
   ]
 
-  @type preset :: :bf16 | :fp16
+  @type preset :: :bf16 | :fp16 | :fp8
 
   @doc """
   Create a mixed precision policy.
@@ -78,6 +78,8 @@ defmodule Edifice.MixedPrecision do
 
   - `:bf16` — `params: f32, compute: bf16, output: bf16`
   - `:fp16` — `params: f32, compute: f16, output: f16`
+  - `:fp8` — `params: f32, compute: bf16, output: bf16` (same as bf16 for compute;
+    use `Edifice.Quantization.FP8.quantize/2` to quantize params post-init)
 
   ## Examples
 
@@ -91,6 +93,11 @@ defmodule Edifice.MixedPrecision do
 
   def policy(:fp16) do
     Axon.MixedPrecision.create_policy(params: {:f, 32}, compute: {:f, 16}, output: {:f, 16})
+  end
+
+  def policy(:fp8) do
+    # FP8 uses bf16 compute — params are quantized separately via Quantization.FP8
+    Axon.MixedPrecision.create_policy(params: {:f, 32}, compute: {:bf, 16}, output: {:bf, 16})
   end
 
   @doc """

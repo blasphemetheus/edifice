@@ -750,4 +750,31 @@ defmodule Edifice do
       opts
     end
   end
+
+  # ============================================================================
+  # FP8 Quantization
+  # ============================================================================
+
+  @doc """
+  Quantize model parameters to FP8 for inference.
+
+  See `Edifice.Quantization.FP8.quantize/2` for full documentation.
+
+  ## Example
+
+      params = Axon.Loop.run(loop, data, %{}, epochs: 10)
+      q_params = Edifice.quantize_fp8(params)
+  """
+  def quantize_fp8(params, opts \\ []) do
+    Edifice.Quantization.FP8.quantize(params, opts)
+  end
+
+  @doc """
+  Dequantize FP8 parameters back to original precision.
+
+  See `Edifice.Quantization.FP8.dequantize/1` for full documentation.
+  """
+  def dequantize_fp8(params) do
+    Edifice.Quantization.FP8.dequantize(params)
+  end
 end
