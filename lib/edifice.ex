@@ -777,4 +777,22 @@ defmodule Edifice do
   def dequantize_fp8(params) do
     Edifice.Quantization.FP8.dequantize(params)
   end
+
+  # ============================================================================
+  # Multi-GPU Sharding
+  # ============================================================================
+
+  @doc """
+  Create a data-parallel inference function across multiple devices.
+
+  See `Edifice.Sharding.data_parallel/3` for full documentation.
+
+  ## Example
+
+      dp_predict = Edifice.data_parallel(predict_fn, params, num_devices: 4)
+      output = dp_predict.(input)
+  """
+  def data_parallel(predict_fn, params, opts \\ []) do
+    Edifice.Sharding.data_parallel(predict_fn, params, opts)
+  end
 end
