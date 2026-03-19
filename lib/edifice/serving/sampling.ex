@@ -128,4 +128,67 @@ defmodule Edifice.Serving.Sampling do
     token_ids = Nx.argmax(Nx.add(logits, gumbel), axis: -1)
     {token_ids, new_key}
   end
+
+  @doc """
+  Adaptive sampling with runtime-determined strategy.
+
+  Unlike `sample/3` which decides top-k/top-p at compile time,
+  this function uses `Nx.Defn.Kernel.if` to branch on tensor
+  values at runtime. Useful when sampling parameters vary per
+  step (e.g., adaptive temperature based on entropy).
+
+  All parameters are tensors (not Elixir values), so branching
+  happens on-device via XLA conditional.
+
+  ## Parameters
+
+    * `logits` - `[batch, vocab_size]` raw logits
+    * `key` - PRNG key
+    * `temperature` - Scalar tensor (> 0)
+    * `top_k` - Scalar tensor (0 = disabled)
+
+  ## Returns
+
+    `{token_ids, new_key}`
+  """
+  defn sample_adaptive(logits, key, temperature, top_k) do
+    # Temperature scaling (always applied)
+    scaled = Nx.divide(Nx.as_type(logits, :f32), Nx.max(temperature, 1.0e-8))
+
+    # Top-k filtering: only if top_k > 0 (runtime branch)
+    filtered =
+      if Nx.greater(top_k, 0) do
+        apply_top_k(scaled, top_k)
+      else
+        scaled
+      end
+
+    categorical_sample(filtered, key)
+  end
+
+  @doc """
+  Greedy or sampled decoding based on a runtime temperature tensor.
+
+  Uses `Nx.Defn.Kernel.if` to branch on-device:
+  - temperature <= 0.01: greedy (argmax)
+  - temperature > 0.01: Gumbel-max sampling
+
+  ## Parameters
+
+    * `logits` - `[batch, vocab_size]` raw logits
+    * `key` - PRNG key
+    * `temperature` - Scalar tensor
+
+  ## Returns
+
+    `{token_ids, new_key}`
+  """
+  defn sample_greedy_or_stochastic(logits, key, temperature) do
+    if Nx.less_equal(temperature, 0.01) do
+      {Nx.argmax(logits, axis: -1), key}
+    else
+      scaled = Nx.divide(Nx.as_type(logits, :f32), temperature)
+      categorical_sample(scaled, key)
+    end
+  end
 end

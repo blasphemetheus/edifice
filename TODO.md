@@ -16,6 +16,14 @@ by running the entire decode loop on-device. Requires:
 - Accumulator tensor for generated token IDs
 Blocked on: validating that `while` + `top_k` + `Nx.Random` all compose inside EXLA JIT.
 
+Update: `Nx.Defn.Kernel.while` cannot contain Axon predict_fn closures (while
+requires all state to be tensors). A true on-device loop would require inlining
+the model forward pass as raw Nx ops inside defn, or modifying Axon.Compiler to
+emit a defn-compatible function instead of a closure. Not worth the effort unless
+a specific model's generation latency is dominated by Elixir↔XLA overhead.
+See `Edifice.Serving.GenerateFused` for the practical compromise: fused defn
+sampling with the loop still in Elixir.
+
 ## Local nx/exla fork (`EDIFICE_LOCAL_NX=1`)
 
 Points to `../nx` (blasphemetheus/nx fork). Key branches:
