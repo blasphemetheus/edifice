@@ -56,7 +56,6 @@
 
 constexpr float DT_MIN = 0.001f;
 constexpr float DT_MAX = 0.1f;
-#define MAX_SEQ_LEN 1024
 #define MAX_STATE 32
 
 // ============================================================================
@@ -78,6 +77,7 @@ __global__ void fused_selective_scan_backward_kernel(
     io_type* __restrict__ grad_dt,           // [B, T, H]
     float* __restrict__ grad_B,            // [B, T, S] — atomicAdd target (stays float for atomicAdd)
     float* __restrict__ grad_C,            // [B, T, S] — atomicAdd target (stays float for atomicAdd)
+    float* __restrict__ workspace,         // [B, H, T, S] — h_prev storage (global memory)
     int batch, int seq_len, int hidden, int state_size
 ) {
     int b = blockIdx.x;
@@ -94,10 +94,10 @@ __global__ void fused_selective_scan_backward_kernel(
     // ========================================
     // Pass 1: Forward — recompute and store h_state per timestep
     // ========================================
-    // We store h_state[t][s] in local arrays for the backward pass
-    // h_prev_store[t][s] = h_state before update at timestep t
+    // h_prev values stored in global memory workspace[b][h][t][s]
     float h_state[MAX_STATE];
-    float h_prev_store[MAX_SEQ_LEN][MAX_STATE];
+    int ws_stride = seq_len * state_size;
+    float* my_h_prev = workspace + (b * hidden + h) * ws_stride;
 
     for (int s = 0; s < state_size && s < MAX_STATE; s++) {
         h_state[s] = 0.0f;
@@ -112,7 +112,7 @@ __global__ void fused_selective_scan_backward_kernel(
         int bc_idx = b * seq_len * state_size + t * state_size;
 
         for (int s = 0; s < state_size && s < MAX_STATE; s++) {
-            h_prev_store[t][s] = h_state[s];
+            my_h_prev[t * state_size + s] = h_state[s];
 
             float A_bar = expf(dt_t * A_diag[s]);
             float B_bar = dt_t * IO_LOAD(B, bc_idx + s);
@@ -143,7 +143,7 @@ __global__ void fused_selective_scan_backward_kernel(
         for (int s = 0; s < state_size && s < MAX_STATE; s++) {
             float C_s = IO_LOAD(C, bc_idx + s);
             float B_s = IO_LOAD(B, bc_idx + s);
-            float h_prev_s = h_prev_store[t][s];
+            float h_prev_s = my_h_prev[t * state_size + s];
             float A_bar = expf(dt_t * A_diag[s]);
 
             // h_after_update[s] = A_bar * h_prev_s + dt_t * B_s * x_t
@@ -215,6 +215,11 @@ int fused_selective_scan_backward_launch(
     cudaMemsetAsync(grad_B, 0, bts * sizeof(float), stream);
     cudaMemsetAsync(grad_C, 0, bts * sizeof(float), stream);
 
+    // Allocate workspace for h_prev storage: [B, H, T, S]
+    size_t ws_size = (size_t)batch * hidden * seq_len * state_size * sizeof(float);
+    float* workspace;
+    cudaMallocAsync(&workspace, ws_size, stream);
+
     int threads_per_block = (hidden < 256) ? hidden : 256;
     int blocks_y = (hidden + threads_per_block - 1) / threads_per_block;
     dim3 grid(batch, blocks_y);
@@ -223,8 +228,11 @@ int fused_selective_scan_backward_launch(
     fused_selective_scan_backward_kernel<<<grid, block, 0, stream>>>(
         x, dt, A, B, C, grad_output,
         grad_x, grad_dt, grad_B, grad_C,
+        workspace,
         batch, seq_len, hidden, state_size
     );
+
+    cudaFreeAsync(workspace, stream);
 
     return (int)cudaGetLastError();
 }
@@ -274,6 +282,11 @@ ffi::Error fused_selective_scan_backward_ffi_impl(
     cudaMemsetAsync(reinterpret_cast<float*>(grad_C->untyped_data()), 0,
                     bts * sizeof(float), stream);
 
+    // Allocate workspace for h_prev storage: [B, H, T, S]
+    size_t ws_size = (size_t)batch * hidden * seq_len * state_size * sizeof(float);
+    float* workspace;
+    cudaMallocAsync(&workspace, ws_size, stream);
+
     int threads_per_block = (hidden < 256) ? hidden : 256;
     int blocks_y = (hidden + threads_per_block - 1) / threads_per_block;
     dim3 grid(batch, blocks_y);
@@ -290,8 +303,11 @@ ffi::Error fused_selective_scan_backward_ffi_impl(
         reinterpret_cast<io_type*>(grad_dt->untyped_data()),
         reinterpret_cast<float*>(grad_B->untyped_data()),
         reinterpret_cast<float*>(grad_C->untyped_data()),
+        workspace,
         batch, seq_len, hidden, state_size
     );
+
+    cudaFreeAsync(workspace, stream);
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
