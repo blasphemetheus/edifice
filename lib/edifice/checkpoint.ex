@@ -65,11 +65,24 @@ defmodule Edifice.Checkpoint do
 
     * `:metadata` - Optional map of training metadata to store alongside
       parameters (epoch, loss, architecture, hyperparameters, etc.)
+    * `:format` - Checkpoint format: `:nx` (default) or `:safetensors`.
+      Safetensors enables cross-ecosystem sharing (PyTorch, JAX, HuggingFace).
+      Note: safetensors format does not support metadata storage.
     * `:compressed` - Compression level 0-9 (default: 0, no compression).
-      Higher levels reduce file size but slow down save/load.
+      Only applies to `:nx` format. Higher levels reduce file size but slow down save/load.
   """
   @spec save(map(), String.t(), keyword()) :: :ok
   def save(params, path, opts \\ []) do
+    format = Keyword.get(opts, :format, :nx)
+
+    if format == :safetensors do
+      export_safetensors(params, path, opts)
+    else
+      save_nx(params, path, opts)
+    end
+  end
+
+  defp save_nx(params, path, opts) do
     metadata = Keyword.get(opts, :metadata, nil)
     compressed = Keyword.get(opts, :compressed, 0)
 
@@ -124,8 +137,10 @@ defmodule Edifice.Checkpoint do
 
   ## Options
 
+    * `:format` - Checkpoint format: `:nx` (default) or `:safetensors`.
+      Auto-detected from file extension if not specified.
     * `:return_metadata` - If `true`, returns `{params, metadata}` tuple
-      (default: `false`, returns just params)
+      (default: `false`, returns just params). Only for `:nx` format.
     * `:backend` - Backend to load tensors into (default: `Nx.BinaryBackend`)
 
   ## Returns
@@ -134,6 +149,18 @@ defmodule Edifice.Checkpoint do
   """
   @spec load(String.t(), keyword()) :: map() | {map(), map()}
   def load(path, opts \\ []) do
+    format = Keyword.get_lazy(opts, :format, fn ->
+      if String.ends_with?(path, ".safetensors"), do: :safetensors, else: :nx
+    end)
+
+    if format == :safetensors do
+      import_safetensors(path, opts)
+    else
+      load_nx(path, opts)
+    end
+  end
+
+  defp load_nx(path, opts) do
     return_metadata = Keyword.get(opts, :return_metadata, false)
 
     file_binary = File.read!(path)
@@ -273,6 +300,99 @@ defmodule Edifice.Checkpoint do
     |> String.replace("{epoch}", to_string(state.epoch))
     |> String.replace("{step}", to_string(state.iteration))
   end
+
+  # ============================================================================
+  # Safetensors export/import
+  # ============================================================================
+
+  @doc """
+  Export model parameters to Safetensors format.
+
+  Saves in the `.safetensors` format used by HuggingFace, PyTorch, and JAX.
+  Enables cross-ecosystem model sharing.
+
+  Nested parameter maps are flattened with dot-separated keys:
+  `%{"layer" => %{"kernel" => t}}` becomes `%{"layer.kernel" => t}`.
+
+  ## Options
+
+    * `:metadata` - Optional metadata map (stored in safetensors header).
+      Values must be strings.
+  """
+  @spec export_safetensors(map(), String.t(), keyword()) :: :ok
+  def export_safetensors(params, path, opts \\ []) do
+    ensure_safetensors!()
+    data = extract_params(params)
+    flat = flatten_to_dot_keys(data)
+
+    dir = Path.dirname(path)
+    if dir != "." and dir != "", do: File.mkdir_p!(dir)
+
+    Safetensors.write!(path, flat)
+
+    size = File.stat!(path).size
+    Logger.info("[Checkpoint] Exported #{readable_size(size)} safetensors to #{path} (#{map_size(flat)} tensors)")
+
+    :ok
+  end
+
+  @doc """
+  Import model parameters from Safetensors format.
+
+  Loads a `.safetensors` file and reconstructs the nested parameter map
+  from dot-separated keys.
+  """
+  @spec import_safetensors(String.t(), keyword()) :: map()
+  def import_safetensors(path, _opts \\ []) do
+    ensure_safetensors!()
+    flat = Safetensors.read!(path)
+
+    size = File.stat!(path).size
+    Logger.info("[Checkpoint] Imported #{readable_size(size)} safetensors from #{path} (#{map_size(flat)} tensors)")
+
+    unflatten_from_dot_keys(flat)
+  end
+
+  defp ensure_safetensors! do
+    unless Code.ensure_loaded?(Safetensors) do
+      raise RuntimeError,
+            "Safetensors export requires the :safetensors dependency. " <>
+              "Add {:safetensors, \"~> 0.1.3\"} to your deps."
+    end
+  end
+
+  defp flatten_to_dot_keys(map, prefix \\ []) do
+    Enum.flat_map(map, fn
+      {k, %Nx.Tensor{} = t} ->
+        key = Enum.join(prefix ++ [k], ".")
+        [{key, t}]
+
+      {k, v} when is_map(v) and not is_struct(v) ->
+        flatten_to_dot_keys(v, prefix ++ [k])
+
+      _ ->
+        []
+    end)
+    |> Map.new()
+  end
+
+  defp unflatten_from_dot_keys(flat) do
+    Enum.reduce(flat, %{}, fn {dot_key, tensor}, acc ->
+      keys = String.split(dot_key, ".")
+      put_nested(acc, keys, tensor)
+    end)
+  end
+
+  defp put_nested(map, [key], value), do: Map.put(map, key, value)
+
+  defp put_nested(map, [key | rest], value) do
+    nested = Map.get(map, key, %{})
+    Map.put(map, key, put_nested(nested, rest, value))
+  end
+
+  # ============================================================================
+  # Helpers
+  # ============================================================================
 
   defp readable_size(n) when n < 1_024, do: "#{n} B"
   defp readable_size(n) when n < 1_048_576, do: "#{Float.round(n / 1_024, 1)} KB"

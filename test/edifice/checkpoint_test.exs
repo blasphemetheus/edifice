@@ -170,8 +170,6 @@ defmodule Edifice.CheckpointTest do
 
   describe "FP8 quantized params" do
     test "saves and loads dequantized FP8 parameters", %{tmp_dir: dir} do
-      # Nx.serialize only handles pure tensor containers.
-      # For FP8 quantized params, dequantize before saving.
       q_params = Edifice.Quantization.FP8.quantize(@params)
       deq_params = Edifice.Quantization.FP8.dequantize(q_params)
       path = Path.join(dir, "fp8_deq.nx")
@@ -181,6 +179,62 @@ defmodule Edifice.CheckpointTest do
         loaded = Checkpoint.load(path)
 
         assert Nx.all_close(loaded["dense_0"]["kernel"], deq_params["dense_0"]["kernel"])
+               |> Nx.to_number() == 1
+      end)
+    end
+  end
+
+  describe "safetensors format" do
+    test "save and load with format: :safetensors", %{tmp_dir: dir} do
+      path = Path.join(dir, "model.safetensors")
+
+      capture_log(fn ->
+        Checkpoint.save(@params, path, format: :safetensors)
+        loaded = Checkpoint.load(path)
+
+        assert Nx.all_close(loaded["dense_0"]["kernel"], @params["dense_0"]["kernel"])
+               |> Nx.to_number() == 1
+
+        assert Nx.all_close(loaded["dense_1"]["bias"], @params["dense_1"]["bias"])
+               |> Nx.to_number() == 1
+      end)
+    end
+
+    test "auto-detects safetensors from extension", %{tmp_dir: dir} do
+      path = Path.join(dir, "auto.safetensors")
+
+      capture_log(fn ->
+        Checkpoint.save(@params, path, format: :safetensors)
+        # load auto-detects from .safetensors extension
+        loaded = Checkpoint.load(path)
+
+        assert is_map(loaded)
+        assert Map.has_key?(loaded, "dense_0")
+      end)
+    end
+
+    test "preserves nested structure via dot keys", %{tmp_dir: dir} do
+      path = Path.join(dir, "nested.safetensors")
+
+      capture_log(fn ->
+        Checkpoint.save(@params, path, format: :safetensors)
+        loaded = Checkpoint.load(path)
+
+        # Should reconstruct nested map from dot-separated keys
+        assert is_map(loaded["dense_0"])
+        assert is_struct(loaded["dense_0"]["kernel"], Nx.Tensor)
+        assert Nx.shape(loaded["dense_0"]["kernel"]) == {2, 3}
+      end)
+    end
+
+    test "export_safetensors and import_safetensors directly", %{tmp_dir: dir} do
+      path = Path.join(dir, "direct.safetensors")
+
+      capture_log(fn ->
+        Checkpoint.export_safetensors(@params, path)
+        loaded = Checkpoint.import_safetensors(path)
+
+        assert Nx.all_close(loaded["dense_0"]["kernel"], @params["dense_0"]["kernel"])
                |> Nx.to_number() == 1
       end)
     end
