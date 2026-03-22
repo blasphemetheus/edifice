@@ -196,6 +196,68 @@ defmodule Edifice.Checkpoint do
   end
 
   # ============================================================================
+  # Loop state serialization (resume training)
+  # ============================================================================
+
+  @doc """
+  Serialize an Axon.Loop state for later resumption.
+
+  Wraps `Axon.Loop.serialize_state/2` to save the full loop state
+  (model params, optimizer state, epoch, step) to a file.
+
+  ## Parameters
+
+    * `loop_state` - The state returned by `Axon.Loop.run/4`
+    * `path` - File path to save to
+  """
+  @spec save_loop_state(map(), String.t()) :: :ok
+  def save_loop_state(loop_state, path) do
+    serialized = Axon.Loop.serialize_state(loop_state)
+    dir = Path.dirname(path)
+    if dir != "." and dir != "", do: File.mkdir_p!(dir)
+    File.write!(path, serialized)
+    size = byte_size(serialized)
+    Logger.info("[Checkpoint] Saved loop state #{readable_size(size)} to #{path}")
+    :ok
+  end
+
+  @doc """
+  Resume training from a saved loop state.
+
+  Wraps `Axon.Loop.from_state/2` to restore a loop from a previously
+  serialized state. Use with `Axon.Loop.run/4` to continue training.
+
+  ## Parameters
+
+    * `loop` - The `Axon.Loop` to resume
+    * `path` - File path to the saved loop state
+
+  ## Returns
+
+    An updated `Axon.Loop` that will resume from the saved state.
+
+  ## Example
+
+      loop = Edifice.Recipes.classify(model, num_classes: 10)
+
+      # First run
+      state = Axon.Loop.run(loop, data, %{}, epochs: 5)
+      Edifice.Checkpoint.save_loop_state(state, "checkpoints/state.bin")
+
+      # Later: resume
+      loop = Edifice.Checkpoint.resume(loop, "checkpoints/state.bin")
+      state = Axon.Loop.run(loop, data, %{}, epochs: 10)
+  """
+  @spec resume(Axon.Loop.t(), String.t()) :: Axon.Loop.t()
+  def resume(%Axon.Loop{} = loop, path) do
+    serialized = File.read!(path)
+    loop_state = Axon.Loop.deserialize_state(serialized)
+    size = byte_size(serialized)
+    Logger.info("[Checkpoint] Resuming from #{readable_size(size)} state at #{path}")
+    Axon.Loop.from_state(loop, loop_state)
+  end
+
+  # ============================================================================
   # Axon.Loop integration
   # ============================================================================
 
