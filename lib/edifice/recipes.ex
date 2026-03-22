@@ -282,7 +282,10 @@ defmodule Edifice.Recipes do
 
   - `:strategy` — Fine-tuning strategy (default: `:head_only`)
     - `:head_only` — Freeze all base layers, train only the classification head
-    - `:lora` — Freeze base, unfreeze head + any LoRA adapter params
+    - `:lora` — Freeze base, unfreeze head + any LoRA adapter params.
+      Note: LoRA layers must be injected at model build time using
+      `Edifice.Meta.LoRA.wrap/3`. This strategy only handles the
+      freeze/unfreeze pattern for already-present LoRA layers.
     - `:full` — Fine-tune all parameters (no freezing)
   - `:head_pattern` — Regex for head layers to keep trainable (default: `~r/head|classifier|out/`)
   - `:learning_rate` — Learning rate (default: 2.0e-5)

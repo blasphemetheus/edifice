@@ -59,6 +59,10 @@ defmodule Edifice.MixProject do
       {:safetensors, "~> 0.1.3", optional: true},
       {:req, "~> 0.5", optional: true},
 
+      # ML utilities (optional)
+      {:scholar, "~> 0.4", optional: true},
+      {:tokenizers, "~> 0.5", optional: true},
+
       # Dev & Test
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
