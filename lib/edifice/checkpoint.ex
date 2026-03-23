@@ -382,7 +382,7 @@ defmodule Edifice.Checkpoint do
       Values must be strings.
   """
   @spec export_safetensors(map(), String.t(), keyword()) :: :ok
-  def export_safetensors(params, path, opts \\ []) do
+  def export_safetensors(params, path, _opts \\ []) do
     ensure_safetensors!()
     data = extract_params(params)
     flat = flatten_to_dot_keys(data)
