@@ -390,7 +390,7 @@ defmodule Edifice.Checkpoint do
     dir = Path.dirname(path)
     if dir != "." and dir != "", do: File.mkdir_p!(dir)
 
-    Safetensors.write!(path, flat)
+    apply(Safetensors, :write!, [path, flat])
 
     size = File.stat!(path).size
     Logger.info("[Checkpoint] Exported #{readable_size(size)} safetensors to #{path} (#{map_size(flat)} tensors)")
@@ -407,7 +407,7 @@ defmodule Edifice.Checkpoint do
   @spec import_safetensors(String.t(), keyword()) :: map()
   def import_safetensors(path, _opts \\ []) do
     ensure_safetensors!()
-    flat = Safetensors.read!(path)
+    flat = apply(Safetensors, :read!, [path])
 
     size = File.stat!(path).size
     Logger.info("[Checkpoint] Imported #{readable_size(size)} safetensors from #{path} (#{map_size(flat)} tensors)")

@@ -51,7 +51,7 @@ defmodule Edifice.Display.TrainingPlot do
         }
       }
 
-      Kino.VegaLite.new(spec)
+      apply(Kino.VegaLite, :new, [spec])
     else
       :no_kino
     end
@@ -102,11 +102,11 @@ defmodule Edifice.Display.TrainingPlot do
             end
 
           if value do
-            Kino.VegaLite.push(widget, %{
+            apply(Kino.VegaLite, :push, [widget, %{
               "step" => step,
               "value" => value,
               "metric" => metric_name
-            })
+            }])
           end
         end)
       end
