@@ -5,8 +5,15 @@
 // a d x d state matrix S in shared memory and performs matrix-vector products
 // (S @ k, S @ q) at each timestep.
 //
-// Thread layout: one thread BLOCK per (batch, head) pair, d threads per block.
-// Each thread owns one row of the state matrix S[d][d].
+// Thread layout: one thread BLOCK per (batch, head) pair.
+// TILE_K threads per row, head_dim * TILE_K threads per block (e.g., 64*4 = 256).
+// Each group of TILE_K threads cooperates on one row of S[d][d], parallelizing
+// dot products across lanes with warp shuffle reduction.
+//
+// Bank conflict elimination: S matrix uses stride (head_dim + 1) instead of
+// head_dim, offsetting consecutive rows by 1 bank. Without this, all rows
+// map to the same bank at any given column j (since head_dim=64 is a multiple
+// of 32 banks), causing 32-way serialization on every shared memory access.
 //
 // DeltaNet recurrence:
 //   retrieval = S_{t-1} @ k_t
@@ -30,12 +37,6 @@
 //
 // Output:
 //   output: [B, T, H, d] — retrieval outputs per head
-//
-// Shared memory budget (head_dim=64):
-//   S matrix: 64*64*4 = 16KB
-//   k_shared: 64*4 = 256 bytes
-//   q_shared: 64*4 = 256 bytes
-//   Total: ~17KB — well within 48KB limit
 
 #include <cuda_runtime.h>
 #include "precision.cuh"
@@ -62,22 +63,37 @@ __global__ void fused_delta_rule_scan_kernel(
     // Thread block assignment: one block per (batch, head)
     int b = blockIdx.x;   // batch index
     int h = blockIdx.y;   // head index
-    int i = threadIdx.x;  // row index in S matrix (0..head_dim-1)
+    int tid = threadIdx.x;
 
-    if (i >= head_dim) return;
+    // Tiling: TILE_K threads per row for dot product parallelism
+    int tile_k = blockDim.x / head_dim;
+    int row = tid / tile_k;   // which row of S (0..head_dim-1)
+    int lane = tid % tile_k;  // which lane within the row (0..tile_k-1)
+
+    if (row >= head_dim) return;
+
+    // Each lane handles a chunk of the inner dimension
+    int chunk = head_dim / tile_k;
+    int j_start = lane * chunk;
+    int j_end = j_start + chunk;
 
     // Shared memory layout:
-    //   S[head_dim][head_dim] — state matrix (each thread owns row i)
+    //   S[head_dim][s_stride] — state matrix with padded stride for bank conflict elimination
     //   k_shared[head_dim]    — current timestep's k vector
     //   q_shared[head_dim]    — current timestep's q vector
+    //
+    // Bank conflict fix: stride = head_dim + 1 ensures consecutive rows
+    // offset by 1 bank (32 banks × 4 bytes). Without padding, S[0][j] and
+    // S[1][j] map to the same bank when head_dim % 32 == 0.
+    int s_stride = head_dim + 1;
     extern __shared__ float smem[];
-    float* S = smem;                                    // [head_dim][head_dim]
-    float* k_shared = smem + head_dim * head_dim;       // [head_dim]
-    float* q_shared = k_shared + head_dim;              // [head_dim]
+    float* S = smem;                                         // [head_dim][s_stride]
+    float* k_shared = smem + head_dim * s_stride;            // [head_dim]
+    float* q_shared = k_shared + head_dim;                   // [head_dim]
 
-    // Initialize state matrix to zero
-    for (int j = 0; j < head_dim; j++) {
-        S[i * head_dim + j] = 0.0f;
+    // Initialize state matrix to zero (each lane handles its chunk of the row)
+    for (int j = j_start; j < j_end; j++) {
+        S[row * s_stride + j] = 0.0f;
     }
     __syncthreads();
 
@@ -96,52 +112,90 @@ __global__ void fused_delta_rule_scan_kernel(
     for (int t = 0; t < seq_len; t++) {
         int offset = base_bh + t * THd;  // offset for this (b, t, h) in [B,T,H,d]
 
-        // Step 1: Load k_t into shared memory (coalesced read, one element per thread)
-        k_shared[i] = IO_LOAD(k, offset + i);
+        // Step 1: Load k_t into shared memory (first head_dim threads load)
+        if (tid < head_dim) {
+            k_shared[tid] = IO_LOAD(k, offset + tid);
+        }
         __syncthreads();
 
-        // Step 2: Compute retrieval[i] = sum_j(S[i][j] * k_shared[j])
-        float retrieval = 0.0f;
-        for (int j = 0; j < head_dim; j++) {
-            retrieval += S[i * head_dim + j] * k_shared[j];
+        // Step 2: Compute retrieval[row] = sum_j(S[row][j] * k_shared[j])
+        // Each lane computes partial sum over its chunk, then reduce across lanes
+        float partial = 0.0f;
+        for (int j = j_start; j < j_end; j++) {
+            partial += S[row * s_stride + j] * k_shared[j];
         }
+        // Warp-level butterfly reduction across tile_k lanes
+        // All tile_k lanes for a row are consecutive in the warp (row*tile_k + lane),
+        // so __shfl_xor_sync correctly pairs them.
+        for (int offset_k = 1; offset_k < tile_k; offset_k *= 2) {
+            partial += __shfl_xor_sync(0xffffffff, partial, offset_k);
+        }
+        float retrieval = partial;  // all lanes now have the full dot product
 
         // Step 3: If alpha provided, apply scalar decay to state row
         if (alpha != NULL) {
             float alpha_val = IO_LOAD(alpha, alpha_base_bh + t * alpha_TH + h);
-            for (int j = 0; j < head_dim; j++) {
-                S[i * head_dim + j] *= alpha_val;
+            for (int j = j_start; j < j_end; j++) {
+                S[row * s_stride + j] *= alpha_val;
             }
-            // Recompute retrieval on decayed state
+            // Retrieval was computed on pre-decay S, so scale it too
             retrieval *= alpha_val;
         }
 
-        // Step 4: Compute error and scaled error
-        float v_i = IO_LOAD(v, offset + i);
-        float beta_i = IO_LOAD(beta, offset + i);
-        float error_i = v_i - retrieval;
-        float scaled_error_i = beta_i * error_i;
+        // Step 4: Compute error and scaled error (all lanes compute the same values)
+        float v_row = IO_LOAD(v, offset + row);
+        float beta_row = IO_LOAD(beta, offset + row);
+        float error_row = v_row - retrieval;
+        float scaled_error_row = beta_row * error_row;
 
-        // Step 5: Rank-1 update: S[i][j] += scaled_error[i] * k[j]
-        for (int j = 0; j < head_dim; j++) {
-            S[i * head_dim + j] += scaled_error_i * k_shared[j];
+        // Step 5: Rank-1 update: S[row][j] += scaled_error[row] * k[j]
+        // Each lane updates its chunk (no conflicts — different j ranges)
+        for (int j = j_start; j < j_end; j++) {
+            S[row * s_stride + j] += scaled_error_row * k_shared[j];
         }
         __syncthreads();
 
         // Step 6: Load q_t into shared memory
-        q_shared[i] = IO_LOAD(q, offset + i);
+        if (tid < head_dim) {
+            q_shared[tid] = IO_LOAD(q, offset + tid);
+        }
         __syncthreads();
 
-        // Step 7: Compute output[i] = sum_j(S[i][j] * q_shared[j])
-        float out_i = 0.0f;
-        for (int j = 0; j < head_dim; j++) {
-            out_i += S[i * head_dim + j] * q_shared[j];
+        // Step 7: Compute output[row] = sum_j(S[row][j] * q_shared[j])
+        float out_partial = 0.0f;
+        for (int j = j_start; j < j_end; j++) {
+            out_partial += S[row * s_stride + j] * q_shared[j];
+        }
+        for (int offset_k = 1; offset_k < tile_k; offset_k *= 2) {
+            out_partial += __shfl_xor_sync(0xffffffff, out_partial, offset_k);
         }
 
-        // Step 8: Write output
-        IO_STORE(output, offset + i, out_i);
+        // Step 8: Write output (only lane 0 per row writes)
+        if (lane == 0) {
+            IO_STORE(output, offset + row, out_partial);
+        }
         __syncthreads();
     }
+}
+
+// ============================================================================
+// Launch helpers
+// ============================================================================
+
+// Compute tile_k: how many threads per row of S
+// Target: at least 128 threads per block for decent occupancy
+// Constraint: head_dim * tile_k <= 1024 (max threads per block)
+static inline int compute_tile_k(int head_dim) {
+    if (head_dim >= 512) return 1;
+    if (head_dim >= 256) return 2;
+    // Default: 4 threads per row (256 threads for head_dim=64)
+    return 4;
+}
+
+static inline size_t compute_smem_bytes(int head_dim) {
+    int s_stride = head_dim + 1;
+    return (size_t)head_dim * s_stride * sizeof(float)   // S[d][d+1]
+         + 2 * head_dim * sizeof(float);                 // k_shared[d] + q_shared[d]
 }
 
 // ============================================================================
@@ -163,13 +217,10 @@ int fused_delta_rule_scan_launch(
     io_type* output,
     int batch, int seq_len, int num_heads, int head_dim
 ) {
-    // One thread block per (batch, head), head_dim threads per block
+    int tile_k = compute_tile_k(head_dim);
     dim3 grid(batch, num_heads);
-    dim3 block(head_dim);
-
-    // Shared memory: S[d][d] + k_shared[d] + q_shared[d]
-    size_t smem_bytes = (size_t)head_dim * head_dim * sizeof(float)
-                      + 2 * head_dim * sizeof(float);
+    dim3 block(head_dim * tile_k);
+    size_t smem_bytes = compute_smem_bytes(head_dim);
 
     fused_delta_rule_scan_kernel<<<grid, block, smem_bytes, stream>>>(
         q, k, v, beta, alpha, output,
@@ -238,10 +289,10 @@ ffi::Error fused_delta_net_scan_ffi_impl(
     int num_heads = static_cast<int>(dims[2]);
     int head_dim  = static_cast<int>(dims[3]);
 
+    int tile_k = compute_tile_k(head_dim);
     dim3 grid(batch, num_heads);
-    dim3 block(head_dim);
-    size_t smem_bytes = (size_t)head_dim * head_dim * sizeof(float)
-                      + 2 * head_dim * sizeof(float);
+    dim3 block(head_dim * tile_k);
+    size_t smem_bytes = compute_smem_bytes(head_dim);
 
     fused_delta_rule_scan_kernel<<<grid, block, smem_bytes, stream>>>(
         reinterpret_cast<const io_type*>(q.untyped_data()),
@@ -276,10 +327,10 @@ ffi::Error fused_gated_delta_net_scan_ffi_impl(
     int num_heads = static_cast<int>(dims[2]);
     int head_dim  = static_cast<int>(dims[3]);
 
+    int tile_k = compute_tile_k(head_dim);
     dim3 grid(batch, num_heads);
-    dim3 block(head_dim);
-    size_t smem_bytes = (size_t)head_dim * head_dim * sizeof(float)
-                      + 2 * head_dim * sizeof(float);
+    dim3 block(head_dim * tile_k);
+    size_t smem_bytes = compute_smem_bytes(head_dim);
 
     fused_delta_rule_scan_kernel<<<grid, block, smem_bytes, stream>>>(
         reinterpret_cast<const io_type*>(q.untyped_data()),

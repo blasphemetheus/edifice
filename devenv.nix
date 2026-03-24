@@ -57,6 +57,10 @@ in
     XLA_TARGET = "cuda12";
     XLA_FLAGS = "--xla_gpu_cuda_data_dir=${cuda.cuda_nvcc} --xla_gpu_per_fusion_autotune_cache_dir=$PWD/.cache/xla_autotune";
     ERL_FLAGS = "+P 4000000";
+
+    # Compile Edifice CUDA kernels directly into libexla.so (no symlinks needed)
+    EXLA_EXTRA_CUDA_DIR = "${toString ./.}/native/cuda";
+    EXLA_GPU_ARCH = "sm_120";
   };
 
   # Library path for CUDA

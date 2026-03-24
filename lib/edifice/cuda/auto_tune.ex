@@ -530,7 +530,7 @@ defmodule Edifice.CUDA.AutoTune do
       :gru_scan ->
         [rand({b, t, 3 * h}, dtype), rand({h, 3 * h}, dtype)]
 
-      # DeltaNet: q,k,v {B,T,heads,d} + beta {B,T,heads}
+      # DeltaNet: q,k,v,beta all {B,T,heads,d}
       :delta_net_scan ->
         {num_heads, head_dim} = head_split(h)
 
@@ -538,10 +538,10 @@ defmodule Edifice.CUDA.AutoTune do
           rand({b, t, num_heads, head_dim}, dtype),
           rand({b, t, num_heads, head_dim}, dtype),
           rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads}, dtype)
+          rand({b, t, num_heads, head_dim}, dtype)
         ]
 
-      # GatedDeltaNet: q,k,v {B,T,H,d} + beta {B,T,H} + alpha {B,T,H}
+      # GatedDeltaNet: q,k,v,beta {B,T,H,d} + alpha {B,T,H}
       :gated_delta_net_scan ->
         {num_heads, head_dim} = head_split(h)
 
@@ -549,7 +549,7 @@ defmodule Edifice.CUDA.AutoTune do
           rand({b, t, num_heads, head_dim}, dtype),
           rand({b, t, num_heads, head_dim}, dtype),
           rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads}, dtype),
+          rand({b, t, num_heads, head_dim}, dtype),
           rand({b, t, num_heads}, dtype)
         ]
 

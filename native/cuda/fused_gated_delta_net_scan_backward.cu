@@ -13,7 +13,12 @@
 //   d_alpha_t = sum_{i,j}(dS_gated[i][j] * S_{t-1}[i][j])  — scalar per (b,h) pair
 //   dS_{t-1} += alpha_t * dS_gated
 //
-// Same thread layout as DeltaNet backward: one block per (batch, head).
+// Same thread layout as forward: one block per (batch, head), TILE_K threads
+// per row for higher occupancy. Bank conflict elimination via S_STRIDE = d+1.
+//
+// Retrieval values from the forward recompute pass are stored in a global
+// memory workspace (allocated via cudaMallocAsync) instead of per-thread
+// stack arrays, avoiding register spills that degraded performance.
 //
 // Inputs:
 //   q:           [B, T, H, d]
@@ -33,8 +38,6 @@
 
 #include <cuda_runtime.h>
 #include "precision.cuh"
-
-#define MAX_SEQ_LEN 1024
 
 // ============================================================================
 // Kernel
@@ -57,23 +60,35 @@ __global__ void fused_gated_delta_net_scan_backward_kernel(
     io_type* __restrict__ grad_v,             // [B, T, H, d]
     io_type* __restrict__ grad_beta,          // [B, T, H, d]
     io_type* __restrict__ grad_alpha,         // [B, T, H]
+    float* __restrict__ retrieval_workspace,  // [B, H, d, T] global memory workspace
     int seq_len,
     int num_heads,
     int head_dim
 ) {
     int b = blockIdx.x;
     int h = blockIdx.y;
-    int i = threadIdx.x;
+    int tid = threadIdx.x;
 
-    if (i >= head_dim) return;
+    // Tiling: TILE_K threads per row
+    int tile_k = blockDim.x / head_dim;
+    int row = tid / tile_k;
+    int lane = tid % tile_k;
 
+    if (row >= head_dim) return;
+
+    int chunk = head_dim / tile_k;
+    int j_start = lane * chunk;
+    int j_end = j_start + chunk;
+
+    // Shared memory with bank conflict elimination
+    int s_stride = head_dim + 1;
     extern __shared__ float smem[];
-    float* S = smem;                                 // [d][d]
-    // smem[d*d..2*d*d-1] reserved for layout alignment
-    float* k_shared = smem + 2 * head_dim * head_dim; // [d]
-    float* q_shared = k_shared + head_dim;            // [d]
-    float* temp_shared = q_shared + head_dim;         // [d]
-    float* reduce_shared = temp_shared + head_dim;    // [1] for alpha gradient reduction
+    float* S = smem;                                          // [d][s_stride]
+    // Reserve second S block for alignment (backward needs extra scratch)
+    float* k_shared = smem + 2 * head_dim * s_stride;         // [d]
+    float* q_shared = k_shared + head_dim;                     // [d]
+    float* temp_shared = q_shared + head_dim;                  // [d]
+    float* reduce_shared = temp_shared + head_dim;             // [1]
 
     // Strides
     int THd = seq_len * num_heads * head_dim;
@@ -85,42 +100,54 @@ __global__ void fused_gated_delta_net_scan_backward_kernel(
     int alpha_TH = seq_len * num_heads;
     int alpha_base = b * alpha_TH + h;
 
+    // Workspace strides: [B, H, d, T] — each (b,h,row) has seq_len entries
+    int ws_base = (b * num_heads + h) * head_dim * seq_len + row * seq_len;
+
     // ========================================
-    // Pass 1: Forward — recompute S states, store retrieval values
+    // Pass 1: Forward — recompute S states, store retrieval values to workspace
     // ========================================
-    for (int j = 0; j < head_dim; j++) {
-        S[i * head_dim + j] = 0.0f;
+    for (int j = j_start; j < j_end; j++) {
+        S[row * s_stride + j] = 0.0f;
     }
     __syncthreads();
-
-    float local_retrieval[MAX_SEQ_LEN];
 
     for (int t = 0; t < seq_len; t++) {
         int offset = base_bh + t * Hd;
         float alpha_val = IO_LOAD(alpha, alpha_base + t * num_heads);
 
         // Apply alpha decay
-        for (int j = 0; j < head_dim; j++) {
-            S[i * head_dim + j] *= alpha_val;
+        for (int j = j_start; j < j_end; j++) {
+            S[row * s_stride + j] *= alpha_val;
         }
         __syncthreads();
 
-        k_shared[i] = IO_LOAD(k, offset + i);
+        if (tid < head_dim) {
+            k_shared[tid] = IO_LOAD(k, offset + tid);
+        }
         __syncthreads();
 
-        float retrieval = 0.0f;
-        for (int j = 0; j < head_dim; j++) {
-            retrieval += S[i * head_dim + j] * k_shared[j];
+        // Retrieval = S[row,:] @ k (tiled)
+        float partial = 0.0f;
+        for (int j = j_start; j < j_end; j++) {
+            partial += S[row * s_stride + j] * k_shared[j];
         }
-        local_retrieval[t] = retrieval;
+        for (int offset_k = 1; offset_k < tile_k; offset_k *= 2) {
+            partial += __shfl_xor_sync(0xffffffff, partial, offset_k);
+        }
 
-        float v_i = IO_LOAD(v, offset + i);
-        float beta_i = IO_LOAD(beta, offset + i);
-        float error_i = v_i - retrieval;
-        float scaled_error_i = beta_i * error_i;
+        // Store retrieval to global memory workspace (lane 0 writes)
+        if (lane == 0) {
+            retrieval_workspace[ws_base + t] = partial;
+        }
 
-        for (int j = 0; j < head_dim; j++) {
-            S[i * head_dim + j] += scaled_error_i * k_shared[j];
+        // Delta rule update
+        float v_row = IO_LOAD(v, offset + row);
+        float beta_row = IO_LOAD(beta, offset + row);
+        float error_row = v_row - partial;
+        float scaled_error_row = beta_row * error_row;
+
+        for (int j = j_start; j < j_end; j++) {
+            S[row * s_stride + j] += scaled_error_row * k_shared[j];
         }
         __syncthreads();
     }
@@ -128,140 +155,181 @@ __global__ void fused_gated_delta_net_scan_backward_kernel(
     // ========================================
     // Pass 2: Backward
     // ========================================
-    float dS_row[128];
-    for (int j = 0; j < head_dim; j++) {
-        dS_row[j] = 0.0f;
+    // dS_row: per-lane partial gradient for this row's chunk
+    // head_dim/tile_k elements per lane (e.g., 16 for tile_k=4, head_dim=64)
+    float dS_chunk[64];  // max head_dim/tile_k (supports head_dim up to 256)
+    for (int j = 0; j < chunk; j++) {
+        dS_chunk[j] = 0.0f;
     }
 
     for (int t = seq_len - 1; t >= 0; t--) {
         int offset = base_bh + t * Hd;
 
-        float q_i = IO_LOAD(q, offset + i);
-        float k_i = IO_LOAD(k, offset + i);
-        float v_i = IO_LOAD(v, offset + i);
-        float beta_i = IO_LOAD(beta, offset + i);
-        float do_i = IO_LOAD(grad_output, offset + i);
+        float q_row = IO_LOAD(q, offset + row);
+        float k_row = IO_LOAD(k, offset + row);
+        float v_row = IO_LOAD(v, offset + row);
+        float beta_row = IO_LOAD(beta, offset + row);
+        float do_row = IO_LOAD(grad_output, offset + row);
         float alpha_val = IO_LOAD(alpha, alpha_base + t * num_heads);
 
-        float retrieval_i = local_retrieval[t];
-        float error_i = v_i - retrieval_i;
-        float scaled_err_i = beta_i * error_i;
+        // Load retrieval from workspace
+        float retrieval_row = retrieval_workspace[ws_base + t];
+        // Broadcast to all lanes
+        retrieval_row = __shfl_sync(0xffffffff, retrieval_row, (row * tile_k) & 31);
+
+        float error_row = v_row - retrieval_row;
+        float scaled_err_row = beta_row * error_row;
 
         // ---- grad_q: dq = S_t^T @ do ----
-        q_shared[i] = do_i;
+        // Load do into shared for column access
+        if (tid < head_dim) {
+            q_shared[tid] = IO_LOAD(grad_output, offset + tid);
+        }
         __syncthreads();
 
-        float dq_i = 0.0f;
-        for (int j = 0; j < head_dim; j++) {
-            dq_i += S[j * head_dim + i] * q_shared[j];
+        // dq[row] = sum_j(S[j][row] * do[j]) — column access on S
+        // Each lane handles its chunk of rows j
+        float dq_partial = 0.0f;
+        for (int j = j_start; j < j_end; j++) {
+            dq_partial += S[j * s_stride + row] * q_shared[j];
         }
-        IO_STORE(grad_q, offset + i, dq_i);
+        for (int offset_k = 1; offset_k < tile_k; offset_k *= 2) {
+            dq_partial += __shfl_xor_sync(0xffffffff, dq_partial, offset_k);
+        }
+        if (lane == 0) {
+            IO_STORE(grad_q, offset + row, dq_partial);
+        }
 
         // ---- dS from output: dS += outer(do, q) ----
-        k_shared[i] = q_i;
+        // Load q into shared
+        if (tid < head_dim) {
+            k_shared[tid] = IO_LOAD(q, offset + tid);  // reuse k_shared for q values
+        }
         __syncthreads();
 
-        for (int j = 0; j < head_dim; j++) {
-            dS_row[j] += do_i * k_shared[j];
+        for (int j = 0; j < chunk; j++) {
+            dS_chunk[j] += do_row * k_shared[j_start + j];
         }
 
         // ---- Gradients from update S_t = S_gated + beta*outer(error, k) ----
-        k_shared[i] = k_i;
-        __syncthreads();
-
-        float d_beta_error_i = 0.0f;
-        for (int j = 0; j < head_dim; j++) {
-            d_beta_error_i += dS_row[j] * k_shared[j];
-        }
-
-        // dk from outer product
-        if (i == 0) {
-            for (int j = 0; j < head_dim; j++) {
-                temp_shared[j] = 0.0f;
-            }
+        if (tid < head_dim) {
+            k_shared[tid] = IO_LOAD(k, offset + tid);
         }
         __syncthreads();
 
-        for (int j = 0; j < head_dim; j++) {
-            atomicAdd(&temp_shared[j], dS_row[j] * scaled_err_i);
+        // d_beta_error = dS[row,:] @ k[:]
+        float d_beta_error_partial = 0.0f;
+        for (int j = 0; j < chunk; j++) {
+            d_beta_error_partial += dS_chunk[j] * k_shared[j_start + j];
+        }
+        for (int offset_k = 1; offset_k < tile_k; offset_k *= 2) {
+            d_beta_error_partial += __shfl_xor_sync(0xffffffff, d_beta_error_partial, offset_k);
+        }
+        float d_beta_error_row = d_beta_error_partial;
+
+        // dk from outer product: dk[j] += sum_i(dS[i][j] * scaled_err[i])
+        if (tid < head_dim) {
+            temp_shared[tid] = 0.0f;
         }
         __syncthreads();
 
-        float d_error_i = d_beta_error_i * beta_i;
-        float dv_i = d_error_i;
-        float d_retrieval_i = -d_error_i;
+        // Each lane atomically adds its chunk contribution
+        for (int j = 0; j < chunk; j++) {
+            atomicAdd(&temp_shared[j_start + j], dS_chunk[j] * scaled_err_row);
+        }
+        __syncthreads();
 
-        for (int j = 0; j < head_dim; j++) {
-            dS_row[j] += d_retrieval_i * k_shared[j];
+        float d_error_row = d_beta_error_row * beta_row;
+        float dv_row = d_error_row;
+        float d_retrieval_row = -d_error_row;
+
+        // dS += d_retrieval * outer(1, k) for this row
+        for (int j = 0; j < chunk; j++) {
+            dS_chunk[j] += d_retrieval_row * k_shared[j_start + j];
         }
 
         // Undo update to get S_gated
-        for (int j = 0; j < head_dim; j++) {
-            S[i * head_dim + j] -= scaled_err_i * k_shared[j];
+        for (int j = j_start; j < j_end; j++) {
+            S[row * s_stride + j] -= scaled_err_row * k_shared[j];
         }
         __syncthreads();
 
-        // dk from retrieval (S_gated @ k)
-        if (i == 0) {
-            for (int j = 0; j < head_dim; j++) {
-                q_shared[j] = 0.0f;
-            }
+        // dk from retrieval (S_gated @ k): dk[j] += sum_i(S[i][j] * d_retrieval[i])
+        if (tid < head_dim) {
+            q_shared[tid] = 0.0f;
         }
         __syncthreads();
 
-        for (int j = 0; j < head_dim; j++) {
-            atomicAdd(&q_shared[j], S[i * head_dim + j] * d_retrieval_i);
+        // Each lane adds its chunk's contribution to the column sum
+        for (int j = j_start; j < j_end; j++) {
+            atomicAdd(&q_shared[j], S[row * s_stride + j] * d_retrieval_row);
         }
         __syncthreads();
 
-        float dk_i = temp_shared[i] + q_shared[i];
+        if (lane == 0) {
+            float dk_row = temp_shared[row] + q_shared[row];
+            float d_beta_row_val = d_beta_error_row * error_row;
 
-        float d_beta_i = d_beta_error_i * error_i;
-
-        IO_STORE(grad_k, offset + i, dk_i);
-        IO_STORE(grad_v, offset + i, dv_i);
-        IO_STORE(grad_beta, offset + i, d_beta_i);
+            IO_STORE(grad_k, offset + row, dk_row);
+            IO_STORE(grad_v, offset + row, dv_row);
+            IO_STORE(grad_beta, offset + row, d_beta_row_val);
+        }
 
         // ---- Gradient through alpha decay: S_gated = alpha * S_{t-1} ----
-        // dS_{t-1}[i][j] = alpha * dS_gated[i][j]
         // d_alpha = sum_{i,j}(dS_gated[i][j] * S_{t-1}[i][j])
-        //
         // Current S holds S_gated. S_{t-1} = S_gated / alpha.
-        // d_alpha partial sum from thread i:
         float d_alpha_partial = 0.0f;
-        for (int j = 0; j < head_dim; j++) {
-            // S_{t-1}[i][j] = S_gated[i][j] / alpha
-            float s_prev_ij = (alpha_val != 0.0f) ? S[i * head_dim + j] / alpha_val : 0.0f;
-            d_alpha_partial += dS_row[j] * s_prev_ij;
+        for (int j = 0; j < chunk; j++) {
+            float s_gated_val = S[row * s_stride + (j_start + j)];
+            float s_prev_val = (alpha_val != 0.0f) ? s_gated_val / alpha_val : 0.0f;
+            d_alpha_partial += dS_chunk[j] * s_prev_val;
+        }
+        // Reduce across lanes within row
+        for (int offset_k = 1; offset_k < tile_k; offset_k *= 2) {
+            d_alpha_partial += __shfl_xor_sync(0xffffffff, d_alpha_partial, offset_k);
         }
 
-        // Reduce d_alpha across threads
-        if (i == 0) reduce_shared[0] = 0.0f;
+        // Reduce across rows (lane 0 of each row contributes)
+        if (lane == 0) {
+            atomicAdd(reduce_shared, d_alpha_partial);
+        }
+        // Need barrier before thread 0 reads reduce_shared
+        // But first, clear it for this timestep
+        if (tid == 0) reduce_shared[0] = 0.0f;
         __syncthreads();
-        atomicAdd(reduce_shared, d_alpha_partial);
+        if (lane == 0) {
+            atomicAdd(reduce_shared, d_alpha_partial);
+        }
         __syncthreads();
 
-        // Only thread 0 writes grad_alpha
-        if (i == 0) {
+        if (tid == 0) {
             IO_STORE(grad_alpha, alpha_base + t * num_heads, reduce_shared[0]);
         }
 
-        // dS propagated through alpha: dS_{t-1} += alpha * dS_gated
-        // (dS_row already contains dS_gated for the next iteration)
-        // We need to scale it by alpha for the contribution through alpha decay
-        for (int j = 0; j < head_dim; j++) {
-            dS_row[j] *= alpha_val;
+        // dS propagated through alpha: scale by alpha for next iteration
+        for (int j = 0; j < chunk; j++) {
+            dS_chunk[j] *= alpha_val;
         }
 
         // Undo alpha decay to get S_{t-1}
         if (alpha_val != 0.0f) {
             float inv_alpha = 1.0f / alpha_val;
-            for (int j = 0; j < head_dim; j++) {
-                S[i * head_dim + j] *= inv_alpha;
+            for (int j = j_start; j < j_end; j++) {
+                S[row * s_stride + j] *= inv_alpha;
             }
         }
         __syncthreads();
     }
+}
+
+// ============================================================================
+// Launch helpers (shared with forward kernel)
+// ============================================================================
+
+static inline int compute_tile_k(int head_dim) {
+    if (head_dim >= 512) return 1;
+    if (head_dim >= 256) return 2;
+    return 4;
 }
 
 // ============================================================================
@@ -291,21 +359,36 @@ int fused_gated_delta_net_scan_backward_launch(
     io_type* grad_beta  = output_concat + 3 * total_4d;
     io_type* grad_alpha = output_concat + 4 * total_4d;
 
+    int tile_k = compute_tile_k(head_dim);
     dim3 grid(batch, num_heads);
-    dim3 block(head_dim);
+    dim3 block(head_dim * tile_k);
 
-    // 2*S[d][d] + k_shared[d] + q_shared[d] + temp_shared[d] + reduce[1]
-    size_t smem_bytes = 2 * (size_t)head_dim * head_dim * sizeof(float)
+    int s_stride = head_dim + 1;
+    // 2*S[d][s_stride] + k_shared[d] + q_shared[d] + temp_shared[d] + reduce[1]
+    size_t smem_bytes = 2 * (size_t)head_dim * s_stride * sizeof(float)
                       + 3 * head_dim * sizeof(float)
                       + sizeof(float);
+
+    // Allocate global memory workspace for retrieval storage
+    // Shape: [batch, num_heads, head_dim, seq_len]
+    size_t ws_size = (size_t)batch * num_heads * head_dim * seq_len * sizeof(float);
+    float* retrieval_workspace = nullptr;
+    cudaError_t alloc_err = cudaMallocAsync(&retrieval_workspace, ws_size, stream);
+    if (alloc_err != cudaSuccess) {
+        return (int)alloc_err;
+    }
 
     fused_gated_delta_net_scan_backward_kernel<<<grid, block, smem_bytes, stream>>>(
         q, k, v, beta, alpha, forward_out, grad_output,
         grad_q, grad_k, grad_v, grad_beta, grad_alpha,
+        retrieval_workspace,
         seq_len, num_heads, head_dim
     );
 
-    return (int)cudaGetLastError();
+    cudaError_t kernel_err = cudaGetLastError();
+    cudaFreeAsync(retrieval_workspace, stream);
+
+    return (int)kernel_err;
 }
 
 }  // extern "C"
@@ -345,11 +428,22 @@ ffi::Error fused_gated_delta_net_scan_backward_ffi_impl(
     int num_heads = static_cast<int>(dims[2]);
     int head_dim  = static_cast<int>(dims[3]);
 
+    int tile_k = compute_tile_k(head_dim);
     dim3 grid(batch, num_heads);
-    dim3 block(head_dim);
-    size_t smem_bytes = 2 * (size_t)head_dim * head_dim * sizeof(float)
+    dim3 block(head_dim * tile_k);
+
+    int s_stride = head_dim + 1;
+    size_t smem_bytes = 2 * (size_t)head_dim * s_stride * sizeof(float)
                       + 3 * head_dim * sizeof(float)
                       + sizeof(float);
+
+    // Allocate workspace
+    size_t ws_size = (size_t)batch * num_heads * head_dim * seq_len * sizeof(float);
+    float* retrieval_workspace = nullptr;
+    cudaError_t alloc_err = cudaMallocAsync(&retrieval_workspace, ws_size, stream);
+    if (alloc_err != cudaSuccess) {
+        return ffi::Error(ffi::ErrorCode::kInternal, "Failed to allocate retrieval workspace");
+    }
 
     fused_gated_delta_net_scan_backward_kernel<<<grid, block, smem_bytes, stream>>>(
         reinterpret_cast<const io_type*>(q.untyped_data()),
@@ -364,12 +458,15 @@ ffi::Error fused_gated_delta_net_scan_backward_ffi_impl(
         reinterpret_cast<io_type*>(grad_v->untyped_data()),
         reinterpret_cast<io_type*>(grad_beta->untyped_data()),
         reinterpret_cast<io_type*>(grad_alpha->untyped_data()),
+        retrieval_workspace,
         seq_len, num_heads, head_dim
     );
 
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        return ffi::Error(ffi::ErrorCode::kInternal, cudaGetErrorString(err));
+    cudaError_t kernel_err = cudaGetLastError();
+    cudaFreeAsync(retrieval_workspace, stream);
+
+    if (kernel_err != cudaSuccess) {
+        return ffi::Error(ffi::ErrorCode::kInternal, cudaGetErrorString(kernel_err));
     }
 
     return ffi::Error::Success();
