@@ -61,4 +61,18 @@ defmodule Edifice.StatefulRollbackTest do
       )
     end
   end
+
+  describe "GatedSSM rollback (scan_mode: :causal)" do
+    test "snapshot at 5, replay 6..12 is bitwise-identical" do
+      assert_rollback_deterministic(:gated_ssm,
+        embed_dim: 8,
+        hidden_size: 8,
+        state_size: 4,
+        num_layers: 2,
+        conv_size: 3,
+        dropout: 0.0,
+        scan_mode: :causal
+      )
+    end
+  end
 end

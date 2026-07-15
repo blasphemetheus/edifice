@@ -60,6 +60,18 @@ defmodule Edifice.SSM.GatedSSM do
   - Lightweight temporal processing without full Mamba complexity
   - Stable training (no NaN issues observed)
   - When true Mamba isn't available or needed
+
+  ## Scan Modes
+
+  - `scan_mode: :legacy` (default) — the original pointwise context
+    weighting. NOT a recurrence: output at position t depends on the total
+    sequence length, so it cannot be stepped frame-by-frame. Kept as the
+    default so existing checkpoints keep their semantics.
+  - `scan_mode: :causal` — a true causal EMA recurrence
+    (`context[t] = 0.9·context[t-1] + 0.1·gated_x[t]`). Required for O(1)
+    stepping via `Edifice.Stateful` (`init_state/2` + `step/3`). Models must
+    be TRAINED with the mode they'll be stepped with — the two forwards
+    compute different functions.
   """
 
   # Default hyperparameters (from paper)
@@ -73,6 +85,9 @@ defmodule Edifice.SSM.GatedSSM do
   @default_num_layers 2
   @default_dropout 0.0
   # Note: dt_rank is computed as hidden_size // state_size when needed
+
+  # EMA decay for the :causal scan mode's context recurrence
+  @ema_alpha 0.9
 
   @doc """
   Build a Mamba model for sequence processing.
@@ -98,6 +113,7 @@ defmodule Edifice.SSM.GatedSSM do
           | {:expand_factor, pos_integer()}
           | {:hidden_size, pos_integer()}
           | {:num_layers, pos_integer()}
+          | {:scan_mode, :legacy | :causal}
           | {:seq_len, pos_integer()}
           | {:state_size, pos_integer()}
           | {:window_size, pos_integer()}
@@ -111,6 +127,7 @@ defmodule Edifice.SSM.GatedSSM do
     conv_size = Keyword.get(opts, :conv_size, @default_conv_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
+    scan_mode = Keyword.get(opts, :scan_mode, :legacy)
     window_size = Keyword.get(opts, :window_size, 60)
     seq_len = Keyword.get(opts, :seq_len, window_size)
 
@@ -138,6 +155,7 @@ defmodule Edifice.SSM.GatedSSM do
             state_size: state_size,
             expand_factor: expand_factor,
             conv_size: conv_size,
+            scan_mode: scan_mode,
             name: "mamba_block_#{layer_idx}"
           )
 
@@ -186,6 +204,7 @@ defmodule Edifice.SSM.GatedSSM do
     state_size = Keyword.get(opts, :state_size, @default_state_size)
     expand_factor = Keyword.get(opts, :expand_factor, @default_expand_factor)
     conv_size = Keyword.get(opts, :conv_size, @default_conv_size)
+    scan_mode = Keyword.get(opts, :scan_mode, :legacy)
     name = Keyword.get(opts, :name, "mamba_block")
 
     # Inner dimension (expanded)
@@ -231,6 +250,7 @@ defmodule Edifice.SSM.GatedSSM do
         hidden_size: inner_size,
         state_size: state_size,
         dt_rank: dt_rank,
+        scan_mode: scan_mode,
         name: "#{name}_ssm"
       )
 
@@ -299,6 +319,7 @@ defmodule Edifice.SSM.GatedSSM do
     hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
     state_size = Keyword.get(opts, :state_size, @default_state_size)
     dt_rank = Keyword.get(opts, :dt_rank, div(hidden_size, state_size))
+    scan_mode = Keyword.get(opts, :scan_mode, :legacy)
     name = Keyword.get(opts, :name, "ssm")
 
     # Project input to get B, C, and delta parameters
@@ -346,13 +367,14 @@ defmodule Edifice.SSM.GatedSSM do
       name: name,
       state_size: state_size,
       hidden_size: hidden_size,
+      scan_mode: scan_mode,
       op_name: :selective_scan
     )
   end
 
   # Selective scan implementation
   # This computes the SSM recurrence efficiently using a simplified approach
-  defp selective_scan_impl(x, b, c, dt, _opts) do
+  defp selective_scan_impl(x, b, c, dt, opts) do
     # x: [batch, seq_len, hidden_size]
     # b: [batch, seq_len, state_size]
     # c: [batch, seq_len, state_size]
@@ -360,10 +382,6 @@ defmodule Edifice.SSM.GatedSSM do
 
     # Simplified SSM: use a gated linear combination
     # This captures the essence of selective state updates without complex recurrence
-    #
-    # In a full implementation, we'd use the parallel associative scan algorithm
-    # For now, we approximate with: y = sigmoid(dt) * (B * C * x)
-    # This gives the "selective gating" behavior without the recurrence
 
     seq_len = Nx.axis_size(x, 1)
 
@@ -382,17 +400,45 @@ defmodule Edifice.SSM.GatedSSM do
     bc_gate = Nx.sigmoid(bc_gate)
 
     # Apply selective gating to input
-    # output = gate * bc_gate * x + (1 - gate) * cumulative_context
+    # output = gate * bc_gate * x + (1 - gate) * context
     gated_x = Nx.multiply(Nx.multiply(gate, bc_gate), x)
 
-    # Simple cumulative context (exponential moving average along sequence)
-    # This approximates the hidden state recurrence
-    # Decay factor
-    alpha = 0.9
-    context = cumulative_ema(gated_x, alpha, seq_len)
+    context =
+      case opts[:scan_mode] do
+        :causal ->
+          # True EMA recurrence: context[t] = α·context[t-1] + (1-α)·gated_x[t].
+          # Causal (position t sees only ≤ t), independent of total seq_len,
+          # and exactly steppable — required for the Edifice.Stateful contract.
+          causal_ema_scan(gated_x, @ema_alpha, seq_len)
+
+        _legacy ->
+          # Legacy pointwise weighting (NOT a recurrence: output at t depends
+          # on total seq_len via the normalized weight, so no O(1) step can
+          # reproduce it). Kept as the default so checkpoints trained against
+          # this forward keep their semantics.
+          cumulative_ema(gated_x, @ema_alpha, seq_len)
+      end
 
     # Combine gated input with context
     Nx.add(gated_x, Nx.multiply(Nx.subtract(1.0, gate), context))
+  end
+
+  # True causal EMA along the sequence axis, unrolled (grad-safe re nx#1747;
+  # sequence windows here are short, e.g. 60 frames).
+  defp causal_ema_scan(x, alpha, seq_len) do
+    batch = Nx.axis_size(x, 0)
+    channels = Nx.axis_size(x, 2)
+
+    h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, channels})
+
+    {_, contexts} =
+      Enum.reduce(0..(seq_len - 1), {h0, []}, fn t, {h_prev, acc} ->
+        x_t = x |> Nx.slice_along_axis(t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        h_t = Nx.add(Nx.multiply(alpha, h_prev), Nx.multiply(1.0 - alpha, x_t))
+        {h_t, [h_t | acc]}
+      end)
+
+    contexts |> Enum.reverse() |> Nx.stack(axis: 1)
   end
 
   # Exponential moving average along sequence dimension
@@ -453,6 +499,7 @@ defmodule Edifice.SSM.GatedSSM do
     conv_size = Keyword.get(opts, :conv_size, @default_conv_size)
     num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
+    scan_mode = Keyword.get(opts, :scan_mode, :legacy)
     window_size = Keyword.get(opts, :window_size, 60)
     seq_len = Keyword.get(opts, :seq_len, window_size)
     checkpoint_every = Keyword.get(opts, :checkpoint_every, 1)
@@ -482,6 +529,7 @@ defmodule Edifice.SSM.GatedSSM do
             state_size: state_size,
             expand_factor: expand_factor,
             conv_size: conv_size,
+            scan_mode: scan_mode,
             name: "mamba_block_#{layer_idx}"
           )
 
@@ -589,7 +637,128 @@ defmodule Edifice.SSM.GatedSSM do
   end
 
   # ============================================================================
-  # Incremental Inference (State Caching)
+  # Stateful step contract (Edifice.Stateful)
+  # ============================================================================
+
+  @behaviour Edifice.Stateful
+
+  alias Edifice.Stateful.Ops
+
+  @doc """
+  Initial recurrent state for O(1) stepping (requires `scan_mode: :causal`):
+  `%{h: [batch, num_layers, inner], conv: [batch, num_layers, conv_size - 1,
+  inner]}` zeros, where `inner = hidden_size * expand_factor` and `h` is the
+  causal EMA context per layer.
+
+  Raises unless the opts carry `scan_mode: :causal`: the default `:legacy`
+  forward is a pointwise weighting whose output at position t depends on the
+  total sequence length — no O(1) step can reproduce it (which is also why
+  the deprecated `step/4` never matched the forward).
+  """
+  @impl Edifice.Stateful
+  def init_state(_params, opts \\ []) do
+    unless Keyword.get(opts, :scan_mode) == :causal do
+      raise ArgumentError,
+            "GatedSSM stateful stepping requires scan_mode: :causal — build the " <>
+              "model with `Edifice.build(:gated_ssm, [scan_mode: :causal, ...])` and " <>
+              "pass the same opts to init_state/2. The default :legacy scan is not a " <>
+              "recurrence (its output depends on total sequence length), so it cannot " <>
+              "be stepped frame-by-frame."
+    end
+
+    batch_size = Keyword.get(opts, :batch_size, 1)
+    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
+    expand_factor = Keyword.get(opts, :expand_factor, @default_expand_factor)
+    conv_size = Keyword.get(opts, :conv_size, @default_conv_size)
+    num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
+
+    inner_size = hidden_size * expand_factor
+
+    %{
+      h: Ops.zeros(batch_size, [num_layers, inner_size]),
+      conv: Ops.zeros(batch_size, [num_layers, conv_size - 1, inner_size])
+    }
+  end
+
+  defp stateful_step(params, %{h: h, conv: conv}, frame) do
+    params = Ops.unwrap_params(params)
+    num_layers = Nx.axis_size(h, 1)
+
+    x =
+      case params do
+        %{"input_projection" => proj} -> Ops.dense(frame, proj)
+        _ -> frame
+      end
+
+    {x, new_hs, new_convs} =
+      Enum.reduce(1..num_layers, {x, [], []}, fn i, {acc, hs, convs} ->
+        name = "mamba_block_#{i}"
+
+        h_i = h |> Nx.slice_along_axis(i - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        conv_i = conv |> Nx.slice_along_axis(i - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+        {block_out, h_new, conv_new} = step_causal_block(params, name, h_i, conv_i, acc)
+
+        {Nx.add(acc, block_out), [h_new | hs], [conv_new | convs]}
+      end)
+
+    new_state = %{
+      h: new_hs |> Enum.reverse() |> Nx.stack(axis: 1),
+      conv: new_convs |> Enum.reverse() |> Nx.stack(axis: 1)
+    }
+
+    {x, new_state}
+  end
+
+  # One frame through a GatedSSM block, matching the :causal forward exactly:
+  # LN -> in_proj -> x/z split -> mean-window "conv" + proj -> SiLU ->
+  # gated EMA recurrence -> SiLU gate -> out_proj.
+  defp step_causal_block(params, name, h_i, conv_buffer, frame) do
+    normed = Ops.layer_norm(frame, Ops.layer_params!(params, "#{name}_norm"))
+    xz = Ops.dense(normed, Ops.layer_params!(params, "#{name}_in_proj"))
+
+    inner_size = div(Nx.axis_size(xz, 1), 2)
+    x_branch = Nx.slice_along_axis(xz, 0, inner_size, axis: 1)
+    z_branch = Nx.slice_along_axis(xz, inner_size, inner_size, axis: 1)
+
+    # GatedSSM's "conv" is a mean over the causal window followed by a dense
+    # projection (build_causal_conv1d/4) — NOT a learned depthwise kernel
+    window = Nx.concatenate([conv_buffer, Nx.new_axis(x_branch, 1)], axis: 1)
+    pooled = Nx.mean(window, axes: [1])
+    conv_out = Ops.dense(pooled, Ops.layer_params!(params, "#{name}_conv_proj"))
+    new_buffer = Nx.slice_along_axis(window, 1, Nx.axis_size(conv_buffer, 1), axis: 1)
+
+    x_activated = Ops.silu(conv_out)
+
+    # Selective gating + causal EMA, mirroring selective_scan_impl/5 :causal
+    ssm_name = "#{name}_ssm"
+    bc = Ops.dense(x_activated, Ops.layer_params!(params, "#{ssm_name}_bc_proj"))
+    state_size = div(Nx.axis_size(bc, 1), 2)
+    b = Nx.slice_along_axis(bc, 0, state_size, axis: 1)
+    c = Nx.slice_along_axis(bc, state_size, state_size, axis: 1)
+
+    dt =
+      x_activated
+      |> Ops.dense(Ops.layer_params!(params, "#{ssm_name}_dt_rank"))
+      |> Ops.dense(Ops.layer_params!(params, "#{ssm_name}_dt_proj"))
+      |> Ops.softplus()
+
+    gate = Nx.sigmoid(Nx.mean(dt, axes: [1], keep_axes: true))
+    bc_gate = Nx.sigmoid(Nx.sum(Nx.multiply(b, c), axes: [1], keep_axes: true))
+    gated_x = Nx.multiply(Nx.multiply(gate, bc_gate), x_activated)
+
+    # context[t] = α·context[t-1] + (1-α)·gated_x[t]
+    h_new = Nx.add(Nx.multiply(@ema_alpha, h_i), Nx.multiply(1.0 - @ema_alpha, gated_x))
+    y = Nx.add(gated_x, Nx.multiply(Nx.subtract(1.0, gate), h_new))
+
+    gated = Nx.multiply(y, Ops.silu(z_branch))
+    out = Ops.dense(gated, Ops.layer_params!(params, "#{name}_out_proj"))
+
+    {out, h_new, new_buffer}
+  end
+
+  # ============================================================================
+  # Incremental Inference (State Caching) — DEPRECATED
   # ============================================================================
 
   @doc """
@@ -613,6 +782,7 @@ defmodule Edifice.SSM.GatedSSM do
       cache = GatedSSM.init_cache(batch_size: 1, hidden_size: 256)
       {output, new_cache} = GatedSSM.step(x_single_frame, params, cache, opts)
   """
+  @deprecated "Use init_state/2 (Edifice.Stateful) with scan_mode: :causal"
   @spec init_cache(keyword()) :: map()
   def init_cache(opts \\ []) do
     batch_size = Keyword.get(opts, :batch_size, 1)
@@ -675,10 +845,37 @@ defmodule Edifice.SSM.GatedSSM do
       cache = GatedSSM.init_cache(hidden_size: 256)
       {out1, cache} = GatedSSM.step(frame1, params, cache)
       {out2, cache} = GatedSSM.step(frame2, params, cache)
-      # out2 is equivalent to running [frame1, frame2] through full model
+
+  > #### Deprecated {: .warning}
+  >
+  > This ad-hoc step **never matched the full-sequence forward**: the
+  > forward's legacy scan is a seq_len-dependent pointwise weighting while
+  > this step runs an unrelated h-recurrence with a mean-pooled dt and an
+  > implicit A = -1. Use the `Edifice.Stateful` contract instead —
+  > `init_state/2` + `step(params, state, frame)` with a model built with
+  > `scan_mode: :causal` — which IS equivalence-tested against the forward.
   """
+  @doc """
+  Advance one frame under the `Edifice.Stateful` contract
+  (`step(params, state, frame)`), or the deprecated legacy form
+  (`step(x, params, cache)`), disambiguated by argument shapes.
+
+  The stateful form requires a model built with `scan_mode: :causal` and a
+  state from `init_state/2`; it matches the causal forward exactly (pinned
+  by `test/edifice/stateful/step_equivalence_test.exs`).
+  """
+  @impl Edifice.Stateful
+  def step(params, %{h: _, conv: _} = state, %Nx.Tensor{} = frame)
+      when not is_struct(params, Nx.Tensor) do
+    stateful_step(params, state, frame)
+  end
+
+  # Deprecated legacy form: step(x, params, cache)
+  def step(%Nx.Tensor{} = x, params, cache), do: step(x, params, cache, [])
+
+  @deprecated "Never numerically matched the forward; use init_state/2 + step/3 (Edifice.Stateful) with scan_mode: :causal"
   @spec step(Nx.Tensor.t(), map(), map(), keyword()) :: {Nx.Tensor.t(), map()}
-  def step(x, params, cache, opts \\ []) do
+  def step(x, params, cache, opts) do
     config = cache.config
     hidden_size = config.hidden_size
     state_size = config.state_size

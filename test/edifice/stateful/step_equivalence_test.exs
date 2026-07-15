@@ -125,4 +125,68 @@ defmodule Edifice.StatefulStepEquivalenceTest do
       end
     end
   end
+
+  describe "GatedSSM step == forward (scan_mode: :causal)" do
+    @gated_base [
+      hidden_size: 8,
+      state_size: 4,
+      expand_factor: 2,
+      dropout: 0.0,
+      scan_mode: :causal
+    ]
+
+    test "single layer, embed == hidden" do
+      assert_step_matches_forward(
+        :gated_ssm,
+        @gated_base ++ [embed_dim: 8, num_layers: 1, conv_size: 4]
+      )
+    end
+
+    test "two layers, embed != hidden, conv_size 3" do
+      assert_step_matches_forward(
+        :gated_ssm,
+        @gated_base ++ [embed_dim: 12, num_layers: 2, conv_size: 3]
+      )
+    end
+
+    test "init_state raises without scan_mode: :causal" do
+      err =
+        assert_raise ArgumentError, fn ->
+          Edifice.init_state(:gated_ssm, %{}, embed_dim: 8, hidden_size: 8)
+        end
+
+      assert err.message =~ "scan_mode: :causal"
+    end
+
+    test "default build is unchanged (:legacy regression guard)" do
+      # The default MUST keep legacy semantics: anything trained on main
+      # before this change would silently drift otherwise
+      opts = [
+        embed_dim: 8,
+        hidden_size: 8,
+        state_size: 4,
+        num_layers: 1,
+        dropout: 0.0,
+        window_size: 6
+      ]
+
+      {params, predict_default, x} = Edifice.StatefulCase.build_forward(:gated_ssm, opts, 6, 1, 3)
+
+      legacy_model = Edifice.build(:gated_ssm, Keyword.put(opts, :scan_mode, :legacy) |> Keyword.put(:seq_len, nil))
+      {_, predict_legacy} = Axon.build(legacy_model, mode: :inference)
+
+      causal_model = Edifice.build(:gated_ssm, Keyword.put(opts, :scan_mode, :causal) |> Keyword.put(:seq_len, nil))
+      {_, predict_causal} = Axon.build(causal_model, mode: :inference)
+
+      out_default = predict_default.(params, x)
+      out_legacy = predict_legacy.(params, x)
+      out_causal = predict_causal.(params, x)
+
+      # default == explicit :legacy, bitwise
+      assert Nx.to_binary(out_default) == Nx.to_binary(out_legacy)
+
+      # :causal computes a genuinely different function (sanity: flag threads)
+      refute Nx.to_binary(out_default) == Nx.to_binary(out_causal)
+    end
+  end
 end
