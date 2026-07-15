@@ -26,10 +26,17 @@ defmodule Edifice.Interpretability.MatryoshkaSAE do
 
   ## Training
 
+  > #### Status: experimental / not the paper's objective {: .error}
+  >
+  > Audit 2026-07-15 (INTERP_AUDIT): `loss/4` is full-width MSE plus an
+  > index-weighted L1 — it is **missing the defining nested-prefix
+  > reconstruction loss** that makes a Matryoshka SAE matryoshka. (A
+  > previous version of this doc referenced a `multi_scale_loss/4` that
+  > never existed.) Until the prefix objective is implemented, this trains
+  > an ordinary top-k SAE with a nonstandard L1 weighting.
+
   The `loss/4` function applies a weighted L1 penalty that increases with
   feature index, encouraging the model to place important features first.
-  For full Matryoshka training, use `multi_scale_loss/4` which evaluates
-  reconstruction at multiple prefix sizes.
 
   ## Usage
 
@@ -140,13 +147,21 @@ defmodule Edifice.Interpretability.MatryoshkaSAE do
   """
   @spec loss(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), keyword()) :: Nx.Tensor.t()
   defn loss(input, reconstruction, hidden_acts, opts \\ []) do
+    opts = keyword!(opts, l1_coeff: 1.0e-3)
     l1_coeff = opts[:l1_coeff]
+
+    # f32 at loss entry per CLAUDE.md precision policy
+    input = Nx.as_type(input, :f32)
+    reconstruction = Nx.as_type(reconstruction, :f32)
+    hidden_acts = Nx.as_type(hidden_acts, :f32)
 
     recon_loss = Nx.mean(Nx.pow(input - reconstruction, 2))
 
-    # Importance-weighted L1: linearly increasing penalty from 0.5x to 2.0x
+    # Importance-weighted L1: linearly increasing penalty from 0.5x to 2.0x.
+    # NOTE: this is NOT the paper's nested-prefix reconstruction objective —
+    # see the moduledoc status warning.
     dict_size = Nx.axis_size(hidden_acts, 1)
-    weights = Nx.linspace(0.5, 2.0, n: dict_size, type: Nx.type(hidden_acts))
+    weights = Nx.linspace(0.5, 2.0, n: dict_size, type: :f32)
     weighted_l1 = Nx.mean(Nx.abs(hidden_acts) * weights)
 
     recon_loss + l1_coeff * weighted_l1

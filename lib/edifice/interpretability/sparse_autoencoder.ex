@@ -150,7 +150,14 @@ defmodule Edifice.Interpretability.SparseAutoencoder do
   """
   @spec loss(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), keyword()) :: Nx.Tensor.t()
   defn loss(input, reconstruction, hidden_acts, opts \\ []) do
+    opts = keyword!(opts, l1_coeff: 1.0e-3)
     l1_coeff = opts[:l1_coeff]
+
+    # Loss math (and therefore its backward) always computes in f32,
+    # regardless of network precision — see CLAUDE.md precision policy
+    input = Nx.as_type(input, :f32)
+    reconstruction = Nx.as_type(reconstruction, :f32)
+    hidden_acts = Nx.as_type(hidden_acts, :f32)
 
     # Reconstruction loss (MSE)
     recon_loss = Nx.mean(Nx.pow(input - reconstruction, 2))

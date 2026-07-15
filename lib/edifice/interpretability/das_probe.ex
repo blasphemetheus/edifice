@@ -1,11 +1,20 @@
 defmodule Edifice.Interpretability.DASProbe do
   @moduledoc """
-  Distributed Alignment Search (DAS) Probe for causal concept detection.
+  Rank-limited linear probe (historically labeled "DAS Probe").
 
-  Extends the linear probe by first learning a linear subspace projection that
-  aligns with the concept's distributed representation. Stronger than standard
-  linear probes because concepts may be distributed across multiple dimensions
-  rather than encoded in a single direction.
+  > #### Status: experimental / mislabeled {: .error}
+  >
+  > Audit 2026-07-15 (INTERP_AUDIT): this is **not** Distributed Alignment
+  > Search — there is no orthogonal rotation, no interchange interventions,
+  > and no counterfactual loss, so it supports no causal claims. As a linear
+  > composition (`dense → dense`), it is at most as expressive as
+  > `LinearProbe`; the subspace bottleneck is a rank constraint, which can
+  > be useful as regularization but never "stronger". Treat it as a
+  > rank-limited probe until real DAS (rotation + intervention training)
+  > exists.
+
+  Learns a low-rank linear subspace projection followed by a linear probe
+  within that subspace.
 
   ## Architecture
 
@@ -23,12 +32,12 @@ defmodule Edifice.Interpretability.DASProbe do
 
   ## Comparison to Linear Probe
 
-  A linear probe uses a single linear layer from full activation space. A DAS
+  A linear probe uses a single linear layer from full activation space. This
   probe first projects into a learned low-dimensional subspace, then probes
-  within that subspace. This finds distributed representations that span
-  multiple dimensions — a concept encoded across 3 dimensions of a 768-dim
-  space would be hard for a linear probe but easy for a DAS probe with
-  subspace_dim >= 3.
+  within it. Since `dense → dense` composes to a single linear map of rank
+  ≤ subspace_dim, anything this probe can express, `LinearProbe` can too —
+  the value of the bottleneck is interpretive (a small subspace to inspect)
+  and regularizing, not expressive power.
 
   ## Usage
 
