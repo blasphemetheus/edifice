@@ -326,6 +326,74 @@ defmodule Edifice.Recurrent.MinGRU do
   end
 
   # ============================================================================
+  # Stateful step contract (Edifice.Stateful)
+  # ============================================================================
+
+  @behaviour Edifice.Stateful
+
+  alias Edifice.Stateful.Ops
+
+  @doc """
+  Initial recurrent state for O(1) stepping: `%{h: [batch, num_layers, hidden]}`
+  zeros, matching `min_gru_scan/2`'s `h_init`.
+
+  Options: `:batch_size` (default 1), `:hidden_size`, `:num_layers` (same
+  defaults as `build/1`).
+  """
+  @impl Edifice.Stateful
+  def init_state(_params, opts \\ []) do
+    batch_size = Keyword.get(opts, :batch_size, 1)
+    hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
+    num_layers = Keyword.get(opts, :num_layers, default_num_layers())
+
+    %{h: Ops.zeros(batch_size, [num_layers, hidden_size])}
+  end
+
+  @doc """
+  Advance one frame: `[batch, embed_dim]` in, `{[batch, hidden], state}` out.
+
+  Iterated steps reproduce the full-sequence forward exactly (pinned by
+  `test/edifice/stateful/step_equivalence_test.exs`). Dropout layers are
+  inference-mode no-ops and are skipped.
+  """
+  @impl Edifice.Stateful
+  def step(params, %{h: h}, frame) do
+    params = Ops.unwrap_params(params)
+    num_layers = Nx.axis_size(h, 1)
+
+    x =
+      case params do
+        %{"input_projection" => proj} -> Ops.dense(frame, proj)
+        _ -> frame
+      end
+
+    {x, new_hs} =
+      Enum.reduce(1..num_layers, {x, []}, fn i, {acc, hs} ->
+        name = "min_gru_#{i}"
+
+        h_i =
+          h
+          |> Nx.slice_along_axis(i - 1, 1, axis: 1)
+          |> Nx.squeeze(axes: [1])
+
+        normed = Ops.layer_norm(acc, Ops.layer_params!(params, "#{name}_norm"))
+        z = Nx.sigmoid(Ops.dense(normed, Ops.layer_params!(params, "#{name}_gate")))
+        c = Ops.dense(normed, Ops.layer_params!(params, "#{name}_candidate"))
+
+        # h_t = (1 - z_t) * h_{t-1} + z_t * candidate_t
+        h_new = Nx.add(Nx.multiply(Nx.subtract(1.0, z), h_i), Nx.multiply(z, c))
+
+        # Residual on the pre-norm input, matching build_min_gru_layer/3
+        {Nx.add(acc, h_new), [h_new | hs]}
+      end)
+
+    new_h = new_hs |> Enum.reverse() |> Nx.stack(axis: 1)
+    out = Ops.layer_norm(x, Ops.layer_params!(params, "final_norm"))
+
+    {out, %{h: new_h}}
+  end
+
+  # ============================================================================
   # Utilities
   # ============================================================================
 
