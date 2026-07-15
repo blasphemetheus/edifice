@@ -158,7 +158,7 @@ defmodule Edifice.StatefulStepEquivalenceTest do
       assert err.message =~ "scan_mode: :causal"
     end
 
-    test "default build is unchanged (:legacy regression guard)" do
+    test "gated_ssm default build is unchanged (:legacy regression guard)" do
       # The default MUST keep legacy semantics: anything trained on main
       # before this change would silently drift otherwise
       opts = [
@@ -188,5 +188,123 @@ defmodule Edifice.StatefulStepEquivalenceTest do
       # :causal computes a genuinely different function (sanity: flag threads)
       refute Nx.to_binary(out_default) == Nx.to_binary(out_causal)
     end
+  end
+
+  describe "GRU/LSTM step == forward (Axon layout)" do
+    # The riskiest equivalence: Axon's initial hidden state is glorot-sampled
+    # from a stored RNG key (NOT zeros), bhn sits inside the reset product,
+    # and the edifice builders use layer-norm epsilon 1e-6. A wrong h0 fails
+    # at k=1 immediately.
+
+    test "GRU single layer" do
+      assert_step_matches_forward(:gru,
+        embed_dim: 8,
+        hidden_size: 8,
+        num_layers: 1,
+        dropout: 0.0
+      )
+    end
+
+    test "GRU two layers, embed != hidden" do
+      assert_step_matches_forward(:gru,
+        embed_dim: 12,
+        hidden_size: 8,
+        num_layers: 2,
+        dropout: 0.0
+      )
+    end
+
+    test "LSTM single layer" do
+      assert_step_matches_forward(:lstm,
+        embed_dim: 8,
+        hidden_size: 8,
+        num_layers: 1,
+        dropout: 0.0
+      )
+    end
+
+    test "LSTM two layers, batch of 2" do
+      assert_step_matches_forward(
+        :lstm,
+        [embed_dim: 8, hidden_size: 8, num_layers: 2, dropout: 0.0],
+        batch: 2
+      )
+    end
+  end
+
+  describe "GRU/LSTM fused-layout step math" do
+    # The fused graph layout only builds on the CUDA-fork machine, but its
+    # CPU fallback scan is public — pin the step math against it with
+    # synthetic weights, no fork needed.
+
+    test "fused GRU step matches gru_scan fallback" do
+      key = Nx.Random.key(11)
+      {wx_seq, key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {2, 6, 3 * 4})
+      {r_kernel, _} = Nx.Random.uniform(key, -1.0, 1.0, shape: {4, 3 * 4})
+
+      full = Edifice.CUDA.FusedScan.gru_scan(wx_seq, r_kernel)
+
+      {_, outs} =
+        Enum.reduce(0..5, {Nx.broadcast(0.0, {2, 4}), []}, fn t, {h, acc} ->
+          wx_t = wx_seq |> Nx.slice_along_axis(t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          h_new = fused_gru_step(wx_t, r_kernel, h)
+          {h_new, [h_new | acc]}
+        end)
+
+      stepped = outs |> Enum.reverse() |> Nx.stack(axis: 1)
+
+      assert Nx.all_close(full, stepped, atol: 1.0e-6) |> Nx.to_number() == 1
+    end
+
+    test "fused LSTM step matches lstm_scan fallback" do
+      key = Nx.Random.key(12)
+      {wx_seq, key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {2, 6, 4 * 4})
+      {r_kernel, _} = Nx.Random.uniform(key, -1.0, 1.0, shape: {4, 4 * 4})
+
+      full = Edifice.CUDA.FusedScan.lstm_scan(wx_seq, r_kernel)
+
+      zeros = Nx.broadcast(0.0, {2, 4})
+
+      {_, outs} =
+        Enum.reduce(0..5, {{zeros, zeros}, []}, fn t, {{h, c}, acc} ->
+          wx_t = wx_seq |> Nx.slice_along_axis(t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          {h_new, c_new} = fused_lstm_step(wx_t, r_kernel, h, c)
+          {{h_new, c_new}, [h_new | acc]}
+        end)
+
+      stepped = outs |> Enum.reverse() |> Nx.stack(axis: 1)
+
+      assert Nx.all_close(full, stepped, atol: 1.0e-6) |> Nx.to_number() == 1
+    end
+  end
+
+  # Single-frame twins of the fused-layout cell steps in Edifice.Recurrent —
+  # exercised through synthetic params shaped like the fused graph layout
+  defp fused_gru_step(wx_t, r_kernel, h) do
+    params = fused_params(:gru, wx_t, r_kernel)
+    state = %{h: Nx.new_axis(h, 1)}
+    {out, _state} = Edifice.Recurrent.step(params, state, wx_t)
+    out
+  end
+
+  defp fused_lstm_step(wx_t, r_kernel, h, c) do
+    params = fused_params(:lstm, wx_t, r_kernel)
+    state = %{h: Nx.new_axis(h, 1), c: Nx.new_axis(c, 1)}
+    {out, new_state} = Edifice.Recurrent.step(params, state, wx_t)
+    {out, new_state.c |> Nx.squeeze(axes: [1])}
+  end
+
+  # Identity input_proj (wx is precomputed in these synthetic tests) and no
+  # layer norms, so the step reduces to exactly the cell recurrence
+  defp fused_params(cell, wx_t, r_kernel) do
+    gate_size = Nx.axis_size(wx_t, 1)
+
+    %{
+      "#{cell}_1_input_proj" => %{
+        "kernel" => Nx.eye(gate_size),
+        "bias" => Nx.broadcast(0.0, {gate_size})
+      },
+      "#{cell}_1_fused_scan" => %{"#{cell}_1_recurrent_kernel" => r_kernel}
+    }
   end
 end

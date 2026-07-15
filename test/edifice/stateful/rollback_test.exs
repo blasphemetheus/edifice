@@ -75,4 +75,24 @@ defmodule Edifice.StatefulRollbackTest do
       )
     end
   end
+
+  describe "GRU/LSTM rollback" do
+    test "GRU: snapshot at 5, replay 6..12 is bitwise-identical" do
+      assert_rollback_deterministic(:gru,
+        embed_dim: 8,
+        hidden_size: 8,
+        num_layers: 2,
+        dropout: 0.0
+      )
+    end
+
+    test "LSTM: snapshot at 5, replay 6..12 is bitwise-identical (h and c)" do
+      assert_rollback_deterministic(:lstm,
+        embed_dim: 8,
+        hidden_size: 8,
+        num_layers: 1,
+        dropout: 0.0
+      )
+    end
+  end
 end
