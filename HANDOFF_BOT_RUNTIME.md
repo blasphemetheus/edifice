@@ -155,4 +155,100 @@ half-done. Task 2 > 3 > 4 after that.
 
 ## RESULTS
 
-(append here)
+### Task 1 — Model manifest (commit 5d0b03b)
+
+Shipped: `Edifice.Spec` (new `lib/edifice/spec.ex`), `Edifice.build_with_spec/3`
+(captures merged opts at the registry funnel; `build/2` refactored onto shared
+`resolve!/1`, behavior-identical), `Checkpoint.save(..., spec:)` embedding the
+spec as a plain map under `"__edifice_spec__"` ([:safe]-deserializable),
+`Checkpoint.fetch_spec/1` (header-only read), `Checkpoint.load_model/2`
+(rebuild-from-spec + shape validation, `validate: false` escape hatch),
+warn-once on spec-less loads. Safetensors path warns + skips (dep has no
+metadata write support). Tuple-returning archs skip shape validation.
+
+Pinned by: `test/edifice/spec_test.exs` (round-trip, [:safe] survival,
+garbage tolerance, merged-registry-defaults capture) and
+`test/edifice/checkpoint_test.exs` "model manifest" block — including THE
+mamba scenario (state_size: 4 saved, `load_model` with no opts reproduces
+original outputs at atol 1e-6; lying spec with default state_size raises
+naming both shapes).
+
+Baseline note: this worktree's full suite has 17 pre-existing failures + 1
+invalid setup_all, ALL attributable to hex nx 0.11 vs the fork main runs
+(13× fork-only `Nx.runtime_call/4` in Training.Monitor/Adaptive/Heatmap/
+AutoTuneProfiler, 4× nx 0.11 vectorized-grad bugs, 1× ShardingTest
+setup_all returns :skip). Failure set verified byte-identical before/after
+task 1 (full `--stale` run = whole suite, 212s).
+
+Environment note for whoever works in this worktree next: `direnv allow`
+regenerates the gitignored `devenv.lock` with broken newer inputs — the fix
+was copying main's known-good lock; `.nvshmem`/`.cuda-compat` are symlinked
+from the main checkout (EXLA NIF dlopen needs them).
+
+### Task 2 — Edifice.Stateful step contract (commits 8e0f872, 6108f5f, 9b61375, 8d3dfb3)
+
+Shipped: `Edifice.Stateful` behaviour (`init_state/2`, `step/3`; state =
+plain Nx container so `snapshot/serialize/deserialize` — the rollback
+primitives — are free), `Edifice.Stateful.Ops` (delegates to
+Axon.Layers/Activations so step math matches builders by construction),
+registry dispatch via `Edifice.init_state/3`, `Edifice.step/4`,
+`Edifice.stateful?/1`. Implementations: **MinGRU** (state `%{h}`), **Mamba**
+(`%{h, conv}` — learned depthwise conv ring buffer; step helpers in
+`Common` for other mamba variants to adopt), **GatedSSM** (new opt-in
+`scan_mode: :causal`; the legacy scan is pointwise seq_len-dependent
+weighting, NOT a recurrence, so the old ad-hoc `step/4` never matched the
+forward — now `@deprecated` with that documented; **default remains
+`:legacy`** so nothing trained on main changes semantics), **GRU/LSTM**
+(both graph layouts; Axon layout replicates the glorot-from-stored-key
+initial hidden state; fused layout pinned synthetically against the
+public FusedScan CPU fallbacks).
+
+Pinned by (`test/edifice/stateful/`): step == full forward at EVERY prefix
+length, atol 1e-5 (incl. Mamba seq-40 Blelloch branch at 1e-4, conv
+warm-up edges, property tests over seeds/lengths/batches); bitwise
+rollback replay through the serialize wire format for all five archs;
+GatedSSM `:legacy`-default bitwise regression guard; state-is-pure-tensor
+container checks. Note: rwkv/hgrn/liquid/s5 have ad-hoc `init_cache`s that
+are future candidates for this behaviour.
+
+### Task 3 — Profile :step mode (commit 290594f)
+
+`Profile.run/compare(mode: :step)`: batch=1 p50/p95/mean/max per-step
+latency, `init_ms`, `state_bytes` (rollback snapshot cost), step-specific
+table + backend footer. One-command rerun: `mix run bench/step_latency.exs`
+(Melee dims); GPU re-measure = `EXLA_TARGET=cuda` prefix ON IDLE GPU.
+CPU (BinaryBackend) sanity numbers — latency meaningless on this backend,
+state footprints real: min_gru 2KB / gru 2KB / lstm 4KB / gated_ssm 16KB /
+mamba 76KB.
+
+### Task 4 + INTERP_AUDIT fixes (commits cc5d6c6, 5ded33a)
+
+Read `~/git/edifice/INTERP_AUDIT_2026-07-15.md`; did the port and the
+audit remediation as one piece (per its coordination note).
+
+Audit concrete fixes: `l1_coeff` nil-crash fixed everywhere via `keyword!`
+defaults; f32-at-loss-entry policy applied to every interp `loss/4`;
+`Crosscoder.loss` made runnable (was Enum.zip-over-lists inside defn —
+now stacks and delegates to defn `stacked_loss/4`); quarantine status
+warnings on the four broken modules (GatedSAE zero-gradient gate,
+MatryoshkaSAE missing nested-prefix loss + phantom `multi_scale_loss/4`
+doc, CrossLayerTranscoder acausal/no-loss + stale `verified: true` marker
+removed, DASProbe relabeled rank-limited probe with false claims removed).
+
+Port (audit steps 1+3): `Edifice.Interpretability.Probe` (fit_eval with
+balanced accuracy, weighted CE from logits, train-only standardization,
+-1 masking, single-class guard, majority baseline, shuffled control;
+default compiler Evaluator — pass `compiler: EXLA` for real workloads) and
+`Edifice.Interpretability.Attribution` (grad×input saliency + group
+shares, `:select` for multi-head outputs). Tests are functional
+guarantees per the LEACE house standard. **Probe profiling note
+resolved**: the exphil 20+ CPU-min mystery was BinaryBackend row gathers
+(single-threaded `Nx.take` on {32k,256}), not the training loop —
+documented in the Probe moduledoc; `fit_eval` reports `train_ms`.
+
+NOT done (audit items left for the main session): `{reconstruction,
+hidden}` container outputs on SAE builds, shared SAE trainer + decoder
+unit-norm renorm, BatchTopK inference threshold + AuxK, real JumpReLU/DAS/
+CLT/Matryoshka rewrites, activation-capture port (almost entirely
+exphil-specific — port the thin tensor plumbing only when the SAE trainer
+lands and needs it).
