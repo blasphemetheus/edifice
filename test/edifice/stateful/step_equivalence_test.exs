@@ -63,4 +63,66 @@ defmodule Edifice.StatefulStepEquivalenceTest do
       end
     end
   end
+
+  describe "Mamba step == forward" do
+    @mamba_base [hidden_size: 8, state_size: 4, expand_factor: 2, dropout: 0.0]
+
+    test "single layer, embed == hidden" do
+      assert_step_matches_forward(
+        :mamba,
+        @mamba_base ++ [embed_dim: 8, num_layers: 1, conv_size: 4]
+      )
+    end
+
+    test "two layers, embed != hidden (input projection), conv_size 3" do
+      assert_step_matches_forward(
+        :mamba,
+        @mamba_base ++ [embed_dim: 12, num_layers: 2, conv_size: 3]
+      )
+    end
+
+    test "batch of 2" do
+      assert_step_matches_forward(
+        :mamba,
+        @mamba_base ++ [embed_dim: 8, num_layers: 2, conv_size: 4],
+        batch: 2
+      )
+    end
+
+    test "conv edge: sequences shorter than conv_size" do
+      # t < conv_size exercises the zero ring buffer == causal left-pad
+      assert_step_matches_forward(
+        :mamba,
+        @mamba_base ++ [embed_dim: 8, num_layers: 1, conv_size: 4],
+        seq_len: 2
+      )
+    end
+
+    test "seq_len 40 crosses the Blelloch-scan branch" do
+      # The forward switches from sequential_scan to blelloch_scan above
+      # seq_len 32; different summation order → slightly looser tolerance.
+      # This transitively pins step == blelloch == sequential.
+      assert_step_matches_forward(
+        :mamba,
+        @mamba_base ++ [embed_dim: 8, num_layers: 1, conv_size: 4],
+        seq_len: 40,
+        atol: 1.0e-4
+      )
+    end
+
+    property "holds across random seeds and sequence lengths" do
+      check all(
+              seed <- StreamData.integer(0..1_000),
+              seq_len <- StreamData.integer(1..8),
+              max_runs: 5
+            ) do
+        assert_step_matches_forward(
+          :mamba,
+          @mamba_base ++ [embed_dim: 6, num_layers: 1, conv_size: 3],
+          seed: seed,
+          seq_len: seq_len
+        )
+      end
+    end
+  end
 end

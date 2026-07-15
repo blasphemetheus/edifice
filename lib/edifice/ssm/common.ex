@@ -590,4 +590,129 @@ defmodule Edifice.SSM.Common do
     h = sequential_scan(a_bar, bx)
     compute_ssm_output(h, c_proj)
   end
+
+  # ============================================================================
+  # Stateful stepping (Edifice.Stateful support)
+  # ============================================================================
+
+  alias Edifice.Stateful.Ops
+
+  @doc """
+  One O(1) step through the common Mamba block pipeline
+  (norm → in_proj → x/z split → depthwise-conv step → SiLU → SSM step →
+  SiLU gate → out_proj), for a single frame.
+
+  The caller supplies `ssm_step_fn.(params, ssm_name, x_activated, h) ->
+  {y, new_h}` — the per-architecture SSM recurrence (see
+  `Edifice.SSM.Mamba.step_selective_ssm/4`).
+
+    * `frame` - `[batch, hidden_size]`
+    * `block_state` - `%{h: ssm_state, conv: [batch, conv_size - 1, inner]}`
+
+  Returns `{block_output [batch, hidden_size], new_block_state}`. The
+  residual add around the block lives in the caller (mirroring
+  `build_model/2`).
+  """
+  @spec step_block(map(), String.t(), map(), Nx.Tensor.t(), fun()) ::
+          {Nx.Tensor.t(), map()}
+  def step_block(params, name, %{h: h, conv: conv_buffer}, frame, ssm_step_fn) do
+    normed = Ops.layer_norm(frame, Ops.layer_params!(params, "#{name}_norm"))
+    xz = Ops.dense(normed, Ops.layer_params!(params, "#{name}_in_proj"))
+
+    inner_size = div(Nx.axis_size(xz, 1), 2)
+    x_branch = Nx.slice_along_axis(xz, 0, inner_size, axis: 1)
+    z_branch = Nx.slice_along_axis(xz, inner_size, inner_size, axis: 1)
+
+    {x_conv, new_buffer} =
+      Ops.conv1d_step(x_branch, conv_buffer, Ops.layer_params!(params, "#{name}_conv_dw_conv"))
+
+    x_activated = Ops.silu(x_conv)
+
+    {y, new_h} = ssm_step_fn.(params, "#{name}_ssm", x_activated, h)
+
+    gated = Nx.multiply(y, Ops.silu(z_branch))
+    out = Ops.dense(gated, Ops.layer_params!(params, "#{name}_out_proj"))
+
+    {out, %{h: new_h, conv: new_buffer}}
+  end
+
+  @doc """
+  Per-frame discretization matching `discretize_ssm/4` exactly, with the
+  sequence axis dropped:
+
+      a_bar = exp(clip(dt) ⊗ a_diag)          # dt per-channel for A
+      bx    = mean(clip(dt)) * b ⊗ x          # dt averaged for B
+      h'    = a_bar * h + bx
+      y     = Σ_state (c ⊗ h')
+
+  `dt` here is post-softplus (the `_dt_softplus` activation layer in the
+  forward); the clip to `[dt_min, dt_max]` happens inside, matching the
+  forward's order of operations.
+
+    * `x` - `[batch, inner]` (post conv + SiLU)
+    * `b`/`c` - `[batch, state_size]`
+    * `dt` - `[batch, inner]`
+    * `h` - `[batch, inner, state_size]`
+
+  Returns `{y [batch, inner], new_h}`.
+  """
+  @spec step_discretized_ssm(
+          Nx.Tensor.t(),
+          Nx.Tensor.t(),
+          Nx.Tensor.t(),
+          Nx.Tensor.t(),
+          Nx.Tensor.t()
+        ) :: {Nx.Tensor.t(), Nx.Tensor.t()}
+  def step_discretized_ssm(x, b, c, dt, h) do
+    state_size = Nx.axis_size(h, 2)
+
+    dt = Nx.clip(dt, dt_min(), dt_max())
+
+    # A matrix: fixed negative diagonal, identical to discretize_ssm/4
+    a_diag = Nx.negate(Nx.add(Nx.iota({state_size}), 1.0))
+
+    # a_bar = exp(dt * A): [batch, inner, state_size]
+    a_bar = Nx.exp(Nx.multiply(Nx.new_axis(dt, 2), Nx.reshape(a_diag, {1, 1, state_size})))
+
+    # bx = mean(dt) * b * x: [batch, inner, state_size]
+    dt_mean = Nx.mean(dt, axes: [1], keep_axes: true)
+
+    bx =
+      dt_mean
+      |> Nx.new_axis(2)
+      |> Nx.multiply(Nx.new_axis(b, 1))
+      |> Nx.multiply(Nx.new_axis(x, 2))
+
+    # h[t] = a_bar * h[t-1] + bx  (zero-initialized h == sequential_scan's h0 = b[0])
+    new_h = Nx.add(Nx.multiply(a_bar, h), bx)
+
+    # y = sum over state of (c * h)
+    y = Nx.sum(Nx.multiply(Nx.new_axis(c, 1), new_h), axes: [2])
+
+    {y, new_h}
+  end
+
+  @doc """
+  Zero block state for `step_block/5`-style stepping: one SSM hidden state
+  and one conv ring buffer per layer, stacked along axis 1.
+
+  Returns `%{h: [batch, num_layers, inner, state_size],
+  conv: [batch, num_layers, conv_size - 1, inner]}`.
+  """
+  @spec init_block_state(keyword()) :: map()
+  def init_block_state(opts) do
+    batch_size = Keyword.get(opts, :batch_size, 1)
+    hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
+    state_size = Keyword.get(opts, :state_size, default_state_size())
+    expand_factor = Keyword.get(opts, :expand_factor, default_expand_factor())
+    conv_size = Keyword.get(opts, :conv_size, default_conv_size())
+    num_layers = Keyword.get(opts, :num_layers, default_num_layers())
+
+    inner_size = hidden_size * expand_factor
+
+    %{
+      h: Ops.zeros(batch_size, [num_layers, inner_size, state_size]),
+      conv: Ops.zeros(batch_size, [num_layers, conv_size - 1, inner_size])
+    }
+  end
 end

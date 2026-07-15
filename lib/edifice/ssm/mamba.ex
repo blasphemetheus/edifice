@@ -200,6 +200,92 @@ defmodule Edifice.SSM.Mamba do
   end
 
   # ============================================================================
+  # Stateful step contract (Edifice.Stateful)
+  # ============================================================================
+
+  @behaviour Edifice.Stateful
+
+  alias Edifice.Stateful.Ops
+
+  @doc """
+  Initial recurrent state for O(1) stepping:
+  `%{h: [batch, num_layers, inner, state_size], conv: [batch, num_layers,
+  conv_size - 1, inner]}` zeros, where `inner = hidden_size * expand_factor`.
+
+  Zero `h` matches `Common.sequential_scan/2`'s implicit `h[-1] = 0`; the
+  zero conv ring buffer reproduces the forward's causal left-padding.
+
+  Options: `:batch_size` (default 1) plus the same shape options as
+  `build/1` (`:hidden_size`, `:state_size`, `:expand_factor`, `:conv_size`,
+  `:num_layers`).
+  """
+  @impl Edifice.Stateful
+  def init_state(_params, opts \\ []), do: Common.init_block_state(opts)
+
+  @doc """
+  Advance one frame: `[batch, embed_dim]` in, `{[batch, hidden], state}` out.
+
+  Matches the CPU (non-fused) forward path — `Common.discretize_ssm/4` +
+  scan — exactly; equivalence at every prefix length is pinned by
+  `test/edifice/stateful/step_equivalence_test.exs`, including one case
+  crossing the Blelloch-scan branch (`seq_len > 32`).
+  """
+  @impl Edifice.Stateful
+  def step(params, %{h: h, conv: conv}, frame) do
+    params = Ops.unwrap_params(params)
+    num_layers = Nx.axis_size(h, 1)
+
+    x =
+      case params do
+        %{"input_projection" => proj} -> Ops.dense(frame, proj)
+        _ -> frame
+      end
+
+    {x, new_hs, new_convs} =
+      Enum.reduce(1..num_layers, {x, [], []}, fn i, {acc, hs, convs} ->
+        name = "mamba_block_#{i}"
+
+        h_i = h |> Nx.slice_along_axis(i - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        conv_i = conv |> Nx.slice_along_axis(i - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+        {block_out, %{h: h_new, conv: conv_new}} =
+          Common.step_block(params, name, %{h: h_i, conv: conv_i}, acc, &step_selective_ssm/4)
+
+        # Residual around the whole block, mirroring Common.build_model/2
+        {Nx.add(acc, block_out), [h_new | hs], [conv_new | convs]}
+      end)
+
+    new_state = %{
+      h: new_hs |> Enum.reverse() |> Nx.stack(axis: 1),
+      conv: new_convs |> Enum.reverse() |> Nx.stack(axis: 1)
+    }
+
+    {x, new_state}
+  end
+
+  @doc """
+  One step of the selective SSM: B/C/dt projections for the current frame,
+  then the discretized recurrence via `Common.step_discretized_ssm/5`.
+  """
+  @spec step_selective_ssm(map(), String.t(), Nx.Tensor.t(), Nx.Tensor.t()) ::
+          {Nx.Tensor.t(), Nx.Tensor.t()}
+  def step_selective_ssm(params, name, x, h) do
+    state_size = Nx.axis_size(h, 2)
+
+    bc = Ops.dense(x, Ops.layer_params!(params, "#{name}_bc_proj"))
+    b = Nx.slice_along_axis(bc, 0, state_size, axis: 1)
+    c = Nx.slice_along_axis(bc, state_size, state_size, axis: 1)
+
+    dt =
+      x
+      |> Ops.dense(Ops.layer_params!(params, "#{name}_dt_rank"))
+      |> Ops.dense(Ops.layer_params!(params, "#{name}_dt_proj"))
+      |> Ops.softplus()
+
+    Common.step_discretized_ssm(x, b, c, dt, h)
+  end
+
+  # ============================================================================
   # Utilities (delegated to Common)
   # ============================================================================
 

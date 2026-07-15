@@ -37,4 +37,28 @@ defmodule Edifice.StatefulRollbackTest do
       )
     end
   end
+
+  describe "Mamba rollback" do
+    test "snapshot at 5, replay 6..12 is bitwise-identical" do
+      assert_rollback_deterministic(:mamba,
+        embed_dim: 8,
+        hidden_size: 8,
+        state_size: 4,
+        num_layers: 2,
+        conv_size: 3,
+        dropout: 0.0
+      )
+    end
+
+    test "snapshot inside the conv warm-up window" do
+      # rollback_at 2 < conv_size 4: the restored ring buffer still contains
+      # left-pad zeros — replay must reproduce them exactly
+      assert_rollback_deterministic(
+        :mamba,
+        [embed_dim: 6, hidden_size: 6, state_size: 4, num_layers: 1, conv_size: 4, dropout: 0.0],
+        seq_len: 8,
+        rollback_at: 2
+      )
+    end
+  end
 end
