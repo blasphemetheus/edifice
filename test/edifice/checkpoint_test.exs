@@ -184,6 +184,188 @@ defmodule Edifice.CheckpointTest do
     end
   end
 
+  # The motivating bug: SSM shape params (e.g. non-default state_size) not
+  # threaded through checkpoint load, so inference silently rebuilt with
+  # DEFAULT shapes — garbage outputs, no error. The manifest tests pin the fix.
+
+  @mamba_opts [embed_dim: 8, hidden_size: 8, state_size: 4, num_layers: 1, window_size: 4]
+
+  defp build_and_init(arch, opts) do
+    {model, spec} = Edifice.build_with_spec(arch, opts)
+    {init_fn, predict_fn} = Axon.build(model)
+
+    template = %{"state_sequence" => Nx.template({1, opts[:window_size], opts[:embed_dim]}, :f32)}
+    params = init_fn.(template, Axon.ModelState.empty())
+
+    {model, spec, params, predict_fn}
+  end
+
+  # capture_log swallows the return value; this variant keeps it
+  defp capture_log_result(fun) do
+    parent = self()
+    capture_log(fn -> send(parent, {:result, fun.()}) end)
+
+    receive do
+      {:result, result} -> result
+    end
+  end
+
+  describe "model manifest (Edifice.Spec)" do
+    test "round-trip preserves non-default build opts via fetch_spec", %{tmp_dir: dir} do
+      path = Path.join(dir, "spec_roundtrip.nx")
+      {_model, spec, params, _predict} = build_and_init(:mamba, @mamba_opts)
+
+      capture_log(fn -> Checkpoint.save(params, path, spec: spec) end)
+
+      assert {:ok, restored} = Checkpoint.fetch_spec(path)
+      assert restored.arch == :mamba
+      assert restored.build_opts[:state_size] == 4
+      assert restored.build_opts[:num_layers] == 1
+    end
+
+    test "the mamba scenario: load_model rebuilds with non-default shapes, no opts passed",
+         %{tmp_dir: dir} do
+      path = Path.join(dir, "mamba_s4.nx")
+      {_model, spec, params, predict_fn} = build_and_init(:mamba, @mamba_opts)
+
+      capture_log(fn -> Checkpoint.save(params, path, spec: spec) end)
+
+      {model2, params2} = capture_log_result(fn -> Checkpoint.load_model(path) end)
+
+      assert %Axon{} = model2
+
+      # Same params + same input through the rebuilt model must reproduce the
+      # original model's outputs exactly (deterministic forward, atol 1e-6)
+      key = Nx.Random.key(42)
+      {input, _} = Nx.Random.uniform(key, shape: {1, 4, 8})
+
+      {_init2, predict2} = Axon.build(model2)
+      out1 = predict_fn.(params, input)
+      out2 = predict2.(Axon.ModelState.new(params2), input)
+
+      assert Nx.all_close(out1, out2, atol: 1.0e-6) |> Nx.to_number() == 1
+    end
+
+    test "shape mismatch raises loudly with both shapes named", %{tmp_dir: dir} do
+      path = Path.join(dir, "mamba_tampered.nx")
+      {_model, _spec, params, _predict} = build_and_init(:mamba, @mamba_opts)
+
+      # Tamper: a spec claiming the DEFAULT state_size (16) while the stored
+      # params were built with state_size 4 — exactly the silent-garbage case
+      lying_spec =
+        Edifice.Spec.new(:mamba, Keyword.put(@mamba_opts, :state_size, 16))
+
+      capture_log(fn -> Checkpoint.save(params, path, spec: lying_spec) end)
+
+      err =
+        assert_raise RuntimeError, fn ->
+          capture_log(fn -> Checkpoint.load_model(path) end)
+        end
+
+      assert err.message =~ "Mismatched shapes"
+      assert err.message =~ "state_size: 16"
+      assert err.message =~ "expected"
+      assert err.message =~ "stored"
+    end
+
+    test "validate: false skips shape validation", %{tmp_dir: dir} do
+      path = Path.join(dir, "mamba_novalidate.nx")
+      {_model, _spec, params, _predict} = build_and_init(:mamba, @mamba_opts)
+
+      lying_spec = Edifice.Spec.new(:mamba, Keyword.put(@mamba_opts, :state_size, 16))
+      capture_log(fn -> Checkpoint.save(params, path, spec: lying_spec) end)
+
+      {model, loaded} =
+        capture_log_result(fn -> Checkpoint.load_model(path, validate: false) end)
+
+      assert %Axon{} = model
+      assert is_map(loaded)
+    end
+
+    test "spec-less checkpoint warns once per VM on load", %{tmp_dir: dir} do
+      path = Path.join(dir, "legacy.nx")
+      capture_log(fn -> Checkpoint.save(@params, path) end)
+
+      Checkpoint.reset_missing_spec_warning()
+
+      first = capture_log(fn -> Checkpoint.load(path) end)
+      assert first =~ "no embedded Edifice.Spec"
+
+      second = capture_log(fn -> Checkpoint.load(path) end)
+      refute second =~ "no embedded Edifice.Spec"
+    end
+
+    test "load_model on a spec-less checkpoint raises descriptively", %{tmp_dir: dir} do
+      path = Path.join(dir, "legacy2.nx")
+      capture_log(fn -> Checkpoint.save(@params, path) end)
+
+      assert_raise RuntimeError, ~r/no embedded Edifice.Spec/, fn ->
+        capture_log(fn -> Checkpoint.load_model(path) end)
+      end
+
+      assert {:error, :missing} = Checkpoint.fetch_spec(path)
+    end
+
+    test "corrupted spec: load_model raises, plain load still returns params",
+         %{tmp_dir: dir} do
+      path = Path.join(dir, "corrupt_spec.nx")
+
+      capture_log(fn ->
+        Checkpoint.save(@params, path, metadata: %{"__edifice_spec__" => %{"nonsense" => true}})
+      end)
+
+      assert {:error, {:invalid, _reason}} = Checkpoint.fetch_spec(path)
+
+      assert_raise RuntimeError, ~r/invalid embedded Edifice.Spec/, fn ->
+        capture_log(fn -> Checkpoint.load_model(path) end)
+      end
+
+      capture_log(fn ->
+        loaded = Checkpoint.load(path)
+        assert Map.has_key?(loaded, "dense_0")
+      end)
+    end
+
+    test "spec coexists with user metadata", %{tmp_dir: dir} do
+      path = Path.join(dir, "spec_meta.nx")
+      spec = Edifice.Spec.new(:mlp, input_size: 4)
+
+      capture_log(fn ->
+        Checkpoint.save(@params, path, spec: spec, metadata: %{epoch: 3})
+        {_params, meta} = Checkpoint.load(path, return_metadata: true)
+
+        assert meta.epoch == 3
+        assert Map.has_key?(meta, "__edifice_spec__")
+      end)
+    end
+
+    test "reserved metadata key collision raises", %{tmp_dir: dir} do
+      path = Path.join(dir, "collision.nx")
+      spec = Edifice.Spec.new(:mlp, input_size: 4)
+
+      assert_raise ArgumentError, ~r/reserved key/, fn ->
+        Checkpoint.save(@params, path,
+          spec: spec,
+          metadata: %{"__edifice_spec__" => %{}}
+        )
+      end
+    end
+
+    test "old checkpoints load exactly as before (backward compat)", %{tmp_dir: dir} do
+      path = Path.join(dir, "compat.nx")
+
+      capture_log(fn ->
+        Checkpoint.save(@params, path, metadata: %{epoch: 1})
+        {loaded, meta} = Checkpoint.load(path, return_metadata: true)
+
+        assert Nx.all_close(loaded["dense_0"]["kernel"], @params["dense_0"]["kernel"])
+               |> Nx.to_number() == 1
+
+        assert meta == %{epoch: 1}
+      end)
+    end
+  end
+
   describe "safetensors format" do
     test "save and load with format: :safetensors", %{tmp_dir: dir} do
       path = Path.join(dir, "model.safetensors")

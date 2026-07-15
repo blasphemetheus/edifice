@@ -689,20 +689,101 @@ defmodule Edifice do
   """
   @spec build(atom(), keyword()) :: Axon.t() | tuple()
   def build(name, opts \\ []) do
+    {module, merged_opts} = resolve!(name, opts)
+    module.build(merged_opts)
+  end
+
+  @doc """
+  Build a model and capture its `Edifice.Spec` manifest in one call.
+
+  Returns `{model, spec}` where `spec` records the architecture and the
+  fully-merged build options (registry defaults applied, input-dimension
+  aliases normalized), so `Edifice.build(spec.arch, spec.build_opts)`
+  reproduces the same model graph. Pass the spec to
+  `Edifice.Checkpoint.save/3` via the `:spec` option to make checkpoints
+  self-describing.
+
+  ## Options
+
+  `spec_opts` are forwarded to `Edifice.Spec.new/3` (`:created_at`,
+  `:edifice_version`, `:nx_version`).
+
+  ## Example
+
+      {model, spec} = Edifice.build_with_spec(:mamba, embed_dim: 287, state_size: 32)
+      Edifice.Checkpoint.save(params, "mamba.nx", spec: spec)
+  """
+  @spec build_with_spec(atom(), keyword(), keyword()) ::
+          {Axon.t() | tuple(), Edifice.Spec.t()}
+  def build_with_spec(name, opts \\ [], spec_opts \\ []) do
+    {module, merged_opts} = resolve!(name, opts)
+    {module.build(merged_opts), Edifice.Spec.new(name, merged_opts, spec_opts)}
+  end
+
+  defp resolve!(name, opts) do
     opts = normalize_input_dim(opts)
 
     case Map.fetch(@architecture_registry, name) do
       {:ok, {module, default_opts}} ->
-        merged_opts = Keyword.merge(default_opts, opts)
-        module.build(merged_opts)
+        {module, Keyword.merge(default_opts, opts)}
 
       {:ok, module} ->
-        module.build(opts)
+        {module, opts}
 
       :error ->
         available = list_architectures() |> Enum.join(", ")
         raise ArgumentError, "Unknown architecture #{inspect(name)}. Available: #{available}"
     end
+  end
+
+  @doc """
+  Whether an architecture implements the `Edifice.Stateful` O(1) step
+  contract. See `Edifice.Stateful`.
+  """
+  @spec stateful?(atom()) :: boolean()
+  def stateful?(name), do: Edifice.Stateful.stateful?(name)
+
+  @doc """
+  Build the initial recurrent state for a stateful architecture.
+
+  `opts` are the architecture's build options plus `:batch_size` (default 1).
+  Registry default opts (e.g. `:gru`'s `cell_type: :gru`) are merged in, so
+  passing the same opts used with `Edifice.build/2` does the right thing.
+
+  See `Edifice.Stateful`.
+  """
+  @spec init_state(atom(), Edifice.Stateful.params(), keyword()) :: Edifice.Stateful.state()
+  def init_state(name, params, opts \\ []) do
+    {module, merged_opts} = resolve_stateful!(name, opts)
+    module.init_state(params, merged_opts)
+  end
+
+  @doc """
+  Advance a stateful architecture by one frame:
+  `{output, new_state} = Edifice.step(:min_gru, params, state, frame)`.
+
+  See `Edifice.Stateful`.
+  """
+  @spec step(atom(), Edifice.Stateful.params(), Edifice.Stateful.state(), Nx.Tensor.t()) ::
+          {Nx.Tensor.t(), Edifice.Stateful.state()}
+  def step(name, params, state, frame) do
+    {module, _opts} = resolve_stateful!(name, [])
+    module.step(params, state, frame)
+  end
+
+  defp resolve_stateful!(name, opts) do
+    {module, merged_opts} = resolve!(name, opts)
+
+    unless Edifice.Stateful.stateful?(module) do
+      raise ArgumentError,
+            "#{inspect(name)} (#{inspect(module)}) does not implement the " <>
+              "Edifice.Stateful step contract. Stateful architectures: " <>
+              (list_architectures()
+               |> Enum.filter(&Edifice.Stateful.stateful?/1)
+               |> Enum.join(", "))
+    end
+
+    {module, merged_opts}
   end
 
   @doc """
