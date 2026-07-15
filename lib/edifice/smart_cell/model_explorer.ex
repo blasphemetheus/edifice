@@ -190,7 +190,12 @@ if Code.ensure_loaded?(Kino.SmartCell) do
       variable = variable || "model"
 
       opts_ast = build_opts_ast(attrs["family"], attrs["options"])
-      arch_atom = String.to_atom(arch)
+      arch_atom =
+        try do
+          String.to_existing_atom(arch)
+        rescue
+          ArgumentError -> raise ArgumentError, "unknown architecture: #{inspect(arch)}"
+        end
 
       build_call =
         case opts_ast do

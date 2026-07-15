@@ -140,7 +140,7 @@ defmodule Mix.Tasks.Edifice.ExportGguf do
       _ext ->
         # Most formats use Erlang binary term serialization
         # This works for .axon, .bin, .etf, and most custom formats
-        :erlang.binary_to_term(binary)
+        :erlang.binary_to_term(binary, [:safe])
     end
   end
 

@@ -159,8 +159,11 @@ defmodule Edifice.Pretrained.Hub do
   """
   @spec cache_path(String.t(), keyword()) :: Path.t()
   def cache_path(repo_id, opts \\ []) do
+    validate_path_component!(repo_id, "repo_id")
     cache_dir = Keyword.get(opts, :cache_dir, @default_cache_dir)
-    Path.join(cache_dir, repo_id)
+    path = Path.join(cache_dir, repo_id)
+    assert_within!(path, cache_dir, "repo_id")
+    path
   end
 
   @doc """
@@ -177,12 +180,16 @@ defmodule Edifice.Pretrained.Hub do
   """
   @spec parse_shard_index(String.t()) :: [String.t()]
   def parse_shard_index(json_body) do
-    json_body
-    |> Jason.decode!()
-    |> Map.fetch!("weight_map")
-    |> Map.values()
-    |> Enum.uniq()
-    |> Enum.sort()
+    filenames =
+      json_body
+      |> Jason.decode!()
+      |> Map.fetch!("weight_map")
+      |> Map.values()
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    Enum.each(filenames, &validate_path_component!(&1, "shard filename"))
+    filenames
   end
 
   # -- Private --
@@ -262,13 +269,38 @@ defmodule Edifice.Pretrained.Hub do
   end
 
   defp file_cache_path(repo_id, filename, opts) do
-    Path.join(cache_path(repo_id, opts), filename)
+    validate_path_component!(filename, "filename")
+    repo_dir = cache_path(repo_id, opts)
+    path = Path.join(repo_dir, filename)
+    assert_within!(path, repo_dir, "filename")
+    path
   end
 
   defp auth_headers(opts) do
     case Keyword.get(opts, :token) do
       nil -> []
       token -> [{"authorization", "Bearer #{token}"}]
+    end
+  end
+
+  defp validate_path_component!(value, label) do
+    if String.contains?(value, "..") do
+      raise ArgumentError, "Path traversal detected in #{label}: #{inspect(value)}"
+    end
+
+    if String.starts_with?(value, "/") do
+      raise ArgumentError, "Absolute path not allowed in #{label}: #{inspect(value)}"
+    end
+  end
+
+  defp assert_within!(path, parent, label) do
+    expanded = Path.expand(path)
+    expanded_parent = Path.expand(parent)
+
+    unless String.starts_with?(expanded, expanded_parent <> "/") do
+      raise ArgumentError,
+            "Path traversal detected: #{label} resolved to #{expanded}, " <>
+              "which is outside #{expanded_parent}"
     end
   end
 

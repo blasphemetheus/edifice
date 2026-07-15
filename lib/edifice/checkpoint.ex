@@ -170,9 +170,21 @@ defmodule Edifice.Checkpoint do
     <<compressed_flag::8, meta_size::32, rest::binary>> = file_binary
     <<meta_binary::binary-size(meta_size), tensor_binary::binary>> = rest
 
+    # 4 GB decompression limit to prevent decompression bombs
+    max_decompressed_size = 4_294_967_296
+
     tensor_binary =
       if compressed_flag == 1 do
-        :zlib.uncompress(tensor_binary)
+        decompressed = :zlib.uncompress(tensor_binary)
+
+        if byte_size(decompressed) > max_decompressed_size do
+          raise RuntimeError,
+                "Decompressed checkpoint exceeds #{max_decompressed_size} byte limit " <>
+                  "(got #{byte_size(decompressed)} bytes). " <>
+                  "This may indicate a decompression bomb or corrupted file."
+        end
+
+        decompressed
       else
         tensor_binary
       end
@@ -181,7 +193,7 @@ defmodule Edifice.Checkpoint do
 
     metadata =
       if meta_size > 0 do
-        :erlang.binary_to_term(meta_binary)
+        :erlang.binary_to_term(meta_binary, [:safe])
       else
         %{}
       end
