@@ -750,25 +750,73 @@ defmodule Edifice do
   Registry default opts (e.g. `:gru`'s `cell_type: :gru`) are merged in, so
   passing the same opts used with `Edifice.build/2` does the right thing.
 
+  ## JIT warmup
+
+  Pass `compiler: EXLA` (or any `Nx.Defn` compiler) to compile the step
+  path once at init time instead of on the first frame — a mid-game
+  compilation hitch is exactly what a 60 FPS loop can't absorb. The
+  warmup runs one throwaway step on a zero frame (requires `:embed_dim`
+  in opts; skipped otherwise with a warning). Pass the same `compiler:`
+  to `Edifice.step/5` afterwards. The returned state is still a plain
+  Nx container — nothing compiled is stored in it.
+
   See `Edifice.Stateful`.
   """
   @spec init_state(atom(), Edifice.Stateful.params(), keyword()) :: Edifice.Stateful.state()
   def init_state(name, params, opts \\ []) do
     {module, merged_opts} = resolve_stateful!(name, opts)
-    module.init_state(params, merged_opts)
+    state = module.init_state(params, Keyword.delete(merged_opts, :compiler))
+
+    case Keyword.get(merged_opts, :compiler) do
+      nil ->
+        state
+
+      compiler ->
+        warm_jit(module, params, state, merged_opts, compiler)
+        state
+    end
   end
 
   @doc """
   Advance a stateful architecture by one frame:
   `{output, new_state} = Edifice.step(:min_gru, params, state, frame)`.
 
+  ## Options
+
+    * `:compiler` - `Nx.Defn` compiler for a JIT-compiled step (e.g.
+      `EXLA`). Default `nil` = eager op-by-op execution. The compiled fun
+      is cached per `{module, compiler}` (see `Edifice.Stateful.jit_step/2`);
+      warm it at init time via `Edifice.init_state/3`'s `:compiler` option.
+
   See `Edifice.Stateful`.
   """
-  @spec step(atom(), Edifice.Stateful.params(), Edifice.Stateful.state(), Nx.Tensor.t()) ::
+  @spec step(atom(), Edifice.Stateful.params(), Edifice.Stateful.state(), Nx.Tensor.t(), keyword()) ::
           {Nx.Tensor.t(), Edifice.Stateful.state()}
-  def step(name, params, state, frame) do
+  def step(name, params, state, frame, opts \\ []) do
     {module, _opts} = resolve_stateful!(name, [])
-    module.step(params, state, frame)
+
+    case Keyword.get(opts, :compiler) do
+      nil -> module.step(params, state, frame)
+      compiler -> Edifice.Stateful.jit_step(module, compiler).(params, state, frame)
+    end
+  end
+
+  defp warm_jit(module, params, state, opts, compiler) do
+    case Keyword.get(opts, :embed_dim) do
+      nil ->
+        require Logger
+
+        Logger.warning(
+          "[Edifice.init_state] compiler: #{inspect(compiler)} given but :embed_dim " <>
+            "is not in opts — skipping JIT warmup; the first step/5 call will compile instead"
+        )
+
+      embed_dim ->
+        batch_size = Keyword.get(opts, :batch_size, 1)
+        frame = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch_size, embed_dim})
+        {_out, _state} = Edifice.Stateful.jit_step(module, compiler).(params, state, frame)
+        :ok
+    end
   end
 
   defp resolve_stateful!(name, opts) do

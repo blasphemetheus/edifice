@@ -30,14 +30,20 @@ defmodule Edifice.StatefulCase do
     batch = Keyword.get(opts, :batch, 1)
     atol = Keyword.get(opts, :atol, 1.0e-5)
     seed = Keyword.get(opts, :seed, 42)
+    step_opts = Keyword.get(opts, :step_opts, [])
 
     {params, predict_fn, x} = build_forward(arch, build_opts, seq_len, batch, seed)
 
-    state = Edifice.init_state(arch, params, build_opts ++ [batch_size: batch])
+    state =
+      Edifice.init_state(
+        arch,
+        params,
+        build_opts ++ [batch_size: batch] ++ Keyword.take(step_opts, [:compiler])
+      )
 
     Enum.reduce(1..seq_len, state, fn k, state ->
       frame = x |> Nx.slice_along_axis(k - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
-      {step_out, state} = Edifice.step(arch, params, state, frame)
+      {step_out, state} = Edifice.step(arch, params, state, frame, step_opts)
 
       prefix = Nx.slice_along_axis(x, 0, k, axis: 1)
       full_out = predict_fn.(params, prefix)
@@ -72,6 +78,7 @@ defmodule Edifice.StatefulCase do
     rollback_at = Keyword.get(opts, :rollback_at, 5)
     batch = Keyword.get(opts, :batch, 1)
     seed = Keyword.get(opts, :seed, 7)
+    step_opts = Keyword.get(opts, :step_opts, [])
 
     {params, _predict_fn, x} = build_forward(arch, build_opts, seq_len, batch, seed)
 
@@ -88,7 +95,7 @@ defmodule Edifice.StatefulCase do
       |> Enum.with_index(1)
       |> Enum.reduce({[], nil}, fn {frame, t}, {outs, snap} ->
         state = if outs == [], do: state0, else: elem(hd(outs), 1)
-        {out, new_state} = Edifice.step(arch, params, state, frame)
+        {out, new_state} = Edifice.step(arch, params, state, frame, step_opts)
 
         snap =
           if t == rollback_at do
@@ -112,7 +119,7 @@ defmodule Edifice.StatefulCase do
       frames
       |> Enum.drop(rollback_at)
       |> Enum.reduce({[], restored}, fn frame, {outs, state} ->
-        {out, new_state} = Edifice.step(arch, params, state, frame)
+        {out, new_state} = Edifice.step(arch, params, state, frame, step_opts)
         {[out | outs], new_state}
       end)
 

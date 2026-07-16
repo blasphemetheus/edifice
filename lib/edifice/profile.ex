@@ -226,6 +226,8 @@ defmodule Edifice.Profile do
     batch_size = Keyword.get(opts, :batch_size, 1)
     warmup = Keyword.get(opts, :warmup, 10)
     iterations = Keyword.get(opts, :iterations, 200)
+    compiler = Keyword.get(opts, :compiler)
+    step_opts = if compiler, do: [compiler: compiler], else: []
 
     build_opts =
       opts
@@ -246,33 +248,49 @@ defmodule Edifice.Profile do
     params = init_fn.(template, Axon.ModelState.empty())
     param_count = count_params(params)
 
+    # init_state also warms the JIT when a compiler is given, so init_ms
+    # includes compilation — that's the honest number for a frame loop
     {init_us, state} =
       :timer.tc(fn ->
-        Edifice.init_state(arch, params, build_opts ++ [batch_size: batch_size])
+        Edifice.init_state(arch, params, build_opts ++ [batch_size: batch_size] ++ step_opts)
       end)
 
     state_bytes = state_byte_size(state)
 
-    # Pre-generate frames so RNG stays out of the timed loop; a fresh frame
-    # per step keeps caches honest
+    # Pre-materialize every frame BEFORE the timed loop: a fresh frame per
+    # step keeps caches honest, but eager per-index slicing must not be
+    # timed — on EXLA each distinct slice start compiles its own executable
+    # (~10ms), which poisoned the first-profiled arch's numbers until this
+    # was hoisted. Slice on BinaryBackend (no compilation), then move each
+    # frame to the active backend.
     {all_frames, _key} =
       Nx.Random.uniform(Nx.Random.key(42), -1.0, 1.0,
         shape: {warmup + iterations, batch_size, embed_dim}
       )
 
-    frame_at = fn i ->
-      all_frames |> Nx.slice_along_axis(i, 1, axis: 0) |> Nx.squeeze(axes: [0])
-    end
+    all_frames_host = Nx.backend_copy(all_frames, Nx.BinaryBackend)
+
+    frames =
+      for i <- 0..(warmup + iterations - 1) do
+        all_frames_host
+        |> Nx.slice_along_axis(i, 1, axis: 0)
+        |> Nx.squeeze(axes: [0])
+        |> Nx.backend_copy(Nx.default_backend())
+      end
+
+    {warmup_frames, timed_frames} = Enum.split(frames, warmup)
 
     state =
-      Enum.reduce(0..(warmup - 1)//1, state, fn i, s ->
-        {_out, s2} = Edifice.step(arch, params, s, frame_at.(i))
+      Enum.reduce(warmup_frames, state, fn frame, s ->
+        {_out, s2} = Edifice.step(arch, params, s, frame, step_opts)
         s2
       end)
 
     {_state, times_rev} =
-      Enum.reduce(warmup..(warmup + iterations - 1), {state, []}, fn i, {s, acc} ->
-        {us, {_out, s2}} = :timer.tc(fn -> Edifice.step(arch, params, s, frame_at.(i)) end)
+      Enum.reduce(timed_frames, {state, []}, fn frame, {s, acc} ->
+        {us, {_out, s2}} =
+          :timer.tc(fn -> Edifice.step(arch, params, s, frame, step_opts) end)
+
         {s2, [us / 1_000.0 | acc]}
       end)
 
@@ -294,7 +312,8 @@ defmodule Edifice.Profile do
         embed_dim: embed_dim,
         hidden_size: Keyword.fetch!(build_opts, :hidden_size),
         batch_size: batch_size,
-        iterations: iterations
+        iterations: iterations,
+        compiler: compiler
       }
     }
   end
