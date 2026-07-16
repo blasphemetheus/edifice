@@ -24,6 +24,23 @@ defmodule Edifice.SpecTest do
       assert spec.created_at == created_at
     end
 
+    test "external: true admits a composite arch owned by a downstream library" do
+      spec = Edifice.Spec.new(:exphil_policy, [embed_size: 288, backbone: :gru], external: true)
+
+      assert spec.arch == :exphil_policy
+      assert spec.external == true
+      assert spec.build_opts[:backbone] == :gru
+      # still round-trips through metadata serialization
+      assert {:ok, %Edifice.Spec{arch: :exphil_policy, external: true}} =
+               spec |> Edifice.Spec.to_map() |> Edifice.Spec.from_map()
+    end
+
+    test "external: true still rejects non-serializable build opts" do
+      assert_raise ArgumentError, fn ->
+        Edifice.Spec.new(:whatever, [fun: &Enum.map/2], external: true)
+      end
+    end
+
     test "raises on unknown architecture" do
       assert_raise ArgumentError, ~r/Unknown architecture/, fn ->
         Spec.new(:not_a_real_arch, [])

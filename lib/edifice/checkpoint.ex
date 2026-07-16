@@ -321,6 +321,14 @@ defmodule Edifice.Checkpoint do
                 "Checkpoint #{path} has an invalid embedded Edifice.Spec: #{reason}"
       end
 
+    if spec.external do
+      raise RuntimeError,
+            "Checkpoint #{path} carries an EXTERNAL spec (#{inspect(spec.arch)}) — a " <>
+              "composite model owned by a downstream library. Edifice cannot rebuild it; " <>
+              "rebuild the model from spec.build_opts in the owning library and use " <>
+              "Checkpoint.load/2 + validate_shapes!/3 instead."
+    end
+
     params = load(path)
     model = Edifice.build(spec.arch, spec.build_opts)
 

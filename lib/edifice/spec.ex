@@ -21,14 +21,15 @@ defmodule Edifice.Spec do
   """
 
   @enforce_keys [:arch, :build_opts, :edifice_version, :nx_version, :created_at]
-  defstruct [:arch, :build_opts, :edifice_version, :nx_version, :created_at]
+  defstruct [:arch, :build_opts, :edifice_version, :nx_version, :created_at, external: false]
 
   @type t :: %__MODULE__{
           arch: atom(),
           build_opts: keyword(),
           edifice_version: String.t(),
           nx_version: String.t(),
-          created_at: DateTime.t()
+          created_at: DateTime.t(),
+          external: boolean()
         }
 
   @doc """
@@ -43,14 +44,25 @@ defmodule Edifice.Spec do
     * `:created_at` - `DateTime` to stamp (default: `DateTime.utc_now()`)
     * `:edifice_version` / `:nx_version` - version string overrides
       (defaults read from the loaded applications)
+    * `:external` - set `true` to skip the architecture-registry check for
+      a COMPOSITE model owned by a downstream library (e.g. a policy that
+      wraps an edifice backbone in its own heads). An external spec still
+      carries build opts + provenance and still powers
+      `Edifice.Checkpoint.validate_shapes!/3` (the caller supplies the
+      rebuilt model), but `Edifice.Checkpoint.load_model/2` cannot rebuild
+      it — the owning library must rebuild from `build_opts` itself.
 
-  Raises `ArgumentError` for an unknown architecture or for build options
-  that cannot survive serialization (functions, PIDs, references, tensors).
+  Raises `ArgumentError` for an unknown architecture (unless `external: true`)
+  or for build options that cannot survive serialization (functions, PIDs,
+  references, tensors).
   """
   @spec new(atom(), keyword(), keyword()) :: t()
   def new(arch, build_opts \\ [], opts \\ []) when is_atom(arch) do
-    # Raises with the list of available architectures on unknown arch
-    _module = Edifice.module_for(arch)
+    unless Keyword.get(opts, :external, false) do
+      # Raises with the list of available architectures on unknown arch
+      _module = Edifice.module_for(arch)
+    end
+
     validate_serializable!(build_opts)
 
     %__MODULE__{
@@ -58,7 +70,8 @@ defmodule Edifice.Spec do
       build_opts: build_opts,
       edifice_version: Keyword.get_lazy(opts, :edifice_version, fn -> app_version(:edifice) end),
       nx_version: Keyword.get_lazy(opts, :nx_version, fn -> app_version(:nx) end),
-      created_at: Keyword.get_lazy(opts, :created_at, &DateTime.utc_now/0)
+      created_at: Keyword.get_lazy(opts, :created_at, &DateTime.utc_now/0),
+      external: Keyword.get(opts, :external, false)
     }
   end
 
@@ -76,7 +89,8 @@ defmodule Edifice.Spec do
       build_opts: spec.build_opts,
       edifice_version: spec.edifice_version,
       nx_version: spec.nx_version,
-      created_at: DateTime.to_iso8601(spec.created_at)
+      created_at: DateTime.to_iso8601(spec.created_at),
+      external: spec.external
     }
   end
 
@@ -88,11 +102,13 @@ defmodule Edifice.Spec do
   """
   @spec from_map(term()) :: {:ok, t()} | {:error, String.t()}
   def from_map(%{arch: arch, build_opts: build_opts} = map) when is_atom(arch) do
+    external = Map.get(map, :external, false) == true
+
     cond do
       not keyword_list?(build_opts) ->
         {:error, "build_opts is not a keyword list: #{inspect(build_opts)}"}
 
-      not known_arch?(arch) ->
+      not external and not known_arch?(arch) ->
         {:error, "unknown architecture #{inspect(arch)}"}
 
       true ->
@@ -104,7 +120,8 @@ defmodule Edifice.Spec do
                build_opts: build_opts,
                edifice_version: Map.get(map, :edifice_version) || "unknown",
                nx_version: Map.get(map, :nx_version) || "unknown",
-               created_at: created_at
+               created_at: created_at,
+               external: external
              }}
 
           {:error, reason} ->
