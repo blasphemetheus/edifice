@@ -78,7 +78,9 @@ defmodule Edifice.SSM.Common do
 
   ## Parameters
 
-  - `opts` - Model options (embed_dim, hidden_size, num_layers, dropout, etc.)
+  - `opts` - Model options (embed_dim, hidden_size, num_layers, dropout, etc.).
+    `:embed_size` is accepted as a legacy alias for `:embed_dim` (compatibility
+    with downstream clones of this module; `:embed_dim` wins if both are given).
   - `block_builder` - Function `(input, opts) -> Axon.t()` that builds one block
 
   ## Returns
@@ -87,7 +89,7 @@ defmodule Edifice.SSM.Common do
   """
   @spec build_model(keyword(), (Axon.t(), keyword() -> Axon.t())) :: Axon.t()
   def build_model(opts, block_builder) do
-    embed_dim = Keyword.fetch!(opts, :embed_dim)
+    embed_dim = fetch_embed_dim!(opts)
     hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
     num_layers = Keyword.get(opts, :num_layers, default_num_layers())
     dropout = Keyword.get(opts, :dropout, default_dropout())
@@ -533,7 +535,7 @@ defmodule Edifice.SSM.Common do
   """
   @spec param_count(keyword()) :: non_neg_integer()
   def param_count(opts) do
-    embed_dim = Keyword.get(opts, :embed_dim, 287)
+    embed_dim = Keyword.get(opts, :embed_dim) || Keyword.get(opts, :embed_size, 287)
     hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
     state_size = Keyword.get(opts, :state_size, default_state_size())
     expand_factor = Keyword.get(opts, :expand_factor, default_expand_factor())
@@ -575,6 +577,30 @@ defmodule Edifice.SSM.Common do
       window_size: 60,
       dropout: 0.1
     ]
+  end
+
+  @doc """
+  Recommended defaults with caller `overrides` merged on top.
+
+  Lets downstream projects express a domain profile without cloning this
+  module — e.g. a 60 fps gameplay profile is just
+  `recommended_defaults(window_size: 60)` (exphil's former
+  `melee_defaults/0` was byte-identical to `recommended_defaults/0` and can
+  delegate here). Unknown keys pass through untouched, so profile-specific
+  options (`:seq_len`, `:embed_dim`, ...) can ride along.
+  """
+  @spec recommended_defaults(keyword()) :: keyword()
+  def recommended_defaults(overrides) when is_list(overrides) do
+    Keyword.merge(recommended_defaults(), overrides)
+  end
+
+  # Fetch :embed_dim, accepting :embed_size as a legacy alias (downstream
+  # clones used the embed_size spelling). :embed_dim wins when both are set.
+  defp fetch_embed_dim!(opts) do
+    case Keyword.get(opts, :embed_dim) || Keyword.get(opts, :embed_size) do
+      nil -> raise KeyError, key: :embed_dim, term: opts
+      dim -> dim
+    end
   end
 
   @doc false
