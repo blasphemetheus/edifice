@@ -2,6 +2,16 @@ defmodule Edifice.Interpretability.GatedSAE do
   @moduledoc """
   Gated Sparse Autoencoder for mechanistic interpretability.
 
+  > #### Status: experimental / known-incorrect {: .error}
+  >
+  > Audit 2026-07-15 (INTERP_AUDIT): the gate reaches the forward pass only
+  > through a boolean top-k mask — a **zero-gradient path** — and `loss/4`
+  > lacks the paper's auxiliary gate loss, so the gate never trains (it stays
+  > frozen random noise). Do not use for real feature analysis until the
+  > gate has a gradient path (paper: aux reconstruction from gate pre-acts)
+  > and a planted-feature recovery test. `BatchTopKSAE` is the current best
+  > SAE in this directory.
+
   Adds a parallel gating network that decouples feature selection (which features
   fire) from magnitude estimation (how strongly they fire). This significantly
   reduces feature suppression compared to standard ReLU + TopK SAEs.

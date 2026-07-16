@@ -814,4 +814,235 @@ defmodule Edifice.Recurrent do
       name: "truncated_bptt_#{keep_steps}"
     )
   end
+
+  # ============================================================================
+  # Stateful step contract (Edifice.Stateful)
+  # ============================================================================
+
+  @behaviour Edifice.Stateful
+
+  alias Edifice.Stateful.Ops
+
+  @doc """
+  Initial recurrent state for O(1) stepping.
+
+  GRU: `%{h: [batch, num_layers, hidden]}`. LSTM additionally carries
+  `%{c: [batch, num_layers, hidden]}`.
+
+  Two build-time graph layouts exist and are detected from the params:
+
+    * **Axon layout** (`Axon.gru`/`Axon.lstm`, the CPU/hex-deps path) —
+      Axon's initial hidden state is NOT zeros: it is glorot-uniform sampled
+      from a stored RNG key (`"gru_1_h_hidden_state" => %{"key" => ...}`).
+      We replicate that exactly (read key, `Nx.Random.split`, sample), or
+      equivalence fails from the very first frame.
+    * **Fused layout** (`_input_proj` + `_fused_scan`, the CUDA-fork path) —
+      zero initial states, matching the kernel and its CPU fallback.
+
+  Options: `:batch_size` (default 1), `:hidden_size`, `:num_layers`,
+  `:cell_type` (same defaults as `build/1`; the registry's `:gru`/`:lstm`
+  entries merge `cell_type` in automatically via `Edifice.init_state/3`).
+  """
+  @impl Edifice.Stateful
+  def init_state(params, opts \\ []) do
+    params = Ops.unwrap_params(params)
+    batch_size = Keyword.get(opts, :batch_size, 1)
+    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
+    num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
+    cell_type = Keyword.get(opts, :cell_type, @default_cell_type)
+
+    layer_state = fn state_name ->
+      1..num_layers
+      |> Enum.map(fn i ->
+        case rnn_layout(params, cell_type) do
+          :axon ->
+            rnn_initial_hidden(
+              params,
+              "#{cell_type}_#{i}_#{state_name}_hidden_state",
+              batch_size,
+              hidden_size
+            )
+
+          :fused ->
+            Ops.zeros(batch_size, [hidden_size])
+        end
+      end)
+      |> Nx.stack(axis: 1)
+    end
+
+    case cell_type do
+      :lstm -> %{h: layer_state.("h"), c: layer_state.("c")}
+      :gru -> %{h: layer_state.("h")}
+    end
+  end
+
+  @doc """
+  Advance one frame: `[batch, embed_dim]` in, `{[batch, hidden], state}` out.
+
+  Cell type is inferred from the state (`:c` present = LSTM); the graph
+  layout is inferred from the param keys. Matches the full-sequence forward
+  exactly (pinned by `test/edifice/stateful/step_equivalence_test.exs`).
+  """
+  @impl Edifice.Stateful
+  def step(params, %{h: h} = state, frame) do
+    params = Ops.unwrap_params(params)
+    cell_type = if Map.has_key?(state, :c), do: :lstm, else: :gru
+    num_layers = Nx.axis_size(h, 1)
+    layout = rnn_layout(params, cell_type)
+
+    x =
+      case params do
+        %{"input_ln" => ln} -> Ops.layer_norm(frame, ln, 1.0e-6)
+        _ -> frame
+      end
+
+    slice = fn tensor, i ->
+      tensor |> Nx.slice_along_axis(i - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+    end
+
+    {x, new_hs, new_cs} =
+      Enum.reduce(1..num_layers, {x, [], []}, fn i, {acc, hs, cs} ->
+        name = "#{cell_type}_#{i}"
+        h_i = slice.(h, i)
+
+        {out, h_new, c_new} =
+          case {layout, cell_type} do
+            {:axon, :gru} ->
+              layer = Ops.layer_params!(params, name)
+
+              {out, {h_new}} =
+                Axon.Layers.gru_cell(
+                  acc,
+                  {h_i},
+                  Nx.tensor(0),
+                  layer["input_kernel"],
+                  layer["hidden_kernel"],
+                  layer["bias"]
+                )
+
+              {out, h_new, nil}
+
+            {:axon, :lstm} ->
+              layer = Ops.layer_params!(params, name)
+              c_i = slice.(state.c, i)
+
+              {out, {c_new, h_new}} =
+                Axon.Layers.lstm_cell(
+                  acc,
+                  {c_i, h_i},
+                  Nx.tensor(0),
+                  layer["input_kernel"],
+                  layer["hidden_kernel"],
+                  layer["bias"]
+                )
+
+              {out, h_new, c_new}
+
+            {:fused, :gru} ->
+              wx = Ops.dense(acc, Ops.layer_params!(params, "#{name}_input_proj"))
+              r_kernel = Ops.layer_params!(params, "#{name}_fused_scan")["#{name}_recurrent_kernel"]
+              h_new = fused_gru_cell_step(wx, r_kernel, h_i)
+              {h_new, h_new, nil}
+
+            {:fused, :lstm} ->
+              wx = Ops.dense(acc, Ops.layer_params!(params, "#{name}_input_proj"))
+              r_kernel = Ops.layer_params!(params, "#{name}_fused_scan")["#{name}_recurrent_kernel"]
+              c_i = slice.(state.c, i)
+              {h_new, c_new} = fused_lstm_cell_step(wx, r_kernel, h_i, c_i)
+              {h_new, h_new, c_new}
+          end
+
+        # Per-layer post-RNN layer norm (present unless use_layer_norm: false)
+        out =
+          case Map.fetch(params, "#{name}_ln") do
+            {:ok, ln} -> Ops.layer_norm(out, ln, 1.0e-6)
+            :error -> out
+          end
+
+        {out, [h_new | hs], [c_new | cs]}
+      end)
+
+    new_state = %{h: new_hs |> Enum.reverse() |> Nx.stack(axis: 1)}
+
+    new_state =
+      if cell_type == :lstm do
+        Map.put(new_state, :c, new_cs |> Enum.reverse() |> Nx.stack(axis: 1))
+      else
+        new_state
+      end
+
+    {x, new_state}
+  end
+
+  # One step of the fused-layout GRU, transcribed from
+  # Edifice.CUDA.FusedScan.gru_scan_fallback/3: gate order [r, z, n], reset
+  # applied to the recurrent contribution only, no recurrent bias.
+  defp fused_gru_cell_step(wx, r_kernel, h_prev) do
+    hidden = Nx.axis_size(h_prev, 1)
+    rh = Nx.dot(h_prev, [1], r_kernel, [0])
+
+    r =
+      Nx.sigmoid(
+        Nx.add(
+          Nx.slice_along_axis(wx, 0, hidden, axis: 1),
+          Nx.slice_along_axis(rh, 0, hidden, axis: 1)
+        )
+      )
+
+    z =
+      Nx.sigmoid(
+        Nx.add(
+          Nx.slice_along_axis(wx, hidden, hidden, axis: 1),
+          Nx.slice_along_axis(rh, hidden, hidden, axis: 1)
+        )
+      )
+
+    n =
+      Nx.tanh(
+        Nx.add(
+          Nx.slice_along_axis(wx, hidden * 2, hidden, axis: 1),
+          Nx.multiply(r, Nx.slice_along_axis(rh, hidden * 2, hidden, axis: 1))
+        )
+      )
+
+    Nx.add(Nx.multiply(Nx.subtract(1.0, z), n), Nx.multiply(z, h_prev))
+  end
+
+  # One step of the fused-layout LSTM, transcribed from
+  # Edifice.CUDA.FusedScan.lstm_scan_fallback/4: gate order [i, f, g, o].
+  defp fused_lstm_cell_step(wx, r_kernel, h_prev, c_prev) do
+    hidden = Nx.axis_size(h_prev, 1)
+    gates = Nx.add(wx, Nx.dot(h_prev, [1], r_kernel, [0]))
+
+    i = Nx.sigmoid(Nx.slice_along_axis(gates, 0, hidden, axis: 1))
+    f = Nx.sigmoid(Nx.slice_along_axis(gates, hidden, hidden, axis: 1))
+    g = Nx.tanh(Nx.slice_along_axis(gates, hidden * 2, hidden, axis: 1))
+    o = Nx.sigmoid(Nx.slice_along_axis(gates, hidden * 3, hidden, axis: 1))
+
+    c_new = Nx.add(Nx.multiply(f, c_prev), Nx.multiply(i, g))
+    h_new = Nx.multiply(o, Nx.tanh(c_new))
+
+    {h_new, c_new}
+  end
+
+  defp rnn_layout(params, cell_type) do
+    cond do
+      Map.has_key?(params, "#{cell_type}_1") -> :axon
+      Map.has_key?(params, "#{cell_type}_1_fused_scan") -> :fused
+      true ->
+        raise ArgumentError,
+              "params contain neither #{inspect("#{cell_type}_1")} (Axon layout) nor " <>
+                "#{inspect("#{cell_type}_1_fused_scan")} (fused layout) — were these " <>
+                "params trained with cell_type: #{inspect(cell_type)}?"
+    end
+  end
+
+  # Replicates Axon's rnn_state initialization (axon.ex rnn_state/7): the
+  # initial hidden state is glorot-uniform sampled from the stored RNG key,
+  # NOT zeros. keys[1] is what the forward consumes in inference mode.
+  defp rnn_initial_hidden(params, state_layer_name, batch_size, hidden_size) do
+    key = Ops.layer_params!(params, state_layer_name)["key"]
+    keys = Nx.Random.split(key)
+    Axon.Initializers.glorot_uniform().({batch_size, hidden_size}, {:f, 32}, keys[1])
+  end
 end

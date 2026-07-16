@@ -107,7 +107,13 @@ defmodule Edifice.Interpretability.Transcoder do
   """
   @spec loss(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), keyword()) :: Nx.Tensor.t()
   defn loss(target, reconstruction, hidden_acts, opts \\ []) do
+    opts = keyword!(opts, l1_coeff: 1.0e-3)
     l1_coeff = opts[:l1_coeff]
+
+    # f32 at loss entry per CLAUDE.md precision policy
+    target = Nx.as_type(target, :f32)
+    reconstruction = Nx.as_type(reconstruction, :f32)
+    hidden_acts = Nx.as_type(hidden_acts, :f32)
 
     recon_loss = Nx.mean(Nx.pow(target - reconstruction, 2))
     l1_loss = Nx.mean(Nx.abs(hidden_acts))

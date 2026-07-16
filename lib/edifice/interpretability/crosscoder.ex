@@ -131,23 +131,48 @@ defmodule Edifice.Interpretability.Crosscoder do
 
   @doc """
   Compute crosscoder training loss: mean reconstruction MSE across sources + L1.
+
+  Accepts targets/reconstructions either as lists of `[batch, dim]` tensors
+  (stacked for you — convenient at call sites outside `defn`) or as
+  already-stacked `[num_sources, batch, dim]` tensors. Inside a `defn`
+  (e.g. under `value_and_grad`), call `stacked_loss/4` directly with
+  stacked tensors — plain lists are not valid `defn` inputs.
   """
-  @spec loss([Nx.Tensor.t()], [Nx.Tensor.t()], Nx.Tensor.t(), keyword()) :: Nx.Tensor.t()
-  defn loss(targets, reconstructions, hidden_acts, opts \\ []) do
+  @spec loss(
+          [Nx.Tensor.t()] | Nx.Tensor.t(),
+          [Nx.Tensor.t()] | Nx.Tensor.t(),
+          Nx.Tensor.t(),
+          keyword()
+        ) :: Nx.Tensor.t()
+  def loss(targets, reconstructions, hidden_acts, opts \\ [])
+
+  def loss(targets, reconstructions, hidden_acts, opts) when is_list(targets) do
+    loss(Nx.stack(targets), Nx.stack(reconstructions), hidden_acts, opts)
+  end
+
+  def loss(targets, reconstructions, hidden_acts, opts) do
+    stacked_loss(targets, reconstructions, hidden_acts, opts)
+  end
+
+  @doc """
+  Crosscoder loss over stacked `[num_sources, batch, dim]` tensors —
+  the `defn`-safe entry point.
+  """
+  @spec stacked_loss(Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t(), keyword()) :: Nx.Tensor.t()
+  defn stacked_loss(targets, reconstructions, hidden_acts, opts \\ []) do
+    opts = keyword!(opts, l1_coeff: 1.0e-3)
     l1_coeff = opts[:l1_coeff]
 
-    # Mean reconstruction loss across all sources
-    {recon_sum, count} =
-      {targets, reconstructions}
-      |> then(fn {ts, rs} ->
-        Enum.zip(ts, rs)
-        |> Enum.reduce({Nx.tensor(0.0), 0}, fn {t, r}, {acc, n} ->
-          {acc + Nx.mean(Nx.pow(t - r, 2)), n + 1}
-        end)
-      end)
+    # f32 at loss entry per CLAUDE.md precision policy
+    targets = Nx.as_type(targets, :f32)
+    reconstructions = Nx.as_type(reconstructions, :f32)
+    hidden_acts = Nx.as_type(hidden_acts, :f32)
 
-    recon_loss = recon_sum / count
+    # Mean MSE across all sources (equal-sized sources, so the global mean
+    # equals the mean of per-source MSEs)
+    recon_loss = Nx.mean(Nx.pow(targets - reconstructions, 2))
     l1_loss = Nx.mean(Nx.abs(hidden_acts))
+
     recon_loss + l1_coeff * l1_loss
   end
 

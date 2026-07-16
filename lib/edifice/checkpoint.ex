@@ -24,6 +24,21 @@ defmodule Edifice.Checkpoint do
         return_metadata: true
       )
 
+  ## Self-Describing Checkpoints (model manifest)
+
+      {model, spec} = Edifice.build_with_spec(:mamba, embed_dim: 287, state_size: 32)
+      Edifice.Checkpoint.save(params, "mamba.nx", spec: spec)
+
+      # Later — rebuilds from the embedded spec and validates param shapes:
+      {model, params} = Edifice.Checkpoint.load_model("mamba.nx")
+
+  Embedding an `Edifice.Spec` kills a silent-failure class: loading a
+  checkpoint into a model rebuilt with *default* options (shape mismatch =
+  garbage outputs, no error). `load_model/2` raises loudly instead.
+  Limitations: specs are embedded only in the `:nx` format (safetensors has
+  no metadata write support here), and shape validation is skipped for
+  architectures whose `build/2` returns a tuple of models.
+
   ## Axon.Loop Integration
 
       loop
@@ -49,6 +64,12 @@ defmodule Edifice.Checkpoint do
 
   require Logger
 
+  alias Edifice.Spec
+
+  # Reserved metadata key for the embedded Edifice.Spec (string key: always
+  # survives :erlang.binary_to_term(bin, [:safe])).
+  @spec_key "__edifice_spec__"
+
   # ============================================================================
   # Save
   # ============================================================================
@@ -65,6 +86,10 @@ defmodule Edifice.Checkpoint do
 
     * `:metadata` - Optional map of training metadata to store alongside
       parameters (epoch, loss, architecture, hyperparameters, etc.)
+    * `:spec` - Optional `Edifice.Spec` manifest to embed, making the
+      checkpoint self-describing (see `load_model/2`). Stored in metadata
+      under a reserved key; raises if `:metadata` already contains that key.
+      Only supported by the `:nx` format.
     * `:format` - Checkpoint format: `:nx` (default) or `:safetensors`.
       Safetensors enables cross-ecosystem sharing (PyTorch, JAX, HuggingFace).
       Note: safetensors format does not support metadata storage.
@@ -76,6 +101,13 @@ defmodule Edifice.Checkpoint do
     format = Keyword.get(opts, :format, :nx)
 
     if format == :safetensors do
+      if Keyword.has_key?(opts, :spec) do
+        Logger.warning(
+          "[Checkpoint] :spec is not supported for the :safetensors format " <>
+            "(no metadata write support) — the spec will NOT be embedded in #{path}"
+        )
+      end
+
       export_safetensors(params, path, opts)
     else
       save_nx(params, path, opts)
@@ -83,7 +115,11 @@ defmodule Edifice.Checkpoint do
   end
 
   defp save_nx(params, path, opts) do
-    metadata = Keyword.get(opts, :metadata, nil)
+    metadata =
+      opts
+      |> Keyword.get(:metadata, nil)
+      |> inject_spec(Keyword.get(opts, :spec))
+
     compressed = Keyword.get(opts, :compressed, 0)
 
     data = extract_params(params)
@@ -198,12 +234,218 @@ defmodule Edifice.Checkpoint do
         %{}
       end
 
+    unless is_map(metadata) and Map.has_key?(metadata, @spec_key) do
+      warn_missing_spec(path)
+    end
+
     Logger.info("[Checkpoint] Loaded #{readable_size(size)} from #{path}")
 
     if return_metadata do
       {params, metadata}
     else
       params
+    end
+  end
+
+  # ============================================================================
+  # Model manifest (Edifice.Spec)
+  # ============================================================================
+
+  @doc """
+  Read the embedded `Edifice.Spec` from a checkpoint without deserializing
+  its tensors (the metadata block sits at the head of the file).
+
+  Returns `{:ok, spec}`, `{:error, :missing}` (no spec embedded, or not an
+  `:nx`-format file with metadata), or `{:error, {:invalid, reason}}`.
+  """
+  @spec fetch_spec(String.t()) ::
+          {:ok, Spec.t()} | {:error, :missing | {:invalid, String.t()}}
+  def fetch_spec(path) do
+    File.open!(path, [:read, :binary, :raw], fn fd ->
+      with {:ok, <<_compressed::8, meta_size::32>>} <- :file.read(fd, 5),
+           true <- meta_size > 0,
+           {:ok, meta_binary} <- :file.read(fd, meta_size),
+           %{} = metadata <- safe_term(meta_binary),
+           {:ok, spec_map} <- Map.fetch(metadata, @spec_key) do
+        case Spec.from_map(spec_map) do
+          {:ok, spec} -> {:ok, spec}
+          {:error, reason} -> {:error, {:invalid, reason}}
+        end
+      else
+        {:invalid_term, reason} -> {:error, {:invalid, reason}}
+        _ -> {:error, :missing}
+      end
+    end)
+  end
+
+  @doc """
+  Load a checkpoint AND rebuild its model from the embedded `Edifice.Spec`.
+
+  Returns `{model, params}` where `model` is the result of
+  `Edifice.build(spec.arch, spec.build_opts)` and `params` is the loaded
+  parameter map. This is the safe counterpart to rebuilding the model
+  by hand: build options travel with the checkpoint, so a non-default
+  `state_size` (or any other shape option) can never silently fall back
+  to defaults.
+
+  ## Options
+
+    * `:validate` - Validate stored parameter shapes against the rebuilt
+      model (default: `true`). Only performed when the rebuilt model is a
+      single `%Axon{}`; tuple-returning architectures skip validation.
+      Validation initializes the rebuilt model's parameters once, on the
+      current default backend.
+
+  Raises with a descriptive message when the checkpoint has no spec
+  (pre-manifest checkpoint — rebuild the model yourself and use `load/2`),
+  when the spec is invalid, or when parameter shapes mismatch.
+  """
+  @spec load_model(String.t(), keyword()) :: {Axon.t() | tuple(), map()}
+  def load_model(path, opts \\ []) do
+    validate = Keyword.get(opts, :validate, true)
+
+    spec =
+      case fetch_spec(path) do
+        {:ok, spec} ->
+          spec
+
+        {:error, :missing} ->
+          raise RuntimeError,
+                "Checkpoint #{path} has no embedded Edifice.Spec (it predates model " <>
+                  "manifests, or was saved without the :spec option). Rebuild the model " <>
+                  "yourself with the original build options and use Checkpoint.load/2, or " <>
+                  "re-save it with Checkpoint.save(params, path, spec: spec)."
+
+        {:error, {:invalid, reason}} ->
+          raise RuntimeError,
+                "Checkpoint #{path} has an invalid embedded Edifice.Spec: #{reason}"
+      end
+
+    params = load(path)
+    model = Edifice.build(spec.arch, spec.build_opts)
+
+    if validate do
+      validate_shapes!(model, params, spec)
+    end
+
+    {model, params}
+  end
+
+  @doc """
+  Validate stored checkpoint parameters against a model's expected shapes.
+
+  Compares the flattened parameter tree of `params` against the shapes the
+  model initializes, raising a descriptive error listing every mismatched,
+  missing, and unexpected parameter. Returns `:ok` when everything matches.
+
+  Only `%Axon{}` models are validated; tuple/container build results return
+  `:ok` unchecked.
+  """
+  @spec validate_shapes!(Axon.t() | tuple(), map(), Spec.t() | nil) :: :ok
+  def validate_shapes!(model, params, spec \\ nil)
+
+  def validate_shapes!(%Axon{} = model, params, spec) do
+    templates = Edifice.Display.build_input_templates(model)
+    {init_fn, _predict_fn} = Axon.build(model)
+    expected = init_fn.(templates, Axon.ModelState.empty())
+
+    expected_shapes = param_shapes(expected)
+    stored_shapes = param_shapes(params)
+
+    mismatched =
+      for {key, shape} <- expected_shapes,
+          stored = Map.get(stored_shapes, key),
+          stored != shape,
+          do: {key, shape, stored}
+
+    missing = Map.keys(expected_shapes) -- Map.keys(stored_shapes)
+    extra = Map.keys(stored_shapes) -- Map.keys(expected_shapes)
+
+    if mismatched == [] and missing == [] and extra == [] do
+      :ok
+    else
+      arch_line =
+        case spec do
+          %Spec{arch: arch, build_opts: build_opts} ->
+            "\n  arch: #{inspect(arch)}\n  build_opts: #{inspect(build_opts)}\n"
+
+          _ ->
+            "\n"
+        end
+
+      sections =
+        [
+          {"Mismatched shapes",
+           Enum.map(mismatched, fn {key, expected, stored} ->
+             "  #{key}: expected #{inspect(expected)}, stored #{inspect(stored)}"
+           end)},
+          {"Missing from checkpoint", Enum.map(missing, &"  #{&1}")},
+          {"Unexpected in checkpoint", Enum.map(extra, &"  #{&1}")}
+        ]
+        |> Enum.reject(fn {_title, lines} -> lines == [] end)
+        |> Enum.map_join("\n", fn {title, lines} ->
+          "#{title}:\n" <> Enum.join(lines, "\n")
+        end)
+
+      raise RuntimeError,
+            "Checkpoint parameters do not match the model rebuilt from its spec." <>
+              arch_line <> sections <>
+              "\nThe checkpoint was likely saved with different build options than " <>
+              "the embedded spec, or the file is corrupted."
+    end
+  end
+
+  def validate_shapes!(_model, _params, _spec), do: :ok
+
+  @doc false
+  def reset_missing_spec_warning do
+    :persistent_term.erase({__MODULE__, :missing_spec_warned})
+    :ok
+  end
+
+  defp inject_spec(metadata, nil), do: metadata
+
+  defp inject_spec(metadata, %Spec{} = spec) do
+    metadata = metadata || %{}
+
+    if Map.has_key?(metadata, @spec_key) do
+      raise ArgumentError,
+            "metadata already contains the reserved key #{inspect(@spec_key)}; " <>
+              "pass the spec via the :spec option only"
+    end
+
+    Map.put(metadata, @spec_key, Spec.to_map(spec))
+  end
+
+  defp inject_spec(_metadata, other) do
+    raise ArgumentError, "expected :spec to be an %Edifice.Spec{}, got: #{inspect(other)}"
+  end
+
+  defp safe_term(binary) do
+    :erlang.binary_to_term(binary, [:safe])
+  rescue
+    ArgumentError ->
+      {:invalid_term, "metadata is not deserializable with binary_to_term(bin, [:safe])"}
+  end
+
+  defp param_shapes(params) do
+    params
+    |> extract_params()
+    |> flatten_to_dot_keys()
+    |> Map.new(fn {key, tensor} -> {key, Nx.shape(tensor)} end)
+  end
+
+  defp warn_missing_spec(path) do
+    key = {__MODULE__, :missing_spec_warned}
+
+    unless :persistent_term.get(key, false) do
+      :persistent_term.put(key, true)
+
+      Logger.warning(
+        "[Checkpoint] #{path} has no embedded Edifice.Spec — the model cannot be " <>
+          "rebuilt from this checkpoint alone. Save with Checkpoint.save(params, path, " <>
+          "spec: spec) (see Edifice.build_with_spec/3). This warning is shown once per VM."
+      )
     end
   end
 

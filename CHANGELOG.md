@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Model manifest (self-describing checkpoints)**: `Edifice.Spec`,
+  `Edifice.build_with_spec/3`, `Checkpoint.save(..., spec:)`,
+  `Checkpoint.fetch_spec/1`, `Checkpoint.load_model/2` (rebuild from the
+  embedded spec + parameter shape validation). Kills the
+  silently-rebuilt-with-default-shapes checkpoint failure class.
+- **`Edifice.Stateful` step contract** for O(1) per-frame inference:
+  `init_state/2` + `step/3` with plain-Nx-container state
+  (snapshot/serialize/restore = netplay rollback primitives). Implemented
+  for MinGRU, Mamba, GatedSSM (`scan_mode: :causal`), GRU, and LSTM — each
+  pinned by step-equals-full-forward equivalence tests at every prefix
+  length and bitwise rollback replay tests.
+- **`Edifice.Profile` `mode: :step`**: batch=1 per-step p50/p95 latency +
+  recurrent-state memory footprint across stateful architectures;
+  `bench/step_latency.exs` one-command comparison.
+- **`Edifice.Interpretability.Probe`** (ported from exphil): linear probing
+  with balanced accuracy, class-weighted CE, train-only standardization,
+  label masking, degeneracy guards, shuffled-label control.
+- **`Edifice.Interpretability.Attribution`** (ported from exphil):
+  gradient×input saliency + dimension-group shares.
+
+### Changed
+
+- `Edifice.SSM.GatedSSM` gains `scan_mode: :causal | :legacy` (default
+  `:legacy`, semantics unchanged). The causal mode is a true EMA recurrence
+  and is required for stateful stepping.
+- All interpretability `loss/4` functions now default `l1_coeff` properly
+  (`keyword!`) and cast to f32 at entry per the numerical precision policy;
+  `Crosscoder.loss/4` accepts lists or stacked tensors (was non-runnable).
+
+### Deprecated
+
+- `Edifice.SSM.GatedSSM.step/4` and `init_cache/1` — never numerically
+  matched the forward; use the `Edifice.Stateful` contract with
+  `scan_mode: :causal`.
+
+### Documentation
+
+- Status warnings on GatedSAE, MatryoshkaSAE, CrossLayerTranscoder, and
+  DASProbe per INTERP_AUDIT_2026-07-15 (known-incorrect implementations;
+  see each moduledoc).
+
 ## [0.2.0] - 2026-02-25
 
 ### Added

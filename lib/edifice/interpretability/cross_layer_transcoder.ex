@@ -2,7 +2,14 @@ defmodule Edifice.Interpretability.CrossLayerTranscoder do
   @moduledoc """
   Cross-Layer Transcoder for circuit-level sparse analysis.
 
-  <!-- verified: true, date: 2026-02-28 -->
+  > #### Status: experimental / wrong architecture {: .error}
+  >
+  > Audit 2026-07-15 (INTERP_AUDIT): this implementation shares code
+  > **acausally** across layers and has no per-layer feature identity — a
+  > real CLT needs causal layer→(layer..L) decoders — and it defines no
+  > loss at all. It needs a redesign, not a patch. (A stale
+  > `verified: true` marker was removed from this doc; it was never
+  > supported by the code.)
 
   Extends the Transcoder to process all MLP layers simultaneously with a
   shared dictionary. Each layer gets its own encoder projection but shares
