@@ -44,7 +44,7 @@ defmodule Edifice.MixProject do
       # ML Core
       if(local_nx?,
         do: {:nx, path: "../nx/nx", override: true},
-        else: {:nx, "~> 0.11"}
+        else: {:nx, "~> 0.12"}
       ),
       {:axon, "~> 0.8"},
       {:polaris, "~> 0.1"},
