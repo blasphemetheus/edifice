@@ -65,10 +65,16 @@ defmodule Edifice.Interpretability.SparseAutoencoder do
     - `:dict_size` - Number of dictionary features, typically >> input_size (default: 4096)
     - `:top_k` - Number of active features when `sparsity: :top_k` (default: 32)
     - `:sparsity` - Sparsity mode: `:top_k` or `:l1` (default: `:top_k`)
+    - `:output` - `:reconstruction` (default, single tensor) or `:container`,
+      an `Axon.container` of `%{reconstruction, hidden, pre_acts}` — losses
+      need the sparse hidden activations, which the default output hides
+      (INTERP_AUDIT family-wide gap 2). `pre_acts` is the post-ReLU,
+      pre-sparsify encoder output (used by aux losses / dead-feature logic).
 
   ## Returns
 
-    An Axon model mapping `[batch, input_size]` to `[batch, input_size]`.
+    An Axon model mapping `[batch, input_size]` to `[batch, input_size]`
+    (or to the container described above).
   """
   @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
@@ -76,12 +82,13 @@ defmodule Edifice.Interpretability.SparseAutoencoder do
     dict_size = Keyword.get(opts, :dict_size, @default_dict_size)
     top_k = Keyword.get(opts, :top_k, @default_top_k)
     sparsity = Keyword.get(opts, :sparsity, :top_k)
+    output = Keyword.get(opts, :output, :reconstruction)
 
     input = Axon.input("sae_input", shape: {nil, input_size})
 
     # Encoder
-    hidden = Axon.dense(input, dict_size, name: "sae_encoder")
-    hidden = Axon.activation(hidden, :relu, name: "sae_encoder_act")
+    pre_acts = Axon.dense(input, dict_size, name: "sae_encoder")
+    pre_acts = Axon.activation(pre_acts, :relu, name: "sae_encoder_act")
 
     # Sparsify
     hidden =
@@ -89,17 +96,25 @@ defmodule Edifice.Interpretability.SparseAutoencoder do
         :top_k ->
           Axon.layer(
             fn acts, _opts -> top_k_sparsify(acts, top_k) end,
-            [hidden],
+            [pre_acts],
             name: "sae_top_k",
             op_name: :top_k_sparsify
           )
 
         :l1 ->
-          hidden
+          pre_acts
       end
 
     # Decoder
-    Axon.dense(hidden, input_size, name: "sae_decoder")
+    reconstruction = Axon.dense(hidden, input_size, name: "sae_decoder")
+
+    case output do
+      :reconstruction ->
+        reconstruction
+
+      :container ->
+        Axon.container(%{reconstruction: reconstruction, hidden: hidden, pre_acts: pre_acts})
+    end
   end
 
   @doc """

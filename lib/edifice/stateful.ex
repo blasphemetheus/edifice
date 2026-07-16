@@ -67,6 +67,47 @@ defmodule Edifice.Stateful do
               {Nx.Tensor.t(), state()}
 
   @doc """
+  Fetch (or compile and cache) a JIT-compiled `step/3` for a module.
+
+  Eager op-by-op dispatch dominates step latency on accelerator backends
+  (launch + sync per Nx op); compiling the whole step into one executable
+  is what makes the 16.67 ms frame budget reachable. The compiled fun is
+  cached in `:persistent_term` keyed by `{module, compiler}` — the
+  compiler itself re-uses its compilation cache across calls with the
+  same tensor shapes, so each (shapes, types) signature compiles once.
+
+  The compiled fun lives OUTSIDE the state on purpose: state must remain
+  a plain Nx container so the snapshot/serialize/restore rollback
+  properties keep holding.
+
+  Callers normally don't use this directly — pass `compiler:` to
+  `Edifice.step/5` / `Edifice.init_state/3` instead.
+  """
+  @spec jit_step(module(), module()) :: (params(), state(), Nx.Tensor.t() -> {Nx.Tensor.t(), state()})
+  def jit_step(module, compiler) do
+    key = {__MODULE__, :jit_step, module, compiler}
+
+    case :persistent_term.get(key, nil) do
+      nil ->
+        fun = Nx.Defn.jit(&module.step/3, compiler: compiler)
+        :persistent_term.put(key, fun)
+        fun
+
+      fun ->
+        fun
+    end
+  end
+
+  @doc false
+  def clear_jit_cache do
+    for {{__MODULE__, :jit_step, _, _} = key, _} <- :persistent_term.get() do
+      :persistent_term.erase(key)
+    end
+
+    :ok
+  end
+
+  @doc """
   Whether an architecture (atom or module) implements the stateful contract.
   """
   @spec stateful?(atom() | module()) :: boolean()

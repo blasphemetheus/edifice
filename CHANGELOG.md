@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **JIT-compiled stateful stepping**: `Edifice.step/5` and
+  `Edifice.init_state/3` accept `compiler:` (e.g. `EXLA`) — the step path
+  compiles to a single executable per architecture (cached in
+  `persistent_term`), 17–25x faster than eager dispatch on EXLA host CPU
+  (0.05–0.09 ms/step at Melee dims). State remains a plain Nx container;
+  rollback guarantees are re-pinned through the jitted path.
+- **`output: :container` on all SAE/transcoder builds** — exposes
+  `%{reconstruction, hidden, pre_acts}` so losses are finally wireable
+  (default single-tensor output unchanged).
+- **`Edifice.Interpretability.SAETrainer`**: first fit path for the SAE
+  family — jitted momentum-SGD with decoder unit-norm renorm each step,
+  AuxK dead-feature loss, and inference-threshold tracking.
+- **BatchTopKSAE production inference**: `inference_threshold:` build
+  option makes feature firing batch-composition-independent; pinned by a
+  planted-dictionary recovery test.
+
 - **Model manifest (self-describing checkpoints)**: `Edifice.Spec`,
   `Edifice.build_with_spec/3`, `Checkpoint.save(..., spec:)`,
   `Checkpoint.fetch_spec/1`, `Checkpoint.load_model/2` (rebuild from the
