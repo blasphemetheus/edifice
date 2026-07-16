@@ -3,6 +3,7 @@ defmodule Edifice.Interpretability.LEACETest do
   @moduletag :interpretability
 
   alias Edifice.Interpretability.LEACE
+  alias Edifice.Interpretability.Probe
 
   @batch 4
   @input_size 32
@@ -173,6 +174,63 @@ defmodule Edifice.Interpretability.LEACETest do
 
       diff = Nx.reduce_max(Nx.abs(Nx.subtract(from_layer, from_fn))) |> Nx.to_number()
       assert diff < 1.0e-5
+    end
+  end
+
+  describe "fit/2 numerical + probe pins" do
+    defp max_abs_diff(a, b) do
+      Nx.reduce_max(Nx.abs(Nx.subtract(a, b))) |> Nx.to_number()
+    end
+
+    test "matches the hand-computed eraser on an exactly-white 2-d case" do
+      # Sample covariance of x is exactly I (4 points at the corners of a
+      # square) and z IS the first coordinate, so Σ_xz = e₁. Whitening is a
+      # scalar multiple of the identity (the sqrt(1+ridge) factors cancel in
+      # A = W⁺ P W), so the closed form collapses exactly to
+      #   μ = 0,  A = e₁e₁ᵀ = [[1, 0], [0, 0]]
+      # i.e. erasure zeroes coordinate 1 and leaves coordinate 2 untouched.
+      x = Nx.tensor([[1.0, 1.0], [1.0, -1.0], [-1.0, 1.0], [-1.0, -1.0]])
+      z = Nx.tensor([[1.0], [1.0], [-1.0], [-1.0]])
+
+      eraser = LEACE.fit(x, z)
+
+      assert eraser.rank == 1
+      assert max_abs_diff(eraser.mu, Nx.tensor([0.0, 0.0])) < 1.0e-6
+      assert max_abs_diff(eraser.a, Nx.tensor([[1.0, 0.0], [0.0, 0.0]])) < 1.0e-5
+
+      erased = LEACE.erase(eraser, Nx.tensor([[2.0, 3.0]]))
+      assert max_abs_diff(erased, Nx.tensor([[0.0, 3.0]])) < 1.0e-4
+    end
+
+    test "linear probe accuracy drops to ~chance after erasure" do
+      {x, z} = planted_data()
+      x = Nx.as_type(x, :f32)
+
+      y =
+        z
+        |> Nx.slice_along_axis(0, 1, axis: 1)
+        |> Nx.squeeze(axes: [1])
+        |> Nx.greater(0.0)
+        |> Nx.as_type(:s64)
+
+      half = 256
+      split = fn t ->
+        {Nx.slice_along_axis(t, 0, half, axis: 0), Nx.slice_along_axis(t, half, half, axis: 0)}
+      end
+
+      {x_tr, x_ev} = split.(x)
+      {y_tr, y_ev} = split.(y)
+
+      before_acc = Probe.fit_eval(x_tr, y_tr, x_ev, y_ev, 2).balanced_accuracy
+      assert before_acc > 0.9
+
+      eraser = LEACE.fit(x, z)
+      {xe_tr, xe_ev} = split.(LEACE.erase(eraser, x))
+      after_acc = Probe.fit_eval(xe_tr, y_tr, xe_ev, y_ev, 2).balanced_accuracy
+
+      # ~chance band (0.5 ± sampling noise on 256 eval rows)
+      assert after_acc < 0.6
+      assert after_acc > 0.4
     end
   end
 end
