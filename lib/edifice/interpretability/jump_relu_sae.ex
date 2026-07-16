@@ -80,17 +80,26 @@ defmodule Edifice.Interpretability.JumpReluSAE do
     input_size = Keyword.fetch!(opts, :input_size)
     dict_size = Keyword.get(opts, :dict_size, @default_dict_size)
     temperature = Keyword.get(opts, :temperature, @default_temperature)
+    output = Keyword.get(opts, :output, :reconstruction)
 
     input = Axon.input("jump_relu_sae_input", shape: {nil, input_size})
 
     # Encoder
-    hidden = Axon.dense(input, dict_size, name: "jump_relu_sae_encoder")
+    pre_acts = Axon.dense(input, dict_size, name: "jump_relu_sae_encoder")
 
     # JumpReLU with learnable threshold
-    hidden = jump_relu_layer(hidden, dict_size, temperature)
+    hidden = jump_relu_layer(pre_acts, dict_size, temperature)
 
     # Decoder
-    Axon.dense(hidden, input_size, name: "jump_relu_sae_decoder")
+    reconstruction = Axon.dense(hidden, input_size, name: "jump_relu_sae_decoder")
+
+    case output do
+      :reconstruction ->
+        reconstruction
+
+      :container ->
+        Axon.container(%{reconstruction: reconstruction, hidden: hidden, pre_acts: pre_acts})
+    end
   end
 
   @doc """

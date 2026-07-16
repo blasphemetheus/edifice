@@ -88,6 +88,7 @@ defmodule Edifice.Interpretability.GatedSAE do
     input_size = Keyword.fetch!(opts, :input_size)
     dict_size = Keyword.get(opts, :dict_size, @default_dict_size)
     top_k = Keyword.get(opts, :top_k, @default_top_k)
+    output = Keyword.get(opts, :output, :reconstruction)
 
     input = Axon.input("gated_sae_input", shape: {nil, input_size})
 
@@ -107,7 +108,19 @@ defmodule Edifice.Interpretability.GatedSAE do
       )
 
     # Decoder
-    Axon.dense(hidden, input_size, name: "gated_sae_decoder")
+    reconstruction = Axon.dense(hidden, input_size, name: "gated_sae_decoder")
+
+    case output do
+      :reconstruction ->
+        reconstruction
+
+      :container ->
+        # pre_acts = ReLU'd magnitudes (the pre-gate feature values)
+        pre_acts =
+          Axon.activation(magnitudes, :relu, name: "gated_sae_pre_acts")
+
+        Axon.container(%{reconstruction: reconstruction, hidden: hidden, pre_acts: pre_acts})
+    end
   end
 
   @doc """

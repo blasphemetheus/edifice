@@ -70,24 +70,33 @@ defmodule Edifice.Interpretability.Transcoder do
     output_size = Keyword.fetch!(opts, :output_size)
     dict_size = Keyword.get(opts, :dict_size, @default_dict_size)
     top_k = Keyword.get(opts, :top_k, @default_top_k)
+    output = Keyword.get(opts, :output, :reconstruction)
 
     input = Axon.input("transcoder_input", shape: {nil, input_size})
 
     # Encoder
-    hidden = Axon.dense(input, dict_size, name: "transcoder_encoder")
-    hidden = Axon.activation(hidden, :relu, name: "transcoder_encoder_act")
+    pre_acts = Axon.dense(input, dict_size, name: "transcoder_encoder")
+    pre_acts = Axon.activation(pre_acts, :relu, name: "transcoder_encoder_act")
 
     # Top-k sparsify
     hidden =
       Axon.layer(
         fn acts, _opts -> SparseAutoencoder.top_k_sparsify(acts, top_k) end,
-        [hidden],
+        [pre_acts],
         name: "transcoder_top_k",
         op_name: :top_k_sparsify
       )
 
     # Decoder to output space
-    Axon.dense(hidden, output_size, name: "transcoder_decoder")
+    reconstruction = Axon.dense(hidden, output_size, name: "transcoder_decoder")
+
+    case output do
+      :reconstruction ->
+        reconstruction
+
+      :container ->
+        Axon.container(%{reconstruction: reconstruction, hidden: hidden, pre_acts: pre_acts})
+    end
   end
 
   @doc """

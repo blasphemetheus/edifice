@@ -67,34 +67,65 @@ defmodule Edifice.Interpretability.BatchTopKSAE do
     - `:batch_k` - Total number of active features across the entire batch
       (default: #{@default_batch_k}). Set to `batch_size * desired_per_sample_k`
       for your training batch size.
+    - `:output` - `:reconstruction` (default) or `:container`
+      (`%{reconstruction, hidden, pre_acts}` — see
+      `Edifice.Interpretability.SparseAutoencoder.build/1`)
+    - `:inference_threshold` - fixed activation threshold replacing the
+      batch-global top-k (use the `threshold` returned by
+      `Edifice.Interpretability.SAETrainer.fit/3`). Makes feature firing
+      independent of batch composition — REQUIRED for ground-truth
+      feature scoring.
 
   ## Returns
 
-    An Axon model mapping `[batch, input_size]` to `[batch, input_size]`.
+    An Axon model mapping `[batch, input_size]` to `[batch, input_size]`
+    (or the container).
   """
   @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
     input_size = Keyword.fetch!(opts, :input_size)
     dict_size = Keyword.get(opts, :dict_size, @default_dict_size)
     batch_k = Keyword.get(opts, :batch_k, @default_batch_k)
+    output = Keyword.get(opts, :output, :reconstruction)
+    inference_threshold = Keyword.get(opts, :inference_threshold)
 
     input = Axon.input("batch_topk_sae_input", shape: {nil, input_size})
 
     # Encoder
-    hidden = Axon.dense(input, dict_size, name: "batch_topk_sae_encoder")
-    hidden = Axon.activation(hidden, :relu, name: "batch_topk_sae_encoder_act")
+    pre_acts = Axon.dense(input, dict_size, name: "batch_topk_sae_encoder")
+    pre_acts = Axon.activation(pre_acts, :relu, name: "batch_topk_sae_encoder_act")
 
-    # Batch-global top-k sparsify
+    # Sparsify: batch-global top-k during training; a FIXED threshold at
+    # inference (fit with SAETrainer to obtain it). Without the fixed
+    # threshold, whether a feature fires depends on what else is in the
+    # batch — which poisons ground-truth feature scoring.
     hidden =
-      Axon.layer(
-        fn acts, _opts -> batch_top_k_sparsify(acts, batch_k) end,
-        [hidden],
-        name: "batch_topk_sae_sparsify",
-        op_name: :batch_top_k_sparsify
-      )
+      if inference_threshold do
+        Axon.layer(
+          fn acts, _opts -> threshold_sparsify(acts, inference_threshold) end,
+          [pre_acts],
+          name: "batch_topk_sae_sparsify",
+          op_name: :threshold_sparsify
+        )
+      else
+        Axon.layer(
+          fn acts, _opts -> batch_top_k_sparsify(acts, batch_k) end,
+          [pre_acts],
+          name: "batch_topk_sae_sparsify",
+          op_name: :batch_top_k_sparsify
+        )
+      end
 
     # Decoder
-    Axon.dense(hidden, input_size, name: "batch_topk_sae_decoder")
+    reconstruction = Axon.dense(hidden, input_size, name: "batch_topk_sae_decoder")
+
+    case output do
+      :reconstruction ->
+        reconstruction
+
+      :container ->
+        Axon.container(%{reconstruction: reconstruction, hidden: hidden, pre_acts: pre_acts})
+    end
   end
 
   @doc """
@@ -147,6 +178,16 @@ defmodule Edifice.Interpretability.BatchTopKSAE do
 
     # Apply mask to original (unflatten by broadcasting)
     mask = Nx.greater_equal(activations, Nx.reshape(threshold, {}))
+    Nx.select(mask, activations, Nx.tensor(0.0, type: Nx.type(activations)))
+  end
+
+  @doc """
+  Fixed-threshold sparsification for inference: activations at or above
+  `threshold` pass, everything else is zeroed. Batch-composition-independent.
+  """
+  @spec threshold_sparsify(Nx.Tensor.t(), float()) :: Nx.Tensor.t()
+  defn threshold_sparsify(activations, threshold) do
+    mask = Nx.greater_equal(activations, threshold)
     Nx.select(mask, activations, Nx.tensor(0.0, type: Nx.type(activations)))
   end
 
