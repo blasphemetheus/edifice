@@ -229,7 +229,7 @@ defmodule Edifice.Checkpoint do
 
     metadata =
       if meta_size > 0 do
-        :erlang.binary_to_term(meta_binary, [:safe])
+        deserialize_metadata(meta_binary, path)
       else
         %{}
       end
@@ -434,6 +434,28 @@ defmodule Edifice.Checkpoint do
   rescue
     ArgumentError ->
       {:invalid_term, "metadata is not deserializable with binary_to_term(bin, [:safe])"}
+  end
+
+  # Prefer :safe, but fall back to an unrestricted load with a warning.
+  # :safe rejects atoms not yet interned in THIS VM — and whether an atom
+  # is interned depends on which modules happen to be loaded. An EXTERNAL
+  # spec's arch atom (e.g. :exphil_policy) is only interned by the module
+  # that exported it, which a pure-inference VM never loads: every probe
+  # of exphil's first manifest-format checkpoint crashed here (2026-07-17,
+  # two full probe phases lost). Checkpoints are local artifacts we
+  # produced ourselves; mirror the consumer-side deserialize_trusted
+  # pattern instead of failing.
+  defp deserialize_metadata(binary, path) do
+    :erlang.binary_to_term(binary, [:safe])
+  rescue
+    ArgumentError ->
+      Logger.warning(
+        "[Checkpoint] #{path} metadata contains atoms not interned in this VM " <>
+          "(likely an external spec arch); falling back to unrestricted " <>
+          "binary_to_term. Only load checkpoints from trusted sources."
+      )
+
+      :erlang.binary_to_term(binary)
   end
 
   defp param_shapes(params) do
