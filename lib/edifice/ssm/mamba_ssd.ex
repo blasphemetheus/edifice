@@ -121,20 +121,37 @@ defmodule Edifice.SSM.MambaSSD do
 
     {b_matrix, c_matrix, dt_proj} = Common.build_ssm_projections(input, opts)
 
+    # Split into scan (-> h trajectory) and output (h, C -> y) layers so
+    # the recurrent state is a tappable Axon node ("#{name}.h",
+    # {batch, seq, hidden, state} — WriteSAE / state-steering prereq).
+    # Both layers are param-free: checkpoints from the fused single-layer
+    # build load unchanged. h does not depend on C in any scan path.
+    h_node =
+      Axon.layer(
+        &scan_impl/4,
+        [input, b_matrix, dt_proj],
+        name: "#{name}_scan",
+        state_size: state_size,
+        hidden_size: hidden_size,
+        chunk_size: chunk_size,
+        training_mode: training_mode,
+        structured_mask: structured_mask,
+        op_name: :ssd_scan
+      )
+
+    Common.probe_tap(h_node, "#{name}.h")
+
     Axon.layer(
-      &ssm_impl/5,
-      [input, b_matrix, c_matrix, dt_proj],
-      name: name,
-      state_size: state_size,
-      hidden_size: hidden_size,
-      chunk_size: chunk_size,
-      training_mode: training_mode,
-      structured_mask: structured_mask,
-      op_name: :ssd_ssm
+      &output_impl/3,
+      [h_node, c_matrix],
+      name: "#{name}_out",
+      op_name: :ssd_output
     )
   end
 
-  defp ssm_impl(x, b, c, dt, opts) do
+  defp output_impl(h, c, _opts), do: Common.compute_ssm_output(h, c)
+
+  defp scan_impl(x, b, dt, opts) do
     state_size = opts[:state_size]
     chunk_size = opts[:chunk_size] || @default_chunk_size
     training_mode = opts[:training_mode] || false
@@ -159,21 +176,18 @@ defmodule Edifice.SSM.MambaSSD do
     # batch_size to compensate (e.g., batch=16 for 4GB VRAM).
     seq_len = Nx.axis_size(a_bar, 1)
 
-    h =
-      cond do
-        seq_len <= chunk_size ->
-          # Sequence fits in one chunk: direct matmul, no chunking overhead
-          ssd_matmul_chunk(a_bar, bx)
+    # Returns the full h trajectory; the output layer contracts with C
+    cond do
+      seq_len <= chunk_size ->
+        # Sequence fits in one chunk: direct matmul, no chunking overhead
+        ssd_matmul_chunk(a_bar, bx)
 
-        training_mode ->
-          ssd_matmul_scan(a_bar, bx, c, chunk_size)
+      training_mode ->
+        ssd_matmul_scan(a_bar, bx, chunk_size)
 
-        true ->
-          ssd_scan(a_bar, bx, chunk_size)
-      end
-
-    # Compute output
-    Common.compute_ssm_output(h, c)
+      true ->
+        ssd_scan(a_bar, bx, chunk_size)
+    end
   end
 
   # Structured semi-separable mask: weight input contributions by cumulative
@@ -210,7 +224,7 @@ defmodule Edifice.SSM.MambaSSD do
   # This can be written as: y = L @ x where L is lower-triangular with
   # L[t,s] = prod_{r=s+1}^{t} A_r * B_s for t >= s
 
-  defp ssd_matmul_scan(a, bx, _c, chunk_size) do
+  defp ssd_matmul_scan(a, bx, chunk_size) do
     # a: [batch, seq_len, hidden_size, state_size]
     # bx: [batch, seq_len, hidden_size, state_size]
     seq_len = Nx.axis_size(a, 1)
