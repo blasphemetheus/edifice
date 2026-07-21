@@ -167,6 +167,46 @@ defmodule Edifice.SSM.Common do
   An Axon node representing the block output.
   """
   @spec build_block(Axon.t(), keyword(), (Axon.t(), keyword() -> Axon.t())) :: Axon.t()
+  # ============================================================================
+  # Probe taps (multi-site activation capture — INTERP_AUDIT remediation /
+  # exphil INTERP_NEXT_RESEARCH_2026-07-20)
+  # ============================================================================
+
+  @probe_key :__edifice_probe_taps__
+
+  @doc """
+  Register `node` as a named capture site when a probe collection is
+  active (see `with_probe_taps/1`); otherwise a no-op returning `node`.
+  Graph construction is synchronous, so the process dictionary is a
+  safe, zero-cost side channel — normal builds never touch it.
+  """
+  def probe_tap(node, site) do
+    case Process.get(@probe_key) do
+      nil ->
+        node
+
+      taps ->
+        Process.put(@probe_key, [{site, node} | taps])
+        node
+    end
+  end
+
+  @doc """
+  Run `fun` (a model-building closure) with probe-tap collection active.
+  Returns `{result, %{site => Axon.t()}}`. Nesting restores the outer
+  collector.
+  """
+  def with_probe_taps(fun) do
+    prev = Process.put(@probe_key, [])
+
+    try do
+      result = fun.()
+      {result, Process.get(@probe_key) |> Enum.reverse() |> Map.new()}
+    after
+      if prev == nil, do: Process.delete(@probe_key), else: Process.put(@probe_key, prev)
+    end
+  end
+
   def build_block(input, opts, ssm_builder) do
     hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
     state_size = Keyword.get(opts, :state_size, default_state_size())
@@ -205,9 +245,12 @@ defmodule Edifice.SSM.Common do
         name: "#{name}_z_split"
       )
 
+    probe_tap(x_branch, "#{name}.pre_conv")
+
     # X branch: Depthwise Conv1D -> SiLU -> SSM
     x_conv = build_depthwise_conv1d(x_branch, inner_size, conv_size, "#{name}_conv")
     x_activated = Axon.activation(x_conv, :silu, name: "#{name}_conv_silu")
+    probe_tap(x_activated, "#{name}.post_conv")
 
     # SSM layer (provided by caller)
     ssm_opts = [
@@ -221,12 +264,15 @@ defmodule Edifice.SSM.Common do
     ssm_opts = Keyword.merge(ssm_opts, Keyword.take(opts, [:chunk_size, :scan_algo]))
 
     x_ssm = ssm_builder.(x_activated, ssm_opts)
+    probe_tap(x_ssm, "#{name}.ssm_out")
 
     # Z branch: SiLU activation (gating)
     z_activated = Axon.activation(z_branch, :silu, name: "#{name}_gate_silu")
+    probe_tap(z_activated, "#{name}.gate_z")
 
     # Multiply x_ssm * z (gated output)
     gated = Axon.multiply(x_ssm, z_activated, name: "#{name}_gated")
+    probe_tap(gated, "#{name}.post_gate")
 
     # Project back to hidden_size
     Axon.dense(gated, hidden_size, name: "#{name}_out_proj")
@@ -318,6 +364,10 @@ defmodule Edifice.SSM.Common do
       |> Axon.dense(dt_rank, name: "#{name}_dt_rank")
       |> Axon.dense(hidden_size, name: "#{name}_dt_proj")
       |> Axon.activation(:softplus, name: "#{name}_dt_softplus")
+
+    probe_tap(b_matrix, "#{name}.B")
+    probe_tap(c_matrix, "#{name}.C")
+    probe_tap(dt_proj, "#{name}.dt")
 
     {b_matrix, c_matrix, dt_proj}
   end

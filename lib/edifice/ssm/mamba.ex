@@ -109,6 +109,17 @@ defmodule Edifice.SSM.Mamba do
   end
 
   @doc """
+  Probe build: same graph/param names as `build/1`, output as an
+  `Axon.container` of named internal sites + `"trunk"` — see
+  `Edifice.SSM.MambaSSD.build_probe/1` for the site list (both mamba
+  variants share `Common.build_block`, so sites match).
+  """
+  def build_probe(opts \\ []) do
+    {trunk, taps} = Common.with_probe_taps(fn -> build(opts) end)
+    Axon.container(Map.put(taps, "trunk", trunk))
+  end
+
+  @doc """
   Build a single Mamba block with parallel scan SSM.
 
   ## Options

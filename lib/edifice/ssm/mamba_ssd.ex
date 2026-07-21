@@ -87,6 +87,22 @@ defmodule Edifice.SSM.MambaSSD do
     Common.build_model(opts, &build_mamba_block/2)
   end
 
+  @doc """
+  Probe build: the SAME graph and parameter names as `build/1`, but the
+  output is an `Axon.container` exposing named internal sites alongside
+  the trunk output — `"trunk"` plus, per block,
+  `"<block>.pre_conv"`, `".post_conv"`, `".ssm_out"` (pre-gate),
+  `".gate_z"`, `".post_gate"`, and `"<block>_ssm.B"/".C"/".dt"`.
+  Site tensors keep the full `{batch, seq, ...}` shape (per-timestep
+  access included). A trained checkpoint's params drive it directly
+  (name compatibility). `h_t` is not yet a site — it lives inside the
+  scan closure; splitting the scan layer is the v2 item.
+  """
+  def build_probe(opts \\ []) do
+    {trunk, taps} = Common.with_probe_taps(fn -> build(opts) end)
+    Axon.container(Map.put(taps, "trunk", trunk))
+  end
+
   defp build_mamba_block(input, opts) do
     layer_idx = Keyword.get(opts, :layer_idx, 1)
     name = Keyword.get(opts, :name, "mamba_ssd_block_#{layer_idx}")
