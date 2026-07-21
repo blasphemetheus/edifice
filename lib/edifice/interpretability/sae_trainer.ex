@@ -110,7 +110,9 @@ defmodule Edifice.Interpretability.SAETrainer do
       |> Keyword.put(:output, :container)
 
     model = module.build(build_opts)
-    {init_fn, predict_fn} = Axon.build(model, mode: :inference)
+    # :seed makes param init deterministic — Axon's default is
+    # :erlang.system_time() (found 2026-07-21; fit was never reproducible)
+    {init_fn, predict_fn} = Axon.build(model, mode: :inference, seed: seed)
 
     input_key = model |> Axon.get_inputs() |> Map.keys() |> hd()
     template = %{input_key => Nx.template({n, d}, :f32)}
@@ -125,13 +127,14 @@ defmodule Edifice.Interpretability.SAETrainer do
           model_state
 
         %Axon.ModelState{data: warm} ->
-          fresh_keys = model_state.data |> Map.keys() |> Enum.sort()
-          warm_keys = warm |> Map.keys() |> Enum.sort()
+          fresh_shapes = tree_map(model_state.data, &Nx.shape/1)
+          warm_shapes = tree_map(warm, &Nx.shape/1)
 
-          if fresh_keys != warm_keys do
+          if fresh_shapes != warm_shapes do
             raise ArgumentError,
-                  ":init_params layer keys #{inspect(warm_keys)} do not match " <>
-                    "this build's #{inspect(fresh_keys)} — same build_opts required"
+                  ":init_params do not match this build (layer keys or tensor " <>
+                    "shapes differ — same build_opts required): " <>
+                    "#{inspect(warm_shapes)} vs #{inspect(fresh_shapes)}"
           end
 
           %{model_state | data: warm}
