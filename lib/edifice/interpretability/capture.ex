@@ -14,20 +14,25 @@ defmodule Edifice.Interpretability.Capture do
   """
 
   @doc """
-  Run `model` with `params` over an enumerable of input batches.
+  Run a frozen network over an enumerable of input batches.
 
-  Batches are whatever the model's `predict_fn` accepts (a bare tensor
-  for single-input models, or an input map). Options:
+  The first argument is either an `Axon.t()` model (built here with
+  `mode: :inference`) or an already-built 2-arity predict fn
+  `(params, batch) -> output` — the latter lets consumers with their own
+  build pipelines (e.g. exphil's trunk loader) delegate without
+  restructuring. Batches are whatever the predict fn accepts; pass a
+  `Stream` to keep one batch on device at a time. Options:
 
     - `:only` - list of site names to keep (default: all)
-    - `:compiler` - `Axon.build` compiler (default EXLA if loaded)
+    - `:compiler` - `Axon.build` compiler for the model form (default
+      EXLA if loaded)
 
   Returns `%{site => tensor}` with sites concatenated across batches;
-  single-output models yield `%{"output" => tensor}`.
+  single-output networks yield `%{"output" => tensor}`.
   """
-  def run(model, %Axon.ModelState{} = params, batches, opts \\ []) do
-    only = Keyword.get(opts, :only)
+  def run(model_or_fn, params, batches, opts \\ [])
 
+  def run(%Axon{} = model, %Axon.ModelState{} = params, batches, opts) do
     build_opts =
       case Keyword.get(opts, :compiler) do
         nil -> if Code.ensure_loaded?(EXLA), do: [compiler: EXLA], else: []
@@ -35,8 +40,15 @@ defmodule Edifice.Interpretability.Capture do
       end
 
     {_init_fn, predict_fn} = Axon.build(model, [mode: :inference] ++ build_opts)
+    run(predict_fn, params, batches, opts)
+  end
 
-    to_bin = fn t -> t |> Nx.as_type(:f32) |> Nx.backend_copy(Nx.BinaryBackend) end
+  def run(predict_fn, params, batches, opts) when is_function(predict_fn, 2) do
+    only = Keyword.get(opts, :only)
+
+    # backend_transfer (not copy): deallocates the device buffer per
+    # batch instead of waiting for BEAM GC — the exphil OOM lesson
+    to_bin = fn t -> t |> Nx.as_type(:f32) |> Nx.backend_transfer(Nx.BinaryBackend) end
 
     per_batch =
       Enum.map(batches, fn batch ->
