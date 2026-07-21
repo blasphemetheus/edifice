@@ -3,13 +3,13 @@ defmodule Edifice.CUDA.FusedScan do
   # High-level dispatch for fused CUDA scan kernels.
   #
   # Three-tier dispatch (highest priority first):
-  # 1. XLA custom call via Nx.Shared.optional — stays inside XLA graph,
+  # 1. XLA-graph tier via Nx.block (Edifice.Block.run) — stays inside XLA graph,
   #    no graph breaks. Requires EXLA fork with fused scan kernels.
   # 2. NIF bridge — breaks graph but uses fused CUDA kernel. Requires
   #    Edifice NIF compiled with CUDA support.
   # 3. Elixir sequential scan — pure Nx, works on any backend.
   #
-  # The custom call path uses Nx.Shared.optional which:
+  # The block path uses Nx.block + EXLA.CustomCall (see Edifice.Block) which:
   # - In defn context (EXLA+CUDA): creates an :optional Expr node that
   #   EXLA pattern-matches into a stablehlo.custom_call
   # - In eager context or non-CUDA: runs the fallback callback
@@ -461,11 +461,11 @@ defmodule Edifice.CUDA.FusedScan do
     # Zero initial hidden state
     h0 = Nx.broadcast(Nx.tensor(0.0, type: tensor_type), {batch, hidden})
 
-    # Output template for Nx.Shared.optional
+    # Output template for Edifice.Block.run
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_mingru_scan, [z, candidates, h0], output, fn z, cand, h0 ->
+      Edifice.Block.run(:fused_mingru_scan, [z, candidates, h0], output, fn z, cand, h0 ->
         mingru_scan_fallback(z, cand, h0)
       end)
 
@@ -491,11 +491,11 @@ defmodule Edifice.CUDA.FusedScan do
     # Zero initial cell state
     h0 = Nx.broadcast(Nx.tensor(0.0, type: tensor_type), {batch, hidden})
 
-    # Output template for Nx.Shared.optional
+    # Output template for Edifice.Block.run
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_minlstm_scan, [f, i, candidates, h0], output, fn f, i, cand, h0 ->
+      Edifice.Block.run(:fused_minlstm_scan, [f, i, candidates, h0], output, fn f, i, cand, h0 ->
         minlstm_scan_fallback(f, i, cand, h0)
       end)
 
@@ -534,7 +534,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_cand_template = Nx.template({batch, seq_len, hidden}, ttype)
     grad_h0_template = Nx.template({batch, hidden}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_mingru_scan_backward,
       [z, candidates, h0, forward_out, grad_output],
       {grad_z_template, grad_cand_template, grad_h0_template},
@@ -609,7 +609,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_cand_template = Nx.template({batch, seq_len, hidden}, ttype)
     grad_h0_template = Nx.template({batch, hidden}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_minlstm_scan_backward,
       [f, i, candidates, h0, forward_out, grad_output],
       {grad_f_template, grad_i_template, grad_cand_template, grad_h0_template},
@@ -687,7 +687,7 @@ defmodule Edifice.CUDA.FusedScan do
     c_act = Nx.add(1.0, Nx.select(Nx.greater(candidates, 0), candidates, Nx.subtract(Nx.exp(candidates), 1.0)))
 
     forward_output =
-      Nx.Shared.optional(:fused_elu_gru_scan, [gates, candidates, h0], output, fn g, c, h0 ->
+      Edifice.Block.run(:fused_elu_gru_scan, [gates, candidates, h0], output, fn g, c, h0 ->
         elu_gru_scan_fallback(g, c, h0)
       end)
 
@@ -731,7 +731,7 @@ defmodule Edifice.CUDA.FusedScan do
     z = Nx.sigmoid(gates)
 
     forward_output =
-      Nx.Shared.optional(:fused_real_gru_scan, [gates, candidates, h0], output, fn g, c, h0 ->
+      Edifice.Block.run(:fused_real_gru_scan, [gates, candidates, h0], output, fn g, c, h0 ->
         real_gru_scan_fallback(g, c, h0)
       end)
 
@@ -768,7 +768,7 @@ defmodule Edifice.CUDA.FusedScan do
     a_sig = Nx.sigmoid(a_vals)
 
     forward_output =
-      Nx.Shared.optional(:fused_diag_linear_scan, [a_vals, b_vals, h0], output, fn a, b, h0 ->
+      Edifice.Block.run(:fused_diag_linear_scan, [a_vals, b_vals, h0], output, fn a, b, h0 ->
         diag_linear_scan_fallback(a, b, h0)
       end)
 
@@ -803,7 +803,7 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_liquid_scan, [tau, activation, h0], output, fn tau, act, h0 ->
+      Edifice.Block.run(:fused_liquid_scan, [tau, activation, h0], output, fn tau, act, h0 ->
         liquid_scan_fallback(tau, act, h0)
       end)
 
@@ -838,7 +838,7 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_linear_scan, [a_vals, b_vals, h0], output, fn a, b, h0 ->
+      Edifice.Block.run(:fused_linear_scan, [a_vals, b_vals, h0], output, fn a, b, h0 ->
         linear_scan_cc_fallback(a, b, h0)
       end)
 
@@ -856,7 +856,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_b_template = Nx.template({batch, seq_len, hidden}, ttype)
     grad_h0_template = Nx.template({batch, hidden}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_linear_scan_backward,
       [a_vals, h0, forward_out, grad_output],
       {grad_a_template, grad_b_template, grad_h0_template},
@@ -927,7 +927,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_c_template = Nx.template({batch, seq_len, hidden}, ttype)
     grad_h0_template = Nx.template({batch, hidden}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_elu_gru_scan_backward,
       [z, c, h0, forward_out, grad_output],
       {grad_z_template, grad_c_template, grad_h0_template},
@@ -981,7 +981,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_cand_template = Nx.template({batch, seq_len, hidden}, ttype)
     grad_h0_template = Nx.template({batch, hidden}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_real_gru_scan_backward,
       [z, candidates, h0, forward_out, grad_output],
       {grad_z_template, grad_cand_template, grad_h0_template},
@@ -1005,7 +1005,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_b_template = Nx.template({batch, seq_len, hidden}, ttype)
     grad_h0_template = Nx.template({batch, hidden}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_diag_linear_scan_backward,
       [a_sig, h0, forward_out, grad_output],
       {grad_a_template, grad_b_template, grad_h0_template},
@@ -1030,7 +1030,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_h0_template = Nx.template({batch, hidden}, ttype)
     grad_c0_template = Nx.template({batch, hidden}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_lstm_scan_backward,
       [wx, recurrent_weight, h0, c0, forward_out, grad_output],
       {grad_wx_template, grad_h0_template, grad_c0_template},
@@ -1110,7 +1110,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_rh_template = Nx.template({batch, seq_len, hidden3}, ttype)
     grad_h0_template = Nx.template({batch, hidden}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_gru_scan_backward,
       [wx, recurrent_weight, h0, forward_out, grad_output],
       {grad_wx_template, grad_rh_template, grad_h0_template},
@@ -1188,7 +1188,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_template = Nx.template({batch, seq_len, hidden}, ttype)
     grad_h0_template = Nx.template({batch, hidden}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_liquid_scan_backward,
       [tau, activation, h0, forward_out, grad_output],
       {grad_template, grad_template, grad_h0_template},
@@ -1243,7 +1243,7 @@ defmodule Edifice.CUDA.FusedScan do
     ttype = Nx.type(q)
     grad_template = Nx.template({batch, seq_len, num_heads, head_dim}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_delta_rule_scan_backward,
       [q, k, v, beta, forward_out, grad_output],
       {grad_template, grad_template, grad_template, grad_template},
@@ -1333,7 +1333,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_template = Nx.template({batch, seq_len, num_heads, head_dim}, ttype)
     grad_alpha_template = Nx.template({batch, seq_len, num_heads}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_gated_delta_net_scan_backward,
       [q, k, v, beta, alpha, forward_out, grad_output],
       {grad_template, grad_template, grad_template, grad_template, grad_alpha_template},
@@ -1439,7 +1439,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_b_template = Nx.template({batch, seq_len, state_size}, {:f, 32})
     grad_c_template = Nx.template({batch, seq_len, state_size}, {:f, 32})
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_selective_scan_backward,
       [x, dt, a, b, c, grad_output],
       {grad_x_template, grad_dt_template, grad_b_template, grad_c_template},
@@ -1538,7 +1538,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_4d = Nx.template({batch, seq_len, num_heads, head_dim}, ttype)
     grad_3d = Nx.template({batch, seq_len, num_heads}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_kda_scan_backward,
       [q, k, v, alpha, beta, forward_out, grad_output],
       {grad_4d, grad_4d, grad_4d, grad_4d, grad_3d},
@@ -1661,7 +1661,7 @@ defmodule Edifice.CUDA.FusedScan do
     variant_t = Nx.tensor(variant_int, type: {:s, 32})
     clip_t = Nx.tensor(clip_threshold, type: {:f, 32})
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_rla_scan_backward,
       [q, k, v, alpha, beta, gamma, forward_out, grad_output, variant_t, clip_t],
       {grad_4d, grad_4d, grad_4d, grad_3d, grad_3d, grad_3d},
@@ -1820,7 +1820,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_w0 = Nx.template({batch, inner_size, inner_size}, ttype)
     grad_ln = Nx.template({inner_size}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_ttt_scan_backward,
       [q, k, v, eta, w0, ln_gamma, ln_beta, forward_out, grad_output],
       {grad_3d, grad_3d, grad_3d, grad_3d, grad_w0, grad_ln, grad_ln},
@@ -2198,7 +2198,7 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, num_heads, head_dim}, tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_delta_net_scan, [q, k, v, beta], output, fn q, k, v, beta ->
+      Edifice.Block.run(:fused_delta_net_scan, [q, k, v, beta], output, fn q, k, v, beta ->
         delta_net_scan_fallback(q, k, v, beta)
       end)
 
@@ -2242,7 +2242,7 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, num_heads, head_dim}, tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_gated_delta_net_scan, [q, k, v, beta, alpha], output, fn q, k, v, beta, alpha ->
+      Edifice.Block.run(:fused_gated_delta_net_scan, [q, k, v, beta, alpha], output, fn q, k, v, beta, alpha ->
         gated_delta_net_scan_fallback(q, k, v, beta, alpha)
       end)
 
@@ -2288,7 +2288,7 @@ defmodule Edifice.CUDA.FusedScan do
     tensor_type = Nx.type(q)
     output = Nx.template({batch, seq_len, num_heads, head_dim}, tensor_type)
 
-    Nx.Shared.optional(:fused_delta_product_scan, [q, k, v, beta], output, fn q, k, v, beta ->
+    Edifice.Block.run(:fused_delta_product_scan, [q, k, v, beta], output, fn q, k, v, beta ->
       delta_product_scan_fallback(q, k, v, beta)
     end)
   end
@@ -2362,7 +2362,7 @@ defmodule Edifice.CUDA.FusedScan do
     c0 = Nx.broadcast(Nx.tensor(0.0, type: tensor_type), {batch, hidden})
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
-    Nx.Shared.optional(:fused_slstm_scan, [wx, recurrent_weight, h0, c0], output,
+    Edifice.Block.run(:fused_slstm_scan, [wx, recurrent_weight, h0, c0], output,
       fn wx, r, h0, c0 ->
         slstm_scan_fallback(wx, r, h0, c0)
       end)
@@ -2412,7 +2412,7 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_lstm_scan, [wx, recurrent_weight, h0, c0], output,
+      Edifice.Block.run(:fused_lstm_scan, [wx, recurrent_weight, h0, c0], output,
         fn wx, r, h0, c0 ->
           lstm_scan_fallback(wx, r, h0, c0)
         end)
@@ -2472,7 +2472,7 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_gru_scan, [wx, recurrent_weight, h0], output,
+      Edifice.Block.run(:fused_gru_scan, [wx, recurrent_weight, h0], output,
         fn wx, r, h0 ->
           gru_scan_fallback(wx, r, h0)
         end)
@@ -2540,7 +2540,7 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, inner_size}, tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_ttt_scan, [q, k, v, eta, w0_batched, ln_gamma, ln_beta], output,
+      Edifice.Block.run(:fused_ttt_scan, [q, k, v, eta, w0_batched, ln_gamma, ln_beta], output,
         fn q, k, v, eta, w0_b, ln_g, ln_b ->
           ttt_scan_fallback(q, k, v, eta, w0_b, ln_g, ln_b)
         end)
@@ -2598,7 +2598,7 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_selective_scan, [x, dt, a, b, c], output,
+      Edifice.Block.run(:fused_selective_scan, [x, dt, a, b, c], output,
         fn x, dt, a, b, c ->
           Edifice.SSM.Common.selective_scan_fallback(x, dt, a, b, c)
         end)
@@ -2617,7 +2617,7 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, num_heads, head_dim}, tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_kda_scan, [q, k, v, alpha, beta], output,
+      Edifice.Block.run(:fused_kda_scan, [q, k, v, alpha, beta], output,
         fn q, k, v, alpha, beta ->
           kda_scan_fallback(q, k, v, alpha, beta)
         end)
@@ -2677,7 +2677,7 @@ defmodule Edifice.CUDA.FusedScan do
     clip_t = Nx.tensor(clip_threshold, type: {:f, 32})
 
     forward_output =
-      Nx.Shared.optional(:fused_rla_scan, [q, k, v, alpha, beta, gamma, variant_t, clip_t], output,
+      Edifice.Block.run(:fused_rla_scan, [q, k, v, alpha, beta, gamma, variant_t, clip_t], output,
         fn q, k, v, alpha, beta, gamma, _variant, _clip ->
           rla_scan_fallback(q, k, v, alpha, beta, gamma, variant, clip_threshold)
         end)
@@ -3431,7 +3431,7 @@ defmodule Edifice.CUDA.FusedScan do
     causal_packed = Nx.tensor([causal], type: tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_flash_attention, [q, k, v, causal_packed], output, fn q, k, v, _causal ->
+      Edifice.Block.run(:fused_flash_attention, [q, k, v, causal_packed], output, fn q, k, v, _causal ->
         flash_attention_fallback(q, k, v, causal)
       end)
 
@@ -3513,7 +3513,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_template = Nx.template({batch, num_heads, seq_len, head_dim}, ttype)
     causal_packed = Nx.tensor([causal], type: ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_flash_attention_backward,
       [q, k, v, forward_out, grad_output, causal_packed],
       {grad_template, grad_template, grad_template},
@@ -3620,7 +3620,7 @@ defmodule Edifice.CUDA.FusedScan do
     causal_packed = Nx.tensor([causal], type: tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_laser_attention, [q, k, v, v_max, causal_packed], output, fn q, k, v, v_max, _causal ->
+      Edifice.Block.run(:fused_laser_attention, [q, k, v, v_max, causal_packed], output, fn q, k, v, v_max, _causal ->
         laser_attention_fallback(q, k, v, v_max, causal)
       end)
 
@@ -3709,7 +3709,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_template = Nx.template({batch, num_heads, seq_len, head_dim}, ttype)
     causal_packed = Nx.tensor([causal], type: ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_laser_attention_backward,
       [q, k, v, v_max, forward_out, grad_output, causal_packed],
       {grad_template, grad_template, grad_template},
@@ -3817,7 +3817,7 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, num_heads, seq_len, head_dim}, tensor_type)
 
     forward_output =
-      Nx.Shared.optional(:fused_fox_attention, [q, k, v, cs], output, fn q, k, v, cs ->
+      Edifice.Block.run(:fused_fox_attention, [q, k, v, cs], output, fn q, k, v, cs ->
         fox_attention_fallback(q, k, v, cs)
       end)
 
@@ -3912,7 +3912,7 @@ defmodule Edifice.CUDA.FusedScan do
     grad_4d = Nx.template({batch, num_heads, seq_len, head_dim}, ttype)
     grad_cs_template = Nx.template({batch, num_heads, seq_len}, ttype)
 
-    Nx.Shared.optional(
+    Edifice.Block.run(
       :fused_fox_attention_backward,
       [q, k, v, cs, forward_out, grad_output],
       {grad_4d, grad_4d, grad_4d, grad_cs_template},
@@ -4027,7 +4027,7 @@ defmodule Edifice.CUDA.FusedScan do
     leak_col = Nx.broadcast(Nx.tensor(leak_rate, type: tensor_type), {batch, 1})
     h0_packed = Nx.concatenate([h0, leak_col], axis: 1)
 
-    Nx.Shared.optional(:fused_reservoir_scan, [wx, w_res, h0_packed], output, fn wx, w_res, _h0_packed ->
+    Edifice.Block.run(:fused_reservoir_scan, [wx, w_res, h0_packed], output, fn wx, w_res, _h0_packed ->
       reservoir_scan_fallback(wx, w_res, leak_rate)
     end)
   end
@@ -4123,7 +4123,7 @@ defmodule Edifice.CUDA.FusedScan do
     momentum_col = Nx.broadcast(Nx.tensor(momentum, type: tensor_type), {batch, seq_len, 1})
     packed = Nx.concatenate([combined, momentum_col], axis: 2)
 
-    Nx.Shared.optional(:fused_titans_scan, [packed], output, fn packed ->
+    Edifice.Block.run(:fused_titans_scan, [packed], output, fn packed ->
       combined_inner = Nx.slice_along_axis(packed, 0, memory_size * 4, axis: 2)
       titans_scan_fallback(combined_inner, memory_size, momentum)
     end)
@@ -4233,7 +4233,7 @@ defmodule Edifice.CUDA.FusedScan do
     momentum_col = Nx.broadcast(Nx.tensor(momentum, type: tensor_type), {batch, seq_len, 1})
     packed = Nx.concatenate([combined, momentum_col], axis: 2)
 
-    Nx.Shared.optional(:fused_miras_scan, [packed], output, fn packed ->
+    Edifice.Block.run(:fused_miras_scan, [packed], output, fn packed ->
       combined_inner = Nx.slice_along_axis(packed, 0, memory_size * 5, axis: 2)
       miras_scan_fallback(combined_inner, memory_size, momentum)
     end)
@@ -4349,7 +4349,7 @@ defmodule Edifice.CUDA.FusedScan do
     tensor_type = Nx.type(q)
     output = Nx.template({batch, seq_len, num_heads * head_dim}, tensor_type)
 
-    Nx.Shared.optional(:fused_gsa_scan, [q, k_slot, v, alpha], output, fn q, k_slot, v, alpha ->
+    Edifice.Block.run(:fused_gsa_scan, [q, k_slot, v, alpha], output, fn q, k_slot, v, alpha ->
       gsa_scan_fallback(q, k_slot, v, alpha)
     end)
   end
@@ -4483,7 +4483,7 @@ defmodule Edifice.CUDA.FusedScan do
     tensor_type = Nx.type(input)
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
-    Nx.Shared.optional(:fused_mingru_block_scan, [input, weights, h0], output, fn inp, w, h ->
+    Edifice.Block.run(:fused_mingru_block_scan, [input, weights, h0], output, fn inp, w, h ->
       mingru_block_fallback(inp, w, h, num_layers)
     end)
   end
@@ -4609,7 +4609,7 @@ defmodule Edifice.CUDA.FusedScan do
     tensor_type = Nx.type(input)
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
-    Nx.Shared.optional(:fused_minlstm_block_scan, [input, weights, h0], output, fn inp, w, h ->
+    Edifice.Block.run(:fused_minlstm_block_scan, [input, weights, h0], output, fn inp, w, h ->
       minlstm_block_fallback(inp, w, h, num_layers)
     end)
   end
@@ -4747,7 +4747,7 @@ defmodule Edifice.CUDA.FusedScan do
     tensor_type = Nx.type(input)
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
-    Nx.Shared.optional(:fused_linear_block_scan, [input, weights, h0], output, fn inp, w, h ->
+    Edifice.Block.run(:fused_linear_block_scan, [input, weights, h0], output, fn inp, w, h ->
       linear_block_fallback(inp, w, h, num_layers)
     end)
   end
@@ -4872,7 +4872,7 @@ defmodule Edifice.CUDA.FusedScan do
     tensor_type = Nx.type(input)
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
-    Nx.Shared.optional(:fused_lstm_block_scan, [input, weights, h0, c0], output, fn inp, w, h, c ->
+    Edifice.Block.run(:fused_lstm_block_scan, [input, weights, h0, c0], output, fn inp, w, h, c ->
       lstm_block_fallback(inp, w, h, c, num_layers)
     end)
   end
@@ -5017,7 +5017,7 @@ defmodule Edifice.CUDA.FusedScan do
     tensor_type = Nx.type(input)
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
-    Nx.Shared.optional(:fused_gru_block_scan, [input, weights, h0], output, fn inp, w, h ->
+    Edifice.Block.run(:fused_gru_block_scan, [input, weights, h0], output, fn inp, w, h ->
       gru_block_fallback(inp, w, h, num_layers)
     end)
   end
@@ -5171,10 +5171,12 @@ defmodule Edifice.CUDA.FusedScan do
          Process.get(:__edifice_force_fallback__, false) do
       false
     else
-      exla_value = Module.concat([EXLA, MLIR, Value])
-
-      Code.ensure_loaded?(exla_value) and
-        function_exported?(exla_value, :custom_call_fused, 4)
+      # Post-Nx.block migration: true only when a real (non-Any)
+      # EXLA.CustomCall impl for Edifice.Block.FusedOp is registered —
+      # i.e. an in-graph native kernel exists. Taking the block tier
+      # without one would silently run the pure fallback and shadow the
+      # faster NIF arm, so the probe must stay truthful.
+      Edifice.Block.native_impl?()
     end
   rescue
     _ -> false
