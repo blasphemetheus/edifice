@@ -1,5 +1,10 @@
 defmodule Edifice.Interpretability.GatedSAE do
   @moduledoc """
+> ### STATUS: BROKEN — do not use for research conclusions
+> INTERP_AUDIT_2026-07-15: the gate reaches the forward pass only
+> through a boolean mask (zero gradient — the gate never trains) and
+> the paper aux loss is absent. Rewrite pending (audit step 4).
+
   Gated Sparse Autoencoder for mechanistic interpretability.
 
   > #### Status: experimental / known-incorrect {: .error}

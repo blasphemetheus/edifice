@@ -55,7 +55,9 @@ defmodule Edifice.Interpretability.SAETrainer do
     :aux_k,
     :aux_coeff,
     :dead_eps,
-    :targets
+    :targets,
+    :init_params,
+    :batch_size
   ]
 
   @doc """
@@ -107,13 +109,39 @@ defmodule Edifice.Interpretability.SAETrainer do
       |> Keyword.put_new(:input_size, d)
       |> Keyword.put(:output, :container)
 
-    _ = seed
     model = module.build(build_opts)
     {init_fn, predict_fn} = Axon.build(model, mode: :inference)
 
     input_key = model |> Axon.get_inputs() |> Map.keys() |> hd()
     template = %{input_key => Nx.template({n, d}, :f32)}
     model_state = init_fn.(template, Axon.ModelState.empty())
+
+    # :init_params — warm-start from a previous fit (the stage-wise
+    # diffing primitive: fine-tune model-A's dictionary on model-B's
+    # activations, then Diffing.decoder_shift names what moved)
+    model_state =
+      case Keyword.get(opts, :init_params) do
+        nil ->
+          model_state
+
+        %Axon.ModelState{data: warm} ->
+          fresh_keys = model_state.data |> Map.keys() |> Enum.sort()
+          warm_keys = warm |> Map.keys() |> Enum.sort()
+
+          if fresh_keys != warm_keys do
+            raise ArgumentError,
+                  ":init_params layer keys #{inspect(warm_keys)} do not match " <>
+                    "this build's #{inspect(fresh_keys)} — same build_opts required"
+          end
+
+          %{model_state | data: warm}
+      end
+
+    # :batch_size — minibatch fit (audit follow-up): each step trains on
+    # a random row subset; one extra compiled shape, deterministic under
+    # :seed. nil/>= n = full-batch (unchanged behavior).
+    batch_size = Keyword.get(opts, :batch_size)
+    :rand.seed(:exsss, {seed, seed, seed})
 
     decoder_keys = decoder_keys!(model_state.data)
     dict_size = Keyword.get(build_opts, :dict_size, dict_size_of(model_state.data, decoder_keys))
@@ -166,7 +194,20 @@ defmodule Edifice.Interpretability.SAETrainer do
                                                                        {data, m, ema, hist,
                                                                         thrs} ->
         dead_mask = Nx.as_type(Nx.less(ema, dead_eps), :f32)
-        {data, m, loss, min_sel, firing_rate} = train_step.(data, m, x, y, dead_mask)
+
+        {x_step, y_step} =
+          if batch_size && batch_size < n do
+            idx =
+              1..batch_size
+              |> Enum.map(fn _ -> :rand.uniform(n) - 1 end)
+              |> Nx.tensor(type: :s64)
+
+            {Nx.take(x, idx, axis: 0), Nx.take(y, idx, axis: 0)}
+          else
+            {x, y}
+          end
+
+        {data, m, loss, min_sel, firing_rate} = train_step.(data, m, x_step, y_step, dead_mask)
 
         ema = Nx.add(Nx.multiply(0.9, ema), Nx.multiply(0.1, firing_rate))
 
@@ -197,6 +238,24 @@ defmodule Edifice.Interpretability.SAETrainer do
       module: module,
       build_opts: build_opts
     }
+  end
+
+  @doc """
+  Fine-tune a previous `fit/3` result on new activations (stage-wise
+  model diffing, Anthropic Dec 2024): same module and build options,
+  warm-started from `result.params`. Follow with
+  `Edifice.Interpretability.Diffing.decoder_shift/2` on the before/after
+  params to rank which features moved.
+
+  Trainer options may be overridden (fewer `:steps`, a `:batch_size`,
+  ...); build options are pinned to the original fit's.
+  """
+  def finetune(%{module: module, params: params, build_opts: build_opts}, activations, opts \\ []) do
+    fit(
+      module,
+      activations,
+      Keyword.merge(build_opts, opts) |> Keyword.put(:init_params, params)
+    )
   end
 
   # ============================================================================

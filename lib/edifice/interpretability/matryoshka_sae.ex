@@ -1,5 +1,10 @@
 defmodule Edifice.Interpretability.MatryoshkaSAE do
   @moduledoc """
+> ### STATUS: BROKEN — do not use for research conclusions
+> INTERP_AUDIT_2026-07-15: the defining nested-prefix reconstruction
+> loss is missing (current loss is full-width MSE + index-weighted
+> L1) and docs cite a nonexistent multi_scale_loss/4. Rewrite pending.
+
   Matryoshka Sparse Autoencoder for multi-granularity feature analysis.
 
   Dictionary features are ordered by importance. Any prefix of features

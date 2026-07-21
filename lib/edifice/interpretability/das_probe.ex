@@ -1,5 +1,10 @@
 defmodule Edifice.Interpretability.DASProbe do
   @moduledoc """
+> ### STATUS: MISLABELED — this is not DAS
+> INTERP_AUDIT_2026-07-15: no orthogonal rotation, no interventions,
+> no counterfactual loss; expressiveness <= LinearProbe. Causal
+> claims unsupported; treat as a rank-limited linear probe only.
+
   Rank-limited linear probe (historically labeled "DAS Probe").
 
   > #### Status: experimental / mislabeled {: .error}

@@ -1,5 +1,11 @@
 defmodule Edifice.Interpretability.CrossLayerTranscoder do
   @moduledoc """
+> ### STATUS: BROKEN — needs redesign, not a patch
+> INTERP_AUDIT_2026-07-15: wrong architecture for a CLT (acausal
+> shared code, no per-layer feature identity, no loss). The
+> attribution-graphs program (INTERP_NEXT_RESEARCH_2026-07-20)
+> requires the real causal l->(l..L) design.
+
   Cross-Layer Transcoder for circuit-level sparse analysis.
 
   > #### Status: experimental / wrong architecture {: .error}
