@@ -37,8 +37,29 @@ defmodule Edifice.Serving.GenerateTest do
     end
   end
 
+  defp build_token_lm do
+    Generate.build_lm(
+      arch: :decoder_only,
+      vocab_size: @vocab_size,
+      embed_dim: @embed_dim,
+      hidden_size: @embed_dim,
+      seq_len: @seq_len,
+      num_layers: 1,
+      num_heads: 2,
+      num_kv_heads: 2
+    )
+  end
+
   describe "build_lm/1" do
     test "builds model with LM head using decoder_only" do
+      model = build_token_lm()
+
+      assert %Axon{} = model
+      # Default is a trainable embedding: the model takes integer token IDs
+      assert Map.has_key?(Axon.get_inputs(model), "token_ids")
+    end
+
+    test "embedding: :external preserves the legacy float input" do
       model =
         Generate.build_lm(
           arch: :decoder_only,
@@ -48,10 +69,103 @@ defmodule Edifice.Serving.GenerateTest do
           seq_len: @seq_len,
           num_layers: 1,
           num_heads: 2,
-          num_kv_heads: 2
+          num_kv_heads: 2,
+          embedding: :external
         )
 
-      assert %Axon{} = model
+      inputs = Axon.get_inputs(model)
+      assert Map.has_key?(inputs, "state_sequence")
+      refute Map.has_key?(inputs, "token_ids")
+
+      {init_fn, _predict_fn} = Axon.build(model)
+
+      params =
+        init_fn.(
+          %{"state_sequence" => Nx.template({@batch, @seq_len, @embed_dim}, :f32)},
+          Axon.ModelState.empty()
+        )
+
+      refute Map.has_key?(params.data, "token_embedding")
+    end
+
+    test "trainable embedding lives in ModelState and outputs full-seq logits" do
+      model = build_token_lm()
+      {init_fn, predict_fn} = Axon.build(model)
+
+      params =
+        init_fn.(
+          %{"token_ids" => Nx.template({@batch, @seq_len}, :s64)},
+          Axon.ModelState.empty()
+        )
+
+      assert %{"token_embedding" => %{"kernel" => kernel}} = params.data
+      assert Nx.shape(kernel) == {@vocab_size, @embed_dim}
+      assert Map.has_key?(Axon.ModelState.trainable_parameters(params), "token_embedding")
+
+      tokens = Nx.remainder(Nx.iota({@batch, @seq_len}), @vocab_size)
+      logits = predict_fn.(params, %{"token_ids" => tokens})
+      assert Nx.shape(logits) == {@batch, @seq_len, @vocab_size}
+    end
+
+    test "embedding receives gradients" do
+      model = build_token_lm()
+      {init_fn, predict_fn} = Axon.build(model)
+
+      params =
+        init_fn.(
+          %{"token_ids" => Nx.template({@batch, @seq_len}, :s64)},
+          Axon.ModelState.empty()
+        )
+
+      tokens = Nx.remainder(Nx.iota({@batch, @seq_len}), @vocab_size)
+
+      # Differentiate over trainable params, grafting them back into the
+      # model state inside the objective (mirrors Axon.Loop.train_step —
+      # closing over concrete tensors breaks layer compilation)
+      grad_fn =
+        Nx.Defn.jit(fn model_state, inputs ->
+          trainable = Axon.ModelState.trainable_parameters(model_state)
+
+          Nx.Defn.grad(trainable, fn tp ->
+            logits = predict_fn.(%{model_state | data: tp}, %{"token_ids" => inputs})
+            Nx.mean(Nx.pow(logits, 2))
+          end)
+        end)
+
+      grads = grad_fn.(params, tokens)
+
+      embed_grad = grads["token_embedding"]["kernel"]
+      assert Nx.shape(embed_grad) == {@vocab_size, @embed_dim}
+
+      grad_magnitude = embed_grad |> Nx.abs() |> Nx.sum() |> Nx.to_number()
+      assert grad_magnitude > 0.0, "embedding gradient is identically zero — table is not training"
+    end
+
+    test "generate_simple works end-to-end from raw token IDs" do
+      model = build_token_lm()
+      {init_fn, predict_fn} = Axon.build(model)
+
+      params =
+        init_fn.(
+          %{"token_ids" => Nx.template({@batch, @seq_len}, :s64)},
+          Axon.ModelState.empty()
+        )
+
+      prompt = Nx.tensor([[1, 2, 3]])
+
+      result =
+        Generate.generate_simple(predict_fn, params,
+          prompt: prompt,
+          max_tokens: 4,
+          seq_len: @seq_len,
+          temperature: 0.0
+        )
+
+      assert Nx.to_flat_list(result[[0, 0..2]]) == [1, 2, 3]
+      assert Nx.axis_size(result, 1) >= 4
+
+      flat = Nx.to_flat_list(result)
+      assert Enum.all?(flat, &(&1 >= 0 and &1 < @vocab_size))
     end
   end
 

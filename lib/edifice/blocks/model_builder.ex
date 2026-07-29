@@ -51,6 +51,10 @@ defmodule Edifice.Blocks.ModelBuilder do
     - `:hidden_size` - Internal hidden dimension (default: embed_dim)
     - `:num_layers` - Number of blocks to stack (required)
     - `:block_builder` - Function `(input, opts) -> Axon.t()` that builds one block (required)
+    - `:input` - Pre-built Axon node to use as the model input (e.g. a token
+      embedding). When provided, no `Axon.input` is created here; the node must
+      produce `[batch, seq_len, embed_dim]`. Default: an
+      `Axon.input("state_sequence")` of that shape.
     - `:seq_len` - Expected sequence length for JIT optimization (default: 60)
     - `:output_mode` - Output extraction: `:last_timestep`, `:all`, `:mean_pool` (default: :last_timestep)
     - `:final_norm` - Whether to apply final layer norm (default: true)
@@ -77,8 +81,11 @@ defmodule Edifice.Blocks.ModelBuilder do
     # Use concrete seq_len for efficient JIT compilation
     input_seq_dim = if seq_len, do: seq_len, else: nil
 
-    # Input: [batch, seq_len, embed_dim]
-    input = Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
+    # Input: [batch, seq_len, embed_dim] — either a caller-provided node
+    # (e.g. a trainable token embedding) or a fresh float input
+    input =
+      Keyword.get(opts, :input) ||
+        Axon.input("state_sequence", shape: {nil, input_seq_dim, embed_dim})
 
     # Project input to hidden dimension if different
     x =
