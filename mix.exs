@@ -48,6 +48,9 @@ defmodule Edifice.MixProject do
       ),
       {:axon, "~> 0.8"},
       {:polaris, "~> 0.1"},
+      # Pretrained.Config/Hub parse HF JSON; a real dep so consumers
+      # compile warning-free (it was previously assumed ambient).
+      {:jason, "~> 1.4"},
 
       # GPU Backend
       if(local_nx?,

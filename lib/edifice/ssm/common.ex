@@ -142,31 +142,6 @@ defmodule Edifice.SSM.Common do
   # Block Building
   # ============================================================================
 
-  @doc """
-  Build the common Mamba block structure.
-
-  This handles everything except the SSM scan itself:
-  - Layer normalization
-  - Input projection (to 2x inner_size for x/z branches)
-  - X/Z branch splitting
-  - Depthwise convolution + SiLU on X branch
-  - SiLU gating on Z branch
-  - Gated multiplication
-  - Output projection
-
-  The caller provides an `ssm_builder` function that constructs the SSM layer.
-
-  ## Parameters
-
-  - `input` - Input Axon node
-  - `opts` - Block options (hidden_size, state_size, expand_factor, conv_size, name)
-  - `ssm_builder` - Function `(x_activated, ssm_opts) -> Axon.t()` that builds SSM
-
-  ## Returns
-
-  An Axon node representing the block output.
-  """
-  @spec build_block(Axon.t(), keyword(), (Axon.t(), keyword() -> Axon.t())) :: Axon.t()
   # ============================================================================
   # Probe taps (multi-site activation capture — INTERP_AUDIT remediation /
   # exphil INTERP_NEXT_RESEARCH_2026-07-20)
@@ -207,6 +182,31 @@ defmodule Edifice.SSM.Common do
     end
   end
 
+  @doc """
+  Build the common Mamba block structure.
+
+  This handles everything except the SSM scan itself:
+  - Layer normalization
+  - Input projection (to 2x inner_size for x/z branches)
+  - X/Z branch splitting
+  - Depthwise convolution + SiLU on X branch
+  - SiLU gating on Z branch
+  - Gated multiplication
+  - Output projection
+
+  The caller provides an `ssm_builder` function that constructs the SSM layer.
+
+  ## Parameters
+
+  - `input` - Input Axon node
+  - `opts` - Block options (hidden_size, state_size, expand_factor, conv_size, name)
+  - `ssm_builder` - Function `(x_activated, ssm_opts) -> Axon.t()` that builds SSM
+
+  ## Returns
+
+  An Axon node representing the block output.
+  """
+  @spec build_block(Axon.t(), keyword(), (Axon.t(), keyword() -> Axon.t())) :: Axon.t()
   def build_block(input, opts, ssm_builder) do
     hidden_size = Keyword.get(opts, :hidden_size, default_hidden_size())
     state_size = Keyword.get(opts, :state_size, default_state_size())

@@ -824,38 +824,6 @@ defmodule Edifice.SSM.GatedSSM do
   end
 
   @doc """
-  Perform a single incremental step with cached state.
-
-  Takes a single frame input and the current cache, returns the output
-  and updated cache. This enables O(1) inference per frame instead of
-  O(window_size).
-
-  ## Arguments
-    - `x` - Single frame input [batch, hidden_size] or [batch, 1, hidden_size]
-    - `params` - Model parameters (from trained model)
-    - `cache` - Cache from `init_cache/1` or previous `step/4` call
-
-  ## Returns
-    `{output, new_cache}` where:
-    - `output` - [batch, hidden_size] tensor
-    - `new_cache` - Updated cache for next step
-
-  ## Example
-
-      cache = GatedSSM.init_cache(hidden_size: 256)
-      {out1, cache} = GatedSSM.step(frame1, params, cache)
-      {out2, cache} = GatedSSM.step(frame2, params, cache)
-
-  > #### Deprecated {: .warning}
-  >
-  > This ad-hoc step **never matched the full-sequence forward**: the
-  > forward's legacy scan is a seq_len-dependent pointwise weighting while
-  > this step runs an unrelated h-recurrence with a mean-pooled dt and an
-  > implicit A = -1. Use the `Edifice.Stateful` contract instead —
-  > `init_state/2` + `step(params, state, frame)` with a model built with
-  > `scan_mode: :causal` — which IS equivalence-tested against the forward.
-  """
-  @doc """
   Advance one frame under the `Edifice.Stateful` contract
   (`step(params, state, frame)`), or the deprecated legacy form
   (`step(x, params, cache)`), disambiguated by argument shapes.
@@ -863,6 +831,14 @@ defmodule Edifice.SSM.GatedSSM do
   The stateful form requires a model built with `scan_mode: :causal` and a
   state from `init_state/2`; it matches the causal forward exactly (pinned
   by `test/edifice/stateful/step_equivalence_test.exs`).
+
+  > #### Deprecated legacy form {: .warning}
+  >
+  > The `step(x, params, cache)` form **never matched the full-sequence
+  > forward**: the forward's legacy scan is a seq_len-dependent pointwise
+  > weighting while that step runs an unrelated h-recurrence with a
+  > mean-pooled dt and an implicit A = -1. Use the `Edifice.Stateful`
+  > contract instead, which IS equivalence-tested against the forward.
   """
   @impl Edifice.Stateful
   def step(params, %{h: _, conv: _} = state, %Nx.Tensor{} = frame)
