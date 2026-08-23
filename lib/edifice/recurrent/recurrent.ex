@@ -352,7 +352,12 @@ defmodule Edifice.Recurrent do
     recurrent_opts = [
       name: name,
       recurrent_initializer: recurrent_init,
-      use_bias: true
+      use_bias: true,
+      # :static unrolls the recurrence into the graph. Axon's default
+      # :dynamic emits Nx.while, whose reverse-mode grad rematerializes
+      # from step 0 every iteration since nx 0.13 (elixir-nx/nx#1785) —
+      # O(seq_len^2) backward, measured 15x slower training at window 60.
+      unroll: Keyword.get(opts, :unroll, :static)
     ]
 
     {output_seq, _hidden} =

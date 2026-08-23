@@ -83,13 +83,18 @@ defmodule Edifice.Stateful do
   Callers normally don't use this directly — pass `compiler:` to
   `Edifice.step/5` / `Edifice.init_state/3` instead.
   """
-  @spec jit_step(module(), module()) :: (params(), state(), Nx.Tensor.t() -> {Nx.Tensor.t(), state()})
-  def jit_step(module, compiler) do
-    key = {__MODULE__, :jit_step, module, compiler}
+  @spec jit_step(module(), module(), keyword()) ::
+          (params(), state(), Nx.Tensor.t() -> {Nx.Tensor.t(), state()})
+  def jit_step(module, compiler, opts \\ []) do
+    key = {__MODULE__, :jit_step, module, compiler, opts}
 
     case :persistent_term.get(key, nil) do
       nil ->
-        fun = Nx.Defn.jit(&module.step/3, compiler: compiler)
+        # Extra opts are forwarded to the compiler — e.g. EXLA's
+        # `cache: path` persists the compiled executable to disk so a
+        # fresh process skips the JIT entirely (EXLA's disk key
+        # auto-invalidates on shape/config mismatch).
+        fun = Nx.Defn.jit(&module.step/3, [compiler: compiler] ++ opts)
         :persistent_term.put(key, fun)
         fun
 
@@ -100,7 +105,9 @@ defmodule Edifice.Stateful do
 
   @doc false
   def clear_jit_cache do
-    for {{__MODULE__, :jit_step, _, _} = key, _} <- :persistent_term.get() do
+    for {key, _} <- :persistent_term.get(),
+        match?({__MODULE__, :jit_step, _, _}, key) or
+          match?({__MODULE__, :jit_step, _, _, _}, key) do
       :persistent_term.erase(key)
     end
 
