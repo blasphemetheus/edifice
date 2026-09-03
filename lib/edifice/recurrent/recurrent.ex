@@ -369,6 +369,103 @@ defmodule Edifice.Recurrent do
     output_seq
   end
 
+  @doc """
+  Build a GRU backbone with an explicit carry: the model takes an
+  `"initial_hidden"` input `{batch, num_layers, hidden_size}` alongside
+  the sequence input, and its output is a container
+  `%{output: output_seq, hidden: final_hidden}` with `final_hidden`
+  shaped like `"initial_hidden"`.
+
+  This is the training-side seam for contiguous BPTT (slippi-ai
+  TrajectoryManager style): the caller feeds chunk k's `hidden` back as
+  chunk k+1's `"initial_hidden"` (zeroing rows whose chunk starts a new
+  episode), so forward state flows across chunk boundaries while
+  gradients truncate at the chunk edge — the carry enters as a plain
+  input tensor, never a differentiated argument.
+
+  Notes:
+  - GRU only, Axon path only (the fused CUDA scan takes no h0 yet).
+  - The last layer returns the FULL sequence — BPTT training
+    supervises every timestep.
+  - `final_hidden` per layer is the RAW recurrent state (pre
+    layer-norm): exactly what the recurrence itself carries.
+  - Fresh episodes should get zero rows in `"initial_hidden"`. (The
+    carryless build samples its initial hidden from a stored RNG key
+    param `<name>_h_hidden_state`; carry mode has no such param —
+    checkpoint loaders drop it, and the GRU kernel/bias params keep
+    the same `gru_<n>_*` names, so trunk transplant works both ways.)
+
+  ## Options
+  `:hidden_size`, `:num_layers`, `:dropout`, `:input_layer_norm`,
+  `:use_layer_norm` as in `build_backbone/2`. `:cell_type` is fixed to
+  `:gru`; `:fused_block` and `:truncate_bptt` do not apply.
+  """
+  @spec build_backbone_with_carry(Axon.t(), keyword()) :: Axon.t()
+  def build_backbone_with_carry(input, opts \\ []) do
+    hidden_size = Keyword.get(opts, :hidden_size, @default_hidden_size)
+    num_layers = Keyword.get(opts, :num_layers, @default_num_layers)
+    dropout = Keyword.get(opts, :dropout, @default_dropout)
+    input_layer_norm = Keyword.get(opts, :input_layer_norm, true)
+    use_layer_norm = Keyword.get(opts, :use_layer_norm, true)
+
+    initial_hidden =
+      Axon.input("initial_hidden", shape: {nil, num_layers, hidden_size})
+
+    normalized_input =
+      if input_layer_norm do
+        Axon.layer_norm(input, name: "input_ln", epsilon: 1.0e-6)
+      else
+        input
+      end
+
+    {output_seq, final_hiddens} =
+      Enum.reduce(1..num_layers, {normalized_input, []}, fn layer_idx, {acc, finals} ->
+        name = "gru_#{layer_idx}"
+        layer_slice = layer_idx - 1
+
+        h0_l =
+          Axon.nx(
+            initial_hidden,
+            fn t -> Nx.squeeze(Nx.slice_along_axis(t, layer_slice, 1, axis: 1), axes: [1]) end,
+            name: "#{name}_h0_slice"
+          )
+
+        {seq, {h_final}} =
+          Axon.gru(acc, {h0_l}, hidden_size,
+            name: name,
+            use_bias: true,
+            # :dynamic emits Nx.while whose backward is O(seq_len^2)
+            # since nx 0.13 (elixir-nx/nx#1785) — see build_axon_recurrent.
+            unroll: :static
+          )
+
+        seq =
+          if use_layer_norm do
+            Axon.layer_norm(seq, name: "#{name}_ln", epsilon: 1.0e-6)
+          else
+            seq
+          end
+
+        seq =
+          if dropout > 0 and layer_idx < num_layers do
+            Axon.dropout(seq, rate: dropout, name: "recurrent_dropout_#{layer_idx}")
+          else
+            seq
+          end
+
+        expanded = Axon.nx(h_final, &Nx.new_axis(&1, 1), name: "#{name}_hf_expand")
+        {seq, [expanded | finals]}
+      end)
+
+    final_hidden =
+      case Enum.reverse(final_hiddens) do
+        [single] -> single
+        many -> Axon.concatenate(many, axis: 1, name: "final_hidden")
+      end
+
+    Axon.container(%{output: output_seq, hidden: final_hidden}, name: "carry_backbone")
+  end
+
   @doc false
   def fused_rnn_available?(cell_type) when cell_type in [:lstm, :gru] do
     Edifice.CUDA.FusedScan.custom_call_available?() or nif_available?()
