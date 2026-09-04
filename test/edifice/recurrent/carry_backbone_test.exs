@@ -154,3 +154,95 @@ defmodule Edifice.Recurrent.CarryBackboneTest do
            "tensors differ: #{inspect(Nx.subtract(a, b) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number())}"
   end
 end
+
+defmodule Edifice.Recurrent.CarryStepParityTest do
+  use ExUnit.Case, async: true
+  @moduletag :recurrent
+
+  alias Edifice.Recurrent
+
+  @batch 2
+  @embed_dim 16
+  @hidden 24
+  @layers 2
+  @time 12
+
+  # THE inference-side contract for BPTT-trained policies
+  # (BPTT_LOADER_DESIGN.md "agent zero-init"): a carry-mode checkpoint has
+  # no RNG-key initial-state param, trains from zero state, and must replay
+  # EXACTLY under the agent's O(1) step path — init_state (zeros fallback)
+  # + step/3 per frame == the training-graph unroll.
+  test "init_state on carry params falls back to zeros (no RNG-key param)" do
+    {params, _} = build_and_init()
+
+    state =
+      Recurrent.init_state(params,
+        batch_size: @batch,
+        hidden_size: @hidden,
+        num_layers: @layers,
+        cell_type: :gru
+      )
+
+    assert Nx.shape(state.h) == {@batch, @layers, @hidden}
+    assert Nx.to_number(Nx.reduce_max(Nx.abs(state.h))) == 0.0
+  end
+
+  test "step-mode replay from init_state == carry-model unroll (train/inference parity)" do
+    {params, predict_fn} = build_and_init()
+
+    x = Nx.iota({@batch, @time, @embed_dim}, type: :f32) |> Nx.divide(100)
+    h0 = Nx.broadcast(0.0, {@batch, @layers, @hidden})
+
+    %{output: out_full, hidden: hf_full} =
+      predict_fn.(params, %{"state_sequence" => x, "initial_hidden" => h0})
+
+    state =
+      Recurrent.init_state(params,
+        batch_size: @batch,
+        hidden_size: @hidden,
+        num_layers: @layers,
+        cell_type: :gru
+      )
+
+    {outs, final_state} =
+      Enum.reduce(0..(@time - 1), {[], state}, fn t, {acc, st} ->
+        frame = x |> Nx.slice_along_axis(t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        {out, st} = Recurrent.step(params, st, frame)
+        {[Nx.new_axis(out, 1) | acc], st}
+      end)
+
+    out_stepped = outs |> Enum.reverse() |> Nx.concatenate(axis: 1)
+
+    assert_close(out_stepped, out_full)
+    assert_close(final_state.h, hf_full)
+  end
+
+  defp build_and_init do
+    input = Axon.input("state_sequence", shape: {nil, nil, @embed_dim})
+
+    model =
+      Recurrent.build_backbone_with_carry(input,
+        hidden_size: @hidden,
+        num_layers: @layers,
+        dropout: 0.0
+      )
+
+    {init_fn, predict_fn} = Axon.build(model, mode: :inference)
+
+    params =
+      init_fn.(
+        %{
+          "state_sequence" => Nx.template({@batch, @time, @embed_dim}, :f32),
+          "initial_hidden" => Nx.template({@batch, @layers, @hidden}, :f32)
+        },
+        Axon.ModelState.empty()
+      )
+
+    {params, predict_fn}
+  end
+
+  defp assert_close(a, b) do
+    assert Nx.all_close(a, b, atol: 1.0e-5, rtol: 1.0e-5) |> Nx.to_number() == 1,
+           "max |delta| = #{Nx.subtract(a, b) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()}"
+  end
+end

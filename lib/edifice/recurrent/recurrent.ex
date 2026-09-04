@@ -1143,8 +1143,19 @@ defmodule Edifice.Recurrent do
   # initial hidden state is glorot-uniform sampled from the stored RNG key,
   # NOT zeros. keys[1] is what the forward consumes in inference mode.
   defp rnn_initial_hidden(params, state_layer_name, batch_size, hidden_size) do
-    key = Ops.layer_params!(params, state_layer_name)["key"]
-    keys = Nx.Random.split(key)
-    Axon.Initializers.glorot_uniform().({batch_size, hidden_size}, {:f, 32}, keys[1])
+    # Carryless Axon layout: replicate Axon's glorot-uniform initial hidden
+    # from the stored RNG key. Carry-mode (BPTT-trained) checkpoints have NO
+    # such param — they train from ZERO initial state (see
+    # build_backbone_with_carry) — so absence of the key means zeros, not an
+    # error. Sampling anything here for a bptt policy would give the agent a
+    # game-start state the network never saw in training.
+    case Map.get(Ops.unwrap_params(params), state_layer_name) do
+      %{"key" => key} ->
+        keys = Nx.Random.split(key)
+        Axon.Initializers.glorot_uniform().({batch_size, hidden_size}, {:f, 32}, keys[1])
+
+      _ ->
+        Ops.zeros(batch_size, [hidden_size])
+    end
   end
 end
