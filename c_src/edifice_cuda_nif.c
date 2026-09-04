@@ -102,7 +102,7 @@ typedef int (*lstm_launch_fn)(
 typedef int (*gru_launch_fn)(
     cudaStream_t stream,
     const float* wx, const float* R,
-    const float* h0,
+    const float* h0, const float* bhn,
     float* output,
     int batch, int seq_len, int hidden
 );
@@ -279,11 +279,11 @@ typedef int (*lstm_backward_launch_fn)(
     int batch, int seq_len, int hidden
 );
 
-/* GRU backward: wx, R, h0, fwd_out, grad -> concat(grad_wx, grad_h0) */
+/* GRU backward: wx, R, h0, bhn, fwd_out, grad -> concat(grad_wx, grad_rh, grad_h0) */
 typedef int (*gru_backward_launch_fn)(
     cudaStream_t stream,
     const float* wx, const float* R,
-    const float* h0,
+    const float* h0, const float* bhn,
     const float* forward_out,
     const float* grad_output,
     float* output_concat,
@@ -1285,22 +1285,23 @@ static ERL_NIF_TERM nif_fused_lstm_scan(
 /* ========================================================================== */
 
 /*
- * fused_gru_scan(wx_ptr, r_ptr, h0_ptr, batch, seq_len, hidden)
+ * fused_gru_scan(wx_ptr, r_ptr, h0_ptr, bhn_ptr, batch, seq_len, hidden)
  *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
  */
 static ERL_NIF_TERM nif_fused_gru_scan(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    uint64_t wx_ptr, r_ptr, h0_ptr;
+    uint64_t wx_ptr, r_ptr, h0_ptr, bhn_ptr;
     int batch, seq_len, hidden, dtype;
 
     if (!enif_get_uint64(env, argv[0], &wx_ptr) ||
         !enif_get_uint64(env, argv[1], &r_ptr) ||
         !enif_get_uint64(env, argv[2], &h0_ptr) ||
-        !enif_get_int(env, argv[3], &batch) ||
-        !enif_get_int(env, argv[4], &seq_len) ||
-        !enif_get_int(env, argv[5], &hidden) ||
-        !enif_get_int(env, argv[6], &dtype))
+        !enif_get_uint64(env, argv[3], &bhn_ptr) ||
+        !enif_get_int(env, argv[4], &batch) ||
+        !enif_get_int(env, argv[5], &seq_len) ||
+        !enif_get_int(env, argv[6], &hidden) ||
+        !enif_get_int(env, argv[7], &dtype))
     {
         return enif_make_badarg(env);
     }
@@ -1337,6 +1338,7 @@ static ERL_NIF_TERM nif_fused_gru_scan(
         (const float*)(uintptr_t)wx_ptr,
         (const float*)(uintptr_t)r_ptr,
         (const float*)(uintptr_t)h0_ptr,
+        (const float*)(uintptr_t)bhn_ptr,
         (float*)(uintptr_t)out_ptr,
         batch, seq_len, hidden
     );
@@ -2921,27 +2923,28 @@ static ERL_NIF_TERM nif_fused_lstm_scan_backward(
 /* ========================================================================== */
 
 /*
- * fused_gru_scan_backward(wx_ptr, r_ptr, h0_ptr, fwd_ptr, grad_ptr,
+ * fused_gru_scan_backward(wx_ptr, r_ptr, h0_ptr, bhn_ptr, fwd_ptr, grad_ptr,
  *                         batch, seq_len, hidden)
  *   -> {:ok, output_ptr, gc_ref} | {:error, reason}
  *
- * Output buffer layout: [grad_wx (B*T*3H) | grad_h0 (B*H)] floats
+ * Output buffer layout: [grad_wx (B*T*3H) | grad_rh (B*T*3H) | grad_h0 (B*H)] floats
  */
 static ERL_NIF_TERM nif_fused_gru_scan_backward(
     ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    uint64_t wx_ptr, r_ptr, h0_ptr, fwd_ptr, grad_ptr;
+    uint64_t wx_ptr, r_ptr, h0_ptr, bhn_ptr, fwd_ptr, grad_ptr;
     int batch, seq_len, hidden, dtype;
 
     if (!enif_get_uint64(env, argv[0], &wx_ptr) ||
         !enif_get_uint64(env, argv[1], &r_ptr) ||
         !enif_get_uint64(env, argv[2], &h0_ptr) ||
-        !enif_get_uint64(env, argv[3], &fwd_ptr) ||
-        !enif_get_uint64(env, argv[4], &grad_ptr) ||
-        !enif_get_int(env, argv[5], &batch) ||
-        !enif_get_int(env, argv[6], &seq_len) ||
-        !enif_get_int(env, argv[7], &hidden) ||
-        !enif_get_int(env, argv[8], &dtype))
+        !enif_get_uint64(env, argv[3], &bhn_ptr) ||
+        !enif_get_uint64(env, argv[4], &fwd_ptr) ||
+        !enif_get_uint64(env, argv[5], &grad_ptr) ||
+        !enif_get_int(env, argv[6], &batch) ||
+        !enif_get_int(env, argv[7], &seq_len) ||
+        !enif_get_int(env, argv[8], &hidden) ||
+        !enif_get_int(env, argv[9], &dtype))
     {
         return enif_make_badarg(env);
     }
@@ -2978,6 +2981,7 @@ static ERL_NIF_TERM nif_fused_gru_scan_backward(
         (const float*)(uintptr_t)wx_ptr,
         (const float*)(uintptr_t)r_ptr,
         (const float*)(uintptr_t)h0_ptr,
+        (const float*)(uintptr_t)bhn_ptr,
         (const float*)(uintptr_t)fwd_ptr,
         (const float*)(uintptr_t)grad_ptr,
         (float*)(uintptr_t)out_ptr,
@@ -4468,7 +4472,7 @@ static ErlNifFunc nif_funcs[] = {
     {"fused_delta_product_scan",   10, nif_fused_delta_product_scan,    ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_slstm_scan",            8, nif_fused_slstm_scan,            ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_lstm_scan",              8, nif_fused_lstm_scan,             ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_gru_scan",               7, nif_fused_gru_scan,              ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_gru_scan",               8, nif_fused_gru_scan,              ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_ttt_scan",              11, nif_fused_ttt_scan,             ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_selective_scan",        10, nif_fused_selective_scan,        ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_kda_scan",              10, nif_fused_kda_scan,              ERL_NIF_DIRTY_JOB_IO_BOUND},
@@ -4487,7 +4491,7 @@ static ErlNifFunc nif_funcs[] = {
     {"fused_real_gru_scan_backward", 9, nif_fused_real_gru_scan_backward, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_diag_linear_scan_backward", 8, nif_fused_diag_linear_scan_backward, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_lstm_scan_backward",    10, nif_fused_lstm_scan_backward,     ERL_NIF_DIRTY_JOB_IO_BOUND},
-    {"fused_gru_scan_backward",      9, nif_fused_gru_scan_backward,      ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fused_gru_scan_backward",     10, nif_fused_gru_scan_backward,      ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_mingru_block_scan",      8, nif_fused_mingru_block_scan,     ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_minlstm_block_scan",     8, nif_fused_minlstm_block_scan,    ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"fused_linear_block_scan",      8, nif_fused_linear_block_scan,     ERL_NIF_DIRTY_JOB_IO_BOUND},

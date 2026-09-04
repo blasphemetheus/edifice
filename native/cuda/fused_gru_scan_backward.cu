@@ -1,10 +1,10 @@
 // Fused Standard GRU Scan Backward Kernel
 //
 // Computes gradients for the standard GRU:
-//   r = σ(wx[0:H]   + R@h[0:H])          reset gate
-//   z = σ(wx[H:2H]  + R@h[H:2H])         update gate
-//   n = tanh(wx[2H:3H] + r * R@h[2H:3H]) candidate (reset applied to recurrent only)
-//   h = (1-z)*n + z*h_prev                hidden update
+//   r = σ(wx[0:H]   + R@h[0:H])                 reset gate
+//   z = σ(wx[H:2H]  + R@h[H:2H])                update gate
+//   n = tanh(wx[2H:3H] + r * (R@h[2H:3H] + bhn)) candidate (reset applied to recurrent only)
+//   h = (1-z)*n + z*h_prev                        hidden update
 //
 // Two-pass approach:
 //   Pass 1 (forward, t=0..T-1): Recompute gate activations via R@h in shared memory.
@@ -31,6 +31,7 @@
 //   wx:          [B, T, 3*H] — pre-computed W@x + bias
 //   R:           [H, 3*H]   — recurrent weight matrix
 //   h0:          [B, H]     — initial hidden state
+//   bhn:         [H]        — recurrent candidate bias (inside reset gate)
 //   forward_out: [B, T, H]  — forward pass hidden states
 //   grad_output: [B, T, H]  — upstream gradient dL/dh
 //
@@ -42,11 +43,17 @@
 //   For r,z columns: grad_R[:,0:2H] = sum_b,t( h_prev^T @ grad_wx[:,0:2H] )
 //   For n column: grad_R[:,2H:3H] = sum_b,t( (r*h_prev)^T @ grad_wx_n )
 //   This is handled in the Elixir backward dispatch function.
+//   grad_bhn = sum_b,t( grad_rh[:,:,2H:3H] ) — also Elixir-side (the
+//   n-column of grad_rh is d(rh_n + bhn) exactly).
+//
+// Thread layout: one block per batch row; the whole hidden dimension
+// must fit in one block (hidden <= 1024) — same constraint and reason
+// as the forward kernel.
 
 #include <cuda_runtime.h>
 #include "precision.cuh"
 
-#define MAX_SEQ_LEN 1024
+#define MAX_SEQ_LEN 256
 
 // ============================================================================
 // Kernel
@@ -60,15 +67,16 @@ __global__ void fused_gru_scan_backward_kernel(
     const io_type* __restrict__ wx,           // [B, T, 3*H]
     const io_type* __restrict__ R,            // [H, 3*H]
     const io_type* __restrict__ h0,           // [B, H]
+    const io_type* __restrict__ bhn,          // [H]
     const io_type* __restrict__ forward_out,  // [B, T, H]
     const io_type* __restrict__ grad_output,  // [B, T, H]
     io_type* __restrict__ grad_wx,            // [B, T, 3*H] — gradient w.r.t. wx pre-activations
-    io_type* __restrict__ grad_rh,            // [B, T, 3*H] — gradient w.r.t. R@h (for computing grad_R)
+    io_type* __restrict__ grad_rh,            // [B, T, 3*H] — gradient w.r.t. R@h + bhn (for grad_R, grad_bhn)
     io_type* __restrict__ grad_h0,            // [B, H]
     int batch, int seq_len, int hidden
 ) {
     int b = blockIdx.x;
-    int i = threadIdx.x + blockIdx.y * blockDim.x;
+    int i = threadIdx.x;
 
     if (b >= batch || i >= hidden) return;
 
@@ -80,12 +88,13 @@ __global__ void fused_gru_scan_backward_kernel(
     float local_r[MAX_SEQ_LEN];   // reset gate
     float local_z[MAX_SEQ_LEN];   // update gate
     float local_n[MAX_SEQ_LEN];   // candidate
-    float local_rh_n[MAX_SEQ_LEN]; // R@h for candidate column (before reset multiply)
+    float local_rh_n[MAX_SEQ_LEN]; // R@h + bhn for candidate column (before reset multiply)
 
     // ========================================
     // Pass 1: Forward — recompute gate activations
     // ========================================
     float h_val = IO_LOAD(h0, b * hidden + i);
+    float bhn_i = IO_LOAD(bhn, i);
 
     for (int t = 0; t < seq_len; t++) {
         h_shared[i] = h_val;
@@ -105,14 +114,15 @@ __global__ void fused_gru_scan_backward_kernel(
         int wx_idx = b * seq_len * hidden3 + t * hidden3;
         float r_t = 1.0f / (1.0f + expf(-(IO_LOAD(wx, wx_idx + i) + rh_r)));
         float z_t = 1.0f / (1.0f + expf(-(IO_LOAD(wx, wx_idx + hidden + i) + rh_z)));
-        float n_t = tanhf(IO_LOAD(wx, wx_idx + 2 * hidden + i) + r_t * rh_n);
+        float rh_n_b = rh_n + bhn_i;
+        float n_t = tanhf(IO_LOAD(wx, wx_idx + 2 * hidden + i) + r_t * rh_n_b);
 
         h_val = (1.0f - z_t) * n_t + z_t * h_val;
 
         local_r[t] = r_t;
         local_z[t] = z_t;
         local_n[t] = n_t;
-        local_rh_n[t] = rh_n;
+        local_rh_n[t] = rh_n_b;
     }
 
     // ========================================
@@ -205,27 +215,28 @@ extern "C" {
 int fused_gru_scan_backward_launch(
     cudaStream_t stream,
     const io_type* wx, const io_type* R,
-    const io_type* h0,
+    const io_type* h0, const io_type* bhn,
     const io_type* forward_out,
     const io_type* grad_output,
     io_type* output_concat,
     int batch, int seq_len, int hidden
 ) {
+    if (hidden > 1024 || seq_len > MAX_SEQ_LEN)
+        return (int)cudaErrorInvalidConfiguration;
+
     int bt3h = batch * seq_len * 3 * hidden;
     io_type* grad_wx = output_concat;
     io_type* grad_rh = output_concat + bt3h;
     io_type* grad_h0 = output_concat + 2 * bt3h;
 
-    int threads_per_block = (hidden < 256) ? hidden : 256;
-    int blocks_y = (hidden + threads_per_block - 1) / threads_per_block;
-    dim3 grid(batch, blocks_y);
-    dim3 block(threads_per_block);
+    dim3 grid(batch);
+    dim3 block(hidden);
 
     // Shared memory: 3*hidden floats
     size_t smem_bytes = 3 * hidden * sizeof(float);
 
     fused_gru_scan_backward_kernel<<<grid, block, smem_bytes, stream>>>(
-        wx, R, h0, forward_out, grad_output,
+        wx, R, h0, bhn, forward_out, grad_output,
         grad_wx, grad_rh, grad_h0,
         batch, seq_len, hidden
     );
@@ -254,6 +265,7 @@ ffi::Error fused_gru_scan_backward_ffi_impl(
     ffi::Buffer<FFI_IO_TYPE> wx,
     ffi::Buffer<FFI_IO_TYPE> R,
     ffi::Buffer<FFI_IO_TYPE> h0,
+    ffi::Buffer<FFI_IO_TYPE> bhn,
     ffi::Buffer<FFI_IO_TYPE> forward_out,
     ffi::Buffer<FFI_IO_TYPE> grad_output,
     ffi::ResultBuffer<FFI_IO_TYPE> grad_wx,
@@ -265,10 +277,17 @@ ffi::Error fused_gru_scan_backward_ffi_impl(
     int seq_len = static_cast<int>(wx_dims[1]);
     int hidden  = static_cast<int>(wx_dims[2]) / 3;
 
-    int threads_per_block = (hidden < 256) ? hidden : 256;
-    int blocks_y = (hidden + threads_per_block - 1) / threads_per_block;
-    dim3 grid(batch, blocks_y);
-    dim3 block(threads_per_block);
+    if (hidden > 1024) {
+        return ffi::Error(ffi::ErrorCode::kInvalidArgument,
+                         "fused_gru_scan_backward: hidden > 1024 unsupported");
+    }
+    if (seq_len > MAX_SEQ_LEN) {
+        return ffi::Error(ffi::ErrorCode::kInvalidArgument,
+                         "fused_gru_scan_backward: seq_len > MAX_SEQ_LEN unsupported");
+    }
+
+    dim3 grid(batch);
+    dim3 block(hidden);
 
     size_t smem_bytes = 3 * hidden * sizeof(float);
 
@@ -276,6 +295,7 @@ ffi::Error fused_gru_scan_backward_ffi_impl(
         reinterpret_cast<const io_type*>(wx.untyped_data()),
         reinterpret_cast<const io_type*>(R.untyped_data()),
         reinterpret_cast<const io_type*>(h0.untyped_data()),
+        reinterpret_cast<const io_type*>(bhn.untyped_data()),
         reinterpret_cast<const io_type*>(forward_out.untyped_data()),
         reinterpret_cast<const io_type*>(grad_output.untyped_data()),
         reinterpret_cast<io_type*>(grad_wx->untyped_data()),
@@ -301,6 +321,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // wx
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // R
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // h0
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // bhn
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // forward_out
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // grad_output
         .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // grad_wx

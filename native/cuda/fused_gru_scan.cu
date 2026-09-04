@@ -1,26 +1,32 @@
 // Fused Standard GRU Scan Kernel
 //
 // Implements the classic GRU with in-kernel recurrent matmul:
-//   r = σ(wx[0:H]   + R@h_prev[0:H])          reset gate
-//   z = σ(wx[H:2H]  + R@h_prev[H:2H])         update gate
-//   n = tanh(wx[2H:3H] + r * R@h_prev[2H:3H]) candidate (reset applied to recurrent part only)
-//   h = (1-z)*n + z*h_prev                      hidden update
+//   r = σ(wx[0:H]   + R@h_prev[0:H])                 reset gate
+//   z = σ(wx[H:2H]  + R@h_prev[H:2H])                update gate
+//   n = tanh(wx[2H:3H] + r * (R@h_prev[2H:3H] + bhn)) candidate
+//   h = (1-z)*n + z*h_prev                             hidden update
 //
 // Note: The reset gate r multiplies only the recurrent contribution
-// R_n@h (the third column block of R@h), not the input part wx_n.
-// This matches the "fully gated" GRU formulation used by PyTorch and Axon.
+// R_n@h + bhn (the third column block of R@h plus the recurrent
+// candidate bias), not the input part wx_n. This matches the "fully
+// gated" GRU formulation used by PyTorch and Axon (Axon's gru_cell:
+// n = tanh(dense(x, win, bin) + r * dense(h, whn, bhn))).
 //
 // The input projection W@x + bias is pre-computed on the Axon/Nx side.
 // The hidden-to-hidden matmul R@h is done inside the kernel using
 // shared memory for the current hidden state vector.
 //
-// Thread layout: one thread per (batch, hidden) element.
-// Each thread handles one hidden dimension across all timesteps.
+// Thread layout: one thread per (batch, hidden) element, one block per
+// batch row. The whole hidden dimension MUST live in one block: each
+// timestep's R@h reads every h_shared[j], and __syncthreads() cannot
+// synchronize across blocks. Therefore hidden <= 1024 (max threads per
+// block); callers must fall back beyond that.
 //
 // Inputs:
 //   wx:  [batch, seq_len, 3*hidden] — pre-computed W@x + bias (r, z, n gates)
 //   R:   [hidden, 3*hidden]         — recurrent weight matrix (constant)
 //   h0:  [batch, hidden]            — initial hidden state
+//   bhn: [hidden]                   — recurrent candidate bias (inside reset gate)
 //
 // Output:
 //   out: [batch, seq_len, hidden]   — hidden states for all timesteps
@@ -40,11 +46,12 @@ __global__ void fused_gru_scan_kernel(
     const io_type* __restrict__ wx,     // [B, T, 3*H]
     const io_type* __restrict__ R,      // [H, 3*H]
     const io_type* __restrict__ h0,     // [B, H]
+    const io_type* __restrict__ bhn,    // [H]
     io_type* __restrict__ output,       // [B, T, H]
     int batch, int seq_len, int hidden
 ) {
     int b = blockIdx.x;
-    int i = threadIdx.x + blockIdx.y * blockDim.x;
+    int i = threadIdx.x;
 
     if (b >= batch || i >= hidden) return;
 
@@ -53,6 +60,7 @@ __global__ void fused_gru_scan_kernel(
 
     // Load initial state
     float h_val = IO_LOAD(h0, b * hidden + i);
+    float bhn_i = IO_LOAD(bhn, i);
 
     int hidden3 = 3 * hidden;
 
@@ -80,8 +88,8 @@ __global__ void fused_gru_scan_kernel(
         float r_t = 1.0f / (1.0f + expf(-(IO_LOAD(wx, wx_idx + i) + rh_r)));
         float z_t = 1.0f / (1.0f + expf(-(IO_LOAD(wx, wx_idx + hidden + i) + rh_z)));
 
-        // Candidate: reset gate applied only to recurrent contribution
-        float n_t = tanhf(IO_LOAD(wx, wx_idx + 2 * hidden + i) + r_t * rh_n);
+        // Candidate: reset gate applied to recurrent contribution + bhn
+        float n_t = tanhf(IO_LOAD(wx, wx_idx + 2 * hidden + i) + r_t * (rh_n + bhn_i));
 
         // Hidden update: blend between candidate and previous hidden
         h_val = (1.0f - z_t) * n_t + z_t * h_val;
@@ -107,19 +115,21 @@ extern "C" {
 int fused_gru_scan_launch(
     cudaStream_t stream,
     const io_type* wx, const io_type* R,
-    const io_type* h0,
+    const io_type* h0, const io_type* bhn,
     io_type* output,
     int batch, int seq_len, int hidden
 ) {
-    int threads_per_block = (hidden < 256) ? hidden : 256;
-    int blocks_y = (hidden + threads_per_block - 1) / threads_per_block;
-    dim3 grid(batch, blocks_y);
-    dim3 block(threads_per_block);
+    // One block per batch row: R@h reads the whole hidden vector from
+    // shared memory, so hidden must fit in a single block.
+    if (hidden > 1024) return (int)cudaErrorInvalidConfiguration;
+
+    dim3 grid(batch);
+    dim3 block(hidden);
 
     size_t smem_bytes = hidden * sizeof(float);
 
     fused_gru_scan_kernel<<<grid, block, smem_bytes, stream>>>(
-        wx, R, h0, output,
+        wx, R, h0, bhn, output,
         batch, seq_len, hidden
     );
 
@@ -147,6 +157,7 @@ ffi::Error fused_gru_scan_ffi_impl(
     ffi::Buffer<FFI_IO_TYPE> wx,      // [B, T, 3*H]
     ffi::Buffer<FFI_IO_TYPE> R,       // [H, 3*H]
     ffi::Buffer<FFI_IO_TYPE> h0,      // [B, H]
+    ffi::Buffer<FFI_IO_TYPE> bhn,     // [H]
     ffi::ResultBuffer<FFI_IO_TYPE> output  // [B, T, H]
 ) {
     auto wx_dims = wx.dimensions();
@@ -161,10 +172,13 @@ ffi::Error fused_gru_scan_ffi_impl(
                          "wx last dim must be 3 * h0 last dim");
     }
 
-    int threads_per_block = (hidden < 256) ? hidden : 256;
-    int blocks_y = (hidden + threads_per_block - 1) / threads_per_block;
-    dim3 grid(batch, blocks_y);
-    dim3 block(threads_per_block);
+    if (hidden > 1024) {
+        return ffi::Error(ffi::ErrorCode::kInvalidArgument,
+                         "fused_gru_scan: hidden > 1024 unsupported");
+    }
+
+    dim3 grid(batch);
+    dim3 block(hidden);
 
     size_t smem_bytes = hidden * sizeof(float);
 
@@ -172,6 +186,7 @@ ffi::Error fused_gru_scan_ffi_impl(
         reinterpret_cast<const io_type*>(wx.untyped_data()),
         reinterpret_cast<const io_type*>(R.untyped_data()),
         reinterpret_cast<const io_type*>(h0.untyped_data()),
+        reinterpret_cast<const io_type*>(bhn.untyped_data()),
         reinterpret_cast<io_type*>(output->untyped_data()),
         batch, seq_len, hidden
     );
@@ -193,6 +208,7 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // wx
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // R
         .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // h0
+        .Arg<ffi::Buffer<FFI_IO_TYPE>>()   // bhn
         .Ret<ffi::Buffer<FFI_IO_TYPE>>()   // output
 );
 

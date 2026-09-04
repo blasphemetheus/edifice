@@ -312,22 +312,31 @@ defmodule Edifice.CUDA.FusedScan do
   Inputs are pre-computed W@x + bias `[batch, seq_len, 3*hidden]` and recurrent
   weight R `[hidden, 3*hidden]`. The kernel computes R@h internally using
   shared memory. Reset gate applied selectively to recurrent contribution:
-  r = σ(wx_r + rh_r), z = σ(wx_z + rh_z), n = tanh(wx_n + r*rh_n),
+  r = σ(wx_r + rh_r), z = σ(wx_z + rh_z), n = tanh(wx_n + r*(rh_n + bhn)),
   h = (1-z)*n + z*h_prev.
+
+  Optional:
+  - `h0` `[batch, hidden]` — initial hidden state (default zeros). Used
+    by the contiguous-BPTT carry path; treated as a constant (gradients
+    truncate at the chunk edge, matching the carry-backbone contract).
+  - `bhn` `[hidden]` — recurrent candidate bias applied INSIDE the reset
+    gate (default zeros), matching Axon's gru_cell
+    `n = tanh(dense(x, win, bin) + r * dense(h, whn, bhn))`. Trainable:
+    the custom-call path returns its gradient.
   """
-  def gru_scan(wx, recurrent_weight) do
+  def gru_scan(wx, recurrent_weight, h0 \\ nil, bhn \\ nil) do
     cond do
       Edifice.CUDA.AutoTune.use_fused?(:gru_scan, wx) ->
         record_dispatch(:gru_scan, :custom_call, wx)
-        gru_custom_call(wx, recurrent_weight)
+        gru_custom_call(wx, recurrent_weight, h0, bhn)
 
       cuda_available?(wx) ->
         record_dispatch(:gru_scan, :nif, wx)
-        gru_fused(wx, recurrent_weight)
+        gru_fused(wx, recurrent_weight, h0, bhn)
 
       true ->
         record_dispatch(:gru_scan, :fallback, wx)
-        gru_scan_fallback(wx, recurrent_weight, nil)
+        gru_scan_fallback(wx, recurrent_weight, h0, bhn)
     end
   end
 
@@ -1102,7 +1111,7 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   # GRU backward dispatch — outputs grad_wx, grad_rh, grad_h0
-  defp gru_backward_dispatch(wx, recurrent_weight, h0, forward_out, grad_output) do
+  defp gru_backward_dispatch(wx, recurrent_weight, h0, bhn, forward_out, grad_output) do
     {batch, seq_len, hidden3} = Nx.shape(wx)
     hidden = div(hidden3, 3)
     ttype = Nx.type(wx)
@@ -1112,19 +1121,21 @@ defmodule Edifice.CUDA.FusedScan do
 
     Edifice.Block.run(
       :fused_gru_scan_backward,
-      [wx, recurrent_weight, h0, forward_out, grad_output],
+      [wx, recurrent_weight, h0, bhn, forward_out, grad_output],
       {grad_wx_template, grad_rh_template, grad_h0_template},
-      fn wx, r, h0, fwd, grad ->
-        gru_backward_fallback(wx, r, h0, fwd, grad)
+      fn wx, r, h0, bhn, fwd, grad ->
+        gru_backward_fallback(wx, r, h0, bhn, fwd, grad)
       end
     )
   end
 
   @doc false
-  def gru_backward_fallback(wx, recurrent_weight, h0, forward_out, grad_output) do
+  def gru_backward_fallback(wx, recurrent_weight, h0, bhn, forward_out, grad_output) do
     {batch, seq_len, hidden3} = Nx.shape(wx)
     hidden = div(hidden3, 3)
     ttype = Nx.type(wx)
+
+    bhn = if bhn, do: bhn, else: Nx.broadcast(Nx.tensor(0.0, type: ttype), {hidden})
 
     grad_wx = Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, seq_len, hidden3})
     grad_rh = Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, seq_len, hidden3})
@@ -1139,7 +1150,7 @@ defmodule Edifice.CUDA.FusedScan do
                      Nx.slice_along_axis(rh_t, 0, hidden, axis: 1)) |> Nx.sigmoid()
         z_t = Nx.add(Nx.slice_along_axis(wx_t, hidden, hidden, axis: 1),
                      Nx.slice_along_axis(rh_t, hidden, hidden, axis: 1)) |> Nx.sigmoid()
-        rh_n = Nx.slice_along_axis(rh_t, 2 * hidden, hidden, axis: 1)
+        rh_n = Nx.add(Nx.slice_along_axis(rh_t, 2 * hidden, hidden, axis: 1), bhn)
         n_t = Nx.add(Nx.slice_along_axis(wx_t, 2 * hidden, hidden, axis: 1),
                      Nx.multiply(r_t, rh_n)) |> Nx.tanh()
         h_t = Nx.add(Nx.multiply(Nx.subtract(1.0, z_t), n_t), Nx.multiply(z_t, h_p))
@@ -2463,38 +2474,49 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   # Standard GRU: 3-gate GRU with reset applied to recurrent part only
-  defp gru_custom_call(wx, recurrent_weight) do
+  defp gru_custom_call(wx, recurrent_weight, h0, bhn) do
     {batch, seq_len, hidden3} = Nx.shape(wx)
     hidden = div(hidden3, 3)
     tensor_type = Nx.type(wx)
 
-    h0 = Nx.broadcast(Nx.tensor(0.0, type: tensor_type), {batch, hidden})
+    h0 = h0 || Nx.broadcast(Nx.tensor(0.0, type: tensor_type), {batch, hidden})
+    bhn = bhn || Nx.broadcast(Nx.tensor(0.0, type: tensor_type), {hidden})
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
     forward_output =
-      Edifice.Block.run(:fused_gru_scan, [wx, recurrent_weight, h0], output,
-        fn wx, r, h0 ->
-          gru_scan_fallback(wx, r, h0)
+      Edifice.Block.run(:fused_gru_scan, [wx, recurrent_weight, h0, bhn], output,
+        fn wx, r, h0, bhn ->
+          gru_scan_fallback(wx, r, h0, bhn)
         end)
 
-    Nx.Defn.Kernel.custom_grad(forward_output, [wx, recurrent_weight], fn grad_output ->
+    # h0 is deliberately NOT a differentiated input: the BPTT carry
+    # enters as a constant and gradients truncate at the chunk edge.
+    Nx.Defn.Kernel.custom_grad(forward_output, [wx, recurrent_weight, bhn], fn grad_output ->
       {grad_wx, grad_rh, _grad_h0} =
-        gru_backward_dispatch(wx, recurrent_weight, h0, forward_output, grad_output)
+        gru_backward_dispatch(wx, recurrent_weight, h0, bhn, forward_output, grad_output)
 
       # grad_R = sum(h_prev^T @ grad_rh) — grad_rh has correct R@h-specific gradients
       h_prev = Nx.concatenate([Nx.reshape(h0, {batch, 1, hidden}), Nx.slice_along_axis(forward_output, 0, seq_len - 1, axis: 1)], axis: 1)
       grad_r = Nx.dot(Nx.reshape(h_prev, {batch * seq_len, hidden}) |> Nx.transpose(),
                        Nx.reshape(grad_rh, {batch * seq_len, hidden3}))
 
-      [grad_wx, grad_r]
+      # grad_bhn: the n-column of grad_rh is d(rh_n + bhn) per (b,t) —
+      # bhn's gradient is its sum over batch and time.
+      grad_bhn =
+        grad_rh
+        |> Nx.slice_along_axis(2 * hidden, hidden, axis: 2)
+        |> Nx.sum(axes: [0, 1])
+
+      [grad_wx, grad_r, grad_bhn]
     end)
   end
 
-  defp gru_scan_fallback(wx, recurrent_weight, h0) do
+  defp gru_scan_fallback(wx, recurrent_weight, h0, bhn) do
     {batch, seq_len, hidden3} = Nx.shape(wx)
     hidden = div(hidden3, 3)
 
     h0 = if h0, do: h0, else: Nx.broadcast(Nx.tensor(0.0, type: Nx.type(wx)), {batch, hidden})
+    bhn = if bhn, do: bhn, else: Nx.broadcast(Nx.tensor(0.0, type: Nx.type(wx)), {hidden})
 
     {_, h_list} =
       Enum.reduce(0..(seq_len - 1), {h0, []}, fn t, {h_p, acc} ->
@@ -2512,10 +2534,10 @@ defmodule Edifice.CUDA.FusedScan do
           Nx.slice_along_axis(rh_t, hidden, hidden, axis: 1)
         ) |> Nx.sigmoid()
 
-        # Candidate: reset applied only to recurrent contribution
+        # Candidate: reset applied only to recurrent contribution (+ bhn)
         n_t = Nx.add(
           Nx.slice_along_axis(wx_t, hidden * 2, hidden, axis: 1),
-          Nx.multiply(r_t, Nx.slice_along_axis(rh_t, hidden * 2, hidden, axis: 1))
+          Nx.multiply(r_t, Nx.add(Nx.slice_along_axis(rh_t, hidden * 2, hidden, axis: 1), bhn))
         ) |> Nx.tanh()
 
         # Blend: h = (1-z)*n + z*h_prev
@@ -3185,21 +3207,23 @@ defmodule Edifice.CUDA.FusedScan do
     end
   end
 
-  defp gru_fused(wx, recurrent_weight) do
+  defp gru_fused(wx, recurrent_weight, h0, bhn) do
     {batch, seq_len, hidden3} = Nx.shape(wx)
     hidden = div(hidden3, 3)
     dtype = dtype_flag(wx)
     esize = elem_size(wx)
     ttype = tensor_type(wx)
 
-    h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
+    h0 = h0 || Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
+    bhn = bhn || Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {hidden})
 
     wx_ptr = Nx.to_pointer(wx, mode: :local)
     r_ptr = Nx.to_pointer(recurrent_weight, mode: :local)
     h0_ptr = Nx.to_pointer(h0, mode: :local)
+    bhn_ptr = Nx.to_pointer(bhn, mode: :local)
 
     case Edifice.CUDA.NIF.fused_gru_scan(
-           wx_ptr.address, r_ptr.address, h0_ptr.address,
+           wx_ptr.address, r_ptr.address, h0_ptr.address, bhn_ptr.address,
            batch, seq_len, hidden, dtype
          ) do
       {:ok, out_addr, gc_ref} ->

@@ -75,7 +75,7 @@ defmodule Edifice.CUDA.NIF do
     do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_gru_scan(_wx, _r, _h0, _batch, _seq, _hidden, _dtype),
+  def fused_gru_scan(_wx, _r, _h0, _bhn, _batch, _seq, _hidden, _dtype),
     do: :erlang.nif_error(:not_loaded)
 
   @doc false
@@ -173,7 +173,7 @@ defmodule Edifice.CUDA.NIF do
     do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_gru_scan_backward(_wx_ptr, _r_ptr, _h0_ptr, _fwd_ptr, _grad_ptr, _batch, _seq, _hidden, _dtype),
+  def fused_gru_scan_backward(_wx_ptr, _r_ptr, _h0_ptr, _bhn_ptr, _fwd_ptr, _grad_ptr, _batch, _seq, _hidden, _dtype),
     do: :erlang.nif_error(:not_loaded)
 
   # Phase 3 backward kernels

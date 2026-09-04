@@ -826,7 +826,7 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         Nx.Defn.grad({wx, r_weight}, fn {w, r} -> forward_fn.(w, r) |> Nx.sum() end)
 
       {grad_wx, grad_rh, _grad_h0} =
-        Edifice.CUDA.FusedScan.gru_backward_fallback(wx, r_weight, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.gru_backward_fallback(wx, r_weight, h0, nil, forward_out, grad_output)
 
       # Compute grad_R from grad_rh
       h_prev = Nx.concatenate([Nx.reshape(h0, {batch, 1, hidden}), Nx.slice_along_axis(forward_out, 0, seq_len - 1, axis: 1)], axis: 1)
@@ -835,6 +835,60 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
 
       assert_all_close(grad_wx, ref_grad_wx, atol: 1.0e-4)
       assert_all_close(grad_r, ref_grad_r, atol: 1.0e-4)
+    end
+
+    test "gru_scan/4 forward (fallback tier) matches reference with h0 + bhn" do
+      batch = 2
+      seq_len = 4
+      hidden = 3
+
+      key = Nx.Random.key(11)
+      {wx, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 3 * hidden}, type: {:f, 32})
+      {r_weight, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 3 * hidden}, type: {:f, 32})
+      {bhn, key} = Nx.Random.uniform(key, -0.4, 0.4, shape: {hidden}, type: {:f, 32})
+      {h0, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, hidden}, type: {:f, 32})
+
+      out = Edifice.CUDA.FusedScan.gru_scan(wx, r_weight, h0, bhn)
+      ref = gru_forward(wx, r_weight, h0, hidden, bhn)
+
+      assert_all_close(out, ref, atol: 1.0e-5)
+    end
+
+    test "matches Nx autodiff with nonzero bhn and h0 (BPTT carry semantics)" do
+      batch = 2
+      seq_len = 3
+      hidden = 2
+
+      key = Nx.Random.key(7)
+      {wx, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 3 * hidden}, type: {:f, 32})
+      {r_weight, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 3 * hidden}, type: {:f, 32})
+      {bhn, key} = Nx.Random.uniform(key, -0.4, 0.4, shape: {hidden}, type: {:f, 32})
+      {h0, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, hidden}, type: {:f, 32})
+
+      forward_out = gru_forward(wx, r_weight, h0, hidden, bhn)
+      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, hidden})
+
+      {ref_grad_wx, ref_grad_r, ref_grad_bhn} =
+        Nx.Defn.grad({wx, r_weight, bhn}, fn {w, r, b} ->
+          gru_forward(w, r, h0, hidden, b) |> Nx.sum()
+        end)
+
+      {grad_wx, grad_rh, _grad_h0} =
+        Edifice.CUDA.FusedScan.gru_backward_fallback(wx, r_weight, h0, bhn, forward_out, grad_output)
+
+      h_prev = Nx.concatenate([Nx.reshape(h0, {batch, 1, hidden}), Nx.slice_along_axis(forward_out, 0, seq_len - 1, axis: 1)], axis: 1)
+      grad_r = Nx.dot(Nx.reshape(h_prev, {batch * seq_len, hidden}) |> Nx.transpose(),
+                       Nx.reshape(grad_rh, {batch * seq_len, 3 * hidden}))
+
+      # grad_bhn = sum over (b, t) of grad_rh's n-column
+      grad_bhn =
+        grad_rh
+        |> Nx.slice_along_axis(2 * hidden, hidden, axis: 2)
+        |> Nx.sum(axes: [0, 1])
+
+      assert_all_close(grad_wx, ref_grad_wx, atol: 1.0e-4)
+      assert_all_close(grad_r, ref_grad_r, atol: 1.0e-4)
+      assert_all_close(grad_bhn, ref_grad_bhn, atol: 1.0e-4)
     end
 
     test "numerical gradient check for wx" do
@@ -852,7 +906,7 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, hidden})
 
       {grad_wx, _, _} =
-        Edifice.CUDA.FusedScan.gru_backward_fallback(wx, r_weight, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.gru_backward_fallback(wx, r_weight, h0, nil, forward_out, grad_output)
 
       eps = 1.0e-3
       numer_wx = finite_diff_grad(wx, fn w -> gru_forward(w, r_weight, h0, hidden) |> Nx.sum() end, eps)
@@ -878,7 +932,7 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         Nx.Defn.grad({wx, r_weight}, fn {w, r} -> gru_forward(w, r, h0, hidden) |> Nx.sum() end)
 
       {grad_wx, _, _} =
-        Edifice.CUDA.FusedScan.gru_backward_fallback(wx, r_weight, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.gru_backward_fallback(wx, r_weight, h0, nil, forward_out, grad_output)
 
       assert_all_close(grad_wx, ref_grad_wx, atol: 0.1)
     end
@@ -1471,8 +1525,9 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
   end
 
   # Standard GRU forward scan for testing
-  defp gru_forward(wx, recurrent_weight, h0, hidden) do
+  defp gru_forward(wx, recurrent_weight, h0, hidden, bhn \\ nil) do
     {_batch, seq_len, _hidden3} = Nx.shape(wx)
+    bhn = if bhn, do: bhn, else: Nx.broadcast(Nx.tensor(0.0, type: Nx.type(wx)), {hidden})
 
     {_, h_list} =
       Enum.reduce(0..(seq_len - 1), {h0, []}, fn t, {h_p, acc} ->
@@ -1483,7 +1538,7 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
                      Nx.slice_along_axis(rh_t, 0, hidden, axis: 1)) |> Nx.sigmoid()
         z_t = Nx.add(Nx.slice_along_axis(wx_t, hidden, hidden, axis: 1),
                      Nx.slice_along_axis(rh_t, hidden, hidden, axis: 1)) |> Nx.sigmoid()
-        rh_n = Nx.slice_along_axis(rh_t, 2 * hidden, hidden, axis: 1)
+        rh_n = Nx.add(Nx.slice_along_axis(rh_t, 2 * hidden, hidden, axis: 1), bhn)
         n_t = Nx.add(Nx.slice_along_axis(wx_t, 2 * hidden, hidden, axis: 1),
                      Nx.multiply(r_t, rh_n)) |> Nx.tanh()
         h_t = Nx.add(Nx.multiply(Nx.subtract(1.0, z_t), n_t), Nx.multiply(z_t, h_p))
