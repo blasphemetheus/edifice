@@ -5195,12 +5195,16 @@ defmodule Edifice.CUDA.FusedScan do
          Process.get(:__edifice_force_fallback__, false) do
       false
     else
-      # Post-Nx.block migration: true only when a real (non-Any)
-      # EXLA.CustomCall impl for Edifice.Block.FusedOp is registered —
-      # i.e. an in-graph native kernel exists. Taking the block tier
-      # without one would silently run the pure fallback and shadow the
-      # faster NIF arm, so the probe must stay truthful.
-      Edifice.Block.native_impl?()
+      # Post-Nx.block migration: true only when the (env-gated) FusedOp
+      # defimpl is ACTIVE — i.e. EDIFICE_FUSED_CUSTOM_CALL=1 asserts the
+      # loaded EXLA library links the native kernels — AND a real
+      # (non-Any) EXLA.CustomCall impl is registered. Taking the block
+      # tier without both would silently run the pure fallback and
+      # shadow the faster NIF arm, so the probe must stay truthful (the
+      # defimpl also self-gates per-op; this keeps the whole tier's
+      # dispatch honest).
+      System.get_env("EDIFICE_FUSED_CUSTOM_CALL") == "1" and
+        Edifice.Block.native_impl?()
     end
   rescue
     _ -> false
