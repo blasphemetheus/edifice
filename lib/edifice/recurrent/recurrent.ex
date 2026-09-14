@@ -111,6 +111,7 @@ defmodule Edifice.Recurrent do
           | {:seq_len, pos_integer()}
           | {:truncate_bptt, pos_integer() | nil}
           | {:window_size, pos_integer()}
+          | {:recurrent_state, :legacy_random | :zeros}
 
   @spec build([build_opt()]) :: Axon.t()
   def build(opts \\ []) do
@@ -136,6 +137,7 @@ defmodule Edifice.Recurrent do
       cell_type: cell_type,
       dropout: dropout,
       return_sequences: return_sequences,
+      recurrent_state: Keyword.get(opts, :recurrent_state, :legacy_random),
       truncate_bptt: truncate_bptt,
       fused_block: fused_block
     )
@@ -156,6 +158,7 @@ defmodule Edifice.Recurrent do
                          Set to e.g. 15-20 for 2-3x faster training with some accuracy loss
     - `:input_layer_norm` - Apply layer norm to input for stability (default: true)
     - `:use_layer_norm` - Apply layer norm after each RNN layer (default: true)
+    - `:recurrent_state` - `:legacy_random` (default) or explicit `:zeros` for standard GRU
   """
   @spec build_backbone(Axon.t(), keyword()) :: Axon.t()
   def build_backbone(input, opts \\ []) do
@@ -168,6 +171,11 @@ defmodule Edifice.Recurrent do
     input_layer_norm = Keyword.get(opts, :input_layer_norm, true)
     use_layer_norm = Keyword.get(opts, :use_layer_norm, true)
     fused_block = Keyword.get(opts, :fused_block, false)
+
+    recurrent_state = Keyword.get(opts, :recurrent_state, :legacy_random)
+    unless recurrent_state == :legacy_random or
+             (recurrent_state == :zeros and cell_type == :gru and not fused_block),
+      do: raise(ArgumentError, "explicit zero state requires the standard GRU path")
 
     if fused_block and cell_type in [:lstm, :gru] do
       # Fused block path: kernel handles prenorm internally via packed weights.
@@ -206,6 +214,7 @@ defmodule Edifice.Recurrent do
             build_recurrent_layer(acc, hidden_size, cell_type,
               name: "#{cell_type}_#{layer_idx}",
               return_sequences: layer_return_seq,
+              recurrent_state: Keyword.get(opts, :recurrent_state, :legacy_random),
               use_layer_norm: use_layer_norm
             )
 
@@ -247,13 +256,15 @@ defmodule Edifice.Recurrent do
     recurrent_init = Keyword.get(opts, :recurrent_initializer, :glorot_uniform)
 
     output_seq =
-      if fused_rnn_available?(cell_type) do
+      if Keyword.get(opts, :recurrent_state, :legacy_random) == :legacy_random and
+           fused_rnn_available?(cell_type) do
         build_fused_recurrent(input, hidden_size, cell_type,
           name: name,
           recurrent_initializer: recurrent_init
         )
       else
         build_axon_recurrent(input, hidden_size, cell_type,
+          recurrent_state: Keyword.get(opts, :recurrent_state, :legacy_random),
           name: name,
           recurrent_initializer: recurrent_init
         )
@@ -361,9 +372,15 @@ defmodule Edifice.Recurrent do
     ]
 
     {output_seq, _hidden} =
-      case cell_type do
-        :lstm -> Axon.lstm(input, hidden_size, recurrent_opts)
-        :gru -> Axon.gru(input, hidden_size, recurrent_opts)
+      case {cell_type, Keyword.get(opts, :recurrent_state, :legacy_random)} do
+        {:lstm, :legacy_random} -> Axon.lstm(input, hidden_size, recurrent_opts)
+        {:gru, :legacy_random} -> Axon.gru(input, hidden_size, recurrent_opts)
+        {:gru, :zeros} ->
+          hidden = Axon.nx(input, fn tensor ->
+            Nx.broadcast(Nx.tensor(0.0, type: Nx.type(tensor)), {Nx.axis_size(tensor, 0), hidden_size})
+          end, name: "#{name}_zero_hidden_state")
+          Axon.gru(input, {hidden}, hidden_size, Keyword.delete(recurrent_opts, :recurrent_initializer))
+        other -> raise ArgumentError, "unsupported recurrent cell/state: #{inspect(other)}"
       end
 
     output_seq
