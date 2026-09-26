@@ -217,8 +217,9 @@ int fused_selective_scan_backward_launch(
 
     // Allocate workspace for h_prev storage: [B, H, T, S]
     size_t ws_size = (size_t)batch * hidden * seq_len * state_size * sizeof(float);
-    float* workspace;
-    cudaMallocAsync(&workspace, ws_size, stream);
+    float* workspace = nullptr;
+    cudaError_t alloc_err = cudaMallocAsync(&workspace, ws_size, stream);
+    if (alloc_err != cudaSuccess) return (int)alloc_err;
 
     int threads_per_block = (hidden < 256) ? hidden : 256;
     int blocks_y = (hidden + threads_per_block - 1) / threads_per_block;
@@ -232,9 +233,9 @@ int fused_selective_scan_backward_launch(
         batch, seq_len, hidden, state_size
     );
 
-    cudaFreeAsync(workspace, stream);
-
-    return (int)cudaGetLastError();
+    cudaError_t launch_err = cudaGetLastError();
+    cudaError_t free_err = cudaFreeAsync(workspace, stream);
+    return (int)(launch_err != cudaSuccess ? launch_err : free_err);
 }
 
 }  // extern "C"
@@ -282,10 +283,19 @@ ffi::Error fused_selective_scan_backward_ffi_impl(
     cudaMemsetAsync(reinterpret_cast<float*>(grad_C->untyped_data()), 0,
                     bts * sizeof(float), stream);
 
-    // Allocate workspace for h_prev storage: [B, H, T, S]
+    // This workspace lives outside XLA's pool. Always check allocation:
+    // launching with an invalid pointer turns a recoverable OOM into a
+    // device-wide illegal write. B=128,H=1024,T=80,S=16 needs 640 MiB.
     size_t ws_size = (size_t)batch * hidden * seq_len * state_size * sizeof(float);
-    float* workspace;
-    cudaMallocAsync(&workspace, ws_size, stream);
+    float* workspace = nullptr;
+    cudaError_t alloc_err = cudaMallocAsync(&workspace, ws_size, stream);
+    if (alloc_err != cudaSuccess) {
+        return ffi::Error(alloc_err == cudaErrorMemoryAllocation
+                              ? ffi::ErrorCode::kResourceExhausted
+                              : ffi::ErrorCode::kInternal,
+                          std::string("Mamba selective scan backward workspace: ") +
+                          cudaGetErrorString(alloc_err));
+    }
 
     int threads_per_block = (hidden < 256) ? hidden : 256;
     int blocks_y = (hidden + threads_per_block - 1) / threads_per_block;
@@ -307,11 +317,13 @@ ffi::Error fused_selective_scan_backward_ffi_impl(
         batch, seq_len, hidden, state_size
     );
 
-    cudaFreeAsync(workspace, stream);
-
     cudaError_t err = cudaGetLastError();
+    cudaError_t free_err = cudaFreeAsync(workspace, stream);
     if (err != cudaSuccess) {
         return ffi::Error(ffi::ErrorCode::kInternal, cudaGetErrorString(err));
+    }
+    if (free_err != cudaSuccess) {
+        return ffi::Error(ffi::ErrorCode::kInternal, cudaGetErrorString(free_err));
     }
 
     return ffi::Error::Success();
