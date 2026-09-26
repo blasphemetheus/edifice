@@ -52,6 +52,8 @@
 //   grad_C:  [B, T, S]  — gradient w.r.t. C (reduced across hidden)
 
 #include <cuda_runtime.h>
+#include <mutex>
+#include <unordered_map>
 #include "precision.cuh"
 
 constexpr float DT_MIN = 0.001f;
@@ -188,6 +190,51 @@ __global__ void fused_selective_scan_backward_kernel(
 }  // anonymous namespace
 #endif
 
+// ============================================================================
+// Workspace cache (2026-09-26)
+// ============================================================================
+// The backward pass needs a [B, H, T, S] f32 workspace — 640 MiB at the
+// production shape. Until 2026-09-26 every call did cudaMallocAsync +
+// cudaFreeAsync on the compute stream, i.e. mapped and unmapped 640 MiB of
+// device memory per layer per training step through the driver's
+// stream-ordered pool. With eager XLA work enqueued concurrently from another
+// host thread (the training pipeline's background chunk embedding) this ended
+// in a reproducible Xid 31 MMU fault: a VIRT_WRITE to an unmapped page at a
+// stable address inside that pool's range (exphil
+// scripts/mamba_race_probe.exs, 2 of 3 runs). All callers run on XLA's single
+// per-device compute stream, so one grow-only buffer per device, reused in
+// stream order and never unmapped for the life of the process, removes the
+// churn entirely. Growth frees the old buffer stream-ordered (cudaFreeAsync
+// accepts cudaMalloc memory), so an in-flight kernel on the old buffer is
+// safe. Returns nullptr and sets *err on allocation failure.
+static float* selective_scan_backward_workspace(size_t bytes, cudaStream_t stream, cudaError_t* err) {
+    struct Slot { float* ptr; size_t bytes; };
+    static std::mutex mutex;
+    static std::unordered_map<int, Slot> per_device;
+
+    int device = 0;
+    cudaError_t e = cudaGetDevice(&device);
+    if (e != cudaSuccess) { *err = e; return nullptr; }
+
+    std::lock_guard<std::mutex> lock(mutex);
+    Slot& slot = per_device[device];
+    if (slot.bytes >= bytes && slot.ptr != nullptr) { *err = cudaSuccess; return slot.ptr; }
+
+    if (slot.ptr != nullptr) {
+        e = cudaFreeAsync(slot.ptr, stream);
+        slot.ptr = nullptr;
+        slot.bytes = 0;
+        if (e != cudaSuccess) { *err = e; return nullptr; }
+    }
+    float* fresh = nullptr;
+    e = cudaMalloc(&fresh, bytes);
+    if (e != cudaSuccess) { *err = e; return nullptr; }
+    slot.ptr = fresh;
+    slot.bytes = bytes;
+    *err = cudaSuccess;
+    return fresh;
+}
+
 #ifndef EXLA_FFI
 
 extern "C" {
@@ -215,11 +262,11 @@ int fused_selective_scan_backward_launch(
     cudaMemsetAsync(grad_B, 0, bts * sizeof(float), stream);
     cudaMemsetAsync(grad_C, 0, bts * sizeof(float), stream);
 
-    // Allocate workspace for h_prev storage: [B, H, T, S]
+    // Cached workspace for h_prev storage: [B, H, T, S] (see selective_scan_backward_workspace)
     size_t ws_size = (size_t)batch * hidden * seq_len * state_size * sizeof(float);
-    float* workspace = nullptr;
-    cudaError_t alloc_err = cudaMallocAsync(&workspace, ws_size, stream);
-    if (alloc_err != cudaSuccess) return (int)alloc_err;
+    cudaError_t alloc_err = cudaSuccess;
+    float* workspace = selective_scan_backward_workspace(ws_size, stream, &alloc_err);
+    if (workspace == nullptr) return (int)alloc_err;
 
     int threads_per_block = (hidden < 256) ? hidden : 256;
     int blocks_y = (hidden + threads_per_block - 1) / threads_per_block;
@@ -233,9 +280,7 @@ int fused_selective_scan_backward_launch(
         batch, seq_len, hidden, state_size
     );
 
-    cudaError_t launch_err = cudaGetLastError();
-    cudaError_t free_err = cudaFreeAsync(workspace, stream);
-    return (int)(launch_err != cudaSuccess ? launch_err : free_err);
+    return (int)cudaGetLastError();
 }
 
 }  // extern "C"
@@ -283,13 +328,14 @@ ffi::Error fused_selective_scan_backward_ffi_impl(
     cudaMemsetAsync(reinterpret_cast<float*>(grad_C->untyped_data()), 0,
                     bts * sizeof(float), stream);
 
-    // This workspace lives outside XLA's pool. Always check allocation:
-    // launching with an invalid pointer turns a recoverable OOM into a
-    // device-wide illegal write. B=128,H=1024,T=80,S=16 needs 640 MiB.
+    // This workspace lives outside XLA's pool (cached, grow-only — see
+    // selective_scan_backward_workspace). Always check allocation: launching
+    // with an invalid pointer turns a recoverable OOM into a device-wide
+    // illegal write. B=128,H=1024,T=80,S=16 needs 640 MiB.
     size_t ws_size = (size_t)batch * hidden * seq_len * state_size * sizeof(float);
-    float* workspace = nullptr;
-    cudaError_t alloc_err = cudaMallocAsync(&workspace, ws_size, stream);
-    if (alloc_err != cudaSuccess) {
+    cudaError_t alloc_err = cudaSuccess;
+    float* workspace = selective_scan_backward_workspace(ws_size, stream, &alloc_err);
+    if (workspace == nullptr) {
         return ffi::Error(alloc_err == cudaErrorMemoryAllocation
                               ? ffi::ErrorCode::kResourceExhausted
                               : ffi::ErrorCode::kInternal,
@@ -318,12 +364,8 @@ ffi::Error fused_selective_scan_backward_ffi_impl(
     );
 
     cudaError_t err = cudaGetLastError();
-    cudaError_t free_err = cudaFreeAsync(workspace, stream);
     if (err != cudaSuccess) {
         return ffi::Error(ffi::ErrorCode::kInternal, cudaGetErrorString(err));
-    }
-    if (free_err != cudaSuccess) {
-        return ffi::Error(ffi::ErrorCode::kInternal, cudaGetErrorString(free_err));
     }
 
     return ffi::Error::Success();
