@@ -52,6 +52,8 @@
 //   grad_C:  [B, T, S]  — gradient w.r.t. C (reduced across hidden)
 
 #include <cuda_runtime.h>
+#include <cstdlib>
+#include <cstring>
 #include <mutex>
 #include <unordered_map>
 #include "precision.cuh"
@@ -207,10 +209,53 @@ __global__ void fused_selective_scan_backward_kernel(
 // churn entirely. Growth frees the old buffer stream-ordered (cudaFreeAsync
 // accepts cudaMalloc memory), so an in-flight kernel on the old buffer is
 // safe. Returns nullptr and sets *err on allocation failure.
+//
+// Diagnostic switch (env EDIFICE_SSB_WORKSPACE, read once; default "cached"):
+//   cached     — the fix above.
+//   pool       — the pre-fix per-call cudaMallocAsync/cudaFreeAsync path.
+//   pool_keep  — pool, with the default pool's release threshold set to
+//                unlimited once (pages never unmapped on sync).
+//   pool_noopp — pool, with opportunistic cross-stream reuse disabled once.
+// These exist to separate "driver releases pages under a running kernel"
+// from "another stream was handed the buffer" on the race reproducer; they
+// are not for production.
+enum SsbWorkspaceMode { SSB_WS_CACHED = 0, SSB_WS_POOL, SSB_WS_POOL_KEEP, SSB_WS_POOL_NOOPP };
+
+static SsbWorkspaceMode selective_scan_backward_workspace_mode() {
+    static SsbWorkspaceMode mode = [] {
+        const char* v = std::getenv("EDIFICE_SSB_WORKSPACE");
+        SsbWorkspaceMode m = SSB_WS_CACHED;
+        if (v && std::strcmp(v, "pool") == 0) m = SSB_WS_POOL;
+        else if (v && std::strcmp(v, "pool_keep") == 0) m = SSB_WS_POOL_KEEP;
+        else if (v && std::strcmp(v, "pool_noopp") == 0) m = SSB_WS_POOL_NOOPP;
+        if (m == SSB_WS_POOL_KEEP || m == SSB_WS_POOL_NOOPP) {
+            int device = 0;
+            cudaMemPool_t pool;
+            if (cudaGetDevice(&device) == cudaSuccess && cudaDeviceGetDefaultMemPool(&pool, device) == cudaSuccess) {
+                if (m == SSB_WS_POOL_KEEP) {
+                    unsigned long long max = ~0ULL;
+                    cudaMemPoolSetAttribute(pool, cudaMemPoolAttrReleaseThreshold, &max);
+                } else {
+                    int off = 0;
+                    cudaMemPoolSetAttribute(pool, cudaMemPoolReuseAllowOpportunistic, &off);
+                }
+            }
+        }
+        return m;
+    }();
+    return mode;
+}
+
 static float* selective_scan_backward_workspace(size_t bytes, cudaStream_t stream, cudaError_t* err) {
     struct Slot { float* ptr; size_t bytes; };
     static std::mutex mutex;
     static std::unordered_map<int, Slot> per_device;
+
+    if (selective_scan_backward_workspace_mode() != SSB_WS_CACHED) {
+        float* ws = nullptr;
+        *err = cudaMallocAsync(&ws, bytes, stream);
+        return *err == cudaSuccess ? ws : nullptr;
+    }
 
     int device = 0;
     cudaError_t e = cudaGetDevice(&device);
@@ -233,6 +278,13 @@ static float* selective_scan_backward_workspace(size_t bytes, cudaStream_t strea
     slot.bytes = bytes;
     *err = cudaSuccess;
     return fresh;
+}
+
+// Pair of selective_scan_backward_workspace: a no-op in cached mode, the
+// stream-ordered free in the diagnostic pool modes.
+static cudaError_t selective_scan_backward_workspace_release(float* ws, cudaStream_t stream) {
+    if (selective_scan_backward_workspace_mode() == SSB_WS_CACHED) return cudaSuccess;
+    return cudaFreeAsync(ws, stream);
 }
 
 #ifndef EXLA_FFI
@@ -280,7 +332,9 @@ int fused_selective_scan_backward_launch(
         batch, seq_len, hidden, state_size
     );
 
-    return (int)cudaGetLastError();
+    cudaError_t launch_err = cudaGetLastError();
+    cudaError_t free_err = selective_scan_backward_workspace_release(workspace, stream);
+    return (int)(launch_err != cudaSuccess ? launch_err : free_err);
 }
 
 }  // extern "C"
@@ -364,8 +418,12 @@ ffi::Error fused_selective_scan_backward_ffi_impl(
     );
 
     cudaError_t err = cudaGetLastError();
+    cudaError_t free_err = selective_scan_backward_workspace_release(workspace, stream);
     if (err != cudaSuccess) {
         return ffi::Error(ffi::ErrorCode::kInternal, cudaGetErrorString(err));
+    }
+    if (free_err != cudaSuccess) {
+        return ffi::Error(ffi::ErrorCode::kInternal, cudaGetErrorString(free_err));
     }
 
     return ffi::Error::Success();
