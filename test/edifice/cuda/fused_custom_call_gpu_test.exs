@@ -1,9 +1,9 @@
 defmodule Edifice.CUDA.FusedCustomCallGpuTest do
   @moduledoc """
   End-to-end equivalence tests for the REVIVED custom-call tier
-  (Edifice.Block.FusedOp defimpl + FFI kernels linked into the EXLA
-  fork). Excluded by default (:exla_only): they need CUDA, the fork
-  with kernels linked, and the explicit activation flag —
+  (Edifice.Block.FusedOp defimpl + dynamically loaded FFI kernels).
+  Excluded by default (:exla_only): they need CUDA, an EXLA build with
+  load_dylib/1, `mix edifice.cuda.build`, and the explicit activation flag —
 
       EDIFICE_FUSED_CUSTOM_CALL=1 mix test \\
         test/edifice/cuda/fused_custom_call_gpu_test.exs \\
@@ -28,9 +28,15 @@ defmodule Edifice.CUDA.FusedCustomCallGpuTest do
   setup_all do
     unless System.get_env("EDIFICE_FUSED_CUSTOM_CALL") == "1" and
              Edifice.Block.native_impl?() do
-      raise "these tests need EDIFICE_FUSED_CUSTOM_CALL=1 + the kernel-linked EXLA fork"
+      raise "these tests need EDIFICE_FUSED_CUSTOM_CALL=1 and EXLA.CustomCall support"
     end
 
+    # Native scratch/local memory is allocated outside XLA's pool. The default
+    # 90% reservation can starve a later GRU launch after other kernels run.
+    clients = Application.fetch_env!(:exla, :clients)
+    cuda = Keyword.merge(Keyword.fetch!(clients, :cuda), memory_fraction: 0.7)
+    Application.put_env(:exla, :clients, Keyword.put(clients, :cuda, cuda))
+    on_exit(fn -> Application.put_env(:exla, :clients, clients) end)
     Nx.global_default_backend({EXLA.Backend, client: :cuda})
     :ok
   end

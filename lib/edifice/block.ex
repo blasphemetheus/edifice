@@ -17,13 +17,13 @@ defmodule Edifice.Block do
   default fun in-graph — identical semantics to the old `optional/4`
   fallback path, but on a supported API.
 
-  The native tier plugs in later WITHOUT touching callsites: a
+  The native tier uses a
   `defimpl EXLA.CustomCall, for: FusedOp` that pattern-matches `op` and
   returns `{:ok, %EXLA.CustomCall.Spec{call_target_name: ...}}` on CUDA
-  (the fork's .cu kernels re-registered under the protocol's FFI
-  convention) and `:skip` elsewhere. `native_impl?/0` reports whether
-  such an impl is registered — dispatch tiers gate on it so the NIF arm
-  keeps priority until a real in-graph kernel exists.
+  after loading Edifice's FFI library, and `:skip` elsewhere.
+  Build with `mix edifice.cuda.build` and opt in with
+  `EDIFICE_FUSED_CUSTOM_CALL=1`. `native_impl?/0` reports protocol
+  availability, not whether the shared library has been built or loaded.
   """
 
   defmodule FusedOp do

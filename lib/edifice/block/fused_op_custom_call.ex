@@ -9,14 +9,10 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
     # kernel supports and `:skip` everything else (a :skip compiles the
     # pure default fun in-graph, same as before this impl existed).
     #
-    # The call targets ("exla_fused_<op>_<precision>") must be linked
-    # into the loaded EXLA native library (the fork compiles
-    # native/cuda/*.cu with -DEXLA_FFI). A target emitted here without
-    # its handler registered fails at XLA compile time with an unknown
-    # custom-call error — loud, not silent.
+    # Edifice.CUDA.Library loads the separately built handlers before a
+    # supported call target is emitted. EXLA itself does not need rebuilding.
     #
-    # Scope (2026-09-05): GRU forward + backward only (f32), the pair
-    # verified end-to-end via carry-backbone/backward-kernel tests.
+    # Scope: GRU and selective-scan forward + backward (f32).
     # Constraints mirror the kernels: hidden <= 1024 (whole hidden dim in
     # one CUDA block); backward additionally seq_len <= 256 (MAX_SEQ_LEN
     # thread-local arrays).
@@ -24,8 +20,7 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
     # ACTIVATION GATE: emitting a call target whose FFI handler is not
     # linked into the loaded EXLA library fails the whole XLA compile —
     # so the impl stays inert until EDIFICE_FUSED_CUSTOM_CALL=1 is set
-    # explicitly (i.e., you are running an EXLA fork built with the
-    # native/cuda kernels). Default: every op :skip, exactly the
+    # explicitly after `mix edifice.cuda.build`. Default: every op :skip, exactly the
     # pre-defimpl behavior.
 
     alias EXLA.CustomCall.Spec
@@ -33,14 +28,21 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
     @max_hidden 1024
     @max_backward_seq 256
 
-    defp enabled?, do: System.get_env("EDIFICE_FUSED_CUSTOM_CALL") == "1"
+    defp enabled? do
+      if System.get_env("EDIFICE_FUSED_CUSTOM_CALL") == "1" do
+        Edifice.CUDA.Library.ensure_loaded!()
+        true
+      else
+        false
+      end
+    end
 
     # :fused_gru_scan operands: [wx {B,T,3H}, R {H,3H}, h0 {B,H}, bhn {H}]
     def call(%{op: :fused_gru_scan}, _out, [wx | _], %{platform: :cuda}) do
-      with true <- enabled?(),
-           {:f, 32} <- wx.type,
+      with {:f, 32} <- wx.type,
            {_b, _t, h3} <- wx.shape,
-           true <- div(h3, 3) <= @max_hidden do
+           true <- div(h3, 3) <= @max_hidden,
+           true <- enabled?() do
         {:ok, %Spec{call_target_name: "exla_fused_gru_scan_f32"}}
       else
         _ -> :skip
@@ -50,10 +52,10 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
     # :fused_gru_scan_backward operands:
     # [wx, R, h0, bhn, forward_out, grad_output]
     def call(%{op: :fused_gru_scan_backward}, _out, [wx | _], %{platform: :cuda}) do
-      with true <- enabled?(),
-           {:f, 32} <- wx.type,
+      with {:f, 32} <- wx.type,
            {_b, t, h3} <- wx.shape,
-           true <- div(h3, 3) <= @max_hidden and t <= @max_backward_seq do
+           true <- div(h3, 3) <= @max_hidden and t <= @max_backward_seq,
+           true <- enabled?() do
         {:ok, %Spec{call_target_name: "exla_fused_gru_scan_backward_f32"}}
       else
         _ -> :skip
@@ -69,10 +71,10 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
     @max_ssm_state 32
 
     def call(%{op: :fused_selective_scan}, _out, [x, _dt, a | _], %{platform: :cuda}) do
-      with true <- enabled?(),
-           {:f, 32} <- x.type,
+      with {:f, 32} <- x.type,
            {_h, s} <- a.shape,
-           true <- s <= @max_ssm_state do
+           true <- s <= @max_ssm_state,
+           true <- enabled?() do
         {:ok, %Spec{call_target_name: "exla_fused_selective_scan_f32"}}
       else
         _ -> :skip
@@ -81,10 +83,10 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
 
     # :fused_selective_scan_backward operands: [x, dt, A, B, C, grad_output]
     def call(%{op: :fused_selective_scan_backward}, _out, [x, _dt, a | _], %{platform: :cuda}) do
-      with true <- enabled?(),
-           {:f, 32} <- x.type,
+      with {:f, 32} <- x.type,
            {_h, s} <- a.shape,
-           true <- s <= @max_ssm_state do
+           true <- s <= @max_ssm_state,
+           true <- enabled?() do
         {:ok, %Spec{call_target_name: "exla_fused_selective_scan_backward_f32"}}
       else
         _ -> :skip

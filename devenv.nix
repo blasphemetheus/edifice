@@ -62,8 +62,7 @@ in
     XLA_FLAGS = "--xla_gpu_cuda_data_dir=${cuda.cuda_nvcc} --xla_gpu_per_fusion_autotune_cache_dir=$PWD/.cache/xla_autotune";
     ERL_FLAGS = "+P 4000000";
 
-    # Compile Edifice CUDA kernels directly into libexla.so (no symlinks needed)
-    EXLA_EXTRA_CUDA_DIR = "${toString ./.}/native/cuda";
+    # Target used by `mix edifice.cuda.build` for the separate FFI library.
     EXLA_GPU_ARCH = "sm_120";
   };
 

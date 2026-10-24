@@ -5064,8 +5064,8 @@ defmodule Edifice.CUDA.FusedScan do
       false
     else
       # Post-Nx.block migration: true only when the (env-gated) FusedOp
-      # defimpl is ACTIVE — i.e. EDIFICE_FUSED_CUSTOM_CALL=1 asserts the
-      # loaded EXLA library links the native kernels — AND a real
+      # defimpl is ACTIVE — i.e. EDIFICE_FUSED_CUSTOM_CALL=1 requests
+      # loading the Edifice FFI library — AND a real
       # (non-Any) EXLA.CustomCall impl is registered. Taking the block
       # tier without both would silently run the pure fallback and
       # shadow the faster NIF arm, so the probe must stay truthful (the

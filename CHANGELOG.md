@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `mix edifice.cuda.build` builds a separate EXLA FFI library for f32 GRU and
+  Mamba selective-scan forward/backward kernels. Opt-in runtime loading registers
+  handlers before compilation, without modifying or rebuilding EXLA itself.
+
 - **JIT-compiled stateful stepping**: `Edifice.step/5` and
   `Edifice.init_state/3` accept `compiler:` (e.g. `EXLA`) — the step path
   compiles to a single executable per architecture (cached in

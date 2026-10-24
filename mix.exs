@@ -305,6 +305,9 @@ defmodule Edifice.MixProject do
       links: %{"GitHub" => @source_url},
       files: [
         "lib",
+        "native/cuda/Makefile",
+        "native/cuda/*.cu",
+        "native/cuda/*.cuh",
         "mix.exs",
         ".formatter.exs",
         "README.md",

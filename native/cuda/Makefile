@@ -5,8 +5,8 @@
 # These can be loaded via dlopen / Erlang NIF for standalone testing,
 # or via EXLA's device buffer pointer interop.
 #
-# For XLA FFI integration (EXLA fork), copy the .cu files into
-# deps/exla/c_src/exla/custom_calls/ and compile with -DEXLA_FFI.
+# For XLA FFI integration, `mix edifice.cuda.build` builds a separate
+# library loaded by EXLA. No EXLA sources or cached libraries are modified.
 #
 # Usage:
 #   make              # Build both f32 and bf16 shared libraries
@@ -27,6 +27,15 @@ OBJ_DIR      := build
 NVCC     := nvcc
 # Default: sm_75 = Turing (T400, T600, RTX 2xxx)
 GPU_ARCH ?= sm_75
+
+# Only the f32 operations exposed by Edifice.Block's CustomCall implementation.
+# Keep objects separate from the standalone C ABI and from other GPU targets.
+XLA_EXTENSION_DIR ?= $(EDIFICE_ROOT)/deps/exla/cache/xla_extension
+FFI_DIR ?= $(OBJ_DIR)/ffi/$(GPU_ARCH)
+FFI_SOURCES := fused_gru_scan.cu fused_gru_scan_backward.cu \
+               fused_selective_scan.cu fused_selective_scan_backward.cu
+FFI_OBJECTS := $(patsubst %.cu,$(FFI_DIR)/%.o,$(FFI_SOURCES))
+FFI_TARGET := $(BUILD_DIR)/libedifice_xla.so
 
 NVCCFLAGS := -std=c++17 \
              -arch=$(GPU_ARCH) \
@@ -93,6 +102,18 @@ BENCH_BIN   := $(OBJ_DIR)/bench_kernels
 # Default target — both f32 and bf16 shared libraries
 all: $(TARGET) $(TARGET_BF16)
 
+ffi: $(FFI_TARGET)
+
+$(FFI_DIR)/%.o: %.cu precision.cuh Makefile $(wildcard $(XLA_EXTENSION_DIR)/include/xla/ffi/api/*.h)
+	@mkdir -p $(FFI_DIR)
+	$(NVCC) -c $(NVCCFLAGS) -DEXLA_FFI -DNDEBUG -I$(XLA_EXTENSION_DIR)/include $< -o $@
+
+$(FFI_TARGET): $(FFI_OBJECTS) $(XLA_EXTENSION_DIR)/lib/libxla_extension.so FORCE_FFI_LINK
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) -shared -arch=$(GPU_ARCH) -o $@.tmp $(FFI_OBJECTS) \
+	  -L$(XLA_EXTENSION_DIR)/lib -lxla_extension
+	mv $@.tmp $@
+
 # f32 shared library
 $(TARGET): $(KERNEL_OBJECTS)
 	@mkdir -p $(BUILD_DIR)
@@ -143,4 +164,4 @@ info:
 	@echo ""
 	@$(NVCC) --version
 
-.PHONY: all clean test-compile test-bin bench-bin info
+.PHONY: all ffi clean test-compile test-bin bench-bin info FORCE_FFI_LINK
