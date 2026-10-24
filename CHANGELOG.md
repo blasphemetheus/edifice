@@ -47,12 +47,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `Edifice.Utils.Quantization.gptq/3` now requires actual per-layer input
+  activations keyed by full parameter paths. A list remains valid for a single
+  kernel; missing calibration raises. Dense kernels now use full Hessian error
+  compensation, static group scales, and blocked updates instead of RTN.
+
 - `Edifice.SSM.GatedSSM` gains `scan_mode: :causal | :legacy` (default
   `:legacy`, semantics unchanged). The causal mode is a true EMA recurrence
   and is required for stateful stepping.
 - All interpretability `loss/4` functions now default `l1_coeff` properly
   (`keyword!`) and cast to f32 at entry per the numerical precision policy;
   `Crosscoder.loss/4` accepts lists or stacked tensors (was non-runnable).
+
+### Fixed
+
+- Fused generation retains prompt and generated context on every prediction,
+  including sliding-window overflow, one-token requests, and per-row stopping.
+- TRELLIS sparse encoding selects occupied cells; dense decoding scatters
+  features to voxel coordinates instead of broadcasting a global mean.
+- SSM analysis exposes signed scan coefficients validated against Mamba probe
+  output, excludes future frames, and computes decay summaries without log-exp
+  underflow.
+- SSM analysis resolves discretization constants outside `defn` tracing.
+- EXLA custom-call registration is conditional, so consumers can compile and
+  run Edifice without EXLA. CI checks an isolated CPU-only consumer.
+- Sharding tests skip only device-dependent cases on single-device hosts;
+  CI also executes them with two virtual CPU devices.
+- ReMoE gradient smoke input covers both signs and uses seeded initialization
+  to avoid random all-inactive routing.
 
 ### Deprecated
 

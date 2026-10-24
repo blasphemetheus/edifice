@@ -1,4 +1,9 @@
 defmodule Edifice.Sharding do
+  # EXLA is optional; retain undefined-function checks when it is installed.
+  unless Code.ensure_loaded?(EXLA) do
+    @compile {:no_warn_undefined, [EXLA, EXLA.Client]}
+  end
+
   @moduledoc """
   Multi-GPU sharding for Edifice models via `Nx.Mesh` and `EXLA.shard_jit`.
 

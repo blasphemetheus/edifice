@@ -551,7 +551,11 @@ defmodule Edifice.Generative.TRELLIS do
 
     - `voxel_grid` - Dense voxel grid [batch, resolution, resolution, resolution, features]
                      or occupancy grid [batch, res, res, res]
-    - `opts` - Options including `:threshold` for occupancy detection
+    - `opts` - `:threshold` (default 0.5) and `:max_voxels` (default 8192).
+      Occupied cells are selected in x/y/z order, truncated to `max_voxels`.
+      Unused slots are masked and zero-filled. Occupancy-only grids retain
+      their scalar values as one feature channel; `:feature_dim` can replicate
+      that value across additional channels.
 
   ## Returns
 
@@ -565,63 +569,69 @@ defmodule Edifice.Generative.TRELLIS do
     threshold = Keyword.get(opts, :threshold, 0.5)
     max_voxels = Keyword.get(opts, :max_voxels, 8192)
 
-    # Determine if input is occupancy-only or has features
-    rank = Nx.rank(voxel_grid)
+    shape = Nx.shape(voxel_grid)
+
+    unless Nx.rank(voxel_grid) in [4, 5],
+      do: raise(ArgumentError, "voxel_grid must have shape {batch, res, res, res[, features]}")
+
+    batch = elem(shape, 0)
+    res = elem(shape, 1)
+
+    unless elem(shape, 2) == res and elem(shape, 3) == res,
+      do: raise(ArgumentError, "voxel_grid must be cubic")
+
+    unless is_integer(max_voxels) and max_voxels > 0,
+      do: raise(ArgumentError, "max_voxels must be positive")
 
     {occupancy, features} =
-      if rank == 4 do
-        # Just occupancy: [batch, res, res, res]
-        occ = Nx.greater(voxel_grid, threshold)
-        {occ, nil}
+      if Nx.rank(voxel_grid) == 4 do
+        feature_dim = Keyword.get(opts, :feature_dim, 1)
+
+        unless is_integer(feature_dim) and feature_dim > 0,
+          do: raise(ArgumentError, "feature_dim must be positive")
+
+        {Nx.greater(voxel_grid, threshold),
+         Nx.broadcast(Nx.new_axis(voxel_grid, -1), {batch, res, res, res, feature_dim})}
       else
-        # With features: [batch, res, res, res, features]
-        # Use first channel or norm for occupancy
-        occ = Nx.greater(Nx.sum(Nx.abs(voxel_grid), axes: [-1]), threshold)
-        {occ, voxel_grid}
+        {Nx.greater(Nx.sum(Nx.abs(voxel_grid), axes: [-1]), threshold), voxel_grid}
       end
 
-    batch = Nx.axis_size(occupancy, 0)
-    res = Nx.axis_size(occupancy, 1)
+    volume = res * res * res
+    count = min(max_voxels, volume)
+    feature_dim = Nx.axis_size(features, -1)
+    occ_flat = Nx.reshape(occupancy, {batch, volume})
+    # Occupied cells first, in lexicographic x/y/z order. Padding slots have mask=0.
+    indices =
+      occ_flat
+      |> Nx.argsort(axis: 1, direction: :desc, stable: true)
+      |> Nx.slice_along_axis(0, count, axis: 1)
 
-    # For each batch, extract occupied voxel positions and features
-    # This is a simplified version - in practice would use sparse tensor ops
+    mask = Nx.take_along_axis(occ_flat, indices, axis: 1) |> Nx.as_type(:f32)
 
-    # Create coordinate grids
-    x_grid = Nx.iota({res, res, res}, axis: 0)
-    y_grid = Nx.iota({res, res, res}, axis: 1)
-    z_grid = Nx.iota({res, res, res}, axis: 2)
+    coords =
+      Nx.stack(
+        [
+          Nx.iota({res, res, res}, axis: 0) |> Nx.flatten(),
+          Nx.iota({res, res, res}, axis: 1) |> Nx.flatten(),
+          Nx.iota({res, res, res}, axis: 2) |> Nx.flatten()
+        ],
+        axis: 1
+      )
 
-    # Flatten for indexing
-    x_flat = Nx.reshape(x_grid, {res * res * res})
-    y_flat = Nx.reshape(y_grid, {res * res * res})
-    z_flat = Nx.reshape(z_grid, {res * res * res})
-    coords = Nx.stack([x_flat, y_flat, z_flat], axis: 1)
+    positions = Nx.take(coords, indices, axis: 0)
+    feature_indices = Nx.broadcast(Nx.new_axis(indices, -1), {batch, count, feature_dim})
 
-    # Flatten occupancy
-    occ_flat = Nx.reshape(occupancy, {batch, res * res * res})
-
-    # For simplicity, take top-k occupied voxels by position
-    # (In practice, would use actual sparse extraction)
-    positions = Nx.broadcast(coords, {batch, res * res * res, 3})
-
-    # Create mask based on occupancy (take first max_voxels)
-    mask =
-      Nx.slice_along_axis(occ_flat, 0, min(max_voxels, res * res * res), axis: 1)
-      |> Nx.as_type(:f32)
-
-    positions = Nx.slice_along_axis(positions, 0, min(max_voxels, res * res * res), axis: 1)
-
-    # Extract or create features
     sparse_features =
-      if features != nil do
-        feat_dim = Nx.axis_size(features, 4)
-        feat_flat = Nx.reshape(features, {batch, res * res * res, feat_dim})
-        Nx.slice_along_axis(feat_flat, 0, min(max_voxels, res * res * res), axis: 1)
-      else
-        # Create placeholder features
-        feat_dim = Keyword.get(opts, :feature_dim, @default_feature_dim)
-        Nx.broadcast(0.0, {batch, min(max_voxels, res * res * res), feat_dim})
-      end
+      features
+      |> Nx.reshape({batch, volume, feature_dim})
+      |> Nx.take_along_axis(feature_indices, axis: 1)
+
+    sparse_features =
+      Nx.select(
+        Nx.broadcast(Nx.new_axis(mask, -1), Nx.shape(sparse_features)),
+        sparse_features,
+        0
+      )
 
     %{
       features: sparse_features,
@@ -642,7 +652,16 @@ defmodule Edifice.Generative.TRELLIS do
 
   ## Returns
 
-    Decoded 3D representation in requested format.
+    Dense output is `{batch, resolution, resolution, resolution, channels}`.
+    Features are scattered to integer-valued x/y/z coordinates; absent cells
+    are zero and duplicate coordinates add their feature vectors. A positive
+    mask marks occupancy (it does not scale features). Masked, non-integral,
+    nonfinite, or out-of-grid coordinates are ignored. Coordinate units are
+    voxel indices; changing resolution does not rescale positions.
+
+    This reconstructs a sparse feature/density grid, not a learned TRELLIS
+    latent decoder. `:mesh` returns that grid for downstream mesh extraction;
+    it does not perform marching cubes.
   """
   @spec decode_from_slat(map(), keyword()) :: Nx.Tensor.t() | map()
   def decode_from_slat(sparse_latent, opts \\ []) do
@@ -667,32 +686,53 @@ defmodule Edifice.Generative.TRELLIS do
     end
   end
 
-  defp decode_to_dense(features, _positions, mask, resolution) do
-    batch = Nx.axis_size(features, 0)
-    num_voxels = Nx.axis_size(features, 1)
-    feature_dim = Nx.axis_size(features, 2)
+  defp decode_to_dense(features, positions, mask, resolution) do
+    unless is_integer(resolution) and resolution > 0,
+      do: raise(ArgumentError, "resolution must be a positive integer")
 
-    # Initialize empty dense grid
-    _dense = Nx.broadcast(0.0, {batch, resolution, resolution, resolution, feature_dim})
+    unless Nx.rank(features) == 3,
+      do: raise(ArgumentError, "features must have shape {batch, voxels, channels}")
 
-    # Scatter features to positions (simplified - uses loop semantics)
-    # In practice, would use scatter operations
-    # For now, return a placeholder with aggregate statistics
+    {batch, voxels, channels} = Nx.shape(features)
 
-    # Compute mean feature as a summary
-    masked_features = Nx.multiply(features, Nx.reshape(mask, {batch, num_voxels, 1}))
-    total_mask = Nx.sum(mask, axes: [1], keep_axes: true)
+    unless Nx.shape(positions) == {batch, voxels, 3} and Nx.shape(mask) == {batch, voxels},
+      do:
+        raise(
+          ArgumentError,
+          "positions and mask must match the features' batch and voxel dimensions"
+        )
 
-    mean_feature =
-      Nx.divide(
-        Nx.sum(masked_features, axes: [1]),
-        Nx.add(total_mask, 1.0e-8)
+    # Invalid or masked padding coordinates contribute nothing. Sanitize before
+    # casting/indexing, since padding may contain NaNs or out-of-grid sentinels.
+    finite = Nx.logical_not(Nx.logical_or(Nx.is_nan(positions), Nx.is_infinity(positions)))
+    positions = Nx.select(finite, positions, 0)
+
+    valid_coords =
+      Nx.logical_and(Nx.greater_equal(positions, 0), Nx.less(positions, resolution))
+      |> Nx.logical_and(finite)
+      |> Nx.logical_and(Nx.equal(positions, Nx.floor(positions)))
+      |> Nx.all(axes: [2])
+
+    valid = Nx.logical_and(Nx.greater(mask, 0), valid_coords)
+
+    coords =
+      Nx.select(Nx.broadcast(Nx.new_axis(valid, -1), {batch, voxels, 3}), positions, 0)
+      |> Nx.as_type(:s32)
+
+    batches = Nx.iota({batch, voxels, 1}, axis: 0, type: :s32)
+    indices = Nx.concatenate([batches, coords], axis: 2) |> Nx.reshape({batch * voxels, 4})
+
+    updates =
+      Nx.select(Nx.broadcast(Nx.new_axis(valid, -1), Nx.shape(features)), features, 0)
+      |> Nx.reshape({batch * voxels, channels})
+
+    dense =
+      Nx.broadcast(
+        Nx.tensor(0, type: Nx.type(features)),
+        {batch, resolution, resolution, resolution, channels}
       )
 
-    # Broadcast to dense grid (placeholder)
-    mean_feature
-    |> Nx.reshape({batch, 1, 1, 1, feature_dim})
-    |> Nx.broadcast({batch, resolution, resolution, resolution, feature_dim})
+    Nx.indexed_add(dense, indices, updates, axes: [0, 1, 2, 3])
   end
 
   defp decode_to_gaussian_splats(features, positions, mask) do

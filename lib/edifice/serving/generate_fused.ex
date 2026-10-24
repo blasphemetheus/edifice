@@ -7,9 +7,10 @@ defmodule Edifice.Serving.GenerateFused do
   check) into a single `defn` function. Each decode step is one JIT call
   covering all post-forward-pass work.
 
-  The generation loop itself remains in Elixir because `predict_fn` (an
-  Axon compiled function) cannot be called inside `Nx.Defn.Kernel.while`
-  (while requires all state to be tensors, not closures).
+  Every forward pass receives the full retained context (prompt and generated
+  tokens), using the most recent `seq_len` tokens when the context overflows.
+  There is no KV cache; only sampling and buffer updates are fused. The loop
+  runs in Elixir, with one full model prediction per generated token.
 
   ## Performance Improvements Over Generate
 
@@ -30,8 +31,8 @@ defmodule Edifice.Serving.GenerateFused do
 
   import Nx.Defn
 
-  deftransformp get_opt(opts, key, default), do: Keyword.get(opts, key, default)
-  deftransformp get_opt!(opts, key), do: Keyword.fetch!(opts, key)
+  deftransformp(get_opt(opts, key, default), do: Keyword.get(opts, key, default))
+  deftransformp(get_opt!(opts, key), do: Keyword.fetch!(opts, key))
 
   # ============================================================================
   # Public API
@@ -49,6 +50,10 @@ defmodule Edifice.Serving.GenerateFused do
     * `:temperature` - Sampling temperature (default: 1.0). Use 0.01 for greedy.
     * `:stop_token` - Stop token ID (default: nil)
     * `:seed` - PRNG seed (default: 42)
+
+  Returns only generated tokens, shape `{batch, max_tokens}`. Rows that emit
+  `stop_token` retain that token and are zero-padded thereafter. `max_tokens`
+  must be positive. Context beyond `seq_len` uses a sliding window.
   """
   def generate(predict_fn, params, opts) do
     prompt = Keyword.fetch!(opts, :prompt)
@@ -59,55 +64,49 @@ defmodule Edifice.Serving.GenerateFused do
     stop_token = Keyword.get(opts, :stop_token, nil)
     seed = Keyword.get(opts, :seed, 42)
 
+    unless Nx.rank(prompt) == 2 and Nx.axis_size(prompt, 1) > 0,
+      do: raise(ArgumentError, "prompt must have shape {batch, nonempty_sequence}")
+
+    unless is_integer(max_tokens) and max_tokens > 0,
+      do: raise(ArgumentError, "max_tokens must be a positive integer")
+
+    unless is_integer(seq_len) and seq_len > 0,
+      do: raise(ArgumentError, "seq_len must be a positive integer")
+
+    unless is_number(temperature) and temperature > 0,
+      do: raise(ArgumentError, "temperature must be positive")
+
     batch_size = Nx.axis_size(prompt, 0)
-    prompt_len = Nx.axis_size(prompt, 1)
-
     key = Nx.Random.key(seed)
-
-    # --- Prefill: run full prompt through model ---
-    prompt_embedded = embed_and_pad(prompt, embed_fn, seq_len)
-    logits = predict_fn.(params, %{"state_sequence" => prompt_embedded})
-    last_logits = logits[[.., prompt_len - 1, ..]]
-
-    # Pre-allocate output buffer [batch, max_tokens]
     tokens = Nx.broadcast(Nx.s32(0), {batch_size, max_tokens})
     stopped = Nx.broadcast(Nx.u8(0), {batch_size})
 
-    # Sample first token (fused)
-    {tokens, key, stopped} =
-      fused_sample_and_write(last_logits, tokens, key, stopped, Nx.s32(0),
-        temperature: temperature, stop_token: stop_token || -1,
-        batch_size: batch_size, max_tokens: max_tokens
-      )
-
-    # --- Decode loop ---
-    {tokens, _key, _stopped} =
-      Enum.reduce_while(1..(max_tokens - 1), {tokens, key, stopped}, fn step_int, {tokens, key, stopped} ->
-        # Check if all sequences have stopped
+    {tokens, _, _, _} =
+      Enum.reduce_while(0..(max_tokens - 1), {tokens, key, stopped, prompt}, fn step,
+                                                                                {tokens, key,
+                                                                                 stopped,
+                                                                                 context} ->
         if Nx.all(stopped) |> Nx.to_number() == 1 do
-          {:halt, {tokens, key, stopped}}
+          {:halt, {tokens, key, stopped, context}}
         else
-          # Get previous token for embedding
-          prev_token = extract_token_at(tokens, step_int - 1, batch_size, max_tokens)
-          prev_token_2d = Nx.reshape(prev_token, {batch_size, 1})
+          length = Nx.axis_size(context, 1)
+          retained = min(length, seq_len)
+          context = Nx.slice_along_axis(context, length - retained, retained, axis: 1)
+          embedded = embed_and_pad(context, embed_fn, seq_len)
+          logits = predict_fn.(params, %{"state_sequence" => embedded})
+          step_logits = logits[[.., retained - 1, ..]]
 
-          # Embed and pad single token
-          current_pos = prompt_len + step_int
-          token_embedded = embed_single_padded(prev_token_2d, embed_fn, seq_len, current_pos - 1)
-
-          # Forward pass
-          logits = predict_fn.(params, %{"state_sequence" => token_embedded})
-          pos = min(current_pos - 1, seq_len - 1)
-          step_logits = logits[[.., pos, ..]]
-
-          # Fused sample + write + stop check
           {tokens, key, stopped} =
-            fused_sample_and_write(step_logits, tokens, key, stopped, Nx.s32(step_int),
-              temperature: temperature, stop_token: stop_token || -1,
-              batch_size: batch_size, max_tokens: max_tokens
+            fused_sample_and_write(step_logits, tokens, key, stopped, Nx.s32(step),
+              temperature: temperature,
+              stop_token: stop_token || -1,
+              batch_size: batch_size,
+              max_tokens: max_tokens
             )
 
-          {:cont, {tokens, key, stopped}}
+          next_token = Nx.slice_along_axis(tokens, step, 1, axis: 1)
+          context = Nx.concatenate([context, next_token], axis: 1)
+          {:cont, {tokens, key, stopped, context}}
         end
       end)
 
@@ -139,8 +138,10 @@ defmodule Edifice.Serving.GenerateFused do
 
     {uniform, key} = Nx.Random.uniform(key, shape: Nx.shape(probs), type: :f32)
     gumbel = Nx.negate(Nx.log(Nx.negate(Nx.log(Nx.add(uniform, 1.0e-10)))))
-    next_token = Nx.argmax(Nx.add(Nx.log(Nx.add(probs, 1.0e-10)), gumbel), axis: -1)
-                 |> Nx.as_type(:s32)
+
+    next_token =
+      Nx.argmax(Nx.add(Nx.log(Nx.add(probs, 1.0e-10)), gumbel), axis: -1)
+      |> Nx.as_type(:s32)
 
     # Write token at position `step` (masked by PREVIOUS stopped flag)
     # Write first, then update stop — so the stop token itself IS written
@@ -148,14 +149,16 @@ defmodule Edifice.Serving.GenerateFused do
     mask = Nx.equal(pos_indices, step)
     mask_2d = Nx.broadcast(Nx.reshape(mask, {1, max_tokens}), {batch_size, max_tokens})
 
-    token_broadcast = Nx.broadcast(Nx.reshape(next_token, {batch_size, 1}), {batch_size, max_tokens})
+    token_broadcast =
+      Nx.broadcast(Nx.reshape(next_token, {batch_size, 1}), {batch_size, max_tokens})
 
     # Write 0 if already stopped, token if not
-    write_val = Nx.select(
-      Nx.broadcast(Nx.reshape(stopped, {batch_size, 1}), {batch_size, max_tokens}),
-      Nx.broadcast(Nx.s32(0), {batch_size, max_tokens}),
-      token_broadcast
-    )
+    write_val =
+      Nx.select(
+        Nx.broadcast(Nx.reshape(stopped, {batch_size, 1}), {batch_size, max_tokens}),
+        Nx.broadcast(Nx.s32(0), {batch_size, max_tokens}),
+        token_broadcast
+      )
 
     tokens = Nx.select(mask_2d, write_val, tokens)
 
@@ -180,8 +183,10 @@ defmodule Edifice.Serving.GenerateFused do
 
     {uniform, key} = Nx.Random.uniform(key, shape: Nx.shape(probs), type: :f32)
     gumbel = Nx.negate(Nx.log(Nx.negate(Nx.log(Nx.add(uniform, 1.0e-10)))))
-    token = Nx.argmax(Nx.add(Nx.log(Nx.add(probs, 1.0e-10)), gumbel), axis: -1)
-            |> Nx.as_type(:s32)
+
+    token =
+      Nx.argmax(Nx.add(Nx.log(Nx.add(probs, 1.0e-10)), gumbel), axis: -1)
+      |> Nx.as_type(:s32)
 
     {token, key}
   end
@@ -189,14 +194,6 @@ defmodule Edifice.Serving.GenerateFused do
   # ============================================================================
   # Helpers
   # ============================================================================
-
-  defp extract_token_at(tokens, pos, batch_size, max_tokens) do
-    # Extract token at position `pos` from [batch, max_tokens] buffer
-    pos_indices = Nx.iota({max_tokens}, type: :s32)
-    mask = Nx.equal(pos_indices, pos)
-    mask_2d = Nx.broadcast(Nx.reshape(mask, {1, max_tokens}), {batch_size, max_tokens})
-    Nx.reduce_max(Nx.select(mask_2d, tokens, Nx.broadcast(Nx.s32(0), {batch_size, max_tokens})), axes: [1])
-  end
 
   defp embed_and_pad(token_ids, embed_fn, seq_len) do
     embedded = embed_fn.(token_ids)
@@ -206,17 +203,11 @@ defmodule Edifice.Serving.GenerateFused do
       Nx.slice_along_axis(embedded, current_len - seq_len, seq_len, axis: 1)
     else
       {batch, _len, dim} = Nx.shape(embedded)
-      pad = Nx.broadcast(0.0, {batch, seq_len - current_len, dim}) |> Nx.as_type(Nx.type(embedded))
+
+      pad =
+        Nx.broadcast(0.0, {batch, seq_len - current_len, dim}) |> Nx.as_type(Nx.type(embedded))
+
       Nx.concatenate([embedded, pad], axis: 1)
     end
-  end
-
-  defp embed_single_padded(token_ids, embed_fn, seq_len, position) do
-    embedded = embed_fn.(token_ids)
-    {batch, _one, dim} = Nx.shape(embedded)
-
-    zeros = Nx.broadcast(Nx.tensor(0.0, type: Nx.type(embedded)), {batch, seq_len, dim})
-    pos = min(position, seq_len - 1)
-    Nx.put_slice(zeros, [0, pos, 0], embedded)
   end
 end

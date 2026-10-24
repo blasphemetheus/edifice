@@ -43,6 +43,9 @@ jobs:
       - name: Compile
         run: mix compile
 
+      - name: Verify consumer without EXLA
+        run: bash scripts/check_optional_exla.sh
+
       - name: Smoke tests
         run: mix test --only smoke
 
@@ -77,6 +80,11 @@ jobs:
 
       - name: Run tests
         run: mix test
+
+      - name: Test sharding with virtual CPU devices
+        env:
+          XLA_FLAGS: --xla_force_host_platform_device_count=2
+        run: mix test test/edifice/sharding_test.exs
 
   # Slow tests partitioned across 4 workers (~9 min total → ~2.5 min each)
   slow-tests:

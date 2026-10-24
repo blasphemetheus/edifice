@@ -43,8 +43,8 @@ defmodule Edifice.GradientSmokeTest do
   # so that all tensors (trainable params, full data, input) are JIT arguments.
   # This allows gradient tracing through conv ops that BinaryBackend can't
   # differentiate through on its own.
-  defp check_gradients(model, input_map) do
-    {init_fn, predict_fn} = Axon.build(model, mode: :inference)
+  defp check_gradients(model, input_map, build_opts \\ []) do
+    {init_fn, predict_fn} = Axon.build(model, Keyword.put(build_opts, :mode, :inference))
 
     template =
       Map.new(input_map, fn {name, tensor} ->
@@ -1696,8 +1696,12 @@ defmodule Edifice.GradientSmokeTest do
         top_k: 1
       )
 
-    input = random_tensor({@batch, @seq_len, @embed})
-    check_gradients(model, %{"remoe_input" => input})
+    # Positive-only inputs can randomly close every ReLU router. Paired x/-x
+    # activates each router on at least one side (the bias is positive), so
+    # this tests gradient connectivity instead of an accidental all-dead gate.
+    positive = random_tensor({1, @seq_len, @embed})
+    input = Nx.concatenate([positive, Nx.negate(positive)], axis: 0)
+    check_gradients(model, %{"remoe_input" => input}, seed: 42)
   end
 
   # ── Meta / PEFT additions ─────────────────────────────────────

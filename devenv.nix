@@ -4,6 +4,10 @@ let
   cuda = pkgs.cudaPackages;
 in
 {
+  # The pinned devenv modules leave this unset when dotenv is disabled,
+  # but devenv 2.3 evaluates it during startup. Match the upstream default.
+  dotenv.resolved = lib.mkDefault { };
+
   # Elixir + Erlang
   languages.elixir = {
     enable = true;

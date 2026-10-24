@@ -15,24 +15,9 @@ defmodule Edifice.ShardingTest do
 
   @num_devices 2
 
-  # Skip all tests if host doesn't have enough devices
-  setup_all do
-    try do
-      count = Sharding.device_count(:host)
-
-      if count < @num_devices do
-        IO.puts(
-          "[ShardingTest] Skipping: host has #{count} devices, need #{@num_devices}. " <>
-            "Set XLA_FLAGS=\"--xla_force_host_platform_device_count=#{@num_devices}\""
-        )
-
-        :skip
-      else
-        :ok
-      end
-    rescue
-      _ -> :skip
-    end
+  @host_devices if Code.ensure_loaded?(EXLA), do: Sharding.device_count(:host), else: 0
+  if @host_devices == 0 do
+    @moduletag skip: "EXLA is not installed"
   end
 
   # ============================================================================
@@ -64,6 +49,10 @@ defmodule Edifice.ShardingTest do
   # ============================================================================
 
   describe "data_parallel with tensor input" do
+    if @host_devices < @num_devices do
+      @describetag skip: "requires at least two host devices (set XLA_FLAGS)"
+    end
+
     test "splits batch and gathers output" do
       # Simple function: double the input
       predict_fn = fn _params, input -> Nx.multiply(input, 2) end
@@ -138,6 +127,10 @@ defmodule Edifice.ShardingTest do
   # ============================================================================
 
   describe "data_parallel with map input" do
+    if @host_devices < @num_devices do
+      @describetag skip: "requires at least two host devices (set XLA_FLAGS)"
+    end
+
     test "handles single-key map" do
       predict_fn = fn _params, input ->
         Nx.multiply(input["x"], 3)

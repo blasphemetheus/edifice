@@ -18,8 +18,8 @@ defmodule Edifice.Utils.Quantization do
 
   ### 2. GPTQ (Accurate Post-Training Quantization)
   Quantizes weights column-by-column, using the inverse Hessian to optimally
-  distribute quantization error across remaining columns. Much more accurate
-  than RTN, especially at 4-bit and below.
+  distribute quantization error across remaining columns. Calibration quality
+  determines how well this preserves model outputs at low precision.
 
   ```
   for each column j:
@@ -42,10 +42,11 @@ defmodule Edifice.Utils.Quantization do
   ## Usage
 
       # Simple round-to-nearest at 8-bit
-      quantized_params = Quantization.quantize_weights(params, :rtn, bits: 8)
+      quantized_params = Quantization.quantize_weights(params, bits: 8)
 
-      # GPTQ with calibration data
-      quantized_params = Quantization.gptq(params, calibration_data, bits: 4)
+      # GPTQ with captured inputs to each dense layer
+      calibration = %{["dense", "kernel"] => [dense_input_batch]}
+      quantized_params = Quantization.gptq(params, calibration, bits: 4)
 
       # AWQ with activation statistics
       quantized_params = Quantization.awq(params, act_stats, bits: 4)
@@ -115,44 +116,85 @@ defmodule Edifice.Utils.Quantization do
   # ============================================================================
 
   @doc """
-  Quantize parameters using GPTQ with Hessian-based error compensation.
+  Quantize dense kernels using GPTQ with full Hessian error compensation.
 
-  GPTQ requires calibration data to estimate the Hessian (second-order
-  information about how each weight affects the output).
+  Kernels use Axon's `{input_features, output_features}` layout. Calibration
+  is a map from full parameter paths to nonempty lists of input activation
+  batches, e.g. `%{["dense", "kernel"] => [activations]}`. Each batch has shape
+  `{..., input_features}`. Capture the actual inputs to each layer, not just
+  the model's input; this function does not execute a model to collect them.
+  A bare list of batches is accepted only when exactly one kernel is selected.
+  Missing calibration raises rather than silently falling back to RTN.
 
-  ## Parameters
+  Uses the uncentered input covariance, diagonal damping, an upper Cholesky
+  factor of its inverse, and sequential quantization error compensation.
+  Unobserved input channels are zeroed. Only rank-two kernels are supported;
+  skip other tensors explicitly using `:skip_patterns`.
 
-    - `params` - Model parameters
-    - `calibration_inputs` - List of input tensors for Hessian estimation
-    - `opts` - Options:
-      - `:bits` - Target bit width (default: 4)
-      - `:group_size` - Group size (default: 128)
-      - `:block_size` - Column block size for batched processing (default: 128)
-      - `:dampening` - Dampening factor for Hessian (default: 0.01)
-      - `:skip_patterns` - Name patterns to skip
+  ## Options
 
-  ## Returns
+    - `:bits` — 2, 3, 4 or 8 (default: 4), symmetric signed quantization
+    - `:group_size` — contiguous input channels per static scale group
+      (default: 128); `-1` uses all input channels. Scales are per output channel.
+    - `:block_size` — input channels per error-update block (default: 128)
+    - `:dampening` — positive fraction of mean Hessian diagonal (default: 0.01)
+    - `:skip_patterns` — substrings of parameter paths to preserve (default: ["bias"])
 
-    Same structure as `quantize_weights/2`.
+  Returns the same structure as `quantize_weights/2`, consumable by
+  `dequantize/1`. Codes are stored as s8 tensors (not bit-packed), with scales
+  expanded to kernel shape. `bits` describes the quantization grid, not actual
+  storage compression. This offline routine is not intended to run inside defn.
   """
-  @spec gptq(map(), list(Nx.Tensor.t()), keyword()) :: map()
+  @spec gptq(map(), map() | list(Nx.Tensor.t()), keyword()) :: map()
   def gptq(params, calibration_inputs, opts \\ []) do
-    bits = Keyword.get(opts, :bits, 4)
-    dampening = Keyword.get(opts, :dampening, 0.01)
-    skip_patterns = Keyword.get(opts, :skip_patterns, ["bias"])
+    opts =
+      Keyword.validate!(opts,
+        bits: 4,
+        group_size: 128,
+        block_size: 128,
+        dampening: 0.01,
+        skip_patterns: ["bias"]
+      )
 
-    # Estimate per-layer Hessians from calibration data
-    hessians = estimate_hessians(params, calibration_inputs)
+    bits = opts[:bits]
+    group_size = opts[:group_size]
+    block_size = opts[:block_size]
+    dampening = opts[:dampening]
+    unless bits in [2, 3, 4, 8], do: raise(ArgumentError, "GPTQ bits must be 2, 3, 4 or 8")
 
-    {quantized, scales, zero_points} =
-      deep_map_params(params, fn name, tensor ->
-        if should_skip?(name, skip_patterns) or Nx.rank(tensor) < 2 do
-          {tensor, nil, nil}
-        else
-          h = Map.get(hessians, name, nil)
-          gptq_quantize_tensor(tensor, h, bits, dampening)
-        end
+    unless is_integer(group_size) and (group_size == -1 or group_size > 0),
+      do: raise(ArgumentError, "GPTQ group_size must be -1 or a positive integer")
+
+    unless is_integer(block_size) and block_size > 0,
+      do: raise(ArgumentError, "GPTQ block_size must be a positive integer")
+
+    unless is_number(dampening) and dampening > 0,
+      do: raise(ArgumentError, "GPTQ dampening must be positive")
+
+    selected = gptq_kernels(params, [], opts[:skip_patterns])
+
+    calibration =
+      cond do
+        is_map(calibration_inputs) and not is_struct(calibration_inputs) ->
+          calibration_inputs
+
+        is_list(calibration_inputs) and length(selected) == 1 ->
+          [{path, _}] = selected
+          %{path => calibration_inputs}
+
+        true ->
+          raise ArgumentError,
+                "GPTQ requires calibration keyed by full parameter paths; a list is only valid for one kernel"
+      end
+
+    results =
+      Map.new(selected, fn {path, tensor} ->
+        batches = Map.get(calibration, path)
+        hessian = calibration_hessian!(batches, Nx.axis_size(tensor, 0), path)
+        {path, gptq_quantize_tensor(tensor, hessian, bits, dampening, group_size, block_size)}
       end)
+
+    {quantized, scales, zero_points} = gptq_rebuild(params, results, [])
 
     %{
       quantized_params: quantized,
@@ -311,48 +353,137 @@ defmodule Edifice.Utils.Quantization do
   # Private: GPTQ Implementation
   # ============================================================================
 
-  defp gptq_quantize_tensor(tensor, hessian, bits, dampening) do
+  # Algorithm reference: https://github.com/IST-DASLab/gptq/blob/main/gptq.py
+  # Operate on Axon input rows (the reference GPTQ implementation uses columns).
+  # Static groups keep scale selection independent of error-update block size.
+  defp gptq_quantize_tensor(tensor, hessian, bits, dampening, group_size, block_size) do
+    {n, outputs} = Nx.shape(tensor)
+    weights = Nx.as_type(tensor, :f32)
+    finite!(weights, "GPTQ weights")
+    dead = Nx.equal(Nx.take_diagonal(hessian), 0)
+    weights = Nx.select(Nx.broadcast(Nx.new_axis(dead, 1), {n, outputs}), 0.0, weights)
+    hessian = Nx.add(hessian, Nx.make_diagonal(Nx.as_type(dead, :f32)))
+    damp = Nx.multiply(dampening, Nx.mean(Nx.take_diagonal(hessian)))
+    hessian = Nx.add(hessian, Nx.multiply(damp, Nx.eye(n)))
+    upper = hessian |> Nx.LinAlg.invert() |> Nx.LinAlg.cholesky() |> Nx.transpose()
+    finite!(upper, "GPTQ inverse Hessian factor")
     {qmin, qmax} = quant_range(bits, true)
+    group_size = if group_size == -1, do: n, else: group_size
 
-    # If no Hessian available, fall back to RTN
-    if hessian == nil do
-      rtn_quantize_tensor(tensor, bits, true)
-    else
-      # Add dampening to Hessian diagonal
-      n = Nx.axis_size(hessian, 0)
-      diag_mean = Nx.mean(Nx.take_diagonal(hessian))
-      damp = Nx.multiply(dampening, diag_mean)
-      h_damp = Nx.add(hessian, Nx.multiply(damp, Nx.eye(n)))
+    scales =
+      for start <- Enum.take_every(0..(n - 1), group_size) do
+        count = min(group_size, n - start)
 
-      # Cholesky for stable inverse
-      # Fallback: use diagonal approximation if Cholesky fails
-      h_inv_diag = Nx.divide(1.0, Nx.max(Nx.take_diagonal(h_damp), 1.0e-6))
+        weights
+        |> Nx.slice_along_axis(start, count, axis: 0)
+        |> Nx.abs()
+        |> Nx.reduce_max(axes: [0], keep_axes: true)
+        |> Nx.divide(qmax)
+        |> Nx.max(1.0e-8)
+        |> Nx.broadcast({count, outputs})
+      end
+      |> Nx.concatenate(axis: 0)
 
-      # Column-by-column quantization with error compensation
-      abs_max = Nx.reduce_max(Nx.abs(tensor))
-      scale = Nx.divide(abs_max, qmax)
-      safe_scale = Nx.max(scale, 1.0e-8)
+    {_, codes} =
+      Enum.reduce(
+        Enum.take_every(0..(n - 1), block_size),
+        {weights, Nx.broadcast(Nx.s8(0), {n, outputs})},
+        fn start, {w, codes} ->
+          count = min(block_size, n - start)
+          finish = start + count
+          local = Nx.slice_along_axis(w, start, count, axis: 0)
 
-      # Quantize with diagonal Hessian weighting
-      # Weight error distribution by inverse Hessian diagonal
-      _weighted = Nx.multiply(tensor, Nx.sqrt(Nx.reshape(h_inv_diag, {1, n})))
+          {_, codes, errors} =
+            Enum.reduce(0..(count - 1), {local, codes, []}, fn offset, {local, q, errors} ->
+              i = start + offset
+              row = Nx.slice_along_axis(local, offset, 1, axis: 0)
+              scale = Nx.slice_along_axis(scales, i, 1, axis: 0)
+              code = row |> Nx.divide(scale) |> Nx.round() |> Nx.clip(qmin, qmax)
+              error = Nx.divide(Nx.subtract(row, Nx.multiply(code, scale)), upper[i][i])
+              factors = Nx.slice(upper, [i, i], [1, count - offset]) |> Nx.transpose()
+              tail = Nx.slice_along_axis(local, offset, count - offset, axis: 0)
+              local = Nx.put_slice(local, [offset, 0], Nx.subtract(tail, Nx.dot(factors, error)))
+              {local, Nx.put_slice(q, [i, 0], Nx.as_type(code, :s8)), [error | errors]}
+            end)
 
-      quantized =
-        tensor
-        |> Nx.divide(safe_scale)
-        |> Nx.round()
-        |> Nx.clip(qmin, qmax)
+          w =
+            if finish < n do
+              errors = errors |> Enum.reverse() |> Nx.concatenate(axis: 0)
+              factors = Nx.slice(upper, [start, finish], [count, n - finish]) |> Nx.transpose()
+              tail = Nx.slice_along_axis(w, finish, n - finish, axis: 0)
+              Nx.put_slice(w, [finish, 0], Nx.subtract(tail, Nx.dot(factors, errors)))
+            else
+              w
+            end
 
-      {quantized, safe_scale, nil}
-    end
+          {w, codes}
+        end
+      )
+
+    {codes, scales, nil}
   end
 
-  defp estimate_hessians(params, _calibration_inputs) do
-    # Stub: returns identity map (key -> nil) as placeholder.
-    # In full GPTQ, this requires forward hooks on each linear layer to compute
-    # per-layer input covariance as Hessian proxy. Users should provide
-    # pre-computed Hessians via activation_stats.
-    Map.new(Map.keys(params), fn key -> {key, nil} end)
+  defp calibration_hessian!(batches, features, path) do
+    unless is_list(batches) and batches != [],
+      do: raise(ArgumentError, "missing or empty GPTQ calibration for #{inspect(path)}")
+
+    {sum, samples} =
+      Enum.reduce(batches, {Nx.broadcast(0.0, {features, features}), 0}, fn batch, {sum, count} ->
+        unless is_struct(batch, Nx.Tensor) and Nx.rank(batch) >= 2 and
+                 Nx.axis_size(batch, -1) == features,
+               do:
+                 raise(
+                   ArgumentError,
+                   "GPTQ calibration for #{inspect(path)} must have shape {..., #{features}}"
+                 )
+
+        x = batch |> Nx.as_type(:f32) |> Nx.reshape({:auto, features})
+        finite!(x, "GPTQ calibration for #{inspect(path)}")
+        {Nx.add(sum, Nx.dot(Nx.transpose(x), x)), count + Nx.axis_size(x, 0)}
+      end)
+
+    hessian = Nx.divide(sum, samples)
+    finite!(hessian, "GPTQ Hessian for #{inspect(path)}")
+    hessian
+  end
+
+  defp finite!(tensor, label) do
+    if Nx.any(Nx.logical_or(Nx.is_nan(tensor), Nx.is_infinity(tensor))) |> Nx.to_number() == 1,
+      do: raise(ArgumentError, "#{label} must be finite; check calibration and dampening")
+  end
+
+  defp gptq_kernels(params, prefix, skip_patterns) do
+    Enum.flat_map(params, fn {key, value} ->
+      path = prefix ++ [key]
+
+      cond do
+        is_map(value) and not is_struct(value) ->
+          gptq_kernels(value, path, skip_patterns)
+
+        should_skip?(Enum.join(path, "."), skip_patterns) or Nx.rank(value) < 2 ->
+          []
+
+        Nx.rank(value) == 2 ->
+          [{path, value}]
+
+        true ->
+          raise ArgumentError,
+                "GPTQ supports only dense rank-two kernels; skip #{inspect(path)} explicitly"
+      end
+    end)
+  end
+
+  defp gptq_rebuild(params, results, prefix) do
+    Enum.reduce(params, {%{}, %{}, %{}}, fn {key, value}, {q, s, z} ->
+      path = prefix ++ [key]
+
+      {qv, sv, zv} =
+        if is_map(value) and not is_struct(value),
+          do: gptq_rebuild(value, results, path),
+          else: Map.get(results, path, {value, nil, nil})
+
+      {Map.put(q, key, qv), Map.put(s, key, sv), Map.put(z, key, zv)}
+    end)
   end
 
   # ============================================================================

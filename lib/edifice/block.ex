@@ -1,4 +1,9 @@
 defmodule Edifice.Block do
+  # EXLA is optional; retain undefined-function checks when it is installed.
+  unless Code.ensure_loaded?(EXLA) do
+    @compile {:no_warn_undefined, [EXLA.CustomCall]}
+  end
+
   @moduledoc """
   Extensible-computation blocks for edifice's fused kernels, on the
   sanctioned `Nx.block/4` + `EXLA.CustomCall` protocol (nx PR #1709 /

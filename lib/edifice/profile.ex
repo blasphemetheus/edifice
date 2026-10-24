@@ -1,4 +1,9 @@
 defmodule Edifice.Profile do
+  # EXLA is optional; retain undefined-function checks when it is installed.
+  unless Code.ensure_loaded?(EXLA) do
+    @compile {:no_warn_undefined, [EXLA.Client]}
+  end
+
   @moduledoc """
   Graph-level profiling for Edifice models compiled with EXLA.
 

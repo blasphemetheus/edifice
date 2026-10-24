@@ -10,6 +10,16 @@ A comprehensive ML architecture library for Elixir, built on [Nx](https://github
 
 196 neural network architectures across 26 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons, audio codecs to robotics, scientific ML to 3D generation.
 
+## What is this repo?
+I wanted to build Neural Networks of various architectures. I saw that Nx exists (check out elixir-nx's github page for all the various projects). I vibe coded a scaffold, an 'edifice' to put together the architectures I wanted to support a bot that plays melee. That project is called 'exphil' which is a play on elixir and philip, the colloqial name for slippi-ai's latest bot that combines imitation learning with reinforcement learning to create the currently most capable melee bots that I am aware of. This work to support implementations of various different kinds of architectures mostly coincided with me learning about the existence of the ideas that led to these architectures. The process for implementing them was to ask the coding agent of the time (encoded in the commit themselves, if you want to know more specifically) about the different options for ML neural net architectures. There are papers that lead to the popularization of various architectures, and ML is a very very new field all in all.
+
+# Big Asterisk
+This is vibe coded. To suit the needs of a personal project. But this repo could be useful to many people. Take whatever you need. Fork it, copy wholesale, whatever. Contributions are welcome. I have a license listed, but the intent is to make it so if people want to make stuff that uses ideas from this, feel free. If you make money off of this, hey kick some back if you feel its worth it, but you don't have to. Open source code. If there's a situation where it's complicated for some reason, act reasonably, don't be an idiot, it's probably fine. If you use this code to do bad things, that's on you. I don't see how it is super likely to be the case though.
+
+If you see some part of this repo that doesn't work correctly for you, open an issue. I'll do my best to fix it. The first version of many of these architectures was broken fundamentally in some way and its a process of using what is created and running into the problems that are there, that it is fixed. Some of these architectures I used a cheap (at the time) model on and some I used more expensive ones. We're all just trying out stuff when it comes to coding agents.
+
+I do find that the process of how you approach a problem is more important than your model choice in producing usable code. If you don't think that's the case, you're doing it wrong. Or whatever model they have is much more capable than the models today and being thoughtful doesn't even matter anymore. I doubt that will ever happen.
+
 ## Why Edifice?
 
 The Elixir ML ecosystem has excellent numerical computing (Nx) and model building (Axon) foundations, but no comprehensive collection of ready-to-use architectures. Edifice fills that gap:
@@ -32,11 +42,21 @@ def deps do
 end
 ```
 
-Edifice requires Nx ~> 0.10 and Axon ~> 0.8. For GPU acceleration, add EXLA:
+Edifice requires Nx ~> 0.12 and Axon ~> 0.8. For GPU acceleration, add EXLA:
 
 ```elixir
-{:exla, "~> 0.10"}
+{:exla, "~> 0.11"}
 ```
+
+EXLA is optional for consumers: core architectures run on `Nx.BinaryBackend`
+without a native compiler. Install EXLA for XLA compilation, GPU execution,
+sharding, and allocator memory profiling. The fused custom-call integration is
+compiled only when EXLA's protocol is available. After adding EXLA to an existing
+consumer, recompile Edifice (`mix deps.compile edifice --force`) to enable it.
+
+The development project installs optional dependencies for testing. To check the
+consumer configuration without EXLA, run `bash scripts/check_optional_exla.sh`
+after `mix deps.get`.
 
 > **Tip:** On Elixir 1.19+, set `MIX_OS_DEPS_COMPILE_PARTITION_COUNT=4` to compile dependencies in parallel (up to 4x faster first build).
 
@@ -262,10 +282,10 @@ end
 ## Requirements
 
 - Elixir >= 1.18
-- Nx ~> 0.10
+- Nx ~> 0.12
 - Axon ~> 0.8
 - Polaris ~> 0.1
-- EXLA ~> 0.10 (optional, for GPU acceleration)
+- EXLA ~> 0.11 (optional, for GPU acceleration)
 
 ## License
 

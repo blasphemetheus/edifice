@@ -14,16 +14,26 @@ defmodule Edifice.Interpretability.SSMAnalysis do
     horizon `-1/log(a)` in frames — which channels are reaction-speed
     and which hold episode memory.
 
-  All functions consume the RAW captured `B`/`C`/`dt` site tensors
+  All functions consume captured `B`/`C`/`dt` site tensors
   (`{n, seq, state}` / `{n, seq, hidden}`) and mirror
   `Edifice.SSM.Common.discretize_ssm/4`'s math exactly (dt clamp, fixed
   negative-diagonal A, mean-dt B discretization). If Common's
-  discretization changes, change this module with it.
+  discretization changes, change this module with it. `dt` must be the
+  post-softplus capture, before the discretization clamp.
+
+  These are conditional scan coefficients with B/C/dt held fixed, not a
+  full-model Jacobian or normalized attention probabilities. They describe
+  the Common fixed-A, mean-dt-B recurrence with zero initial state, excluding
+  convolution, gates, residual paths, and output projections. Do not apply
+  them to a different discretization (including per-channel-B fused scans).
   """
 
   import Nx.Defn
 
   alias Edifice.SSM.Common
+
+  @dt_min Common.dt_min()
+  @dt_max Common.dt_max()
 
   @doc """
   Hidden-attention rows for decision frame `t` (0-indexed): weight of
@@ -39,46 +49,58 @@ defmodule Edifice.Interpretability.SSMAnalysis do
   decision at row i attended to inside its window".
   """
   def frame_attention(b, c, dt, t) do
-    seq = Nx.axis_size(b, 1)
-
-    if t >= seq do
-      raise ArgumentError, "t=#{t} out of range for seq=#{seq}"
-    end
-
-    frame_attention_n(b, c, dt, t: t)
+    frame_kernel(b, c, dt, t) |> Nx.abs() |> Nx.sum(axes: [2])
   end
 
-  defnp frame_attention_n(b, c, dt, opts \\ []) do
+  @doc """
+  Signed conditional scan coefficients `{batch, t + 1, hidden}`.
+
+  With zero initial state, `sum_s kernel[s,h] * x[s,h]` reconstructs the
+  Common scan output at frame `t`. Keeping the signs preserves cancellation
+  that the `frame_attention/4` magnitude summary intentionally removes.
+  Future frames are excluded before computation, including their gradients.
+  """
+  def frame_kernel(b, c, dt, t) do
+    unless Nx.rank(b) == 3 and Nx.rank(c) == 3 and Nx.rank(dt) == 3,
+      do: raise(ArgumentError, "B, C and dt must be rank-three capture tensors")
+
+    {batch, seq, _state} = Nx.shape(b)
+
+    unless Nx.shape(c) == Nx.shape(b) and Nx.axis_size(dt, 0) == batch and
+             Nx.axis_size(dt, 1) == seq,
+           do: raise(ArgumentError, "B, C and dt capture dimensions must agree")
+
+    unless is_integer(t) and t >= 0 and t < seq,
+      do: raise(ArgumentError, "t=#{inspect(t)} out of range for seq=#{seq}")
+
+    frame_kernel_n(b, c, dt, t: t)
+  end
+
+  defnp frame_kernel_n(b, c, dt, opts \\ []) do
     t = opts[:t]
     state = Nx.axis_size(b, 2)
+    b = b |> Nx.slice_along_axis(0, t + 1, axis: 1) |> Nx.as_type(:f32)
+    c_t = c |> Nx.slice_along_axis(t, 1, axis: 1) |> Nx.as_type(:f32)
 
-    dt = Nx.clip(dt, Common.dt_min(), Common.dt_max())
+    dt =
+      dt
+      |> Nx.slice_along_axis(0, t + 1, axis: 1)
+      |> Nx.as_type(:f32)
+      |> Nx.clip(@dt_min, @dt_max)
 
-    # A_bar = exp(dt * a_diag): {n, seq, hidden, state}
+    # Sum dt strictly AFTER each source s, through t. Computing log decay
+    # directly avoids log(exp(dt*A)) underflow and future-frame overflow.
+    after_source =
+      dt
+      |> Nx.reverse(axes: [1])
+      |> Nx.cumulative_sum(axis: 1)
+      |> Nx.reverse(axes: [1])
+
+    after_source = Nx.max(after_source - dt, 0.0)
     a_diag = -(Nx.iota({state}) + 1.0)
-    a_bar = Nx.exp(Nx.new_axis(dt, 3) * Nx.reshape(a_diag, {1, 1, 1, state}))
-
-    # log-space cumulative decay along seq
-    log_cum = Nx.cumulative_sum(Nx.log(a_bar), axis: 1)
-
-    # decay from s (exclusive) to t: exp(log_cum[t] - log_cum[s])
-    # {n, 1, hidden, state} - {n, seq, hidden, state} -> broadcast over s
-    log_at_t = Nx.take(log_cum, Nx.tensor([0]) + t, axis: 1)
-    decay = Nx.exp(log_at_t - log_cum)
-
-    # B_bar[s] = mean-dt discretization (mirrors discretize_ssm)
-    dt_mean = Nx.mean(dt, axes: [2], keep_axes: true)
-    b_bar = Nx.new_axis(dt_mean, 3) * Nx.new_axis(b, 2)
-
-    # alpha[s, h] = sum_j C[t, j] * decay[s, h, j] * B_bar[s, 1->h, j]
-    c_t = c |> Nx.take(Nx.tensor([0]) + t, axis: 1) |> Nx.new_axis(2)
-    contrib = Nx.sum(c_t * decay * b_bar, axes: [3])
-
-    # Attention mass per source frame: |.| summed over hidden
-    mass = contrib |> Nx.abs() |> Nx.sum(axes: [2])
-
-    # Causal: zero out s > t, keep s in 0..t
-    Nx.slice_along_axis(mass, 0, t + 1, axis: 1)
+    decay = Nx.exp(Nx.new_axis(after_source, 3) * Nx.reshape(a_diag, {1, 1, 1, state}))
+    b_bar = Nx.new_axis(Nx.mean(dt, axes: [2], keep_axes: true), 3) * Nx.new_axis(b, 2)
+    Nx.sum(Nx.new_axis(c_t, 2) * decay * b_bar, axes: [3])
   end
 
   @doc """
@@ -87,26 +109,28 @@ defmodule Edifice.Interpretability.SSMAnalysis do
   Returns `%{a_bar_mean, horizon_frames}`, both `{hidden, state}`:
   mean decay factor per channel over all rows/frames, and the effective
   memory horizon `-1 / log(a_bar_mean)` in frames (frames until a
-  stored value decays to 1/e).
+  stored value decays to 1/e under that mean multiplier). This is a summary
+  of one-step decays, not an exact horizon for a time-varying trajectory.
   """
   def timescale_map(dt, state_size \\ nil) do
     state = state_size || Common.default_state_size()
+
+    unless Nx.rank(dt) == 3 and is_integer(state) and state > 0,
+      do: raise(ArgumentError, "dt must be rank three and state_size must be positive")
+
     {a_bar_mean, horizon} = timescale_n(dt, state: state)
     %{a_bar_mean: a_bar_mean, horizon_frames: horizon}
   end
 
   defnp timescale_n(dt, opts \\ []) do
     state = opts[:state]
-    dt = Nx.clip(dt, Common.dt_min(), Common.dt_max())
-    hidden = Nx.axis_size(dt, 2)
-
+    dt = dt |> Nx.as_type(:f32) |> Nx.clip(@dt_min, @dt_max)
     a_diag = -(Nx.iota({state}) + 1.0)
-
-    a_bar = Nx.exp(Nx.new_axis(dt, 3) * Nx.reshape(a_diag, {1, 1, 1, state}))
-    a_mean = Nx.mean(a_bar, axes: [0, 1])
-
-    horizon = -1.0 / Nx.log(Nx.clip(a_mean, 1.0e-12, 1.0 - 1.0e-7))
-
-    {Nx.reshape(a_mean, {hidden, state}), Nx.reshape(horizon, {hidden, state})}
+    log_a = Nx.new_axis(dt, 3) * Nx.reshape(a_diag, {1, 1, 1, state})
+    # Keep the mean in log space so large state indices still have a finite
+    # horizon even when exp(log_a) underflows to zero.
+    samples = Nx.axis_size(dt, 0) * Nx.axis_size(dt, 1)
+    log_mean = Nx.logsumexp(log_a, axes: [0, 1]) - Nx.log(samples)
+    {Nx.exp(log_mean), -1.0 / log_mean}
   end
 end

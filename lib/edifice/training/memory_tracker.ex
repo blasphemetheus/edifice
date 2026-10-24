@@ -1,4 +1,9 @@
 defmodule Edifice.Training.MemoryTracker do
+  # EXLA is optional; retain undefined-function checks when it is installed.
+  unless Code.ensure_loaded?(EXLA) do
+    @compile {:no_warn_undefined, [EXLA.Client]}
+  end
+
   @moduledoc """
   GPU memory tracking for training and inference.
 
