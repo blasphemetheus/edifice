@@ -416,6 +416,8 @@ defmodule Edifice.Recurrent do
   `:hidden_size`, `:num_layers`, `:dropout`, `:input_layer_norm`,
   `:use_layer_norm` as in `build_backbone/2`. `:cell_type` is fixed to
   `:gru`; `:fused_block` and `:truncate_bptt` do not apply.
+  Optional `:seed` deterministically seeds each inter-layer dropout state;
+  pass the initialization seed separately to `Axon.build/2` for model weights.
   """
   @spec build_backbone_with_carry(Axon.t(), keyword()) :: Axon.t()
   def build_backbone_with_carry(input, opts \\ []) do
@@ -465,7 +467,13 @@ defmodule Edifice.Recurrent do
 
         seq =
           if dropout > 0 and layer_idx < num_layers do
-            Axon.dropout(seq, rate: dropout, name: "recurrent_dropout_#{layer_idx}")
+            dropout_opts = [rate: dropout, name: "recurrent_dropout_#{layer_idx}"]
+            dropout_opts =
+              if is_integer(opts[:seed]),
+                do: Keyword.put(dropout_opts, :seed, opts[:seed] + layer_idx),
+                else: dropout_opts
+
+            Axon.dropout(seq, dropout_opts)
           else
             seq
           end

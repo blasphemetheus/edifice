@@ -2,9 +2,10 @@ defmodule Edifice.Training do
   @moduledoc """
   Training utilities for Edifice models.
 
-  Provides gradient checkpointing (rematerialization) to reduce peak memory
-  during training by recomputing forward activations during the backward pass
-  instead of storing them.
+  The current checkpoint helpers do not implement activation rematerialization.
+  `remat/2` and `checkpoint/1` call their functions directly;
+  `checkpointed_grad/4` evaluates the loss separately from ordinary gradient
+  computation. None of these helpers guarantees lower peak memory.
 
   ## Gradient Checkpointing
 
@@ -20,10 +21,10 @@ defmodule Edifice.Training do
       {init_fn, predict_fn} = Axon.build(model)
       params = init_fn.(template, Axon.ModelState.empty())
 
-      # Wrap predict_fn with checkpointing
+      # Compatibility wrapper; currently the same computation as predict_fn
       ckpt_predict_fn = Edifice.Training.remat(predict_fn)
 
-      # Use in training loop — same API, lower memory
+      # Use in a training loop
       loss_fn = fn p -> ckpt_predict_fn.(p, input) |> Nx.mean() end
       {loss, grads} = Nx.Defn.value_and_grad(params, loss_fn)
 
@@ -37,19 +38,18 @@ defmodule Edifice.Training do
 
   ## Memory Savings
 
-  For a model with N layers of equal size:
-  - No checkpointing: O(N) activation memory
-  - Full checkpointing: O(1) activation memory, 2x compute
-  - Segment checkpointing (sqrt(N) segments): O(sqrt(N)) memory, ~1.5x compute
+  Actual checkpointing requires compiler support and suitable region boundaries.
+  Wrapping an entire model does not guarantee a reduction in peak memory.
+  `estimate_memory/3` is a shape-based illustration of hypothetical strategies,
+  not a measurement of these helpers or of a compiled training step.
   """
 
   @doc """
-  Wrap an Axon predict function with gradient checkpointing.
+  Wrap an Axon predict function without changing its computation.
 
   Returns a new function with the same `(params, input) -> output` signature.
-  The forward pass runs normally. During backpropagation (inside
-  `Nx.Defn.value_and_grad`), the predict function is re-executed to
-  recompute activations rather than caching them from the forward pass.
+  Both policies currently call `predict_fn` directly. This wrapper does not
+  insert a recomputation boundary during differentiation.
 
   ## Parameters
 
@@ -58,8 +58,8 @@ defmodule Edifice.Training do
   ## Options
 
   - `:policy` — Checkpointing policy (default: `:full`)
-    - `:full` — Checkpoint the entire forward pass (maximum memory savings)
-    - `:none` — No checkpointing (passthrough, useful for benchmarking)
+    - `:full` — Compatibility wrapper around the prediction function
+    - `:none` — Return the prediction function unchanged
 
   ## Examples
 
@@ -87,11 +87,12 @@ defmodule Edifice.Training do
   end
 
   @doc """
-  Compute loss and gradients with gradient checkpointing.
+  Compute the loss separately from its gradients.
 
-  Performs forward pass to compute loss, then a separate backward pass that
-  recomputes the forward activations. This guarantees that forward
-  activations are not held in memory during the backward pass.
+  Evaluates the prediction and loss, then invokes ordinary `Nx.Defn.grad/2`.
+  The gradient computation can still retain intermediate activations. This
+  helper does not implement rematerialization or guarantee memory savings.
+  For a combined value and gradient computation, use `Nx.Defn.value_and_grad/2`.
 
   ## Parameters
 
@@ -160,10 +161,10 @@ defmodule Edifice.Training do
   end
 
   @doc """
-  Wrap a segment of computation for gradient checkpointing.
+  Call a zero-arity function directly.
 
-  Use this inside a training step to checkpoint specific sub-computations.
-  The function `fun` is called immediately to produce its result.
+  This compatibility helper creates no checkpoint boundary. The function
+  `fun` is called immediately to produce its result.
 
   ## Parameters
 
@@ -175,10 +176,13 @@ defmodule Edifice.Training do
   end
 
   @doc """
-  Report activation memory estimate for a model.
+  Illustrate activation sizes for hypothetical checkpointing strategies.
 
-  Estimates the memory that would be used by forward activations during
-  training, both with and without gradient checkpointing.
+  Assumes every graph node produces a tensor with `input_shape`. It does not
+  account for actual intermediate shapes, compiler fusion, buffer reuse,
+  parameters, optimizer state, or native workspaces. The checkpoint estimates
+  do not describe the current pass-through helpers and must not be used as
+  an out-of-memory preflight check.
 
   ## Parameters
 

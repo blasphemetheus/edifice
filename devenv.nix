@@ -96,6 +96,11 @@ in
     export NVSHMEM_LIB="$PWD/.nvshmem/nvidia/nvshmem/lib"
     export CUDA_COMPAT="$PWD/.cuda-compat"
     export LD_LIBRARY_PATH="$NCCL_LIB:$NVSHMEM_LIB:$CUDA_COMPAT:$LD_LIBRARY_PATH"
+    # Prefer the running NixOS driver's userspace library. A stale CUDA
+    # compatibility library can hide an otherwise working GPU from XLA.
+    if [ -e /run/opengl-driver/lib/libcuda.so.1 ]; then
+      export LD_LIBRARY_PATH="/run/opengl-driver/lib:$LD_LIBRARY_PATH"
+    fi
   '';
 
 }

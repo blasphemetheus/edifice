@@ -61,6 +61,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Mamba's Common sequence and step discretization now retain each channel's
+  timestep in the input contribution, matching the fused scan. SSM analysis
+  uses the same recurrence. Existing checkpoints run through the old Common
+  path can change outputs; validate them before replacing deployed models.
+- RLA/RDN backward fallback differentiates the full recurrence, including key
+  gradients and both state-retrieval paths, instead of returning partial gradients.
+- The development shell prefers the installed NixOS CUDA driver over a stale
+  compatibility library that can prevent XLA from finding the GPU.
+- Training helper documentation no longer promises rematerialization or measured
+  memory savings for the current pass-through checkpoint APIs.
+
 - Fused generation retains prompt and generated context on every prediction,
   including sliding-window overflow, one-token requests, and per-row stopping.
 - TRELLIS sparse encoding selects occupied cells; dense decoding scatters

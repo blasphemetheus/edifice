@@ -144,6 +144,7 @@ defmodule Edifice.CUDA.FusedCustomCallGpuTest do
     assert_all_close(gbhn_f, gbhn_ref, atol: 5.0e-4)
   end
 
+  @tag :selective_scan
   test "selective_scan fused forward + grads == fallback (state=16)" do
     state = 16
     key = Nx.Random.key(77)
@@ -167,22 +168,20 @@ defmodule Edifice.CUDA.FusedCustomCallGpuTest do
     fused = fwd_fused.(x, dt, a, b, c)
     ref = forced_fallback(fn -> fwd_ref.(x, dt, a, b, c) end)
 
-    # Same f64-truth arbitration as the GRU test (fallback drifts via
-    # XLA's approximate exp over the recurrence; kernel is near-exact).
     truth = selective_f64_truth(x, dt, a, b, c)
-    assert_all_close(fused, truth, atol: 1.0e-4)
-    assert_all_close(ref, truth, atol: 1.0e-1)
+    Nx.Testing.assert_all_close(fused, truth, atol: 1.0e-5, rtol: 1.0e-4)
+    Nx.Testing.assert_all_close(ref, truth, atol: 1.0e-5, rtol: 1.0e-4)
 
     # a passed as jit argument (same closure/backend rule as h0 above)
     grad_fused = fn x, dt, b, c, a ->
       Nx.Defn.grad({x, dt, b, c}, fn {x, dt, b, c} ->
-        FusedScan.selective_scan(x, dt, a, b, c) |> Nx.pow(2) |> Nx.mean()
+        FusedScan.selective_scan(x, dt, a, b, c) |> Nx.pow(2) |> Nx.sum()
       end)
     end
 
     grad_ref = fn x, dt, b, c, a ->
       Nx.Defn.grad({x, dt, b, c}, fn {x, dt, b, c} ->
-        FusedScan.selective_scan(x, dt, a, b, c) |> Nx.pow(2) |> Nx.mean()
+        FusedScan.selective_scan(x, dt, a, b, c) |> Nx.pow(2) |> Nx.sum()
       end)
     end
 
@@ -197,13 +196,21 @@ defmodule Edifice.CUDA.FusedCustomCallGpuTest do
     {gx_r, gdt_r, gb_r, gc_r} =
       forced_fallback(fn -> Nx.Defn.jit(grad_ref, compiler: EXLA).(x, dt, b, c, a) end)
 
-    assert_all_close(gx_f, gx_r, atol: 5.0e-4)
-    assert_all_close(gdt_f, gdt_r, atol: 5.0e-4)
-    assert_all_close(gb_f, gb_r, atol: 5.0e-4)
-    assert_all_close(gc_f, gc_r, atol: 5.0e-4)
+    for {fused, reference} <- [{gx_f, gx_r}, {gdt_f, gdt_r}, {gb_f, gb_r}, {gc_f, gc_r}] do
+      Nx.Testing.assert_all_close(fused, reference, atol: 1.0e-5, rtol: 1.0e-4)
+    end
   end
 
   defp selective_f64_truth(x, dt, a, b, c) do
+    previous_backend = Nx.default_backend(Nx.BinaryBackend)
+    try do
+      selective_f64_truth_impl(x, dt, a, b, c)
+    after
+      Nx.default_backend(previous_backend)
+    end
+  end
+
+  defp selective_f64_truth_impl(x, dt, a, b, c) do
     to64 = fn t -> t |> Nx.backend_copy(Nx.BinaryBackend) |> Nx.as_type({:f, 64}) end
     [x, dt, a, b, c] = Enum.map([x, dt, a, b, c], to64)
     {batch, seq, hidden} = Nx.shape(x)

@@ -17,15 +17,15 @@ defmodule Edifice.Interpretability.SSMAnalysis do
   All functions consume captured `B`/`C`/`dt` site tensors
   (`{n, seq, state}` / `{n, seq, hidden}`) and mirror
   `Edifice.SSM.Common.discretize_ssm/4`'s math exactly (dt clamp, fixed
-  negative-diagonal A, mean-dt B discretization). If Common's
+  negative-diagonal A, per-channel-dt B discretization). If Common's
   discretization changes, change this module with it. `dt` must be the
   post-softplus capture, before the discretization clamp.
 
   These are conditional scan coefficients with B/C/dt held fixed, not a
   full-model Jacobian or normalized attention probabilities. They describe
-  the Common fixed-A, mean-dt-B recurrence with zero initial state, excluding
-  convolution, gates, residual paths, and output projections. Do not apply
-  them to a different discretization (including per-channel-B fused scans).
+  the Common fixed-A recurrence with zero initial state, excluding
+  convolution, gates, residual paths, and output projections. Fused scans
+  must use the same fixed A and timestep clamp for these coefficients to apply.
   """
 
   import Nx.Defn
@@ -99,7 +99,7 @@ defmodule Edifice.Interpretability.SSMAnalysis do
     after_source = Nx.max(after_source - dt, 0.0)
     a_diag = -(Nx.iota({state}) + 1.0)
     decay = Nx.exp(Nx.new_axis(after_source, 3) * Nx.reshape(a_diag, {1, 1, 1, state}))
-    b_bar = Nx.new_axis(Nx.mean(dt, axes: [2], keep_axes: true), 3) * Nx.new_axis(b, 2)
+    b_bar = Nx.new_axis(dt, 3) * Nx.new_axis(b, 2)
     Nx.sum(Nx.new_axis(c_t, 2) * decay * b_bar, axes: [3])
   end
 

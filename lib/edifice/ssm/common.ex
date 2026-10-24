@@ -427,12 +427,7 @@ defmodule Edifice.SSM.Common do
     # B_bar: [batch, seq_len, hidden_size, state_size]
     # [batch, seq_len, 1, state_size]
     b_expanded = Nx.new_axis(b, 2)
-    # [batch, seq_len, 1]
-    dt_mean = Nx.mean(dt, axes: [2], keep_axes: true)
-    # [batch, seq_len, 1, 1]
-    dt_for_b = Nx.new_axis(dt_mean, 3)
-    # [batch, seq_len, 1, state_size]
-    b_bar = Nx.multiply(dt_for_b, b_expanded)
+    b_bar = Nx.multiply(dt_expanded, b_expanded)
 
     # x contribution: B_bar * x
     # x: [batch, seq_len, hidden_size]
@@ -717,7 +712,7 @@ defmodule Edifice.SSM.Common do
   sequence axis dropped:
 
       a_bar = exp(clip(dt) ⊗ a_diag)          # dt per-channel for A
-      bx    = mean(clip(dt)) * b ⊗ x          # dt averaged for B
+      bx    = clip(dt) * b ⊗ x                # dt per-channel for B
       h'    = a_bar * h + bx
       y     = Σ_state (c ⊗ h')
 
@@ -750,11 +745,8 @@ defmodule Edifice.SSM.Common do
     # a_bar = exp(dt * A): [batch, inner, state_size]
     a_bar = Nx.exp(Nx.multiply(Nx.new_axis(dt, 2), Nx.reshape(a_diag, {1, 1, state_size})))
 
-    # bx = mean(dt) * b * x: [batch, inner, state_size]
-    dt_mean = Nx.mean(dt, axes: [1], keep_axes: true)
-
     bx =
-      dt_mean
+      dt
       |> Nx.new_axis(2)
       |> Nx.multiply(Nx.new_axis(b, 1))
       |> Nx.multiply(Nx.new_axis(x, 2))

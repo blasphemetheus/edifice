@@ -3,6 +3,43 @@ defmodule Edifice.SSM.MambaTest do
   @moduletag :ssm
 
   alias Edifice.SSM.Mamba
+  import Nx.Testing
+
+  describe "Common.discretize_ssm/4" do
+    test "uses each channel's timestep for its input contribution" do
+      x = Nx.tensor([[[2.0, 3.0]]])
+      b = Nx.tensor([[[4.0]]])
+      dt = Nx.tensor([[[0.02, 0.08]]])
+      {_, input} = Edifice.SSM.Common.discretize_ssm(x, b, dt, 1)
+      assert_all_close(input, Nx.tensor([[[[0.16], [0.96]]]]))
+
+      {output, state} =
+        Edifice.SSM.Common.step_discretized_ssm(
+          Nx.squeeze(x, axes: [1]),
+          Nx.squeeze(b, axes: [1]),
+          Nx.tensor([[1.0]]),
+          Nx.squeeze(dt, axes: [1]),
+          Nx.broadcast(0.0, {1, 2, 1})
+        )
+
+      assert_all_close(state, Nx.squeeze(input, axes: [1]))
+      assert_all_close(output, Nx.tensor([[0.16, 0.96]]))
+    end
+
+    test "timestep gradients remain channel-local and respect clipping" do
+      x = Nx.tensor([[[1.0, 2.0, 3.0, 4.0]]])
+      b = Nx.tensor([[[2.0]]])
+      dt = Nx.tensor([[[-1.0, 0.02, 0.08, 1.0]]])
+
+      gradient =
+        Nx.Defn.grad(dt, fn dt ->
+          {_, input} = Edifice.SSM.Common.discretize_ssm(x, b, dt, 1)
+          Nx.sum(Nx.multiply(input, input))
+        end)
+
+      assert_all_close(gradient, Nx.tensor([[[0.0, 0.64, 5.76, 0.0]]]))
+    end
+  end
 
   @batch 4
   @seq_len 12
