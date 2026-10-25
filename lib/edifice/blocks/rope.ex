@@ -156,6 +156,11 @@ defmodule Edifice.Blocks.RoPE do
     `{rotated_query, rotated_key}` with same shapes as input.
   """
   defn apply_rotary(query, key, _opts \\ []) do
+    apply_rotary_offset(query, key, 0)
+  end
+
+  @doc "Apply RoPE at an absolute sequence offset, for cached decoding."
+  defn apply_rotary_offset(query, key, offset) do
     dim = Nx.axis_size(query, 2)
     seq_len = Nx.axis_size(query, 1)
     half_dim = div(dim, 2)
@@ -168,7 +173,7 @@ defmodule Edifice.Blocks.RoPE do
       )
       |> Nx.as_type(Nx.type(query))
 
-    positions = Nx.iota({seq_len}) |> Nx.as_type(Nx.type(query))
+    positions = Nx.add(Nx.iota({seq_len}), offset) |> Nx.as_type(Nx.type(query))
     angles = Nx.outer(positions, freqs)
 
     cos_table = Nx.cos(angles) |> Nx.new_axis(0)

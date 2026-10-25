@@ -8,6 +8,10 @@ defmodule Edifice.Transformer.DecoderOnly do
   - SwiGLU gated feed-forward network
   - RMSNorm for faster normalization
 
+  For incremental inference with trained GQA weights, see
+  `Edifice.Transformer.DecoderOnly.Cache`. It supports chunked prefill and
+  single-frame decoding with explicit state suitable for rollback.
+
   ## Attention Variants
 
   The `:attention_type` option allows switching between attention mechanisms:

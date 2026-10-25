@@ -16,10 +16,10 @@ defmodule Edifice.Serving.Generate do
                                                                       ... repeat
   ```
 
-  Every step re-runs the full (padded) sequence. A KV-cached decode path is
-  not yet implemented — `blocks/kv_cache.ex` exists but is not wired into
-  any architecture. Until it is, full re-run is the only decode strategy
-  that is correct for context-dependent models.
+  By default each step re-runs the full padded sequence. For GQA decoder-only
+  models, pass a cache built by `build_cache/1` to project only new tokens.
+  Cached decoding preserves causal context and rotary positions. At capacity
+  it prefills the retained window again, matching the full re-run behavior.
 
   ## Usage
 
@@ -54,11 +54,13 @@ defmodule Edifice.Serving.Generate do
 
   ## Performance Notes
 
-  - Use `compiler: EXLA` for cached graph compilation (97x speedup)
+  - Use `compiler: EXLA` to compile prediction and cached decoding
   - The generation loop runs outside the JIT boundary (each step is a separate
     JIT call), but the per-step forward pass is fully compiled
-  - Full re-run each step is O(n²) over the generation; acceptable at small
-    seq_len, and the price of correctness until KV caching is wired up
+  - Full prediction repeats quadratic attention over the context each step.
+    The cached path projects only new tokens until the window fills.
+  - `generate/3` and `generate_simple/3` support KV caching; the streaming
+    APIs currently use full-context prediction.
   """
 
   alias Edifice.Serving.Sampling
@@ -152,15 +154,12 @@ defmodule Edifice.Serving.Generate do
   @doc """
   Run autoregressive generation.
 
-  Currently delegates to `generate_simple/3` (full re-run each step). The
-  previous "cached" decode path embedded only the newest token into an
-  otherwise-zeros buffer — the model saw no prior context, which is
-  semantically wrong for any context-dependent architecture. A real
-  KV-cached path can reclaim this entry point once `blocks/kv_cache.ex`
-  is wired into the architectures.
+  Uses full-context prediction by default. Pass `:cache` from `build_cache/1`
+  for incremental GQA decoding with the same trained parameters.
 
   ## Options
 
+    - `:cache` - Optional reusable decoder from `build_cache/1`
     - `:prompt` - `[batch, prompt_len]` tensor of token IDs (required)
     - `:seq_len` - Model's expected sequence length dimension (required for padding)
     - `:embed_fn` - Function `token_ids -> [batch, seq, embed_dim]`.
@@ -191,7 +190,38 @@ defmodule Edifice.Serving.Generate do
   end
 
   @doc """
-  Run generation by re-running the full (padded) sequence each step.
+  Build a reusable GQA decoder cache from the same options as `build_lm/1`.
+
+      cache = Generate.build_cache(model_opts ++ [compiler: EXLA])
+      Generate.generate(predict_fn, params, prompt: prompt, seq_len: 512, cache: cache)
+
+  Supports `arch: :decoder_only` with GQA and no YaRN. Use `:embed_fn` here
+  for external embeddings. New-token embedding, attention, FFN and LM head
+  run in one compiled call. At capacity the generation loop resets and
+  prefills the retained window to preserve full-context semantics.
+  """
+  def build_cache(opts) do
+    unless Keyword.get(opts, :arch, :decoder_only) == :decoder_only,
+      do: raise(ArgumentError, "KV generation currently supports :decoder_only")
+
+    before =
+      if Keyword.get(opts, :embedding, :trainable) == :external do
+        embed = Keyword.fetch!(opts, :embed_fn)
+        fn _params, tokens -> embed.(tokens) end
+      else
+        fn params, tokens -> Nx.take(params["token_embedding"]["kernel"], tokens) end
+      end
+
+    after_fn = fn params, output -> Edifice.Stateful.Ops.dense(output, params["lm_head"]) end
+
+    Edifice.Transformer.DecoderOnly.Cache.build(
+      Keyword.merge(opts, input_transform: before, output_transform: after_fn)
+    )
+  end
+
+  @doc """
+  Run generation with an optional KV cache, otherwise re-running the full
+  padded sequence each step.
 
   Same options as `generate/3`, which currently delegates here.
   """
@@ -211,34 +241,73 @@ defmodule Edifice.Serving.Generate do
     key = Nx.Random.key(seed)
     sampling_opts = [temperature: temperature, top_k: top_k, top_p: top_p]
 
-    # Start with prompt, grow each step
-    {tokens, _key} =
-      Enum.reduce_while(1..max_tokens, {prompt, key}, fn _step, {tokens, key} ->
-        current_len = Nx.axis_size(tokens, 1)
+    unless is_integer(max_tokens) and max_tokens >= 0 and is_integer(seq_len) and seq_len > 0 and
+             Nx.axis_size(prompt, 1) > 0,
+           do:
+             raise(
+               ArgumentError,
+               "generation needs a nonempty prompt, positive seq_len and nonnegative max_tokens"
+             )
 
-        if stop_token && token_matches_stop?(Nx.slice_along_axis(tokens, current_len - 1, 1, axis: 1), stop_token) do
-          {:halt, {tokens, key}}
-        else
-          logits = predict_fn.(params, model_inputs(tokens, embed_fn, seq_len, pad_token))
+    cache = Keyword.get(opts, :cache)
 
-          # Take logits at the last real position
-          pos = min(current_len - 1, seq_len - 1)
-          step_logits = logits[[.., pos, ..]]
+    if cache && cache.max_seq_len != seq_len,
+      do: raise(ArgumentError, "seq_len must match the decoder cache capacity")
 
-          {next_token, key} =
-            if temperature == 0.0 do
-              {Sampling.greedy(step_logits), key}
-            else
-              Sampling.sample(step_logits, key, sampling_opts)
-            end
+    stopped =
+      if stop_token,
+        do: Nx.equal(Nx.take(prompt, Nx.axis_size(prompt, 1) - 1, axis: 1), stop_token),
+        else: Nx.broadcast(0, {batch_size})
 
-          next_token = Nx.reshape(next_token, {batch_size, 1})
-          new_tokens = Nx.concatenate([tokens, next_token], axis: 1)
-          {:cont, {new_tokens, key}}
-        end
-      end)
+    if max_tokens == 0 do
+      prompt
+    else
+      {tokens, _, _, _} =
+        Enum.reduce_while(1..max_tokens, {prompt, key, stopped, nil}, fn _step,
+                                                                         {tokens, key, stopped,
+                                                                          state} ->
+          if Nx.to_number(Nx.all(stopped)) == 1 do
+            {:halt, {tokens, key, stopped, state}}
+          else
+            current_len = Nx.axis_size(tokens, 1)
 
-    tokens
+            {step_logits, state} =
+              if cache do
+                {chunk, state} =
+                  if state == nil or Nx.to_number(state.position) >= seq_len do
+                    count = min(current_len, seq_len)
+
+                    {Nx.slice_along_axis(tokens, current_len - count, count, axis: 1),
+                     cache.init.(batch_size)}
+                  else
+                    {Nx.slice_along_axis(tokens, current_len - 1, 1, axis: 1), state}
+                  end
+
+                {logits, state} = cache.predict.(params, chunk, state)
+                {Nx.take(logits, Nx.axis_size(logits, 1) - 1, axis: 1), state}
+              else
+                logits = predict_fn.(params, model_inputs(tokens, embed_fn, seq_len, pad_token))
+                {Nx.take(logits, min(current_len, seq_len) - 1, axis: 1), nil}
+              end
+
+            {next_token, key} = sample_token(step_logits, key, temperature, sampling_opts)
+            next_token = Nx.reshape(next_token, {batch_size})
+
+            {next_token, stopped} =
+              if stop_token do
+                token = Nx.select(stopped, stop_token, next_token)
+                {token, Nx.logical_or(stopped, Nx.equal(token, stop_token))}
+              else
+                {next_token, stopped}
+              end
+
+            new_tokens = Nx.concatenate([tokens, Nx.new_axis(next_token, 1)], axis: 1)
+            {:cont, {new_tokens, key, stopped, state}}
+          end
+        end)
+
+      tokens
+    end
   end
 
   # ============================================================================
@@ -248,7 +317,7 @@ defmodule Edifice.Serving.Generate do
   @doc """
   Generate tokens with a per-token callback for streaming output.
 
-  Same options as `generate/3`, plus:
+  Same options as `generate/3` except `:cache`, plus:
 
     - `:on_token` - `fn token_id :: integer() -> :cont | :halt` callback.
       Called with each generated token ID (scalar integer). Return `:halt`
@@ -487,7 +556,10 @@ defmodule Edifice.Serving.Generate do
     else
       # Pad with zeros
       {batch, _len, dim} = Nx.shape(embedded)
-      pad = Nx.broadcast(0.0, {batch, seq_len - current_len, dim}) |> Nx.as_type(Nx.type(embedded))
+
+      pad =
+        Nx.broadcast(0.0, {batch, seq_len - current_len, dim}) |> Nx.as_type(Nx.type(embedded))
+
       Nx.concatenate([embedded, pad], axis: 1)
     end
   end
