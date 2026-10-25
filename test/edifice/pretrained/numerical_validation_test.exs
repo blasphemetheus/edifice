@@ -12,13 +12,20 @@ defmodule Edifice.Pretrained.NumericalValidationTest do
 
   Tagged :external since they require fixture files + HuggingFace downloads.
   Full-size models (ViT-base 224x224, ResNet-50, Whisper) are too slow for BinaryBackend;
-  run with EXLA: `EXLA=1 mix test --include external`
+  setup explicitly selects EXLA's host backend and compiler. Run with:
+  `mix test test/edifice/pretrained/numerical_validation_test.exs --include external`
   """
   use ExUnit.Case, async: false
 
   @moduletag :external
 
   @fixtures_dir Path.join([__DIR__, "..", "..", "fixtures", "numerical"])
+
+  setup do
+    Nx.default_backend({EXLA.Backend, client: :host})
+    Nx.Defn.default_options(compiler: EXLA, client: :host)
+    :ok
+  end
 
   defp assert_all_close(actual, expected, opts) do
     atol = Keyword.get(opts, :atol, 1.0e-4)

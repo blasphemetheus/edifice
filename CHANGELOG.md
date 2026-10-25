@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Stateful single-frame inference for GatedDeltaNet (`:gated_delta_net`) and
+  Mamba-2/SSD (`:mamba_ssd`), including causal convolution history, serializable
+  rollback state and structured-mask state for SSD. Prefix outputs and parameter
+  gradients are checked against full prediction.
+
+- Reproducible recurrent inference benchmark for ExPhil-used backbones, with
+  CPU/GPU results, eager/JIT/precompiled comparisons, prefix parity and rollback
+  checks, and documented stateful integration gaps.
+
+- `DecoderOnly.Cache` and `Generate.build_cache/1` provide fixed-capacity GQA
+  KV decoding with trained weights, chunked prefill, RoPE offsets and rollback.
+  Generation resets and prefills at capacity to preserve sliding-window output
+  parity. Includes a host EXLA latency benchmark and an architecture completion
+  audit focused on Melee inference and pretrained compatibility.
+
 - `mix edifice.cuda.build` builds a separate EXLA FFI library for f32 GRU and
   Mamba selective-scan forward/backward kernels. Opt-in runtime loading registers
   handlers before compilation, without modifying or rebuilding EXLA itself.
@@ -64,6 +79,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Crosscoder.loss/4` accepts lists or stacked tensors (was non-runnable).
 
 ### Fixed
+
+- Mamba-2/SSD matmul scan now excludes the source timestep's decay from each
+  input contribution, matching the sequential recurrence across chunk sizes.
+  This changes predictions from the affected matmul path in older checkpoints;
+  revalidate those policies before deployment. State stepping also supports
+  pointwise convolution without zero-sized history tensors.
+
+- PPO now bootstraps from the final next observation, preserves environments
+  across rollouts, updates singleton minibatches, clips global gradient norms
+  before Adam, and compiles the full update when a compiler is supplied.
+  Stateless policy collection and differentiation use consistent inference mode.
+- Pretrained numerical tests explicitly select EXLA host execution. ResNet passes;
+  ViT and Whisper layout failures and the DETR mismatch remain documented failures.
 
 - Mamba's Common sequence and step discretization now retain each channel's
   timestep in the input contribution, matching the fused scan. SSM analysis
