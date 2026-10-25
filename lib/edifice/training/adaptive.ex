@@ -168,8 +168,13 @@ defmodule Edifice.Training.Adaptive do
         config = meta.spike_config
         step = state.iteration
 
+        # Nx.to_number/1 yields :nan or :infinity for non-finite losses. Those
+        # are never spikes and must not poison the EMA (see halt_on_persistent_nan).
         {loss_ema, is_spike} =
           case meta.loss_ema do
+            ema when not is_number(loss_num) ->
+              {ema, false}
+
             nil ->
               {loss_num, false}
 
@@ -179,7 +184,7 @@ defmodule Edifice.Training.Adaptive do
 
             ema ->
               new_ema = config.ema_decay * ema + (1 - config.ema_decay) * loss_num
-              spike = loss_num > config.threshold * ema and loss_num == loss_num
+              spike = loss_num > config.threshold * ema
               {new_ema, spike}
           end
 
@@ -196,19 +201,7 @@ defmodule Edifice.Training.Adaptive do
           new_meta = %{meta | spike_count: spike_count}
 
           # Zero out gradients to skip the update
-          new_step_state =
-            if Map.has_key?(state.step_state, :gradients) do
-              grads = state.step_state.gradients
-
-              zeroed =
-                deep_map_tensors(grads, fn t ->
-                  Nx.broadcast(Nx.tensor(0.0, type: Nx.type(t)), t)
-                end)
-
-              put_in(state.step_state, [:gradients], zeroed)
-            else
-              state.step_state
-            end
+          new_step_state = zero_gradients(state.step_state)
 
           {:continue, %{state | handler_metadata: new_meta, step_state: new_step_state}}
         else
@@ -270,35 +263,47 @@ defmodule Edifice.Training.Adaptive do
       {:continue, %{state | handler_metadata: meta}}
     end)
     |> Axon.Loop.handle_event(:iteration_completed, fn state ->
-      loss_val = get_in(state.step_state, [:loss])
-
-      if loss_val do
-        loss_num = Nx.to_number(loss_val)
-
-        if loss_num != loss_num do
-          streak = state.handler_metadata.nan_streak + 1
-
-          if streak >= patience do
-            Logger.error("[Adaptive] Loss NaN for #{streak} consecutive steps — halting training")
-
-            {:halt_loop, state}
-          else
-            Logger.warning(
-              "[Adaptive] Loss NaN at step #{state.iteration} (streak: #{streak}/#{patience})"
-            )
-
-            meta = %{state.handler_metadata | nan_streak: streak}
-            {:continue, %{state | handler_metadata: meta}}
-          end
-        else
-          meta = %{state.handler_metadata | nan_streak: 0}
-          {:continue, %{state | handler_metadata: meta}}
-        end
-      else
-        {:continue, state}
+      case get_in(state.step_state, [:loss]) do
+        nil -> {:continue, state}
+        loss_val -> update_nan_streak(state, Nx.to_number(loss_val), patience)
       end
     end)
   end
+
+  # Nx.to_number/1 returns the atom :nan for NaN losses.
+  defp update_nan_streak(state, :nan, patience) do
+    streak = state.handler_metadata.nan_streak + 1
+
+    if streak >= patience do
+      Logger.error("[Adaptive] Loss NaN for #{streak} consecutive steps — halting training")
+
+      {:halt_loop, state}
+    else
+      Logger.warning(
+        "[Adaptive] Loss NaN at step #{state.iteration} (streak: #{streak}/#{patience})"
+      )
+
+      meta = %{state.handler_metadata | nan_streak: streak}
+      {:continue, %{state | handler_metadata: meta}}
+    end
+  end
+
+  defp update_nan_streak(state, _loss_num, _patience) do
+    meta = %{state.handler_metadata | nan_streak: 0}
+    {:continue, %{state | handler_metadata: meta}}
+  end
+
+  # Replace every gradient tensor with zeros so the optimizer step is a no-op.
+  defp zero_gradients(%{gradients: grads} = step_state) do
+    zeroed =
+      deep_map_tensors(grads, fn t ->
+        Nx.broadcast(Nx.tensor(0.0, type: Nx.type(t)), t)
+      end)
+
+    put_in(step_state, [:gradients], zeroed)
+  end
+
+  defp zero_gradients(step_state), do: step_state
 
   # ============================================================================
   # Callbacks (named captures for runtime_call)

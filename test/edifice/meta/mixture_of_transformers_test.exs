@@ -125,8 +125,8 @@ defmodule Edifice.Meta.MixtureOfTransformersTest do
 
   describe "output_size/1" do
     test "returns vocab_size" do
-      assert MixtureOfTransformers.output_size(vocab_size: 32000) == 32000
-      assert MixtureOfTransformers.output_size(vocab_size: 50257) == 50257
+      assert MixtureOfTransformers.output_size(vocab_size: 32_000) == 32_000
+      assert MixtureOfTransformers.output_size(vocab_size: 50_257) == 50_257
     end
   end
 end

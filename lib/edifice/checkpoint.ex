@@ -587,54 +587,51 @@ defmodule Edifice.Checkpoint do
         end
 
       if should_save do
-        # Build path with epoch/step substitution
-        path = build_path(path_pattern, state)
-
-        # Extract model state
-        model_state = get_in(state.step_state, [:model_state])
-
-        params =
-          case model_state do
-            %Axon.ModelState{data: data} -> data
-            %{} = map -> map
-            _ -> %{}
-          end
-
-        metadata = %{
-          epoch: state.epoch,
-          iteration: state.iteration,
-          metrics: state.metrics
-        }
-
-        save(params, path, metadata: metadata, compressed: compressed)
-
-        # Manage checkpoint history
-        history = state.handler_metadata[:checkpoint_history] || []
-        history = [path | history]
-
-        # Delete old checkpoints beyond `keep`
-        if length(history) > keep do
-          {_kept, to_delete} = Enum.split(history, keep)
-
-          Enum.each(to_delete, fn old_path ->
-            case File.rm(old_path) do
-              :ok -> Logger.info("[Checkpoint] Deleted old checkpoint: #{old_path}")
-              {:error, _} -> :ok
-            end
-          end)
-
-          history = Enum.take(history, keep)
-          meta = %{state.handler_metadata | checkpoint_history: history}
-          {:continue, %{state | handler_metadata: meta}}
-        else
-          meta = %{state.handler_metadata | checkpoint_history: history}
-          {:continue, %{state | handler_metadata: meta}}
-        end
+        save_and_prune(state, path_pattern, compressed, keep)
       else
         {:continue, state}
       end
     end)
   end
+
+  defp save_and_prune(state, path_pattern, compressed, keep) do
+    path = build_path(path_pattern, state)
+
+    params =
+      case get_in(state.step_state, [:model_state]) do
+        %Axon.ModelState{data: data} -> data
+        %{} = map -> map
+        _ -> %{}
+      end
+
+    metadata = %{
+      epoch: state.epoch,
+      iteration: state.iteration,
+      metrics: state.metrics
+    }
+
+    save(params, path, metadata: metadata, compressed: compressed)
+
+    history = prune_history([path | state.handler_metadata[:checkpoint_history] || []], keep)
+    meta = %{state.handler_metadata | checkpoint_history: history}
+    {:continue, %{state | handler_metadata: meta}}
+  end
+
+  # Delete checkpoints beyond `keep`, returning the retained history.
+  defp prune_history(history, keep) when length(history) > keep do
+    {kept, to_delete} = Enum.split(history, keep)
+
+    Enum.each(to_delete, fn old_path ->
+      case File.rm(old_path) do
+        :ok -> Logger.info("[Checkpoint] Deleted old checkpoint: #{old_path}")
+        {:error, _} -> :ok
+      end
+    end)
+
+    kept
+  end
+
+  defp prune_history(history, _keep), do: history
 
   # ============================================================================
   # Helpers

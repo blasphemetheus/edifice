@@ -67,6 +67,14 @@ defmodule Edifice.Pretrained.KeyMaps.DETR do
 
   @impl true
   def map_key(key) do
+    with :no_match <- map_backbone_key(key),
+         :no_match <- map_encoder_key(key),
+         :no_match <- map_decoder_key(key) do
+      map_head_key(key)
+    end
+  end
+
+  defp map_backbone_key(key) do
     cond do
       # Backbone stem
       match = Regex.run(@backbone_stem_re, key) ->
@@ -88,6 +96,13 @@ defmodule Edifice.Pretrained.KeyMaps.DETR do
         [_, param] = match
         map_input_proj(param)
 
+      true ->
+        :no_match
+    end
+  end
+
+  defp map_encoder_key(key) do
+    cond do
       # Encoder self-attention
       match = Regex.run(@encoder_attn_re, key) ->
         [_, layer, proj, param] = match
@@ -103,6 +118,13 @@ defmodule Edifice.Pretrained.KeyMaps.DETR do
         [_, layer, norm, param] = match
         map_encoder_norm(layer, norm, param)
 
+      true ->
+        :no_match
+    end
+  end
+
+  defp map_decoder_key(key) do
+    cond do
       # Decoder self-attention
       match = Regex.run(@decoder_self_attn_re, key) ->
         [_, layer, proj, param] = match
@@ -128,6 +150,13 @@ defmodule Edifice.Pretrained.KeyMaps.DETR do
         [_, param] = match
         map_norm_param("decoder_norm", param)
 
+      true ->
+        :no_match
+    end
+  end
+
+  defp map_head_key(key) do
+    cond do
       # Object queries
       Regex.match?(@query_embed_re, key) ->
         "object_queries.kernel"

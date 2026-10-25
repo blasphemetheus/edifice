@@ -271,7 +271,7 @@ defmodule Edifice.Display.Heatmap do
       end)
 
       IO.puts("")
-      IO.inspect(Nx.to_heatmap(norm_tensor), label: label)
+      IO.puts("#{label}: " <> inspect(Nx.to_heatmap(norm_tensor)))
     end
   end
 
@@ -303,7 +303,7 @@ defmodule Edifice.Display.Heatmap do
           end
           |> Nx.reshape({rows, cols})
 
-        IO.inspect(Nx.to_heatmap(display))
+        IO.puts(inspect(Nx.to_heatmap(display)))
 
       _ ->
         # For 3D+, show just the first 2D slice
@@ -320,7 +320,7 @@ defmodule Edifice.Display.Heatmap do
               )
           end
 
-        IO.inspect(Nx.to_heatmap(display))
+        IO.puts(inspect(Nx.to_heatmap(display)))
     end
   end
 

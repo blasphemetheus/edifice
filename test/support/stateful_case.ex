@@ -41,27 +41,28 @@ defmodule Edifice.StatefulCase do
         build_opts ++ [batch_size: batch] ++ Keyword.take(step_opts, [:compiler])
       )
 
-    Enum.reduce(1..seq_len, state, fn k, state ->
-      frame = x |> Nx.slice_along_axis(k - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
-      {step_out, state} = Edifice.step(arch, params, state, frame, step_opts)
+    _final_state =
+      Enum.reduce(1..seq_len, state, fn k, state ->
+        frame = x |> Nx.slice_along_axis(k - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        {step_out, state} = Edifice.step(arch, params, state, frame, step_opts)
 
-      prefix = Nx.slice_along_axis(x, 0, k, axis: 1)
-      full_out = predict_fn.(params, prefix)
+        prefix = Nx.slice_along_axis(x, 0, k, axis: 1)
+        full_out = predict_fn.(params, prefix)
 
-      diff =
-        step_out
-        |> Nx.subtract(full_out)
-        |> Nx.abs()
-        |> Nx.reduce_max()
-        |> Nx.to_number()
+        diff =
+          step_out
+          |> Nx.subtract(full_out)
+          |> Nx.abs()
+          |> Nx.reduce_max()
+          |> Nx.to_number()
 
-      assert diff <= atol,
-             "#{inspect(arch)} step output diverged from full forward at " <>
-               "prefix k=#{k}/#{seq_len}: max |diff| = #{diff} > atol #{atol} " <>
-               "(build_opts: #{inspect(build_opts)})"
+        assert diff <= atol,
+               "#{inspect(arch)} step output diverged from full forward at " <>
+                 "prefix k=#{k}/#{seq_len}: max |diff| = #{diff} > atol #{atol} " <>
+                 "(build_opts: #{inspect(build_opts)})"
 
-      state
-    end)
+        state
+      end)
 
     :ok
   end

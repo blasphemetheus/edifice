@@ -240,7 +240,7 @@ defmodule Edifice.Quantization.FP8 do
   end
 
   defp max_representable(@e4m3fn_type), do: 448.0
-  defp max_representable(@e5m2_type), do: 57344.0
+  defp max_representable(@e5m2_type), do: 57_344.0
 
   # ============================================================================
   # Helpers

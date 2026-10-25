@@ -227,32 +227,33 @@ defmodule Edifice.Serving.Generate do
   """
   def generate_simple(predict_fn, params, opts) do
     prompt = Keyword.fetch!(opts, :prompt)
-    embed_fn = Keyword.get(opts, :embed_fn)
-    pad_token = Keyword.get(opts, :pad_token, 0)
     max_tokens = Keyword.get(opts, :max_tokens, @default_max_tokens)
-    temperature = Keyword.get(opts, :temperature, @default_temperature)
-    top_k = Keyword.get(opts, :top_k, @default_top_k)
-    top_p = Keyword.get(opts, :top_p, @default_top_p)
-    seed = Keyword.get(opts, :seed, @default_seed)
-    stop_token = Keyword.get(opts, :stop_token, nil)
     seq_len = Keyword.fetch!(opts, :seq_len)
+    cache = Keyword.get(opts, :cache)
+    stop_token = Keyword.get(opts, :stop_token, nil)
+    validate_simple_opts!(prompt, max_tokens, seq_len, cache)
 
     batch_size = Nx.axis_size(prompt, 0)
-    key = Nx.Random.key(seed)
-    sampling_opts = [temperature: temperature, top_k: top_k, top_p: top_p]
+    temperature = Keyword.get(opts, :temperature, @default_temperature)
 
-    unless is_integer(max_tokens) and max_tokens >= 0 and is_integer(seq_len) and seq_len > 0 and
-             Nx.axis_size(prompt, 1) > 0,
-           do:
-             raise(
-               ArgumentError,
-               "generation needs a nonempty prompt, positive seq_len and nonnegative max_tokens"
-             )
+    ctx = %{
+      predict_fn: predict_fn,
+      params: params,
+      cache: cache,
+      embed_fn: Keyword.get(opts, :embed_fn),
+      pad_token: Keyword.get(opts, :pad_token, 0),
+      seq_len: seq_len,
+      batch_size: batch_size,
+      stop_token: stop_token,
+      temperature: temperature,
+      sampling_opts: [
+        temperature: temperature,
+        top_k: Keyword.get(opts, :top_k, @default_top_k),
+        top_p: Keyword.get(opts, :top_p, @default_top_p)
+      ]
+    }
 
-    cache = Keyword.get(opts, :cache)
-
-    if cache && cache.max_seq_len != seq_len,
-      do: raise(ArgumentError, "seq_len must match the decoder cache capacity")
+    key = Nx.Random.key(Keyword.get(opts, :seed, @default_seed))
 
     stopped =
       if stop_token,
@@ -263,51 +264,73 @@ defmodule Edifice.Serving.Generate do
       prompt
     else
       {tokens, _, _, _} =
-        Enum.reduce_while(1..max_tokens, {prompt, key, stopped, nil}, fn _step,
-                                                                         {tokens, key, stopped,
-                                                                          state} ->
-          if Nx.to_number(Nx.all(stopped)) == 1 do
-            {:halt, {tokens, key, stopped, state}}
-          else
-            current_len = Nx.axis_size(tokens, 1)
-
-            {step_logits, state} =
-              if cache do
-                {chunk, state} =
-                  if state == nil or Nx.to_number(state.position) >= seq_len do
-                    count = min(current_len, seq_len)
-
-                    {Nx.slice_along_axis(tokens, current_len - count, count, axis: 1),
-                     cache.init.(batch_size)}
-                  else
-                    {Nx.slice_along_axis(tokens, current_len - 1, 1, axis: 1), state}
-                  end
-
-                {logits, state} = cache.predict.(params, chunk, state)
-                {Nx.take(logits, Nx.axis_size(logits, 1) - 1, axis: 1), state}
-              else
-                logits = predict_fn.(params, model_inputs(tokens, embed_fn, seq_len, pad_token))
-                {Nx.take(logits, min(current_len, seq_len) - 1, axis: 1), nil}
-              end
-
-            {next_token, key} = sample_token(step_logits, key, temperature, sampling_opts)
-            next_token = Nx.reshape(next_token, {batch_size})
-
-            {next_token, stopped} =
-              if stop_token do
-                token = Nx.select(stopped, stop_token, next_token)
-                {token, Nx.logical_or(stopped, Nx.equal(token, stop_token))}
-              else
-                {next_token, stopped}
-              end
-
-            new_tokens = Nx.concatenate([tokens, Nx.new_axis(next_token, 1)], axis: 1)
-            {:cont, {new_tokens, key, stopped, state}}
-          end
+        Enum.reduce_while(1..max_tokens, {prompt, key, stopped, nil}, fn _step, acc ->
+          simple_step(ctx, acc)
         end)
 
       tokens
     end
+  end
+
+  defp validate_simple_opts!(prompt, max_tokens, seq_len, cache) do
+    unless is_integer(max_tokens) and max_tokens >= 0 and is_integer(seq_len) and seq_len > 0 and
+             Nx.axis_size(prompt, 1) > 0,
+           do:
+             raise(
+               ArgumentError,
+               "generation needs a nonempty prompt, positive seq_len and nonnegative max_tokens"
+             )
+
+    if cache && cache.max_seq_len != seq_len,
+      do: raise(ArgumentError, "seq_len must match the decoder cache capacity")
+
+    :ok
+  end
+
+  defp simple_step(ctx, {tokens, key, stopped, state}) do
+    if Nx.to_number(Nx.all(stopped)) == 1 do
+      {:halt, {tokens, key, stopped, state}}
+    else
+      {step_logits, state} = next_logits(ctx, tokens, state)
+      {next_token, key} = sample_token(step_logits, key, ctx.temperature, ctx.sampling_opts)
+      next_token = Nx.reshape(next_token, {ctx.batch_size})
+      {next_token, stopped} = apply_stop_token(next_token, stopped, ctx.stop_token)
+      new_tokens = Nx.concatenate([tokens, Nx.new_axis(next_token, 1)], axis: 1)
+      {:cont, {new_tokens, key, stopped, state}}
+    end
+  end
+
+  # Logits for the next position: incremental via the KV cache when present
+  # (re-prefilling the retained window at capacity), else a full re-run.
+  defp next_logits(%{cache: nil} = ctx, tokens, _state) do
+    current_len = Nx.axis_size(tokens, 1)
+    inputs = model_inputs(tokens, ctx.embed_fn, ctx.seq_len, ctx.pad_token)
+    logits = ctx.predict_fn.(ctx.params, inputs)
+    {Nx.take(logits, min(current_len, ctx.seq_len) - 1, axis: 1), nil}
+  end
+
+  defp next_logits(%{cache: cache, seq_len: seq_len} = ctx, tokens, state) do
+    current_len = Nx.axis_size(tokens, 1)
+
+    {chunk, state} =
+      if state == nil or Nx.to_number(state.position) >= seq_len do
+        count = min(current_len, seq_len)
+
+        {Nx.slice_along_axis(tokens, current_len - count, count, axis: 1),
+         cache.init.(ctx.batch_size)}
+      else
+        {Nx.slice_along_axis(tokens, current_len - 1, 1, axis: 1), state}
+      end
+
+    {logits, state} = cache.predict.(ctx.params, chunk, state)
+    {Nx.take(logits, Nx.axis_size(logits, 1) - 1, axis: 1), state}
+  end
+
+  defp apply_stop_token(next_token, stopped, nil), do: {next_token, stopped}
+
+  defp apply_stop_token(next_token, stopped, stop_token) do
+    token = Nx.select(stopped, stop_token, next_token)
+    {token, Nx.logical_or(stopped, Nx.equal(token, stop_token))}
   end
 
   # ============================================================================
@@ -363,33 +386,51 @@ defmodule Edifice.Serving.Generate do
       if halt? do
         {tokens, key}
       else
-        Enum.reduce_while(2..max_tokens, {tokens, key}, fn _step, {tokens, key} ->
-          current_len = Nx.axis_size(tokens, 1)
-          last = Nx.slice_along_axis(tokens, current_len - 1, 1, axis: 1)
+        step_ctx = %{
+          predict_fn: predict_fn,
+          params: params,
+          embed_fn: embed_fn,
+          pad_token: pad_token,
+          seq_len: seq_len,
+          batch_size: batch_size,
+          stop_token: stop_token,
+          temperature: temperature,
+          sampling_opts: sampling_opts,
+          on_token: on_token
+        }
 
-          if stop_token && token_matches_stop?(last, stop_token) do
-            {:halt, {tokens, key}}
-          else
-            logits = predict_fn.(params, model_inputs(tokens, embed_fn, seq_len, pad_token))
-
-            pos = min(current_len - 1, seq_len - 1)
-            step_logits = logits[[.., pos, ..]]
-
-            {next_token, key} = sample_token(step_logits, key, temperature, sampling_opts)
-            next_token = Nx.reshape(next_token, {batch_size, 1})
-
-            token_val = next_token |> Nx.squeeze() |> Nx.to_number()
-            new_tokens = Nx.concatenate([tokens, next_token], axis: 1)
-
-            case on_token.(token_val) do
-              :halt -> {:halt, {new_tokens, key}}
-              _ -> {:cont, {new_tokens, key}}
-            end
-          end
+        Enum.reduce_while(2..max_tokens, {tokens, key}, fn _step, acc ->
+          stream_step(step_ctx, acc)
         end)
       end
 
     tokens
+  end
+
+  defp stream_step(ctx, {tokens, key}) do
+    current_len = Nx.axis_size(tokens, 1)
+    last = Nx.slice_along_axis(tokens, current_len - 1, 1, axis: 1)
+
+    if ctx.stop_token && token_matches_stop?(last, ctx.stop_token) do
+      {:halt, {tokens, key}}
+    else
+      inputs = model_inputs(tokens, ctx.embed_fn, ctx.seq_len, ctx.pad_token)
+      logits = ctx.predict_fn.(ctx.params, inputs)
+
+      pos = min(current_len - 1, ctx.seq_len - 1)
+      step_logits = logits[[.., pos, ..]]
+
+      {next_token, key} = sample_token(step_logits, key, ctx.temperature, ctx.sampling_opts)
+      next_token = Nx.reshape(next_token, {ctx.batch_size, 1})
+
+      token_val = next_token |> Nx.squeeze() |> Nx.to_number()
+      new_tokens = Nx.concatenate([tokens, next_token], axis: 1)
+
+      case ctx.on_token.(token_val) do
+        :halt -> {:halt, {new_tokens, key}}
+        _ -> {:cont, {new_tokens, key}}
+      end
+    end
   end
 
   @doc """

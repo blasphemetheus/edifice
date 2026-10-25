@@ -88,45 +88,43 @@ defmodule Edifice.Serving.Speculative do
     key = Nx.Random.key(seed)
     sampling_opts = [temperature: temperature, top_k: top_k, top_p: top_p]
 
+    config = %{
+      draft_fn: draft_fn,
+      draft_params: draft_params,
+      verify_fn: verify_fn,
+      verify_params: verify_params,
+      embed_fn: embed_fn,
+      seq_len: seq_len,
+      draft_steps: draft_steps,
+      max_tokens: max_tokens,
+      temperature: temperature,
+      sampling_opts: sampling_opts,
+      stop_token: stop_token,
+      on_accept: on_accept,
+      batch_size: batch_size
+    }
+
     # Initial state: just the prompt tokens
-    do_speculative_loop(
-      draft_fn,
-      draft_params,
-      verify_fn,
-      verify_params,
-      prompt,
-      embed_fn,
-      seq_len,
-      draft_steps,
-      max_tokens,
-      temperature,
-      sampling_opts,
-      key,
-      stop_token,
-      on_accept,
-      batch_size,
-      0
-    )
+    do_speculative_loop(config, prompt, key, 0)
   end
 
-  defp do_speculative_loop(
-         draft_fn,
-         draft_params,
-         verify_fn,
-         verify_params,
-         tokens,
-         embed_fn,
-         seq_len,
-         draft_steps,
-         max_tokens,
-         temperature,
-         sampling_opts,
-         key,
-         stop_token,
-         on_accept,
-         batch_size,
-         round
-       ) do
+  defp do_speculative_loop(config, tokens, key, round) do
+    %{
+      draft_fn: draft_fn,
+      draft_params: draft_params,
+      verify_fn: verify_fn,
+      verify_params: verify_params,
+      embed_fn: embed_fn,
+      seq_len: seq_len,
+      draft_steps: draft_steps,
+      max_tokens: max_tokens,
+      temperature: temperature,
+      sampling_opts: sampling_opts,
+      stop_token: stop_token,
+      on_accept: on_accept,
+      batch_size: batch_size
+    } = config
+
     current_len = Nx.axis_size(tokens, 1)
     _remaining = max_tokens - (current_len - Nx.axis_size(tokens, 1)) + max_tokens
 
@@ -186,24 +184,7 @@ defmodule Edifice.Serving.Speculative do
         if new_len >= max_tokens do
           Nx.slice_along_axis(tokens, 0, max_tokens, axis: 1)
         else
-          do_speculative_loop(
-            draft_fn,
-            draft_params,
-            verify_fn,
-            verify_params,
-            tokens,
-            embed_fn,
-            seq_len,
-            draft_steps,
-            max_tokens,
-            temperature,
-            sampling_opts,
-            key,
-            stop_token,
-            on_accept,
-            batch_size,
-            round + 1
-          )
+          do_speculative_loop(config, tokens, key, round + 1)
         end
       end
     end

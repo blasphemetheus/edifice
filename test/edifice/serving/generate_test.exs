@@ -408,7 +408,7 @@ defmodule Edifice.Serving.GenerateTest do
         )
 
       tokens = Enum.take(stream, 3)
-      assert length(tokens) >= 1
+      assert tokens != []
       assert Enum.all?(tokens, &is_integer/1)
     end
   end

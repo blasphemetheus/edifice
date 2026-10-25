@@ -84,38 +84,40 @@ defmodule Edifice.Display.TrainingPlot do
     Axon.Loop.handle_event(loop, :iteration_completed, fn state ->
       step = state.iteration
 
-      if rem(step, every) == 0 do
-        Enum.each(metrics, fn metric_name ->
-          value =
-            case metric_name do
-              "loss" ->
-                loss = get_in(state.step_state, [:loss])
-                if loss, do: Nx.to_number(loss), else: nil
-
-              name ->
-                case get_in(state.metrics, [name]) do
-                  nil -> nil
-                  %Nx.Tensor{} = t -> Nx.to_number(t)
-                  v when is_number(v) -> v
-                  _ -> nil
-                end
-            end
-
-          if value do
-            apply(Kino.VegaLite, :push, [
-              widget,
-              %{
-                "step" => step,
-                "value" => value,
-                "metric" => metric_name
-              }
-            ])
-          end
-        end)
-      end
+      if rem(step, every) == 0, do: push_metrics(widget, state, metrics, step)
 
       {:continue, state}
     end)
+  end
+
+  defp push_metrics(widget, state, metrics, step) do
+    Enum.each(metrics, fn metric_name ->
+      case metric_value(state, metric_name) do
+        nil -> :ok
+        value -> push_point(widget, step, metric_name, value)
+      end
+    end)
+  end
+
+  defp metric_value(state, "loss") do
+    loss = get_in(state.step_state, [:loss])
+    if loss, do: Nx.to_number(loss), else: nil
+  end
+
+  defp metric_value(state, name) do
+    case get_in(state.metrics, [name]) do
+      nil -> nil
+      %Nx.Tensor{} = t -> Nx.to_number(t)
+      v when is_number(v) -> v
+      _ -> nil
+    end
+  end
+
+  defp push_point(widget, step, metric_name, value) do
+    apply(Kino.VegaLite, :push, [
+      widget,
+      %{"step" => step, "value" => value, "metric" => metric_name}
+    ])
   end
 
   @doc """

@@ -85,40 +85,40 @@ defmodule Edifice.Serving.MedusaGenerate do
     batch_size = Nx.axis_size(prompt, 0)
     _key = Nx.Random.key(seed)
 
-    do_medusa_loop(
-      base_fn,
-      base_params,
-      heads_fn,
-      heads_params,
-      prompt,
-      embed_fn,
-      seq_len,
-      max_tokens,
-      top_k,
-      stop_token,
-      num_medusa_heads,
-      on_accept,
-      batch_size,
-      0
-    )
+    config = %{
+      base_fn: base_fn,
+      base_params: base_params,
+      heads_fn: heads_fn,
+      heads_params: heads_params,
+      embed_fn: embed_fn,
+      seq_len: seq_len,
+      max_tokens: max_tokens,
+      top_k: top_k,
+      stop_token: stop_token,
+      num_medusa_heads: num_medusa_heads,
+      on_accept: on_accept,
+      batch_size: batch_size
+    }
+
+    do_medusa_loop(config, prompt, 0)
   end
 
-  defp do_medusa_loop(
-         base_fn,
-         base_params,
-         heads_fn,
-         heads_params,
-         tokens,
-         embed_fn,
-         seq_len,
-         max_tokens,
-         top_k,
-         stop_token,
-         num_medusa_heads,
-         on_accept,
-         batch_size,
-         round
-       ) do
+  defp do_medusa_loop(config, tokens, round) do
+    %{
+      base_fn: base_fn,
+      base_params: base_params,
+      heads_fn: heads_fn,
+      heads_params: heads_params,
+      embed_fn: embed_fn,
+      seq_len: seq_len,
+      max_tokens: max_tokens,
+      top_k: top_k,
+      stop_token: stop_token,
+      num_medusa_heads: num_medusa_heads,
+      on_accept: on_accept,
+      batch_size: batch_size
+    } = config
+
     current_len = Nx.axis_size(tokens, 1)
 
     if current_len >= max_tokens do
@@ -171,22 +171,7 @@ defmodule Edifice.Serving.MedusaGenerate do
         if stop_token && Nx.to_number(Nx.squeeze(base_token_0)) == stop_token do
           tokens
         else
-          do_medusa_loop(
-            base_fn,
-            base_params,
-            heads_fn,
-            heads_params,
-            tokens,
-            embed_fn,
-            seq_len,
-            max_tokens,
-            top_k,
-            stop_token,
-            num_medusa_heads,
-            on_accept,
-            batch_size,
-            round + 1
-          )
+          do_medusa_loop(config, tokens, round + 1)
         end
       else
         accepted_tensor =
@@ -199,22 +184,7 @@ defmodule Edifice.Serving.MedusaGenerate do
         if stop_token && List.last(accepted_tokens) == stop_token do
           tokens
         else
-          do_medusa_loop(
-            base_fn,
-            base_params,
-            heads_fn,
-            heads_params,
-            tokens,
-            embed_fn,
-            seq_len,
-            max_tokens,
-            top_k,
-            stop_token,
-            num_medusa_heads,
-            on_accept,
-            batch_size,
-            round + 1
-          )
+          do_medusa_loop(config, tokens, round + 1)
         end
       end
     end

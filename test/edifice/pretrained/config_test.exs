@@ -124,7 +124,7 @@ defmodule Edifice.Pretrained.ConfigTest do
                       "encoder_attention_heads" => 8,
                       "decoder_attention_heads" => 8,
                       "encoder_ffn_dim" => 2048,
-                      "vocab_size" => 51865,
+                      "vocab_size" => 51_865,
                       "max_target_positions" => 448,
                       "dropout" => 0.0
                     })
@@ -143,7 +143,7 @@ defmodule Edifice.Pretrained.ConfigTest do
       assert opts[:decoder_layers] == 6
       assert opts[:num_heads] == 8
       assert opts[:ffn_dim] == 2048
-      assert opts[:vocab_size] == 51865
+      assert opts[:vocab_size] == 51_865
       assert opts[:max_dec_len] == 448
       assert opts[:dropout] == 0.0
     end
@@ -154,7 +154,7 @@ defmodule Edifice.Pretrained.ConfigTest do
           "model_type" => "whisper",
           "encoder_layers" => 6,
           "decoder_layers" => 6,
-          "vocab_size" => 51865
+          "vocab_size" => 51_865
         })
 
       assert {:error, msg} = Config.parse(config)

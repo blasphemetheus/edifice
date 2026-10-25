@@ -94,7 +94,7 @@ defmodule Edifice.Generative.MeissonicTest do
   describe "output_size/1" do
     test "returns codebook_size" do
       assert Meissonic.output_size(codebook_size: 8192) == 8192
-      assert Meissonic.output_size(codebook_size: 16384) == 16384
+      assert Meissonic.output_size(codebook_size: 16_384) == 16_384
     end
   end
 end

@@ -573,6 +573,13 @@ defmodule Edifice.Pretrained.RoundTripTest do
     do: [{"classifier.bias", t}]
 
   defp cnx_reverse_key(key, tensor) do
+    case cnx_reverse_downsample_key(key, tensor) do
+      :no_match -> cnx_reverse_block_key(key, tensor)
+      pairs -> pairs
+    end
+  end
+
+  defp cnx_reverse_downsample_key(key, tensor) do
     cond do
       # Downsample norm
       match = Regex.run(~r/^downsample_(\d+)_norm\.gamma$/, key) ->
@@ -601,6 +608,13 @@ defmodule Edifice.Pretrained.RoundTripTest do
 
         [{"convnext.encoder.stages.#{hf_stage}.downsampling_layer.1.bias", tensor}]
 
+      true ->
+        :no_match
+    end
+  end
+
+  defp cnx_reverse_block_key(key, tensor) do
+    cond do
       # Block depthwise conv
       match = Regex.run(~r/^stage(\d+)_block(\d+)_dw_conv\.kernel$/, key) ->
         [_, s, b] = match

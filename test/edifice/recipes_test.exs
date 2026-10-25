@@ -30,7 +30,7 @@ defmodule Edifice.RecipesTest do
   defp make_classification_data(n \\ 10) do
     Stream.repeatedly(fn ->
       {input, _key} =
-        Nx.Random.uniform(Nx.Random.key(:rand.uniform(10000)), shape: {@batch, @embed_dim})
+        Nx.Random.uniform(Nx.Random.key(:rand.uniform(10_000)), shape: {@batch, @embed_dim})
 
       # One-hot labels
       labels = Nx.iota({@batch}, type: :s64) |> Nx.remainder(@num_classes)
@@ -49,7 +49,7 @@ defmodule Edifice.RecipesTest do
   defp make_regression_data(n \\ 10) do
     Stream.repeatedly(fn ->
       {input, _key} =
-        Nx.Random.uniform(Nx.Random.key(:rand.uniform(10000)), shape: {@batch, @embed_dim})
+        Nx.Random.uniform(Nx.Random.key(:rand.uniform(10_000)), shape: {@batch, @embed_dim})
 
       target = Nx.broadcast(1.0, {@batch, 1})
       {%{"x" => input}, target}
@@ -61,7 +61,7 @@ defmodule Edifice.RecipesTest do
     Stream.repeatedly(fn ->
       # Concatenated positive pairs: first half = view1, second half = view2
       {input, _key} =
-        Nx.Random.uniform(Nx.Random.key(:rand.uniform(10000)), shape: {2 * @batch, @embed_dim})
+        Nx.Random.uniform(Nx.Random.key(:rand.uniform(10_000)), shape: {2 * @batch, @embed_dim})
 
       # Dummy labels (not used by infonce loss)
       labels = Nx.broadcast(0.0, {2 * @batch, @embed_dim})
@@ -248,7 +248,7 @@ defmodule Edifice.RecipesTest do
     end
 
     test "returns language_model config" do
-      desc = Recipes.describe(:language_model, vocab_size: 32000)
+      desc = Recipes.describe(:language_model, vocab_size: 32_000)
       assert desc.loss == :categorical_cross_entropy
       assert desc.schedule == :warmup_cosine
       assert desc.max_grad_norm == 1.0

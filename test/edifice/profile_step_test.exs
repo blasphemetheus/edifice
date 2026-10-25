@@ -30,8 +30,8 @@ defmodule Edifice.ProfileStepTest do
         assert is_number(result[key]) and result[key] >= 0, "#{key} missing or negative"
       end
 
-      # MinGRU state is %{h: [1, num_layers, hidden]} f32
-      assert result.state_bytes == 1 * 1 * 16 * 4
+      # MinGRU state is %{h: [batch=1, num_layers=1, hidden=16]} f32 (4 bytes each)
+      assert result.state_bytes == 16 * 4
 
       # Percentiles must be ordered
       assert result.p50_step_ms <= result.p95_step_ms

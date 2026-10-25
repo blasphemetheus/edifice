@@ -195,7 +195,10 @@ if Code.ensure_loaded?(Kino.SmartCell) do
         try do
           String.to_existing_atom(arch)
         rescue
-          ArgumentError -> raise ArgumentError, "unknown architecture: #{inspect(arch)}"
+          ArgumentError ->
+            reraise ArgumentError,
+                    [message: "unknown architecture: #{inspect(arch)}"],
+                    __STACKTRACE__
         end
 
       build_call =

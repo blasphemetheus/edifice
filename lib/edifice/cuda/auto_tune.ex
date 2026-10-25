@@ -175,22 +175,7 @@ defmodule Edifice.CUDA.AutoTune do
 
           {:error, :gpu_mismatch}
         else
-          results = data["results"] || %{}
-
-          count =
-            Enum.reduce(results, 0, fn {key_str, winner_str}, acc ->
-              case parse_cache_key(key_str) do
-                {:ok, kernel, dim, dtype} ->
-                  winner = String.to_existing_atom(winner_str)
-                  key = cache_key(kernel, dim, dtype)
-                  :persistent_term.put(key, winner)
-                  acc + 1
-
-                _ ->
-                  acc
-              end
-            end)
-
+          count = install_cached_results(data["results"] || %{})
           Logger.info("[AutoTune] Loaded #{count} results from #{path}")
           {:ok, count}
         end
@@ -202,6 +187,21 @@ defmodule Edifice.CUDA.AutoTune do
         Logger.warning("[AutoTune] Failed to load disk cache: #{inspect(reason)}")
         {:error, reason}
     end
+  end
+
+  # Install each parseable cache entry into persistent_term; returns the count.
+  defp install_cached_results(results) do
+    Enum.reduce(results, 0, fn {key_str, winner_str}, acc ->
+      case parse_cache_key(key_str) do
+        {:ok, kernel, dim, dtype} ->
+          winner = String.to_existing_atom(winner_str)
+          :persistent_term.put(cache_key(kernel, dim, dtype), winner)
+          acc + 1
+
+        _ ->
+          acc
+      end
+    end)
   end
 
   @doc "Save cached results to disk."
@@ -557,217 +557,181 @@ defmodule Edifice.CUDA.AutoTune do
   # Input generators
   # ============================================================================
 
+  @scan_2tensor_kernels [:mingru, :elu_gru, :real_gru, :diag_linear, :liquid, :linear_scan]
+  @matmul_4h_kernels [:slstm_scan, :lstm_scan]
+  @head_kernels [
+    :delta_net_scan,
+    :gated_delta_net_scan,
+    :delta_product_scan,
+    :kda_scan,
+    :rla_scan,
+    :gsa_scan
+  ]
+  @attention_kernels [:flash_attention, :laser_attention, :fox_attention]
+  @block_kernels [:mingru_block, :minlstm_block, :linear_block, :gru_block, :lstm_block]
+
   defp generate_inputs(kernel_name, dim, dtype) do
     b = @bench_batch
     t = @bench_seq
     h = dim
 
-    case kernel_name do
-      # 2-tensor {B,T,H}
-      k when k in [:mingru, :elu_gru, :real_gru, :diag_linear, :liquid, :linear_scan] ->
-        [rand({b, t, h}, dtype), rand({b, t, h}, dtype)]
-
-      # 3-tensor {B,T,H}
-      :minlstm ->
-        [rand({b, t, h}, dtype), rand({b, t, h}, dtype), rand({b, t, h}, dtype)]
-
-      # Matmul scans: wx {B,T,4H} + R {H,4H}
-      k when k in [:slstm_scan, :lstm_scan] ->
-        [rand({b, t, 4 * h}, dtype), rand({h, 4 * h}, dtype)]
-
-      # Matmul scan: wx {B,T,3H} + R {H,3H}
-      :gru_scan ->
-        [rand({b, t, 3 * h}, dtype), rand({h, 3 * h}, dtype)]
-
-      # DeltaNet: q,k,v,beta all {B,T,heads,d}
-      :delta_net_scan ->
-        {num_heads, head_dim} = head_split(h)
-
-        [
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads, head_dim}, dtype)
-        ]
-
-      # GatedDeltaNet: q,k,v,beta {B,T,H,d} + alpha {B,T,H}
-      :gated_delta_net_scan ->
-        {num_heads, head_dim} = head_split(h)
-
-        [
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads}, dtype)
-        ]
-
-      # DeltaProduct: q {B,T,H,d}, k/v {B,T,n_h,H,d}, beta {B,T,n_h,H}
-      :delta_product_scan ->
-        {num_heads, head_dim} = head_split(h)
-        n_h = 2
-
-        [
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, n_h, num_heads, head_dim}, dtype),
-          rand({b, t, n_h, num_heads, head_dim}, dtype),
-          rand({b, t, n_h, num_heads}, dtype)
-        ]
-
-      # TTT: q,k,v,eta {B,T,H} + W0 {H,H} + gamma,beta {H}
-      :ttt_scan ->
-        [
-          rand({b, t, h}, dtype),
-          rand({b, t, h}, dtype),
-          rand({b, t, h}, dtype),
-          rand({b, t, h}, dtype),
-          rand({h, h}, dtype),
-          rand({h}, dtype),
-          rand({h}, dtype)
-        ]
-
-      # Selective scan: x,dt {B,T,H} + A {H,S} + B,C {B,T,S}
-      :selective_scan ->
-        state_size = 16
-
-        [
-          rand({b, t, h}, dtype),
-          rand({b, t, h}, dtype),
-          rand({h, state_size}, dtype),
-          rand({b, t, state_size}, dtype),
-          rand({b, t, state_size}, dtype)
-        ]
-
-      # KDA: q,k,v,alpha {B,T,H,d} + beta {B,T,H}
-      :kda_scan ->
-        {num_heads, head_dim} = head_split(h)
-
-        [
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads}, dtype)
-        ]
-
-      # RLA: q,k,v {B,T,H,d} + alpha,beta,gamma {B,T,H,1,1}
-      :rla_scan ->
-        {num_heads, head_dim} = head_split(h)
-
-        [
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads, 1, 1}, dtype),
-          rand({b, t, num_heads, 1, 1}, dtype),
-          rand({b, t, num_heads, 1, 1}, dtype)
-        ]
-
-      # Attention: q,k,v {B,heads,T,d}
-      k when k in [:flash_attention, :laser_attention] ->
-        {num_heads, head_dim} = head_split(h)
-
-        [
-          rand({b, num_heads, t, head_dim}, dtype),
-          rand({b, num_heads, t, head_dim}, dtype),
-          rand({b, num_heads, t, head_dim}, dtype)
-        ]
-
-      # Fox attention: q,k,v {B,heads,T,d} + cs {B,heads,T}
-      :fox_attention ->
-        {num_heads, head_dim} = head_split(h)
-
-        [
-          rand({b, num_heads, t, head_dim}, dtype),
-          rand({b, num_heads, t, head_dim}, dtype),
-          rand({b, num_heads, t, head_dim}, dtype),
-          rand({b, num_heads, t}, dtype)
-        ]
-
-      # Reservoir: wx {B,T,H} + w_res {H,H}
-      :reservoir_scan ->
-        [rand({b, t, h}, dtype), rand({h, h}, dtype)]
-
-      # Titans: combined {B,T,4*M} where M = dim
-      :titans_scan ->
-        [rand({b, t, 4 * h}, dtype)]
-
-      # MIRAS: combined {B,T,5*M} where M = dim
-      :miras_scan ->
-        [rand({b, t, 5 * h}, dtype)]
-
-      # GSA: q {B,T,H,d}, k_slot {B,T,H,slots}, v {B,T,H,d}, alpha {B,T,H}
-      :gsa_scan ->
-        {num_heads, head_dim} = head_split(h)
-        num_slots = 4
-
-        [
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads, num_slots}, dtype),
-          rand({b, t, num_heads, head_dim}, dtype),
-          rand({b, t, num_heads}, dtype)
-        ]
-
-      # MinGRU block: input {B,T,H} + weights {layers*(2H²+4H)} + h0 {B,layers,H}
-      :mingru_block ->
-        num_layers = 2
-        layer_stride = 2 * h * h + 4 * h
-
-        [
-          rand({b, t, h}, dtype),
-          rand({num_layers * layer_stride}, dtype),
-          rand({b, num_layers, h}, dtype)
-        ]
-
-      # MinLSTM block: input {B,T,H} + weights {layers*(3H²+5H)} + h0 {B,layers,H}
-      :minlstm_block ->
-        num_layers = 2
-        layer_stride = 3 * h * h + 5 * h
-
-        [
-          rand({b, t, h}, dtype),
-          rand({num_layers * layer_stride}, dtype),
-          rand({b, num_layers, h}, dtype)
-        ]
-
-      # Linear block: same as mingru_block
-      :linear_block ->
-        num_layers = 2
-        layer_stride = 2 * h * h + 4 * h
-
-        [
-          rand({b, t, h}, dtype),
-          rand({num_layers * layer_stride}, dtype),
-          rand({b, num_layers, h}, dtype)
-        ]
-
-      # GRU block: input {B,T,H} + weights {layers*(6H²+5H)} + h0 {B,layers,H}
-      :gru_block ->
-        num_layers = 2
-        layer_stride = 6 * h * h + 5 * h
-
-        [
-          rand({b, t, h}, dtype),
-          rand({num_layers * layer_stride}, dtype),
-          rand({b, num_layers, h}, dtype)
-        ]
-
-      # LSTM block: input {B,T,H} + weights {layers*(8H²+6H)} + h0,c0 {B,layers,H}
-      :lstm_block ->
-        num_layers = 2
-        layer_stride = 8 * h * h + 6 * h
-
-        [
-          rand({b, t, h}, dtype),
-          rand({num_layers * layer_stride}, dtype),
-          rand({b, num_layers, h}, dtype),
-          rand({b, num_layers, h}, dtype)
-        ]
-
-      _ ->
-        :unsupported
+    cond do
+      kernel_name in @head_kernels -> head_inputs(kernel_name, b, t, h, dtype)
+      kernel_name in @attention_kernels -> attention_inputs(kernel_name, b, t, h, dtype)
+      kernel_name in @block_kernels -> block_inputs(kernel_name, b, t, h, dtype)
+      true -> scan_inputs(kernel_name, b, t, h, dtype)
     end
   end
+
+  # Element-wise / matmul scan kernels operating on {B,T,H}-shaped tensors.
+  defp scan_inputs(k, b, t, h, dtype) when k in @scan_2tensor_kernels,
+    do: [rand({b, t, h}, dtype), rand({b, t, h}, dtype)]
+
+  # 3-tensor {B,T,H}
+  defp scan_inputs(:minlstm, b, t, h, dtype),
+    do: [rand({b, t, h}, dtype), rand({b, t, h}, dtype), rand({b, t, h}, dtype)]
+
+  # Matmul scans: wx {B,T,4H} + R {H,4H}
+  defp scan_inputs(k, b, t, h, dtype) when k in @matmul_4h_kernels,
+    do: [rand({b, t, 4 * h}, dtype), rand({h, 4 * h}, dtype)]
+
+  # Matmul scan: wx {B,T,3H} + R {H,3H}
+  defp scan_inputs(:gru_scan, b, t, h, dtype),
+    do: [rand({b, t, 3 * h}, dtype), rand({h, 3 * h}, dtype)]
+
+  # TTT: q,k,v,eta {B,T,H} + W0 {H,H} + gamma,beta {H}
+  defp scan_inputs(:ttt_scan, b, t, h, dtype) do
+    [
+      rand({b, t, h}, dtype),
+      rand({b, t, h}, dtype),
+      rand({b, t, h}, dtype),
+      rand({b, t, h}, dtype),
+      rand({h, h}, dtype),
+      rand({h}, dtype),
+      rand({h}, dtype)
+    ]
+  end
+
+  # Selective scan: x,dt {B,T,H} + A {H,S} + B,C {B,T,S}
+  defp scan_inputs(:selective_scan, b, t, h, dtype) do
+    state_size = 16
+
+    [
+      rand({b, t, h}, dtype),
+      rand({b, t, h}, dtype),
+      rand({h, state_size}, dtype),
+      rand({b, t, state_size}, dtype),
+      rand({b, t, state_size}, dtype)
+    ]
+  end
+
+  # Reservoir: wx {B,T,H} + w_res {H,H}
+  defp scan_inputs(:reservoir_scan, b, t, h, dtype),
+    do: [rand({b, t, h}, dtype), rand({h, h}, dtype)]
+
+  # Titans: combined {B,T,4*M} where M = dim
+  defp scan_inputs(:titans_scan, b, t, h, dtype), do: [rand({b, t, 4 * h}, dtype)]
+
+  # MIRAS: combined {B,T,5*M} where M = dim
+  defp scan_inputs(:miras_scan, b, t, h, dtype), do: [rand({b, t, 5 * h}, dtype)]
+
+  defp scan_inputs(_kernel, _b, _t, _h, _dtype), do: :unsupported
+
+  # Multi-head delta-family kernels operating on {B,T,heads,d}-shaped tensors.
+  defp head_inputs(kernel, b, t, h, dtype) do
+    {num_heads, head_dim} = head_split(h)
+    qkv = rand({b, t, num_heads, head_dim}, dtype)
+    head_inputs(kernel, qkv, b, t, num_heads, head_dim, dtype)
+  end
+
+  # DeltaNet: q,k,v,beta all {B,T,heads,d}
+  defp head_inputs(:delta_net_scan, qkv, b, t, nh, d, dtype),
+    do: [qkv, rand({b, t, nh, d}, dtype), rand({b, t, nh, d}, dtype), rand({b, t, nh, d}, dtype)]
+
+  # GatedDeltaNet / KDA: q,k,v,beta {B,T,H,d} + alpha {B,T,H}
+  defp head_inputs(k, qkv, b, t, nh, d, dtype) when k in [:gated_delta_net_scan, :kda_scan] do
+    [
+      qkv,
+      rand({b, t, nh, d}, dtype),
+      rand({b, t, nh, d}, dtype),
+      rand({b, t, nh, d}, dtype),
+      rand({b, t, nh}, dtype)
+    ]
+  end
+
+  # DeltaProduct: q {B,T,H,d}, k/v {B,T,n_h,H,d}, beta {B,T,n_h,H}
+  defp head_inputs(:delta_product_scan, qkv, b, t, nh, d, dtype) do
+    n_h = 2
+
+    [
+      qkv,
+      rand({b, t, n_h, nh, d}, dtype),
+      rand({b, t, n_h, nh, d}, dtype),
+      rand({b, t, n_h, nh}, dtype)
+    ]
+  end
+
+  # RLA: q,k,v {B,T,H,d} + alpha,beta,gamma {B,T,H,1,1}
+  defp head_inputs(:rla_scan, qkv, b, t, nh, d, dtype) do
+    [
+      qkv,
+      rand({b, t, nh, d}, dtype),
+      rand({b, t, nh, d}, dtype),
+      rand({b, t, nh, 1, 1}, dtype),
+      rand({b, t, nh, 1, 1}, dtype),
+      rand({b, t, nh, 1, 1}, dtype)
+    ]
+  end
+
+  # GSA: q {B,T,H,d}, k_slot {B,T,H,slots}, v {B,T,H,d}, alpha {B,T,H}
+  defp head_inputs(:gsa_scan, qkv, b, t, nh, d, dtype) do
+    num_slots = 4
+
+    [
+      qkv,
+      rand({b, t, nh, num_slots}, dtype),
+      rand({b, t, nh, d}, dtype),
+      rand({b, t, nh}, dtype)
+    ]
+  end
+
+  # Attention: q,k,v {B,heads,T,d} (+ cs {B,heads,T} for Fox)
+  defp attention_inputs(kernel, b, t, h, dtype) do
+    {num_heads, head_dim} = head_split(h)
+
+    qkv = [
+      rand({b, num_heads, t, head_dim}, dtype),
+      rand({b, num_heads, t, head_dim}, dtype),
+      rand({b, num_heads, t, head_dim}, dtype)
+    ]
+
+    case kernel do
+      :fox_attention -> qkv ++ [rand({b, num_heads, t}, dtype)]
+      _ -> qkv
+    end
+  end
+
+  # Block scans: input {B,T,H} + flat weights {layers*stride} + h0 (and c0) {B,layers,H}
+  defp block_inputs(kernel, b, t, h, dtype) do
+    num_layers = 2
+    layer_stride = block_layer_stride(kernel, h)
+
+    base = [
+      rand({b, t, h}, dtype),
+      rand({num_layers * layer_stride}, dtype),
+      rand({b, num_layers, h}, dtype)
+    ]
+
+    case kernel do
+      :lstm_block -> base ++ [rand({b, num_layers, h}, dtype)]
+      _ -> base
+    end
+  end
+
+  defp block_layer_stride(k, h) when k in [:mingru_block, :linear_block], do: 2 * h * h + 4 * h
+  defp block_layer_stride(:minlstm_block, h), do: 3 * h * h + 5 * h
+  defp block_layer_stride(:gru_block, h), do: 6 * h * h + 5 * h
+  defp block_layer_stride(:lstm_block, h), do: 8 * h * h + 6 * h
 
   defp rand(shape, dtype) do
     key = Nx.Random.key(System.os_time())

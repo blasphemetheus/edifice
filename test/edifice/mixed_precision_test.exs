@@ -160,7 +160,7 @@ defmodule Edifice.MixedPrecisionTest do
   describe "loss scaling" do
     test "init_loss_scale returns default state" do
       state = MixedPrecision.init_loss_scale()
-      assert state.scale == 65536.0
+      assert state.scale == 65_536.0
       assert state.growth_factor == 2.0
       assert state.backoff_factor == 0.5
       assert state.growth_interval == 2000

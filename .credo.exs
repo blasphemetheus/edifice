@@ -67,7 +67,10 @@
           {Credo.Check.Refactor.FilterFilter, []},
           # Raised from 8 — ODE solvers (Dormand-Prince) pass stepper state
           # through multiple integration stages, requiring 10 parameters
-          {Credo.Check.Refactor.FunctionArity, [max_arity: 10]},
+          # NIF stubs in cuda/nif.ex mirror the C kernel signatures and cannot be
+          # regrouped without changing the native ABI.
+          {Credo.Check.Refactor.FunctionArity,
+           [max_arity: 10, files: %{excluded: ["lib/edifice/cuda/nif.ex"]}]},
           {Credo.Check.Refactor.LongQuoteBlocks, []},
           {Credo.Check.Refactor.MapJoin, []},
           {Credo.Check.Refactor.MatchInCondition, []},

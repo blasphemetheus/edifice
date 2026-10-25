@@ -281,41 +281,7 @@ defmodule Edifice.Training.Monitor do
       step = state.iteration
 
       if rem(step, every) == 0 do
-        parts =
-          Enum.flat_map(metrics, fn
-            :loss ->
-              loss = get_in(state.step_state, [:loss])
-              if loss, do: ["loss=#{format_float(Nx.to_number(loss))}"], else: []
-
-            :grad_norm ->
-              grads = get_in(state.step_state, [:gradients])
-
-              if grads do
-                norm = grad_global_norm(grads)
-                ["grad_norm=#{format_float(norm)}"]
-              else
-                []
-              end
-
-            :param_norm ->
-              params = get_in(state.step_state, [:model_state])
-
-              if params do
-                data =
-                  case params do
-                    %Axon.ModelState{data: d} -> d
-                    %{} -> params
-                  end
-
-                norm = grad_global_norm(data)
-                ["param_norm=#{format_float(norm)}"]
-              else
-                []
-              end
-
-            _ ->
-              []
-          end)
+        parts = Enum.flat_map(metrics, &metric_parts(state.step_state, &1))
 
         if parts != [] do
           Logger.info("[Monitor] step=#{step} #{Enum.join(parts, " ")}")
@@ -326,45 +292,59 @@ defmodule Edifice.Training.Monitor do
     end)
   end
 
+  defp metric_parts(step_state, :loss) do
+    case get_in(step_state, [:loss]) do
+      nil -> []
+      loss -> ["loss=#{format_float(Nx.to_number(loss))}"]
+    end
+  end
+
+  defp metric_parts(step_state, :grad_norm) do
+    case get_in(step_state, [:gradients]) do
+      nil -> []
+      grads -> ["grad_norm=#{format_float(grad_global_norm(grads))}"]
+    end
+  end
+
+  defp metric_parts(step_state, :param_norm) do
+    case get_in(step_state, [:model_state]) do
+      nil -> []
+      %Axon.ModelState{data: d} -> ["param_norm=#{format_float(grad_global_norm(d))}"]
+      %{} = params -> ["param_norm=#{format_float(grad_global_norm(params))}"]
+    end
+  end
+
+  defp metric_parts(_step_state, _metric), do: []
+
   defp maybe_attach_nan_check(loop, false, _halt), do: loop
 
   defp maybe_attach_nan_check(loop, true, halt_on_nan) do
     Axon.Loop.handle_event(loop, :iteration_completed, fn state ->
-      loss = get_in(state.step_state, [:loss])
-
-      if loss do
-        loss_val = Nx.to_number(loss)
-
-        cond do
-          loss_val != loss_val ->
-            # NaN: NaN != NaN is true
-            msg = "[Monitor] NaN loss detected at step #{state.iteration}"
-
-            if halt_on_nan do
-              Logger.error(msg <> " — halting training")
-              {:halt_loop, state}
-            else
-              Logger.warning(msg)
-              {:continue, state}
-            end
-
-          loss_val == :infinity or loss_val == :neg_infinity ->
-            msg = "[Monitor] Inf loss detected at step #{state.iteration}"
-
-            if halt_on_nan do
-              Logger.error(msg <> " — halting training")
-              {:halt_loop, state}
-            else
-              Logger.warning(msg)
-              {:continue, state}
-            end
-
-          true ->
-            {:continue, state}
-        end
-      else
-        {:continue, state}
+      case get_in(state.step_state, [:loss]) do
+        nil -> {:continue, state}
+        loss -> check_nonfinite_loss(state, Nx.to_number(loss), halt_on_nan)
       end
     end)
+  end
+
+  # Nx.to_number/1 returns :nan, :infinity or :neg_infinity for non-finite losses.
+  defp check_nonfinite_loss(state, :nan, halt_on_nan),
+    do: handle_nonfinite_loss(state, "NaN", halt_on_nan)
+
+  defp check_nonfinite_loss(state, inf, halt_on_nan) when inf in [:infinity, :neg_infinity],
+    do: handle_nonfinite_loss(state, "Inf", halt_on_nan)
+
+  defp check_nonfinite_loss(state, _loss_val, _halt_on_nan), do: {:continue, state}
+
+  defp handle_nonfinite_loss(state, kind, halt_on_nan) do
+    msg = "[Monitor] #{kind} loss detected at step #{state.iteration}"
+
+    if halt_on_nan do
+      Logger.error(msg <> " — halting training")
+      {:halt_loop, state}
+    else
+      Logger.warning(msg)
+      {:continue, state}
+    end
   end
 end

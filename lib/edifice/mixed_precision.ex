@@ -172,7 +172,7 @@ defmodule Edifice.MixedPrecision do
   @spec init_loss_scale(keyword()) :: map()
   def init_loss_scale(opts \\ []) do
     %{
-      scale: Keyword.get(opts, :scale, 65536.0),
+      scale: Keyword.get(opts, :scale, 65_536.0),
       growth_factor: Keyword.get(opts, :growth_factor, 2.0),
       backoff_factor: Keyword.get(opts, :backoff_factor, 0.5),
       growth_interval: Keyword.get(opts, :growth_interval, 2000),
