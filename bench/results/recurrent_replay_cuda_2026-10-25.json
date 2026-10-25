@@ -1,0 +1,184 @@
+{
+  "precision": "highest",
+  "embed": 264,
+  "client": "cuda",
+  "iterations": 40,
+  "results": [
+    {
+      "hidden": 256,
+      "window": 80,
+      "results": [
+        {
+          "sequential": {
+            "median_us": 16808,
+            "p95_us": 23249
+          },
+          "kind": "cold_start",
+          "compiled": {
+            "median_us": 1733,
+            "p95_us": 1873
+          },
+          "speedup": 9.698788228505482
+        },
+        {
+          "sequential": {
+            "median_us": 18020,
+            "p95_us": 23524
+          },
+          "kind": "resync",
+          "compiled": {
+            "median_us": 1720,
+            "p95_us": 1841
+          },
+          "speedup": 10.476744186046512
+        },
+        {
+          "sequential": {
+            "median_us": 14939,
+            "p95_us": 22254
+          },
+          "kind": "continued_chunk",
+          "compiled": {
+            "median_us": 1713,
+            "p95_us": 1888
+          },
+          "speedup": 8.720957384705196
+        }
+      ],
+      "architecture": "min_gru"
+    },
+    {
+      "hidden": 512,
+      "window": 60,
+      "results": [
+        {
+          "sequential": {
+            "median_us": 13954,
+            "p95_us": 27154
+          },
+          "kind": "cold_start",
+          "compiled": {
+            "median_us": 2327,
+            "p95_us": 2531
+          },
+          "speedup": 5.996562097120757
+        },
+        {
+          "sequential": {
+            "median_us": 14269,
+            "p95_us": 20184
+          },
+          "kind": "resync",
+          "compiled": {
+            "median_us": 2259,
+            "p95_us": 2485
+          },
+          "speedup": 6.31651173085436
+        },
+        {
+          "sequential": {
+            "median_us": 14624,
+            "p95_us": 19257
+          },
+          "kind": "continued_chunk",
+          "compiled": {
+            "median_us": 2318,
+            "p95_us": 2570
+          },
+          "speedup": 6.308886971527179
+        }
+      ],
+      "architecture": "gru"
+    },
+    {
+      "hidden": 512,
+      "window": 80,
+      "results": [
+        {
+          "sequential": {
+            "median_us": 20376,
+            "p95_us": 25393
+          },
+          "kind": "cold_start",
+          "compiled": {
+            "median_us": 3811,
+            "p95_us": 4049
+          },
+          "speedup": 5.3466281815796375
+        },
+        {
+          "sequential": {
+            "median_us": 18741,
+            "p95_us": 27668
+          },
+          "kind": "resync",
+          "compiled": {
+            "median_us": 3666,
+            "p95_us": 3931
+          },
+          "speedup": 5.112111292962357
+        },
+        {
+          "sequential": {
+            "median_us": 19583,
+            "p95_us": 27446
+          },
+          "kind": "continued_chunk",
+          "compiled": {
+            "median_us": 3730,
+            "p95_us": 3925
+          },
+          "speedup": 5.250134048257372
+        }
+      ],
+      "architecture": "mamba"
+    },
+    {
+      "hidden": 256,
+      "window": 60,
+      "results": [
+        {
+          "sequential": {
+            "median_us": 17648,
+            "p95_us": 20858
+          },
+          "kind": "cold_start",
+          "compiled": {
+            "median_us": 2510,
+            "p95_us": 2773
+          },
+          "speedup": 7.031075697211155
+        },
+        {
+          "sequential": {
+            "median_us": 38016,
+            "p95_us": 69509
+          },
+          "kind": "resync",
+          "compiled": {
+            "median_us": 3623,
+            "p95_us": 6687
+          },
+          "speedup": 10.492961634004969
+        },
+        {
+          "sequential": {
+            "median_us": 17898,
+            "p95_us": 20641
+          },
+          "kind": "continued_chunk",
+          "compiled": {
+            "median_us": 2447,
+            "p95_us": 2595
+          },
+          "speedup": 7.314262362076011
+        }
+      ],
+      "architecture": "mamba_ssd"
+    }
+  ],
+  "batch": 1,
+  "force_fallback": true,
+  "note": "Synthetic weights, resident inputs, backbone-only replay; no embedding/head/IPC time. All final state leaves checked against sequential calls before timing.",
+  "measurement_conditions": "Started with the GPU free. Another Edifice CUDA test started near the end of the run; treat timings as indicative rather than an isolated GPU baseline."
+}

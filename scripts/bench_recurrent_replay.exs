@@ -115,6 +115,7 @@ File.write!(
       precision: "highest",
       embed: 264,
       batch: 1,
+      force_fallback: true,
       iterations: iterations,
       note:
         "Synthetic weights, resident inputs, backbone-only replay; no embedding/head/IPC time. All final state leaves checked against sequential calls before timing.",

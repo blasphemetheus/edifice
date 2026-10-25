@@ -23,18 +23,57 @@ precision, seeded synthetic weights, 40 samples after warmup:
 Inputs/weights were resident and final carry was synchronized. These timings
 exclude input assembly, embedding, action heads, first compilation and IPC.
 The overnight ExPhil league was running concurrently, so these are indicative
-CPU measurements rather than an idle-machine baseline. No GPU benchmark was
-run against the occupied device. Results:
+CPU measurements rather than an idle-machine baseline. Results:
 `bench/results/recurrent_replay_host_2026-10-25.json`; reproduce with
 `mix run scripts/bench_recurrent_replay.exs --client host --out /tmp/replay.json`.
 
 ExPhil integration is in its `feat/compiled-replay` worktree while the live
-league finishes. It uses replay for single-agent cold starts, observe-only
+evaluation queue finishes. It uses replay for single-agent cold starts, observe-only
 cold starts, single-agent resync and batched cold/reset rows. Warmup compiles
 replay on throwaway carry. Mamba-2 aliases `:mamba_2` and `:mamba_ssd` now have
 Agent adapters there. Snapshot v2 also stores resync history/counters, frame
 debounce, controller queue and stick-run state; this fixes deterministic replay
-across resync boundaries. Per-row **batched resync itself remains unimplemented**.
+across resync boundaries. Per-row batched resync is now implemented in that
+worktree, with independent history lengths and counters, partial resets, and
+observation-only warmup matching single-agent behavior. Current ExPhil main
+has been merged into the integration branch; the active evaluation queue's
+checkout remains untouched. GPU validation is complete; activation on main awaits
+the live queue. The press-window feature branch is also merged into the integration
+branch: the queue's attempted merge into main had failed.
+
+CUDA replay-core cold medians (separate steps → compiled replay): MinGRU
+16.808 → 1.733 ms, GRU 13.954 → 2.327 ms, Mamba 20.376 → 3.811 ms,
+SSD 17.648 → 2.510 ms. Every carry tensor passes sequential/compiled parity.
+The device was free at launch, but another CUDA test started near the end;
+these are indicative measurements, not an isolated performance ceiling.
+Artifact: `bench/results/recurrent_replay_cuda_2026-10-25.json`.
+
+Actual ExPhil checkpoint Agent calls (including embedding, heads, dispatch and
+output transfer) have the following medians in milliseconds:
+
+| Backbone | CPU window / carry / cold / resync | CUDA window / carry / cold / resync |
+|---|---|---|
+| MinGRU | 2.457 / 0.661 / 1.617 / 2.562 | 9.896 / 6.548 / 9.086 / 16.835 |
+| Mamba | 30.569 / 1.278 / 14.830 / 17.653 | 3.959 / 1.146 / 6.177 / 8.501 |
+| Mamba-2 | 7.632 / 0.581 / 3.078 / 3.586 | 3.365 / 1.690 / 4.139 / 6.463 |
+
+CUDA full-Agent timings were contended by another test process; do not use
+them to rank CPU versus GPU or claim peak throughput. Cold/resync have only
+3–6 samples. All three checkpoints pass cold-action parity, warmup state
+preservation and exact rollback across resync on CUDA at highest precision.
+Timing artifacts use portable kernels. A separate fused-on Mamba run confirms
+the handler library loaded and the same Agent checks pass. The loader now
+loads OTP crypto before the global CUDA library to prevent its lazy NIF crash;
+a fresh Erlang subprocess regression exercises that load order directly.
+
+ExPhil's 32 seeded closed-loop runs compare windowed, carried, resync30 and
+resync60 modes. MinGRU versus an active windowed opponent had self-destructs/min
+of 3.125 / 5.0 / 4.0 / 4.25 respectively. Resync30 improves over indefinite
+carry but does not recover windowed behavior. Mamba and Mamba-2 idle screens
+are insufficient for promotion. Keep defaults unchanged; next validation is
+larger active-opponent trials and isolated full-policy p95 measurements.
+Artifacts and protocol: ExPhil `eval_runs/recurrent_resync_20261025/RESULTS.md`
+and `eval_runs/recurrent_replay_20261025/` on `feat/compiled-replay`.
 
 ### Original benchmark scope
 
@@ -78,8 +117,9 @@ use raw input widths 264/288 rather than the 516-wide benchmark above.
 
 The validation also exposed an ExPhil batch-row reset bug, now fixed: only
 reset rows receive cold-start padding; continuing games retain their carry.
-Compiling a chunk replay to reduce cold-start/resync launches, supporting
-batched resync, and wiring Mamba-2 into ExPhil's Agent remain useful next steps.
+Compiled chunk replay, batched resync and Mamba-2 Agent wiring are now
+implemented (see the October 25 follow-up above). Initial full-policy GPU timing
+and closed-loop screens are complete, with contention and sample limits above.
 
 MinGRU stepping is now enabled in ExPhil's Agent via the existing opt-in
 `--stateful-step` flag. The adapter includes input projection, final normalization,
@@ -223,10 +263,10 @@ Mamba-2 step paths; see the follow-up table above for their current measurements
    already copies loaded trunk weights to the device and uses `Stateful.jit_step`.
    Its source records a previous GRU regression from 0.21 to 12.4 ms when weights
    were transferred every step. The new benchmark does not remeasure that old result.
-3. **Integrate GatedDeltaNet/Mamba-2 into ExPhil when needed.** The Edifice stateful
-   contracts now exist. ExPhil's adapters still need parameter extraction, reset,
-   batching and head parity tests for these two architectures. Revalidate SSD's
-   corrected matmul semantics against the chosen checkpoint first.
+3. **Integrate GatedDeltaNet into ExPhil when needed.** Its Edifice stateful
+   contract exists; the ExPhil adapter remains pending. Mamba-2 parameter
+   extraction, reset, batching and head parity are implemented and validated on
+   `feat/compiled-replay`. Activate the branch after the live queue finishes.
 4. **Measure full policy latency with actual observations/checkpoints.** Fuse
    compatible embedding, trunk and head work into fewer executable calls, and
    measure p95 including cold starts/resync. A fast backbone does not guarantee
