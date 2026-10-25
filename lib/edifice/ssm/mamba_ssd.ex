@@ -2,6 +2,14 @@ defmodule Edifice.SSM.MambaSSD do
   @moduledoc """
   Mamba variant using State Space Duality (SSD) algorithm from Mamba-2.
 
+  `Edifice.init_state(:mamba_ssd, params, opts)` and `Edifice.step/5` provide
+  constant-time per-frame inference using the same block weights. Carried state
+  matches a full prefix, not a freshly reset sliding window.
+
+  The corrected matmul scan uses `prod(a[s+1..t])` for input at position `s`.
+  Older versions incorrectly included `a[s]`; checkpoints trained with that
+  path need numerical and behavioral revalidation after upgrading.
+
   ## SSD Algorithm
 
   The key insight: SSM computation can be decomposed into matrix multiplications
@@ -86,6 +94,87 @@ defmodule Edifice.SSM.MambaSSD do
   def build(opts \\ []) do
     Common.build_model(opts, &build_mamba_block/2)
   end
+
+  @behaviour Edifice.Stateful
+  alias Edifice.Stateful.Ops
+
+  @doc "Initialize Mamba-2 recurrence and convolution history, including structured-mask decay when enabled."
+  @impl Edifice.Stateful
+  def init_state(_params, opts \\ []) do
+    state = Common.init_block_state(opts)
+
+    if Keyword.get(opts, :structured_mask, false) do
+      Map.put(state, :log_decay, Nx.broadcast(0.0, Nx.shape(state.h)))
+    else
+      state
+    end
+  end
+
+  @doc """
+  Advance one frame with the same trained block weights as `build/1`.
+  Chunk size and training mode affect full-sequence execution only; the carried
+  recurrence is independent of chunking. Structured-mask models retain their
+  cumulative log decay in state. State remains a serializable tensor container.
+  """
+  @impl Edifice.Stateful
+  def step(params, %{h: h, conv: conv} = state, frame) do
+    params = Ops.unwrap_params(params)
+    layers = Nx.axis_size(h, 1)
+    structured? = Map.has_key?(state, :log_decay)
+
+    x =
+      if params["input_projection"], do: Ops.dense(frame, params["input_projection"]), else: frame
+
+    {x, hs, buffers, logs} =
+      Enum.reduce(1..layers, {x, [], [], []}, fn i, {x, hs, buffers, logs} ->
+        hi = Nx.take(h, i - 1, axis: 1)
+        ci = Nx.take(conv, i - 1, axis: 1)
+
+        hi =
+          if structured?,
+            do: %{memory: hi, log_decay: Nx.take(state.log_decay, i - 1, axis: 1)},
+            else: hi
+
+        {out, next} =
+          Common.step_block(params, "mamba_ssd_block_#{i}", %{h: hi, conv: ci}, x, &step_ssm/4)
+
+        {memory, logs} =
+          if structured?, do: {next.h.memory, [next.h.log_decay | logs]}, else: {next.h, logs}
+
+        {Nx.add(x, out), [memory | hs], [next.conv | buffers], logs}
+      end)
+
+    stack = fn xs -> xs |> Enum.reverse() |> Nx.stack(axis: 1) end
+    next = %{h: stack.(hs), conv: stack.(buffers)}
+    next = if structured?, do: Map.put(next, :log_decay, stack.(logs)), else: next
+    {x, next}
+  end
+
+  defp step_ssm(params, name, x, %{memory: h, log_decay: log_decay}) do
+    size = Nx.axis_size(h, 2)
+    bc = Ops.dense(x, params[name <> "_bc_proj"])
+    b = Nx.slice_along_axis(bc, 0, size, axis: 1)
+    c = Nx.slice_along_axis(bc, size, size, axis: 1)
+
+    dt =
+      x
+      |> Ops.dense(params[name <> "_dt_rank"])
+      |> Ops.dense(params[name <> "_dt_proj"])
+      |> Ops.softplus()
+
+    {a, bx} =
+      Common.discretize_ssm(Nx.new_axis(x, 1), Nx.new_axis(b, 1), Nx.new_axis(dt, 1), size)
+
+    a = Nx.squeeze(a, axes: [1])
+    bx = Nx.squeeze(bx, axes: [1])
+    log_decay = Nx.add(log_decay, Nx.log(Nx.add(Nx.abs(a), 1.0e-10)))
+    decay = Nx.exp(log_decay)
+    bx = Nx.multiply(bx, Nx.divide(decay, Nx.add(decay, 1.0e-10)))
+    h = Nx.add(Nx.multiply(a, h), bx)
+    {Nx.sum(Nx.multiply(Nx.new_axis(c, 1), h), axes: [2]), %{memory: h, log_decay: log_decay}}
+  end
+
+  defp step_ssm(params, name, x, h), do: Edifice.SSM.Mamba.step_selective_ssm(params, name, x, h)
 
   @doc """
   Probe build: the SAME graph and parameter names as `build/1`, but the
@@ -282,21 +371,11 @@ defmodule Edifice.SSM.MambaSSD do
 
     # log_transfer[t, s] = log_cumsum[t] - log_cumsum[s]
     # This gives us log of prod_{r=s+1}^{t} a[r]
-    # But we need to shift by 1: we want prod from s+1, not s
-    # So we use: log_cumsum[t] - log_cumsum[s] when s < t
-
-    # Create shift: prepend zero and drop last
-    zero_slice = Nx.broadcast(0.0, {batch, 1, hidden, state})
-
-    log_cumsum_shifted =
-      Nx.concatenate([zero_slice, Nx.slice_along_axis(log_cumsum, 0, chunk_len - 1, axis: 1)],
-        axis: 1
-      )
-
-    log_cumsum_s_shifted = Nx.reshape(log_cumsum_shifted, {batch, 1, chunk_len, hidden, state})
-
-    # log_transfer[t, s] = log_cumsum[t] - log_cumsum_shifted[s]
-    log_transfer = Nx.subtract(log_cumsum_t, log_cumsum_s_shifted)
+    # Subtract the inclusive prefix at s: a[s] must NOT multiply bx[s].
+    # Shifting this prefix incorrectly decayed every new input, including
+    # the diagonal, and disagreed with the sequential scan at chunk boundaries.
+    log_cumsum_s = Nx.reshape(log_cumsum, {batch, 1, chunk_len, hidden, state})
+    log_transfer = Nx.subtract(log_cumsum_t, log_cumsum_s)
 
     # Convert back from log space
     transfer = Nx.exp(log_transfer)

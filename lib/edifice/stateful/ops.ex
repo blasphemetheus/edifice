@@ -62,7 +62,14 @@ defmodule Edifice.Stateful.Ops do
           {Nx.Tensor.t(), Nx.Tensor.t()}
   def conv1d_step(frame, buffer, %{"kernel" => kernel} = layer_params) do
     # window: [batch, k, channels] — buffer ++ current frame
-    window = Nx.concatenate([buffer, Nx.new_axis(frame, 1)], axis: 1)
+    # Nx tensors cannot have a zero-sized axis. Kernel-size-one models keep a
+    # dummy buffer slot that is ignored, since they have no temporal history.
+    pointwise? = Nx.axis_size(kernel, 0) == 1
+
+    window =
+      if pointwise?,
+        do: Nx.new_axis(frame, 1),
+        else: Nx.concatenate([buffer, Nx.new_axis(frame, 1)], axis: 1)
 
     # kernel [k, 1, channels] -> [k, channels]; out[b, c] = sum_k w[k, c] * window[b, k, c]
     weights = Nx.squeeze(kernel, axes: [1])
@@ -79,7 +86,10 @@ defmodule Edifice.Stateful.Ops do
       end
 
     # Slide: drop the oldest frame, append the current one
-    new_buffer = Nx.slice_along_axis(window, 1, Nx.axis_size(buffer, 1), axis: 1)
+    new_buffer =
+      if pointwise?,
+        do: buffer,
+        else: Nx.slice_along_axis(window, 1, Nx.axis_size(buffer, 1), axis: 1)
 
     {out, new_buffer}
   end

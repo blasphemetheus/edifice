@@ -2,6 +2,11 @@ defmodule Edifice.Recurrent.GatedDeltaNet do
   @moduledoc """
   Gated DeltaNet - Linear Attention with Gated Delta Rule.
 
+  For recurrent inference with trained weights, use
+  `Edifice.init_state(:gated_delta_net, params, opts)` and `Edifice.step/5`.
+  State contains the per-head memory matrices and causal convolution history;
+  it supports serialization and deterministic rollback.
+
   Extends DeltaNet with a data-dependent gating mechanism that modulates
   the state matrix between timesteps. Where vanilla DeltaNet always retains
   all of S_{t-1} (modulated only by the delta correction), Gated DeltaNet
@@ -401,8 +406,106 @@ defmodule Edifice.Recurrent.GatedDeltaNet do
   end
 
   # ============================================================================
-  # Utilities
+  # Stateful inference
   # ============================================================================
+
+  @behaviour Edifice.Stateful
+  alias Edifice.Stateful.Ops
+
+  @doc "Initialize per-layer associative memory and causal convolution history."
+  @impl Edifice.Stateful
+  def init_state(params, opts \\ []) do
+    params = Ops.unwrap_params(params)
+    batch = Keyword.get(opts, :batch_size, 1)
+    hidden = Keyword.get(opts, :hidden_size, @default_hidden_size)
+    heads = Keyword.get(opts, :num_heads, @default_num_heads)
+    layers = Keyword.get(opts, :num_layers, @default_num_layers)
+
+    unless heads > 0 and rem(hidden, heads) == 0,
+      do: raise(ArgumentError, "hidden_size must be divisible by num_heads")
+
+    conv =
+      for i <- 1..layers,
+          kernel = get_in(params, ["gated_delta_net_#{i}_short_conv", "kernel"]),
+          kernel != nil,
+          Nx.axis_size(kernel, 0) > 1,
+          into: %{} do
+        {i, Ops.zeros(batch, [Nx.axis_size(kernel, 0) - 1, hidden])}
+      end
+
+    %{
+      memory: Ops.zeros(batch, [layers, heads, div(hidden, heads), div(hidden, heads)]),
+      conv: conv
+    }
+  end
+
+  @doc "Advance one frame using the trained Q/K/V, gates, normalization and convolution weights."
+  @impl Edifice.Stateful
+  def step(params, %{memory: memory, conv: conv}, frame) do
+    params = Ops.unwrap_params(params)
+    {batch, layers, heads, dim, _} = Nx.shape(memory)
+    hidden = heads * dim
+
+    x =
+      if params["input_projection"], do: Ops.dense(frame, params["input_projection"]), else: frame
+
+    {x, memories, conv} =
+      Enum.reduce(1..layers, {x, [], conv}, fn i, {x, memories, conv} ->
+        name = "gated_delta_net_#{i}"
+        norm = Ops.layer_norm(x, params[name <> "_norm"])
+
+        {input, conv} =
+          case params[name <> "_short_conv"] do
+            nil ->
+              {norm, conv}
+
+            %{"kernel" => kernel} = weights ->
+              if Nx.axis_size(kernel, 0) == 1 do
+                out =
+                  Nx.multiply(norm, Nx.squeeze(kernel, axes: [0, 1])) |> Nx.add(weights["bias"])
+
+                {Ops.silu(out), conv}
+              else
+                {out, buffer} = Ops.conv1d_step(norm, Map.fetch!(conv, i), weights)
+                {Ops.silu(out), Map.put(conv, i, buffer)}
+              end
+          end
+
+        proj = Ops.dense(input, params[name <> "_qkvbag_proj"])
+        part = fn index -> Nx.slice_along_axis(proj, index * hidden, hidden, axis: 1) end
+        headed = fn x -> Nx.reshape(x, {batch, heads, dim}) end
+        q = headed.(part.(0))
+        k = headed.(part.(1))
+
+        k =
+          Nx.divide(
+            k,
+            Nx.sqrt(Nx.add(Nx.sum(Nx.pow(k, 2), axes: [2], keep_axes: true), @norm_eps))
+          )
+
+        v = headed.(part.(2))
+        beta = headed.(Nx.sigmoid(part.(3)))
+        alpha = Nx.mean(headed.(Nx.sigmoid(part.(4))), axes: [2])
+        previous = Nx.take(memory, i - 1, axis: 1)
+        gated = Nx.multiply(previous, Nx.reshape(alpha, {batch, heads, 1, 1}))
+        retrieve = fn state, key -> Nx.dot(state, [3], [0, 1], key, [2], [0, 1]) end
+        error = Nx.subtract(v, retrieve.(gated, k))
+
+        updated =
+          Nx.add(gated, Nx.multiply(Nx.new_axis(Nx.multiply(beta, error), 3), Nx.new_axis(k, 2)))
+
+        out =
+          retrieve.(updated, q) |> Nx.reshape({batch, hidden}) |> Nx.multiply(Ops.silu(part.(5)))
+
+        x = Nx.add(x, Ops.dense(out, params[name <> "_out_proj"]))
+        {x, [updated | memories], conv}
+      end)
+
+    {Ops.layer_norm(x, params["final_norm"]),
+     %{memory: memories |> Enum.reverse() |> Nx.stack(axis: 1), conv: conv}}
+  end
+
+  # Utilities
 
   @doc """
   Get the output size of a Gated DeltaNet model.

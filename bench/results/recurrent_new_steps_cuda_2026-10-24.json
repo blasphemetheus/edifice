@@ -1,0 +1,87 @@
+{
+  "scope": "backbone only; full prefix versus carried state, not equivalent sliding-window deployment",
+  "system": {
+    "otp": "27",
+    "schedulers": 32,
+    "elixir": "1.18.4"
+  },
+  "timestamp": "2026-10-24T08:36:51.445272Z",
+  "rows": [
+    {
+      "hidden": 512,
+      "full": {
+        "iterations": 200,
+        "median_us": 615,
+        "p95_us": 848,
+        "min_us": 571
+      },
+      "step": {
+        "iterations": 200,
+        "median_us": 116,
+        "p95_us": 260,
+        "min_us": 100
+      },
+      "embed": 516,
+      "architecture": "gated_delta_net",
+      "window": 60,
+      "first_prediction_us": 29649584,
+      "eager_step": {
+        "iterations": 20,
+        "median_us": 4154,
+        "p95_us": 6483,
+        "min_us": 3260
+      },
+      "ahead_of_time_step": {
+        "iterations": 200,
+        "median_us": 117,
+        "p95_us": 274,
+        "min_us": 100
+      },
+      "max_abs_diff": 7.152557373046875e-7,
+      "rollback_exact": true,
+      "full_to_step_speedup": 5.301724137931035
+    },
+    {
+      "hidden": 512,
+      "full": {
+        "iterations": 200,
+        "median_us": 248,
+        "p95_us": 420,
+        "min_us": 233
+      },
+      "step": {
+        "iterations": 200,
+        "median_us": 135,
+        "p95_us": 247,
+        "min_us": 115
+      },
+      "embed": 516,
+      "architecture": "mamba_ssd",
+      "window": 60,
+      "first_prediction_us": 599461,
+      "eager_step": {
+        "iterations": 20,
+        "median_us": 4184,
+        "p95_us": 5685,
+        "min_us": 3587
+      },
+      "ahead_of_time_step": {
+        "iterations": 200,
+        "median_us": 132,
+        "p95_us": 216,
+        "min_us": 109
+      },
+      "max_abs_diff": 3.5762786865234375e-7,
+      "rollback_exact": true,
+      "full_to_step_speedup": 1.837037037037037
+    }
+  ],
+  "precision": "highest",
+  "client": "cuda",
+  "batch": 1,
+  "dtype": "f32",
+  "weights": "seeded synthetic, device resident",
+  "native_requested": false,
+  "native_library_loaded": false,
+  "script_sha256": "69f3431bf43d3c04a8f5fee296c28a0f8c35c16bc2bda7e1b867834d44c3296d"
+}

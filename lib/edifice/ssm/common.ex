@@ -766,6 +766,8 @@ defmodule Edifice.SSM.Common do
 
   Returns `%{h: [batch, num_layers, inner, state_size],
   conv: [batch, num_layers, conv_size - 1, inner]}`.
+  A pointwise (`conv_size: 1`) convolution uses one ignored buffer slot because
+  Nx does not support zero-sized tensor axes.
   """
   @spec init_block_state(keyword()) :: map()
   def init_block_state(opts) do
@@ -780,7 +782,7 @@ defmodule Edifice.SSM.Common do
 
     %{
       h: Ops.zeros(batch_size, [num_layers, inner_size, state_size]),
-      conv: Ops.zeros(batch_size, [num_layers, conv_size - 1, inner_size])
+      conv: Ops.zeros(batch_size, [num_layers, max(conv_size - 1, 1), inner_size])
     }
   end
 end

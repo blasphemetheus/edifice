@@ -1,0 +1,53 @@
+{
+  "scope": "backbone only; full prefix versus carried state, not equivalent sliding-window deployment",
+  "system": {
+    "otp": "27",
+    "schedulers": 32,
+    "elixir": "1.18.4"
+  },
+  "timestamp": "2026-10-24T08:19:52.169440Z",
+  "rows": [
+    {
+      "hidden": 512,
+      "full": {
+        "iterations": 200,
+        "median_us": 415,
+        "p95_us": 568,
+        "min_us": 388
+      },
+      "step": {
+        "iterations": 200,
+        "median_us": 115,
+        "p95_us": 149,
+        "min_us": 105
+      },
+      "embed": 516,
+      "architecture": "mamba",
+      "window": 80,
+      "first_prediction_us": 240623,
+      "eager_step": {
+        "iterations": 20,
+        "median_us": 4482,
+        "p95_us": 6867,
+        "min_us": 3260
+      },
+      "ahead_of_time_step": {
+        "iterations": 200,
+        "median_us": 114,
+        "p95_us": 190,
+        "min_us": 97
+      },
+      "max_abs_diff": 4.76837158203125e-7,
+      "rollback_exact": true,
+      "full_to_step_speedup": 3.608695652173913
+    }
+  ],
+  "precision": "highest",
+  "client": "cuda",
+  "batch": 1,
+  "dtype": "f32",
+  "weights": "seeded synthetic, device resident",
+  "native_requested": true,
+  "native_library_loaded": true,
+  "script_sha256": "be9a15865d76e4290d6a4e0a75d93f313f75a076e083f5077c8fe92e284f8a7c"
+}
