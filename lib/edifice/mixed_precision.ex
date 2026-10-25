@@ -69,6 +69,10 @@ defmodule Edifice.MixedPrecision do
 
   @type preset :: :bf16 | :fp16 | :fp8
 
+  # Axon defines no @type t for these structs.
+  @typep loop :: %Axon.Loop{}
+  @typep policy :: %Axon.MixedPrecision.Policy{}
+
   @doc """
   Create a mixed precision policy.
 
@@ -86,7 +90,7 @@ defmodule Edifice.MixedPrecision do
       policy = Edifice.MixedPrecision.policy(:bf16)
       #=> #Axon.MixedPrecision.Policy<p=f32 c=bf16 o=bf16>
   """
-  @spec policy(preset()) :: Axon.MixedPrecision.Policy.t()
+  @spec policy(preset()) :: policy()
   def policy(:bf16) do
     Axon.MixedPrecision.create_policy(params: {:f, 32}, compute: {:bf, 16}, output: {:bf, 16})
   end
@@ -128,7 +132,7 @@ defmodule Edifice.MixedPrecision do
       policy = Edifice.MixedPrecision.policy(:bf16)
       model = Edifice.MixedPrecision.apply(model, policy, except: [:embedding])
   """
-  @spec apply(Axon.t(), preset() | Axon.MixedPrecision.Policy.t(), keyword()) :: Axon.t()
+  @spec apply(Axon.t(), preset() | policy(), keyword()) :: Axon.t()
   def apply(model, policy_or_preset, opts \\ [])
 
   def apply(model, preset, opts) when preset in [:bf16, :fp16] do
@@ -246,7 +250,7 @@ defmodule Edifice.MixedPrecision do
       |> Edifice.MixedPrecision.with_loss_scaling(scale: 1024.0)
       |> Axon.Loop.run(data, %{}, epochs: 10)
   """
-  @spec with_loss_scaling(Axon.Loop.t(), keyword()) :: Axon.Loop.t()
+  @spec with_loss_scaling(loop(), keyword()) :: loop()
   def with_loss_scaling(%Axon.Loop{} = loop, opts \\ []) do
     scale_state = init_loss_scale(opts)
 

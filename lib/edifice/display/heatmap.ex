@@ -345,7 +345,10 @@ defmodule Edifice.Display.Heatmap do
     end)
   end
 
-  defp should_log?(label, 1), do: bump_counter(label) || true
+  defp should_log?(label, 1) do
+    _ = bump_counter(label)
+    true
+  end
 
   defp should_log?(label, every) do
     count = bump_counter(label)

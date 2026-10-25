@@ -94,7 +94,10 @@ defmodule Edifice.Meta.MixtureOfAgents do
     embed_dim = Keyword.fetch!(opts, :embed_dim)
     num_proposers = Keyword.get(opts, :num_proposers, 4)
     proposer_hidden = Keyword.get(opts, :proposer_hidden_size, 128)
-    aggregator_hidden = Keyword.get(opts, :aggregator_hidden_size, 256)
+
+    aggregator_hidden =
+      Keyword.get(opts, :aggregator_hidden_size, Keyword.get(opts, :hidden_size, 256))
+
     proposer_layers = Keyword.get(opts, :proposer_layers, 2)
     aggregator_layers = Keyword.get(opts, :aggregator_layers, 2)
     num_heads = Keyword.get(opts, :num_heads, 4)
@@ -173,7 +176,7 @@ defmodule Edifice.Meta.MixtureOfAgents do
   """
   @spec output_size(keyword()) :: pos_integer()
   def output_size(opts \\ []) do
-    Keyword.get(opts, :aggregator_hidden_size, 256)
+    Keyword.get(opts, :aggregator_hidden_size, Keyword.get(opts, :hidden_size, 256))
   end
 
   @doc """

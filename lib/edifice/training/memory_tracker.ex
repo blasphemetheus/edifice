@@ -44,6 +44,9 @@ defmodule Edifice.Training.MemoryTracker do
   # Snapshot API
   # ============================================================================
 
+  # Axon defines no @type t for these structs.
+  @typep loop :: %Axon.Loop{}
+
   @doc """
   Get current memory statistics.
 
@@ -176,7 +179,7 @@ defmodule Edifice.Training.MemoryTracker do
     * `:warn_threshold` - Warn when allocated exceeds this many bytes (default: nil)
     * `:client` - EXLA client name (default: auto-detect)
   """
-  @spec attach(Axon.Loop.t(), keyword()) :: Axon.Loop.t()
+  @spec attach(loop(), keyword()) :: loop()
   def attach(loop, opts \\ []) do
     every = Keyword.get(opts, :every, 100)
     warn_threshold = Keyword.get(opts, :warn_threshold, nil)

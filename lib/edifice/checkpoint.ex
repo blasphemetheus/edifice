@@ -74,6 +74,9 @@ defmodule Edifice.Checkpoint do
   # Save
   # ============================================================================
 
+  # Axon defines no @type t for these structs.
+  @typep loop :: %Axon.Loop{}
+
   @doc """
   Save model parameters to a file.
 
@@ -534,7 +537,7 @@ defmodule Edifice.Checkpoint do
       loop = Edifice.Checkpoint.resume(loop, "checkpoints/state.bin")
       state = Axon.Loop.run(loop, data, %{}, epochs: 10)
   """
-  @spec resume(Axon.Loop.t(), String.t()) :: Axon.Loop.t()
+  @spec resume(loop(), String.t()) :: loop()
   def resume(%Axon.Loop{} = loop, path) do
     serialized = File.read!(path)
     loop_state = Axon.Loop.deserialize_state(serialized)
@@ -561,7 +564,7 @@ defmodule Edifice.Checkpoint do
       Older checkpoints are deleted automatically.
     * `:compressed` - Compression level 0-9 (default: 0)
   """
-  @spec attach(Axon.Loop.t(), String.t(), keyword()) :: Axon.Loop.t()
+  @spec attach(loop(), String.t(), keyword()) :: loop()
   def attach(loop, path_pattern, opts \\ []) do
     every = Keyword.get(opts, :every, :epoch)
     step_interval = Keyword.get(opts, :step_interval, 1000)

@@ -10,6 +10,9 @@ defmodule Edifice.Stateful.Ops do
   hand-rolled reimplementations are how step-vs-forward drift starts.
   """
 
+  # Axon defines no @type t for these structs.
+  @typep model_state :: %Axon.ModelState{}
+
   @doc """
   Dense layer forward using Axon's convention: `x · kernel + bias`.
 
@@ -98,7 +101,7 @@ defmodule Edifice.Stateful.Ops do
   Unwrap an `Axon.ModelState` to its plain param data map (identity for
   plain maps).
   """
-  @spec unwrap_params(Axon.ModelState.t() | map()) :: map()
+  @spec unwrap_params(model_state() | map()) :: map()
   def unwrap_params(%Axon.ModelState{data: data}), do: data
   def unwrap_params(%{} = map), do: map
 

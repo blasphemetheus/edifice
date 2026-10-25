@@ -142,6 +142,12 @@ defmodule Edifice.Detection.RTDETR do
     dropout = Keyword.get(opts, :dropout, @default_dropout)
     backbone_stages = Keyword.get(opts, :backbone_stages, @default_backbone_stages)
 
+    if rem(image_size, 32) != 0 do
+      raise ArgumentError,
+            ":image_size must be a multiple of 32 (feature levels at strides 8/16/32 " <>
+              "must align for CCFM fusion), got #{image_size}"
+    end
+
     input = Axon.input("image", shape: {nil, image_size, image_size, in_channels})
 
     # Multi-scale backbone: 3 feature levels at strides 8, 16, 32

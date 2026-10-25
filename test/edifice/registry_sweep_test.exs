@@ -1690,10 +1690,11 @@ defmodule Edifice.RegistrySweepTest do
     end
   end
 
+  # Exceeds its budget on BinaryBackend; only feasible under EXLA.
   describe "valle (audio)" do
     for batch <- [@small_batch] do
       @tag timeout: 120_000
-      @tag :slow
+      @tag :exla_only
       test "batch=#{batch}: AR model produces correct shape" do
         batch = unquote(batch)
 
@@ -1755,10 +1756,11 @@ defmodule Edifice.RegistrySweepTest do
     end
   end
 
+  # Exceeds its budget on BinaryBackend; only feasible under EXLA.
   describe "nemotron_h (transformer)" do
     for batch <- [@small_batch] do
       @tag timeout: 120_000
-      @tag :slow
+      @tag :exla_only
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2667,10 +2669,11 @@ defmodule Edifice.RegistrySweepTest do
     end
   end
 
+  # Exceeds its budget on BinaryBackend; only feasible under EXLA.
   describe "openvla (robotics)" do
     for batch <- [@small_batch] do
       @tag timeout: 120_000
-      @tag :slow
+      @tag :exla_only
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 

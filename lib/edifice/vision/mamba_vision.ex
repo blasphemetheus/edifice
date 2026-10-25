@@ -123,8 +123,19 @@ defmodule Edifice.Vision.MambaVision do
     d_conv = Keyword.get(opts, :d_conv, @default_d_conv)
     num_classes = Keyword.get(opts, :num_classes, nil)
 
-    # Channel dims per stage: dim, 2*dim, 4*dim, 8*dim
-    dims = [dim, dim * 2, dim * 4, dim * 8]
+    num_stages = length(depths)
+
+    if num_stages == 0 or length(num_heads) != num_stages do
+      raise ArgumentError,
+            ":depths and :num_heads must be non-empty lists of the same length, " <>
+              "got depths=#{inspect(depths)} num_heads=#{inspect(num_heads)}"
+    end
+
+    # Channel dims per stage: dim, 2*dim, 4*dim, ... (doubling per stage)
+    dims = Enum.map(0..(num_stages - 1), fn i -> dim * Integer.pow(2, i) end)
+
+    # The last two stages are hybrid (Mamba mixer + attention); earlier ones are conv.
+    first_hybrid_stage = max(num_stages - 2, 0)
 
     # Input: [batch, channels, height, width]
     input = Axon.input("image", shape: {nil, in_channels, image_size, image_size})
@@ -133,13 +144,13 @@ defmodule Edifice.Vision.MambaVision do
     # Output: [batch, dim, H/4, W/4]
     x = build_stem(input, in_channels, dim)
 
-    # Build 4 stages
+    # Build stages
     x =
-      Enum.reduce(0..3, x, fn stage_idx, acc ->
+      Enum.reduce(0..(num_stages - 1), x, fn stage_idx, acc ->
         stage_dim = Enum.at(dims, stage_idx)
         stage_depth = Enum.at(depths, stage_idx)
         stage_heads = Enum.at(num_heads, stage_idx)
-        is_hybrid = stage_idx >= 2
+        is_hybrid = stage_idx >= first_hybrid_stage
 
         # Build stage blocks
         stage_out =
@@ -159,7 +170,7 @@ defmodule Edifice.Vision.MambaVision do
           end
 
         # Downsample between stages (not after the last stage)
-        if stage_idx < 3 do
+        if stage_idx < num_stages - 1 do
           next_dim = Enum.at(dims, stage_idx + 1)
           build_downsample(stage_out, next_dim, "downsample_#{stage_idx}")
         else

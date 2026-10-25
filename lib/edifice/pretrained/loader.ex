@@ -57,6 +57,9 @@ defmodule Edifice.Pretrained do
           | {:strict, boolean()}
           | {:build_opts, keyword()}
 
+  # Axon defines no @type t for these structs.
+  @typep model_state :: %Axon.ModelState{}
+
   @doc """
   Downloads and loads a pretrained model from HuggingFace Hub.
 
@@ -88,7 +91,7 @@ defmodule Edifice.Pretrained do
 
   """
   @spec from_hub(String.t(), [hub_opt()]) ::
-          {Axon.t(), Axon.ModelState.t()} | {Axon.t(), Axon.t(), Axon.ModelState.t()}
+          {Axon.t(), model_state()} | {Axon.t(), Axon.t(), model_state()}
   def from_hub(repo_id, opts \\ []) do
     # 1. Fetch and parse config.json
     hub_opts = Keyword.take(opts, [:revision, :token])
@@ -134,7 +137,7 @@ defmodule Edifice.Pretrained do
       model_state = Edifice.Pretrained.load(MyKeyMap, "model.safetensors", dtype: :f32)
 
   """
-  @spec load(module(), Path.t(), [load_opt()]) :: Axon.ModelState.t()
+  @spec load(module(), Path.t(), [load_opt()]) :: model_state()
   def load(key_map, path, opts \\ []) do
     ensure_safetensors!()
 
@@ -154,7 +157,7 @@ defmodule Edifice.Pretrained do
       model_state = Edifice.Pretrained.load_sharded(MyKeyMap, paths)
 
   """
-  @spec load_sharded(module(), [Path.t()], [load_opt()]) :: Axon.ModelState.t()
+  @spec load_sharded(module(), [Path.t()], [load_opt()]) :: model_state()
   def load_sharded(key_map, paths, opts \\ []) when is_list(paths) do
     ensure_safetensors!()
 

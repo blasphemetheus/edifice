@@ -212,6 +212,8 @@ defmodule Edifice.Meta.PiSSA do
     - `b_init` - `[rank, output_size]` — transpose of `U_r * sqrt(Sigma_r)`
     - `w_residual` - `[output_size, input_size]` — frozen residual
   """
+  # Nx.LinAlg.svd/2 carries no @spec; Dialyzer infers a tensor instead of a 3-tuple.
+  @dialyzer {:nowarn_function, [decompose: 1, decompose: 2]}
   @spec decompose(Nx.Tensor.t(), keyword()) ::
           {Nx.Tensor.t(), Nx.Tensor.t(), Nx.Tensor.t()}
   def decompose(weight, opts \\ []) do

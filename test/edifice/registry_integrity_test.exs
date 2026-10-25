@@ -104,6 +104,8 @@ defmodule Edifice.RegistryIntegrityTest do
       num_queries: 4
     ],
     rt_detr: [
+      # feature levels at strides 8/16/32 need a 32-multiple
+      image_size: 32,
       hidden_dim: 8,
       num_encoder_layers: 1,
       num_decoder_layers: 1,

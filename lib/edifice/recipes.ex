@@ -41,6 +41,9 @@ defmodule Edifice.Recipes do
     best model (by validation loss if validation_data is provided, otherwise every epoch).
   """
 
+  # Axon defines no @type t for these structs.
+  @typep loop :: %Axon.Loop{}
+
   @doc """
   Build a supervised classification training loop.
 
@@ -72,7 +75,7 @@ defmodule Edifice.Recipes do
       loop = Edifice.Recipes.classify(model, num_classes: 10)
       state = Axon.Loop.run(loop, train_data, %{}, epochs: 10)
   """
-  @spec classify(Axon.t(), keyword()) :: Axon.Loop.t()
+  @spec classify(Axon.t(), keyword()) :: loop()
   def classify(model, opts \\ []) do
     _num_classes = Keyword.fetch!(opts, :num_classes)
     lr = Keyword.get(opts, :learning_rate, 1.0e-3)
@@ -154,7 +157,7 @@ defmodule Edifice.Recipes do
       loop = Edifice.Recipes.language_model(model, vocab_size: 32000)
       state = Axon.Loop.run(loop, train_data, %{}, epochs: 5)
   """
-  @spec language_model(Axon.t(), keyword()) :: Axon.Loop.t()
+  @spec language_model(Axon.t(), keyword()) :: loop()
   def language_model(model, opts \\ []) do
     _vocab_size = Keyword.fetch!(opts, :vocab_size)
     lr = Keyword.get(opts, :learning_rate, 3.0e-4)
@@ -232,7 +235,7 @@ defmodule Edifice.Recipes do
       loop = Edifice.Recipes.contrastive(encoder, temperature: 0.1)
       state = Axon.Loop.run(loop, paired_data, %{}, epochs: 100)
   """
-  @spec contrastive(Axon.t(), keyword()) :: Axon.Loop.t()
+  @spec contrastive(Axon.t(), keyword()) :: loop()
   def contrastive(model, opts \\ []) do
     temperature = Keyword.get(opts, :temperature, 0.07)
     lr = Keyword.get(opts, :learning_rate, 3.0e-4)
@@ -311,7 +314,7 @@ defmodule Edifice.Recipes do
         learning_rate: 1.0e-5
       )
   """
-  @spec fine_tune(Axon.t(), map(), keyword()) :: Axon.Loop.t()
+  @spec fine_tune(Axon.t(), map(), keyword()) :: loop()
   def fine_tune(model, base_params, opts \\ []) do
     strategy = Keyword.get(opts, :strategy, :head_only)
     head_pattern = Keyword.get(opts, :head_pattern, ~r/head|classifier|out/)
@@ -382,7 +385,7 @@ defmodule Edifice.Recipes do
       loop = Edifice.Recipes.regress(model, loss: :huber)
       state = Axon.Loop.run(loop, train_data, %{}, epochs: 10)
   """
-  @spec regress(Axon.t(), keyword()) :: Axon.Loop.t()
+  @spec regress(Axon.t(), keyword()) :: loop()
   def regress(model, opts \\ []) do
     lr = Keyword.get(opts, :learning_rate, 1.0e-3)
     weight_decay = Keyword.get(opts, :weight_decay, 1.0e-2)
@@ -561,12 +564,24 @@ defmodule Edifice.Recipes do
   end
 
   defp maybe_log(loop, true) do
-    Axon.Loop.log(loop, :epoch_completed, fn state ->
-      {:continue, state}
-    end)
+    Axon.Loop.log(loop, &epoch_log_message/1, event: :epoch_completed)
   end
 
   defp maybe_log(loop, false), do: loop
+
+  defp epoch_log_message(state) do
+    metrics =
+      Enum.map_join(state.metrics, ", ", fn {name, value} ->
+        "#{name}: #{format_metric(value)}"
+      end)
+
+    suffix = if metrics == "", do: "", else: " (#{metrics})"
+    "Epoch #{state.epoch} completed#{suffix}\n"
+  end
+
+  defp format_metric(%Nx.Tensor{} = t), do: format_metric(Nx.to_number(t))
+  defp format_metric(n) when is_float(n), do: :erlang.float_to_binary(n, decimals: 4)
+  defp format_metric(other), do: inspect(other)
 
   defp maybe_attach_monitor(loop, nil), do: loop
   defp maybe_attach_monitor(loop, true), do: Edifice.Training.Monitor.attach(loop)

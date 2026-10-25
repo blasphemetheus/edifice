@@ -45,7 +45,7 @@ defmodule Edifice.Stateful do
   @type state :: map()
 
   @typedoc "Trained parameters: an `Axon.ModelState` or its plain data map."
-  @type params :: Axon.ModelState.t() | map()
+  @type params :: %Axon.ModelState{} | map()
 
   @doc """
   Build the initial recurrent state.

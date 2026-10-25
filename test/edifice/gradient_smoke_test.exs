@@ -972,8 +972,9 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"state_sequence" => input})
   end
 
+  # ~6 min on BinaryBackend (Mamba scan autodiff); only feasible under EXLA.
   @tag timeout: 300_000
-  @tag :slow
+  @tag :exla_only
   test "gradient flows through nemotron_h" do
     model =
       Edifice.build(:nemotron_h,
@@ -1172,8 +1173,9 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"input" => input})
   end
 
+  # ~19 min on BinaryBackend; only feasible under EXLA.
   @tag timeout: 300_000
-  @tag :slow
+  @tag :exla_only
   test "parameters are sensitive in efficientnet" do
     model = Edifice.build(:efficientnet, input_dim: @embed, hidden_dim: @hidden)
     input = random_tensor({@batch, @embed})
@@ -1231,9 +1233,12 @@ defmodule Edifice.GradientSmokeTest do
     @tag timeout: 120_000
     @tag :slow
     test "gradient flows through #{arch}" do
+      # RT-DETR fuses feature levels at strides 8/16/32, so it needs a 32-multiple.
+      image_size = unquote(if arch == :rt_detr, do: 32, else: @image_size)
+
       model =
         Edifice.build(unquote(arch),
-          image_size: @image_size,
+          image_size: image_size,
           in_channels: @in_channels,
           hidden_dim: @hidden,
           num_heads: 2,
@@ -1245,7 +1250,7 @@ defmodule Edifice.GradientSmokeTest do
           dropout: 0.0
         )
 
-      input = random_tensor({@batch, @image_size, @image_size, @in_channels})
+      input = random_tensor({@batch, image_size, image_size, @in_channels})
       check_gradients(model, %{"image" => input})
     end
   end

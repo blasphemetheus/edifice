@@ -46,7 +46,7 @@ defmodule Edifice.RecipesTest do
     |> Axon.dense(1, name: "out")
   end
 
-  defp make_regression_data(n \\ 10) do
+  defp make_regression_data(n) do
     Stream.repeatedly(fn ->
       {input, _key} =
         Nx.Random.uniform(Nx.Random.key(:rand.uniform(10_000)), shape: {@batch, @embed_dim})

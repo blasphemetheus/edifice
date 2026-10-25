@@ -65,6 +65,9 @@ defmodule Edifice.Interpretability.LEACE do
   Note: the O(n·d²) covariance products run on the INPUT tensors' backend —
   put `x`/`z` on your accelerator for large n.
   """
+  # Nx.LinAlg.svd/2 carries no @spec and Dialyzer infers a tensor instead of a
+  # 3-tuple, so the {u, s, vt} match and its callers are flagged spuriously.
+  @dialyzer {:nowarn_function, [fit: 2, fit: 3, fit_small_stage: 6]}
   def fit(x, z, opts \\ []) do
     shrink = Keyword.get(opts, :shrinkage, 1.0e-4)
     decomp_backend = Keyword.get(opts, :decomp_backend, Nx.BinaryBackend)
