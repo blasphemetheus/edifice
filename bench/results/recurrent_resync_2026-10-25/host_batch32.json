@@ -1,0 +1,584 @@
+{
+  "precision": "highest",
+  "client": "host",
+  "iterations": 20,
+  "results": [
+    {
+      "hidden": 256,
+      "rows": [
+        {
+          "selected": {
+            "median_us": 987,
+            "p95_us": 1134
+          },
+          "fused_full": {
+            "median_us": 5353,
+            "p95_us": 6532
+          },
+          "bucket": 1,
+          "current_total": {
+            "median_us": 6814,
+            "p95_us": 7646
+          },
+          "due": 1,
+          "eager_merge": {
+            "median_us": 43,
+            "p95_us": 72
+          },
+          "fused_history_total": {
+            "median_us": 5875,
+            "p95_us": 7403
+          },
+          "optimized_total": {
+            "median_us": 1272,
+            "p95_us": 1545
+          },
+          "selected_total": {
+            "median_us": 2333,
+            "p95_us": 2480
+          }
+        },
+        {
+          "selected": {
+            "median_us": 969,
+            "p95_us": 1512
+          },
+          "fused_full": {
+            "median_us": 5567,
+            "p95_us": 6095
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 6798,
+            "p95_us": 7317
+          },
+          "due": 3,
+          "eager_merge": {
+            "median_us": 39,
+            "p95_us": 49
+          },
+          "fused_history_total": {
+            "median_us": 5573,
+            "p95_us": 6875
+          },
+          "optimized_total": {
+            "median_us": 1236,
+            "p95_us": 1815
+          },
+          "selected_total": {
+            "median_us": 2356,
+            "p95_us": 2623
+          }
+        },
+        {
+          "selected": {
+            "median_us": 980,
+            "p95_us": 1217
+          },
+          "fused_full": {
+            "median_us": 5448,
+            "p95_us": 6217
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 6813,
+            "p95_us": 8462
+          },
+          "due": 4,
+          "eager_merge": {
+            "median_us": 42,
+            "p95_us": 49
+          },
+          "fused_history_total": {
+            "median_us": 5651,
+            "p95_us": 7462
+          },
+          "optimized_total": {
+            "median_us": 1237,
+            "p95_us": 1704
+          },
+          "selected_total": {
+            "median_us": 2371,
+            "p95_us": 2758
+          }
+        },
+        {
+          "selected": {
+            "median_us": 5717,
+            "p95_us": 8320
+          },
+          "fused_full": {
+            "median_us": 5283,
+            "p95_us": 6000
+          },
+          "bucket": 32,
+          "current_total": {
+            "median_us": 6664,
+            "p95_us": 7314
+          },
+          "due": 32,
+          "eager_merge": {
+            "median_us": 49,
+            "p95_us": 97
+          },
+          "fused_history_total": {
+            "median_us": 5716,
+            "p95_us": 6276
+          },
+          "optimized_total": {
+            "median_us": 5651,
+            "p95_us": 6309
+          },
+          "selected_total": {
+            "median_us": 7763,
+            "p95_us": 8402
+          }
+        }
+      ],
+      "window": 80,
+      "batch": 32,
+      "assembly": {
+        "median_us": 2099,
+        "p95_us": 2419
+      },
+      "full_replay": {
+        "median_us": 5425,
+        "p95_us": 6594
+      },
+      "architecture": "min_gru"
+    },
+    {
+      "hidden": 512,
+      "rows": [
+        {
+          "selected": {
+            "median_us": 4810,
+            "p95_us": 4925
+          },
+          "fused_full": {
+            "median_us": 14877,
+            "p95_us": 20522
+          },
+          "bucket": 1,
+          "current_total": {
+            "median_us": 16321,
+            "p95_us": 17673
+          },
+          "due": 1,
+          "eager_merge": {
+            "median_us": 70,
+            "p95_us": 81
+          },
+          "fused_history_total": {
+            "median_us": 14361,
+            "p95_us": 15255
+          },
+          "optimized_total": {
+            "median_us": 5355,
+            "p95_us": 6160
+          },
+          "selected_total": {
+            "median_us": 6625,
+            "p95_us": 7274
+          }
+        },
+        {
+          "selected": {
+            "median_us": 5175,
+            "p95_us": 5488
+          },
+          "fused_full": {
+            "median_us": 14587,
+            "p95_us": 15109
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 16326,
+            "p95_us": 17949
+          },
+          "due": 3,
+          "eager_merge": {
+            "median_us": 103,
+            "p95_us": 111
+          },
+          "fused_history_total": {
+            "median_us": 14861,
+            "p95_us": 15859
+          },
+          "optimized_total": {
+            "median_us": 5561,
+            "p95_us": 6298
+          },
+          "selected_total": {
+            "median_us": 6656,
+            "p95_us": 6966
+          }
+        },
+        {
+          "selected": {
+            "median_us": 5186,
+            "p95_us": 5534
+          },
+          "fused_full": {
+            "median_us": 14736,
+            "p95_us": 15377
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 16681,
+            "p95_us": 19662
+          },
+          "due": 4,
+          "eager_merge": {
+            "median_us": 79,
+            "p95_us": 233
+          },
+          "fused_history_total": {
+            "median_us": 14775,
+            "p95_us": 15472
+          },
+          "optimized_total": {
+            "median_us": 5321,
+            "p95_us": 5686
+          },
+          "selected_total": {
+            "median_us": 6739,
+            "p95_us": 7752
+          }
+        },
+        {
+          "selected": {
+            "median_us": 14735,
+            "p95_us": 15175
+          },
+          "fused_full": {
+            "median_us": 14259,
+            "p95_us": 14877
+          },
+          "bucket": 32,
+          "current_total": {
+            "median_us": 15898,
+            "p95_us": 16561
+          },
+          "due": 32,
+          "eager_merge": {
+            "median_us": 89,
+            "p95_us": 105
+          },
+          "fused_history_total": {
+            "median_us": 14801,
+            "p95_us": 15631
+          },
+          "optimized_total": {
+            "median_us": 15156,
+            "p95_us": 16588
+          },
+          "selected_total": {
+            "median_us": 16393,
+            "p95_us": 17286
+          }
+        }
+      ],
+      "window": 60,
+      "batch": 32,
+      "assembly": {
+        "median_us": 1567,
+        "p95_us": 1977
+      },
+      "full_replay": {
+        "median_us": 14234,
+        "p95_us": 15001
+      },
+      "architecture": "gru"
+    },
+    {
+      "hidden": 512,
+      "rows": [
+        {
+          "selected": {
+            "median_us": 11393,
+            "p95_us": 14954
+          },
+          "fused_full": {
+            "median_us": 63465,
+            "p95_us": 75508
+          },
+          "bucket": 1,
+          "current_total": {
+            "median_us": 62348,
+            "p95_us": 72907
+          },
+          "due": 1,
+          "eager_merge": {
+            "median_us": 1794,
+            "p95_us": 2301
+          },
+          "fused_history_total": {
+            "median_us": 63799,
+            "p95_us": 70417
+          },
+          "optimized_total": {
+            "median_us": 12754,
+            "p95_us": 14762
+          },
+          "selected_total": {
+            "median_us": 14013,
+            "p95_us": 14639
+          }
+        },
+        {
+          "selected": {
+            "median_us": 18044,
+            "p95_us": 22302
+          },
+          "fused_full": {
+            "median_us": 59215,
+            "p95_us": 72383
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 60037,
+            "p95_us": 82914
+          },
+          "due": 3,
+          "eager_merge": {
+            "median_us": 1474,
+            "p95_us": 1659
+          },
+          "fused_history_total": {
+            "median_us": 60805,
+            "p95_us": 72375
+          },
+          "optimized_total": {
+            "median_us": 21201,
+            "p95_us": 23739
+          },
+          "selected_total": {
+            "median_us": 23209,
+            "p95_us": 25755
+          }
+        },
+        {
+          "selected": {
+            "median_us": 18029,
+            "p95_us": 21910
+          },
+          "fused_full": {
+            "median_us": 64280,
+            "p95_us": 77447
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 70539,
+            "p95_us": 77009
+          },
+          "due": 4,
+          "eager_merge": {
+            "median_us": 1897,
+            "p95_us": 2552
+          },
+          "fused_history_total": {
+            "median_us": 62555,
+            "p95_us": 78535
+          },
+          "optimized_total": {
+            "median_us": 16471,
+            "p95_us": 21697
+          },
+          "selected_total": {
+            "median_us": 17712,
+            "p95_us": 19118
+          }
+        },
+        {
+          "selected": {
+            "median_us": 62933,
+            "p95_us": 77555
+          },
+          "fused_full": {
+            "median_us": 62746,
+            "p95_us": 79964
+          },
+          "bucket": 32,
+          "current_total": {
+            "median_us": 60506,
+            "p95_us": 79433
+          },
+          "due": 32,
+          "eager_merge": {
+            "median_us": 1712,
+            "p95_us": 2041
+          },
+          "fused_history_total": {
+            "median_us": 58502,
+            "p95_us": 61560
+          },
+          "optimized_total": {
+            "median_us": 58678,
+            "p95_us": 73774
+          },
+          "selected_total": {
+            "median_us": 61509,
+            "p95_us": 68621
+          }
+        }
+      ],
+      "window": 80,
+      "batch": 32,
+      "assembly": {
+        "median_us": 2566,
+        "p95_us": 3421
+      },
+      "full_replay": {
+        "median_us": 62645,
+        "p95_us": 82888
+      },
+      "architecture": "mamba"
+    },
+    {
+      "hidden": 256,
+      "rows": [
+        {
+          "selected": {
+            "median_us": 3405,
+            "p95_us": 3812
+          },
+          "fused_full": {
+            "median_us": 22207,
+            "p95_us": 27850
+          },
+          "bucket": 1,
+          "current_total": {
+            "median_us": 26118,
+            "p95_us": 33958
+          },
+          "due": 1,
+          "eager_merge": {
+            "median_us": 1000,
+            "p95_us": 1332
+          },
+          "fused_history_total": {
+            "median_us": 24725,
+            "p95_us": 32914
+          },
+          "optimized_total": {
+            "median_us": 3981,
+            "p95_us": 4936
+          },
+          "selected_total": {
+            "median_us": 4744,
+            "p95_us": 4989
+          }
+        },
+        {
+          "selected": {
+            "median_us": 6208,
+            "p95_us": 8509
+          },
+          "fused_full": {
+            "median_us": 24079,
+            "p95_us": 33174
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 24598,
+            "p95_us": 31189
+          },
+          "due": 3,
+          "eager_merge": {
+            "median_us": 931,
+            "p95_us": 1060
+          },
+          "fused_history_total": {
+            "median_us": 23245,
+            "p95_us": 29326
+          },
+          "optimized_total": {
+            "median_us": 6413,
+            "p95_us": 7367
+          },
+          "selected_total": {
+            "median_us": 7241,
+            "p95_us": 8393
+          }
+        },
+        {
+          "selected": {
+            "median_us": 6718,
+            "p95_us": 7556
+          },
+          "fused_full": {
+            "median_us": 22832,
+            "p95_us": 29918
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 24656,
+            "p95_us": 28847
+          },
+          "due": 4,
+          "eager_merge": {
+            "median_us": 885,
+            "p95_us": 1203
+          },
+          "fused_history_total": {
+            "median_us": 25286,
+            "p95_us": 30628
+          },
+          "optimized_total": {
+            "median_us": 7060,
+            "p95_us": 8778
+          },
+          "selected_total": {
+            "median_us": 8368,
+            "p95_us": 10243
+          }
+        },
+        {
+          "selected": {
+            "median_us": 33276,
+            "p95_us": 46761
+          },
+          "fused_full": {
+            "median_us": 37562,
+            "p95_us": 41232
+          },
+          "bucket": 32,
+          "current_total": {
+            "median_us": 38713,
+            "p95_us": 42973
+          },
+          "due": 32,
+          "eager_merge": {
+            "median_us": 1088,
+            "p95_us": 1330
+          },
+          "fused_history_total": {
+            "median_us": 22395,
+            "p95_us": 25135
+          },
+          "optimized_total": {
+            "median_us": 24274,
+            "p95_us": 27741
+          },
+          "selected_total": {
+            "median_us": 26860,
+            "p95_us": 31964
+          }
+        }
+      ],
+      "window": 60,
+      "batch": 32,
+      "assembly": {
+        "median_us": 1490,
+        "p95_us": 1661
+      },
+      "full_replay": {
+        "median_us": 23884,
+        "p95_us": 33244
+      },
+      "architecture": "mamba_ssd"
+    }
+  ],
+  "note": "Synthetic representative weights. Resident inputs; stage timings synchronize independently and are not additive. Current total includes history assembly, full-batch replay, eager row merge. Selected total includes assembly, fused gather/replay/scatter. Compilation excluded. Selected outputs checked against full replay; untouched rows bitwise identical."
+}

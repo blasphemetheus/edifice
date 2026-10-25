@@ -108,7 +108,8 @@ defmodule Edifice.Stateful do
     for {key, _} <- :persistent_term.get(),
         match?({__MODULE__, :jit_step, _, _}, key) or
           match?({__MODULE__, :jit_step, _, _, _}, key) or
-          match?({__MODULE__, :jit_replay, _, _, _}, key) do
+          match?({__MODULE__, :jit_replay, _, _, _}, key) or
+          match?({__MODULE__, :jit_replay_rows, _, _, _}, key) do
       :persistent_term.erase(key)
     end
 
@@ -122,9 +123,14 @@ defmodule Edifice.Stateful do
   `[batch, time, features]`. It preserves the same state as successive steps,
   including convolution history, using one compiled loop. Use for cold-start
   padding or resync; ordinary one-frame inference still uses `jit_step/3`.
+
+  Instead of a tensor, frames may be a nonempty chronological tuple of
+  `[batch, features]` tensors. Stacking then happens inside the executable,
+  avoiding eager per-frame reshape/concatenate dispatch. Tuple length is part
+  of the compiled signature; warm both forms if using both on a live path.
   """
   @spec jit_replay(module(), module(), keyword()) ::
-          (params(), state(), Nx.Tensor.t() -> state())
+          (params(), state(), Nx.Tensor.t() | tuple() -> state())
   def jit_replay(module, compiler, opts \\ []) do
     key = {__MODULE__, :jit_replay, module, compiler, opts}
 
@@ -134,6 +140,49 @@ defmodule Edifice.Stateful do
           Nx.Defn.jit(
             fn params, state, frames ->
               Edifice.Stateful.Replay.run(params, state, frames, module: module)
+            end,
+            [compiler: compiler] ++ opts
+          )
+
+        :persistent_term.put(key, fun)
+        fun
+
+      fun ->
+        fun
+    end
+  end
+
+  @doc """
+  Cached replay of selected batch rows, preserving all other carry exactly.
+
+  Returns a function of `(params, current, initial, frames, rows, count)`.
+  Initial and current carry have the full batch size; frames follow the same
+  tensor or chronological tuple contract as `jit_replay/3`. Every state leaf
+  must have batch on axis zero. `rows` is a nonempty integer vector of unique,
+  in-range row indices; only its first `count` entries are updated from initial
+  carry. `count` is an integer scalar tensor between zero and the vector size.
+
+  The remaining indices are padding and retain their current state. Callers can
+  pad with other unique rows to a power-of-two size to bound compilation variants.
+  Gather, replay, and scatter run in one executable. Index values and count can
+  change without recompilation; index-vector size and history length cannot.
+  Warm the expected shapes before latency-sensitive use. When all rows are due,
+  prefer `jit_replay/3` directly to avoid unnecessary gather/scatter.
+  """
+  @spec jit_replay_rows(module(), module(), keyword()) ::
+          (params(), state(), state(), Nx.Tensor.t() | tuple(), Nx.Tensor.t(), Nx.Tensor.t() ->
+             state())
+  def jit_replay_rows(module, compiler, opts \\ []) do
+    key = {__MODULE__, :jit_replay_rows, module, compiler, opts}
+
+    case :persistent_term.get(key, nil) do
+      nil ->
+        fun =
+          Nx.Defn.jit(
+            fn params, current, initial, frames, rows, count ->
+              Edifice.Stateful.Replay.run_rows(params, current, initial, frames, rows, count,
+                module: module
+              )
             end,
             [compiler: compiler] ++ opts
           )

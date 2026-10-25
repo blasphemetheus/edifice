@@ -2,6 +2,27 @@
 
 ## Scope and model selection
 
+### Resync profiling and optimization (2026-10-25)
+
+Profiling isolated eager history assembly (2.5–3.9 ms on CUDA at batch 32) and
+replay of unaffected rows as substantial costs. `jit_replay/3` now accepts a
+chronological tuple of frames and stacks them inside the executable.
+`jit_replay_rows/3` fuses row gathering, replay and scatter, including a runtime
+count mask for padded rows. ExPhil uses power-of-two selection sizes and warms
+them during batch setup; all-due batches bypass selection. Resync scheduling,
+initialization and retained-history semantics are unchanged.
+
+For one of 32 rows due, complete CUDA resync medians fell from 7.397 to 1.820 ms
+for MinGRU, 5.174 to 2.371 ms for GRU, 12.410 to 5.054 ms for Mamba, and 9.846
+to 2.932 ms for SSD. These are backbone resync costs, not complete Agent calls.
+CPU results, method, caveats and reproduction commands are in the
+[resync profiling report](../bench/results/recurrent_resync_2026-10-25/README.md).
+
+Full-Agent profiling also identified batched embedding as a larger ordinary-frame
+cost: ExPhil now mirrors its single-frame path by assembling observations on the
+host and transferring the completed batch once. Trained-checkpoint comparisons
+and timing artifacts are in ExPhil `eval_runs/recurrent_resync_profile_20261025/`.
+
 ### Compiled replay follow-up (2026-10-25)
 
 `Edifice.Stateful.jit_replay/3` now returns a cached function that consumes a

@@ -1,0 +1,584 @@
+{
+  "precision": "highest",
+  "client": "cuda",
+  "iterations": 30,
+  "results": [
+    {
+      "hidden": 256,
+      "rows": [
+        {
+          "selected": {
+            "median_us": 1759,
+            "p95_us": 1952
+          },
+          "fused_full": {
+            "median_us": 3652,
+            "p95_us": 4137
+          },
+          "bucket": 1,
+          "current_total": {
+            "median_us": 7397,
+            "p95_us": 8637
+          },
+          "due": 1,
+          "eager_merge": {
+            "median_us": 136,
+            "p95_us": 184
+          },
+          "fused_history_total": {
+            "median_us": 3870,
+            "p95_us": 4116
+          },
+          "optimized_total": {
+            "median_us": 1820,
+            "p95_us": 2023
+          },
+          "selected_total": {
+            "median_us": 4948,
+            "p95_us": 5410
+          }
+        },
+        {
+          "selected": {
+            "median_us": 1741,
+            "p95_us": 2021
+          },
+          "fused_full": {
+            "median_us": 3668,
+            "p95_us": 4041
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 6911,
+            "p95_us": 7420
+          },
+          "due": 3,
+          "eager_merge": {
+            "median_us": 140,
+            "p95_us": 229
+          },
+          "fused_history_total": {
+            "median_us": 3800,
+            "p95_us": 4251
+          },
+          "optimized_total": {
+            "median_us": 1841,
+            "p95_us": 2052
+          },
+          "selected_total": {
+            "median_us": 4899,
+            "p95_us": 5231
+          }
+        },
+        {
+          "selected": {
+            "median_us": 1768,
+            "p95_us": 1955
+          },
+          "fused_full": {
+            "median_us": 3684,
+            "p95_us": 4006
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 7085,
+            "p95_us": 7485
+          },
+          "due": 4,
+          "eager_merge": {
+            "median_us": 113,
+            "p95_us": 130
+          },
+          "fused_history_total": {
+            "median_us": 3751,
+            "p95_us": 4174
+          },
+          "optimized_total": {
+            "median_us": 1843,
+            "p95_us": 1935
+          },
+          "selected_total": {
+            "median_us": 4762,
+            "p95_us": 5027
+          }
+        },
+        {
+          "selected": {
+            "median_us": 3764,
+            "p95_us": 4212
+          },
+          "fused_full": {
+            "median_us": 3698,
+            "p95_us": 3971
+          },
+          "bucket": 32,
+          "current_total": {
+            "median_us": 6751,
+            "p95_us": 7404
+          },
+          "due": 32,
+          "eager_merge": {
+            "median_us": 122,
+            "p95_us": 142
+          },
+          "fused_history_total": {
+            "median_us": 3853,
+            "p95_us": 4120
+          },
+          "optimized_total": {
+            "median_us": 3771,
+            "p95_us": 4131
+          },
+          "selected_total": {
+            "median_us": 6707,
+            "p95_us": 7404
+          }
+        }
+      ],
+      "window": 80,
+      "batch": 32,
+      "assembly": {
+        "median_us": 3862,
+        "p95_us": 4739
+      },
+      "full_replay": {
+        "median_us": 3781,
+        "p95_us": 4145
+      },
+      "architecture": "min_gru"
+    },
+    {
+      "hidden": 512,
+      "rows": [
+        {
+          "selected": {
+            "median_us": 2344,
+            "p95_us": 2584
+          },
+          "fused_full": {
+            "median_us": 2814,
+            "p95_us": 3285
+          },
+          "bucket": 1,
+          "current_total": {
+            "median_us": 5174,
+            "p95_us": 5659
+          },
+          "due": 1,
+          "eager_merge": {
+            "median_us": 154,
+            "p95_us": 368
+          },
+          "fused_history_total": {
+            "median_us": 2959,
+            "p95_us": 3277
+          },
+          "optimized_total": {
+            "median_us": 2371,
+            "p95_us": 2575
+          },
+          "selected_total": {
+            "median_us": 4775,
+            "p95_us": 5303
+          }
+        },
+        {
+          "selected": {
+            "median_us": 2695,
+            "p95_us": 3153
+          },
+          "fused_full": {
+            "median_us": 3157,
+            "p95_us": 3966
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 6764,
+            "p95_us": 9047
+          },
+          "due": 3,
+          "eager_merge": {
+            "median_us": 310,
+            "p95_us": 843
+          },
+          "fused_history_total": {
+            "median_us": 3318,
+            "p95_us": 4569
+          },
+          "optimized_total": {
+            "median_us": 2409,
+            "p95_us": 2649
+          },
+          "selected_total": {
+            "median_us": 5179,
+            "p95_us": 6766
+          }
+        },
+        {
+          "selected": {
+            "median_us": 2632,
+            "p95_us": 3019
+          },
+          "fused_full": {
+            "median_us": 3311,
+            "p95_us": 4283
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 7321,
+            "p95_us": 8757
+          },
+          "due": 4,
+          "eager_merge": {
+            "median_us": 198,
+            "p95_us": 397
+          },
+          "fused_history_total": {
+            "median_us": 4200,
+            "p95_us": 8454
+          },
+          "optimized_total": {
+            "median_us": 3944,
+            "p95_us": 10324
+          },
+          "selected_total": {
+            "median_us": 12637,
+            "p95_us": 20871
+          }
+        },
+        {
+          "selected": {
+            "median_us": 2962,
+            "p95_us": 3356
+          },
+          "fused_full": {
+            "median_us": 2949,
+            "p95_us": 3344
+          },
+          "bucket": 32,
+          "current_total": {
+            "median_us": 5591,
+            "p95_us": 11706
+          },
+          "due": 32,
+          "eager_merge": {
+            "median_us": 1011,
+            "p95_us": 2003
+          },
+          "fused_history_total": {
+            "median_us": 3083,
+            "p95_us": 3508
+          },
+          "optimized_total": {
+            "median_us": 2895,
+            "p95_us": 3320
+          },
+          "selected_total": {
+            "median_us": 4983,
+            "p95_us": 5618
+          }
+        }
+      ],
+      "window": 60,
+      "batch": 32,
+      "assembly": {
+        "median_us": 2514,
+        "p95_us": 3863
+      },
+      "full_replay": {
+        "median_us": 2896,
+        "p95_us": 3192
+      },
+      "architecture": "gru"
+    },
+    {
+      "hidden": 512,
+      "rows": [
+        {
+          "selected": {
+            "median_us": 5182,
+            "p95_us": 5786
+          },
+          "fused_full": {
+            "median_us": 9250,
+            "p95_us": 9827
+          },
+          "bucket": 1,
+          "current_total": {
+            "median_us": 12410,
+            "p95_us": 12925
+          },
+          "due": 1,
+          "eager_merge": {
+            "median_us": 1597,
+            "p95_us": 2147
+          },
+          "fused_history_total": {
+            "median_us": 9351,
+            "p95_us": 10053
+          },
+          "optimized_total": {
+            "median_us": 5054,
+            "p95_us": 5415
+          },
+          "selected_total": {
+            "median_us": 7714,
+            "p95_us": 8267
+          }
+        },
+        {
+          "selected": {
+            "median_us": 6903,
+            "p95_us": 7553
+          },
+          "fused_full": {
+            "median_us": 9433,
+            "p95_us": 9735
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 12516,
+            "p95_us": 13202
+          },
+          "due": 3,
+          "eager_merge": {
+            "median_us": 1418,
+            "p95_us": 1631
+          },
+          "fused_history_total": {
+            "median_us": 9132,
+            "p95_us": 9713
+          },
+          "optimized_total": {
+            "median_us": 7070,
+            "p95_us": 7355
+          },
+          "selected_total": {
+            "median_us": 9266,
+            "p95_us": 9863
+          }
+        },
+        {
+          "selected": {
+            "median_us": 6813,
+            "p95_us": 7387
+          },
+          "fused_full": {
+            "median_us": 9114,
+            "p95_us": 9494
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 12270,
+            "p95_us": 13562
+          },
+          "due": 4,
+          "eager_merge": {
+            "median_us": 1539,
+            "p95_us": 1810
+          },
+          "fused_history_total": {
+            "median_us": 9219,
+            "p95_us": 9733
+          },
+          "optimized_total": {
+            "median_us": 7038,
+            "p95_us": 7614
+          },
+          "selected_total": {
+            "median_us": 9766,
+            "p95_us": 10233
+          }
+        },
+        {
+          "selected": {
+            "median_us": 9303,
+            "p95_us": 9755
+          },
+          "fused_full": {
+            "median_us": 9155,
+            "p95_us": 9477
+          },
+          "bucket": 32,
+          "current_total": {
+            "median_us": 11977,
+            "p95_us": 12635
+          },
+          "due": 32,
+          "eager_merge": {
+            "median_us": 1525,
+            "p95_us": 1832
+          },
+          "fused_history_total": {
+            "median_us": 9356,
+            "p95_us": 9770
+          },
+          "optimized_total": {
+            "median_us": 9349,
+            "p95_us": 9740
+          },
+          "selected_total": {
+            "median_us": 12030,
+            "p95_us": 12929
+          }
+        }
+      ],
+      "window": 80,
+      "batch": 32,
+      "assembly": {
+        "median_us": 3325,
+        "p95_us": 3585
+      },
+      "full_replay": {
+        "median_us": 9612,
+        "p95_us": 10084
+      },
+      "architecture": "mamba"
+    },
+    {
+      "hidden": 256,
+      "rows": [
+        {
+          "selected": {
+            "median_us": 2922,
+            "p95_us": 3086
+          },
+          "fused_full": {
+            "median_us": 7027,
+            "p95_us": 7490
+          },
+          "bucket": 1,
+          "current_total": {
+            "median_us": 9846,
+            "p95_us": 10406
+          },
+          "due": 1,
+          "eager_merge": {
+            "median_us": 932,
+            "p95_us": 1488
+          },
+          "fused_history_total": {
+            "median_us": 6967,
+            "p95_us": 7363
+          },
+          "optimized_total": {
+            "median_us": 2932,
+            "p95_us": 3200
+          },
+          "selected_total": {
+            "median_us": 5219,
+            "p95_us": 6001
+          }
+        },
+        {
+          "selected": {
+            "median_us": 4205,
+            "p95_us": 5229
+          },
+          "fused_full": {
+            "median_us": 7143,
+            "p95_us": 7730
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 9734,
+            "p95_us": 10203
+          },
+          "due": 3,
+          "eager_merge": {
+            "median_us": 1245,
+            "p95_us": 1974
+          },
+          "fused_history_total": {
+            "median_us": 7874,
+            "p95_us": 9647
+          },
+          "optimized_total": {
+            "median_us": 4344,
+            "p95_us": 4924
+          },
+          "selected_total": {
+            "median_us": 8080,
+            "p95_us": 9426
+          }
+        },
+        {
+          "selected": {
+            "median_us": 3667,
+            "p95_us": 4257
+          },
+          "fused_full": {
+            "median_us": 7294,
+            "p95_us": 8103
+          },
+          "bucket": 4,
+          "current_total": {
+            "median_us": 12036,
+            "p95_us": 13398
+          },
+          "due": 4,
+          "eager_merge": {
+            "median_us": 1420,
+            "p95_us": 2284
+          },
+          "fused_history_total": {
+            "median_us": 6969,
+            "p95_us": 7367
+          },
+          "optimized_total": {
+            "median_us": 3759,
+            "p95_us": 4225
+          },
+          "selected_total": {
+            "median_us": 6531,
+            "p95_us": 9343
+          }
+        },
+        {
+          "selected": {
+            "median_us": 8974,
+            "p95_us": 11320
+          },
+          "fused_full": {
+            "median_us": 9486,
+            "p95_us": 14747
+          },
+          "bucket": 32,
+          "current_total": {
+            "median_us": 14483,
+            "p95_us": 27969
+          },
+          "due": 32,
+          "eager_merge": {
+            "median_us": 1448,
+            "p95_us": 1658
+          },
+          "fused_history_total": {
+            "median_us": 7249,
+            "p95_us": 7798
+          },
+          "optimized_total": {
+            "median_us": 7653,
+            "p95_us": 8315
+          },
+          "selected_total": {
+            "median_us": 9738,
+            "p95_us": 10565
+          }
+        }
+      ],
+      "window": 60,
+      "batch": 32,
+      "assembly": {
+        "median_us": 2515,
+        "p95_us": 2749
+      },
+      "full_replay": {
+        "median_us": 6817,
+        "p95_us": 7193
+      },
+      "architecture": "mamba_ssd"
+    }
+  ],
+  "note": "Synthetic representative weights. Resident inputs; stage timings synchronize independently and are not additive. Current total includes history assembly, full-batch replay, eager row merge. Selected total includes assembly, fused gather/replay/scatter. Compilation excluded. Selected outputs checked against full replay; untouched rows bitwise identical."
+}
