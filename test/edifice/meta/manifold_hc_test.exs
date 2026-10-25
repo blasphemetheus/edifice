@@ -79,17 +79,12 @@ defmodule Edifice.Meta.ManifoldHCTest do
     end
 
     test "uses default options" do
+      # Shape inference only: a real forward at the 256-wide, 4-layer defaults
+      # takes ~20s on BinaryBackend and times out on slow CI runners.
       model = ManifoldHC.build(seq_len: @seq_len)
-      {init_fn, predict_fn} = Axon.build(model)
-
-      key = Nx.Random.key(99)
-      {input, _key} = Nx.Random.normal(key, shape: {1, @seq_len, 256})
-
       template = %{"sequence" => Nx.template({1, @seq_len, 256}, :f32)}
-      params = init_fn.(template, Axon.ModelState.empty())
-      output = predict_fn.(params, %{"sequence" => input})
 
-      assert Nx.shape(output) == {1, @seq_len, 256}
+      assert Nx.shape(Axon.get_output_shape(model, template)) == {1, @seq_len, 256}
     end
   end
 

@@ -1662,10 +1662,11 @@ defmodule Edifice.RegistrySweepTest do
     end
   end
 
+  # ~100s on BinaryBackend locally, over budget on CI; only feasible under EXLA.
   describe "soundstorm (audio)" do
     for batch <- [@small_batch] do
       @tag timeout: 120_000
-      @tag :slow
+      @tag :exla_only
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
         num_codebooks = 2
