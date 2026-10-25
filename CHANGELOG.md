@@ -84,6 +84,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Load OTP crypto before globally loading CUDA handlers, preventing lazy crypto
+  NIF failures during fused Mamba Agent evaluation. Includes a cold-VM regression.
+
 - Mamba-2/SSD matmul scan now excludes the source timestep's decay from each
   input contribution, matching the sequential recurrence across chunk sizes.
   This changes predictions from the affected matmul path in older checkpoints;

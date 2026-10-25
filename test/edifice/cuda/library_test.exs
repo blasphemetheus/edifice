@@ -34,6 +34,39 @@ defmodule Edifice.CUDA.LibraryTest do
     end
   end
 
+  @tag :exla_only
+  test "a cold VM loads crypto before globally loading CUDA handlers" do
+    library = Path.expand("../../../priv/cuda/libedifice_xla.so", __DIR__)
+    assert File.regular?(library), "build the CUDA handler library before running this test"
+
+    # Use Erlang, not the Elixir CLI/compiler: compiling an Elixir script can
+    # itself load crypto and accidentally hide this load-order regression.
+    script = """
+    application:ensure_all_started(elixir),
+    false = code:is_loaded(crypto),
+    ok = 'Elixir.Edifice.CUDA.Library':'ensure_loaded!'(),
+    {file, _} = code:is_loaded(crypto),
+    16 = byte_size(crypto:strong_rand_bytes(16)),
+    ok = 'Elixir.Edifice.CUDA.Library':'ensure_loaded!'(),
+    io:format("crypto remains usable after CUDA handlers~n"),
+    halt().
+    """
+
+    args =
+      ["+S", "2:2", "-noshell", "-pa"] ++
+        Enum.map(:code.get_path(), &to_string/1) ++
+        ["-pa", Path.dirname(to_string(:code.which(Edifice.CUDA.Library))), "-eval", script]
+
+    {output, status} =
+      System.cmd(Path.join(to_string(:code.root_dir()), "bin/erl"), args,
+        stderr_to_stdout: true,
+        env: [{"EDIFICE_CUDA_LIBRARY", library}, {"ERL_CRASH_DUMP", "/dev/null"}]
+      )
+
+    assert status == 0, output
+    assert output =~ "crypto remains usable after CUDA handlers"
+  end
+
   test "disabled, host, unsupported dtype and oversized calls do not require a library" do
     block = %FusedOp{op: :fused_gru_scan}
     args = [Nx.template({1, 4, 24}, :f32)]

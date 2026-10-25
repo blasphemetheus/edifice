@@ -32,6 +32,12 @@ defmodule Edifice.CUDA.Library do
   end
 
   defp load! do
+    # EXLA loads these handlers with RTLD_GLOBAL. Their XLA dependency exports
+    # crypto symbols that can interfere with OTP crypto's lazy NIF load. Force
+    # that NIF to bind first; merely starting the :crypto application does not
+    # ensure that its module (and @on_load callback) has run.
+    Code.ensure_loaded!(:crypto)
+
     case System.get_env("EDIFICE_CUDA_LIBRARY") do
       "linked" ->
         :ok
