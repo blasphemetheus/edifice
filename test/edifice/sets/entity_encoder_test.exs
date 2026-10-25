@@ -10,7 +10,7 @@ defmodule Edifice.Sets.EntityEncoderTest do
   @num_types 4
   @hidden 16
 
-  defp build_and_run(opts \\ []) do
+  defp build_and_run(opts) do
     default_opts = [
       entity_dim: @entity_dim,
       num_types: @num_types,

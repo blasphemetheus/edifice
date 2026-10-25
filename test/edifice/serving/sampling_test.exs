@@ -1,6 +1,5 @@
 defmodule Edifice.Serving.SamplingTest do
   use ExUnit.Case, async: true
-  import Nx.Defn
 
   alias Edifice.Serving.Sampling
 
@@ -23,8 +22,6 @@ defmodule Edifice.Serving.SamplingTest do
     end
 
     test "runtime top_k branching produces different distributions" do
-      key = Nx.Random.key(99)
-
       # High temperature + no top-k: can sample any token
       tokens_no_filter =
         for seed <- 1..50 do

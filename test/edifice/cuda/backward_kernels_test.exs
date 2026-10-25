@@ -1645,12 +1645,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output =
         Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
 
-      {ref_gq, ref_gk, ref_gv, ref_galpha, ref_gbeta} =
+      {ref_gq, _ref_gk, ref_gv, _ref_galpha, ref_gbeta} =
         Nx.Defn.grad({q, k, v, alpha, beta}, fn {q, k, v, a, b} ->
           kda_forward(q, k, v, a, b) |> Nx.sum()
         end)
 
-      {gq, gk, gv, galpha, gbeta} =
+      {gq, _gk, gv, _galpha, gbeta} =
         Edifice.CUDA.FusedScan.kda_backward_fallback(q, k, v, alpha, beta, grad_output)
 
       assert_all_close(gq, ref_gq, atol: 1.0e-3)
@@ -1753,7 +1753,7 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output =
         Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
 
-      {gq, gk, gv, ga, gb, gg} =
+      {gq, _gk, gv, ga, _gb, _gg} =
         Edifice.CUDA.FusedScan.rla_backward_fallback(
           q,
           k,
@@ -1811,7 +1811,7 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output =
         Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, num_heads, head_dim})
 
-      {gq, gk, gv, ga, gb, gg} =
+      {gq, _gk, gv, ga, _gb, _gg} =
         Edifice.CUDA.FusedScan.rla_backward_fallback(
           q,
           k,
@@ -2024,7 +2024,7 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output =
         Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, num_heads, head_dim})
 
-      {gq, gk, gv, gbeta} =
+      {gq, gk, gv, _gbeta} =
         Edifice.CUDA.FusedScan.delta_product_backward_fallback(q, k, v, beta, grad_output)
 
       assert Nx.all(Nx.is_nan(gq) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -2396,7 +2396,7 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
 
   # sLSTM forward scan for testing
   defp slstm_forward(wx, recurrent_weight, h0, c0, hidden) do
-    {batch, seq_len, _hidden4} = Nx.shape(wx)
+    {_batch, seq_len, _hidden4} = Nx.shape(wx)
 
     n0 = Nx.broadcast(Nx.tensor(1.0, type: Nx.type(wx)), Nx.shape(h0))
     m0 = Nx.broadcast(Nx.tensor(0.0, type: Nx.type(wx)), Nx.shape(h0))

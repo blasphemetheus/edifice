@@ -7,7 +7,6 @@ defmodule Edifice.RecipesTest do
   @embed_dim 8
   @num_classes 4
   @batch 2
-  @seq_len 16
 
   defp build_classifier do
     Axon.input("x", shape: {nil, @embed_dim})
@@ -27,7 +26,7 @@ defmodule Edifice.RecipesTest do
     |> Axon.dense(@embed_dim, name: "projector")
   end
 
-  defp make_classification_data(n \\ 10) do
+  defp make_classification_data(n) do
     Stream.repeatedly(fn ->
       {input, _key} =
         Nx.Random.uniform(Nx.Random.key(:rand.uniform(10_000)), shape: {@batch, @embed_dim})
@@ -57,7 +56,7 @@ defmodule Edifice.RecipesTest do
     |> Enum.take(n)
   end
 
-  defp make_contrastive_data(n \\ 10) do
+  defp make_contrastive_data(n) do
     Stream.repeatedly(fn ->
       # Concatenated positive pairs: first half = view1, second half = view2
       {input, _key} =

@@ -16,7 +16,7 @@ defmodule Edifice.Blocks.FlashAttentionTest do
   @seq_len 32
   @head_dim 64
 
-  defp assert_all_close(actual, expected, opts \\ []) do
+  defp assert_all_close(actual, expected, opts) do
     atol = Keyword.get(opts, :atol, 1.0e-5)
 
     assert Nx.shape(actual) == Nx.shape(expected),

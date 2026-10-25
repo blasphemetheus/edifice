@@ -6,6 +6,13 @@ defmodule Edifice.SSM.GatedSSMCoverageTest do
 
   alias Edifice.SSM.GatedSSM
 
+  # GatedSSM.init_cache/1 is deprecated; these tests cover it deliberately.
+  # A dynamic call keeps the compiler's deprecation warning out of the run.
+  defp init_cache(opts) do
+    args = [opts]
+    apply(GatedSSM, :init_cache, args)
+  end
+
   @batch 2
   @embed 16
   @seq_len 8
@@ -104,7 +111,7 @@ defmodule Edifice.SSM.GatedSSMCoverageTest do
 
   describe "init_cache/1" do
     test "initializes cache with correct structure" do
-      cache = GatedSSM.init_cache(batch_size: 1, hidden_size: 8, state_size: 4, num_layers: 2)
+      cache = init_cache(batch_size: 1, hidden_size: 8, state_size: 4, num_layers: 2)
       assert is_map(cache)
       assert cache.step == 0
       assert Map.has_key?(cache.layers, "layer_1")

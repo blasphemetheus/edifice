@@ -14,6 +14,13 @@ defmodule Edifice.SSM.GatedSSMCoverage2Test do
 
   alias Edifice.SSM.GatedSSM
 
+  # GatedSSM.init_cache/1 is deprecated; these tests cover it deliberately.
+  # A dynamic call keeps the compiler's deprecation warning out of the run.
+  defp init_cache(opts \\ []) do
+    args = [opts]
+    apply(GatedSSM, :init_cache, args)
+  end
+
   # Small dims for speed
   @batch 2
   @embed 16
@@ -224,7 +231,7 @@ defmodule Edifice.SSM.GatedSSMCoverage2Test do
 
   describe "init_cache/1" do
     test "default options" do
-      cache = GatedSSM.init_cache()
+      cache = init_cache()
       assert cache.step == 0
       assert is_map(cache.layers)
       assert Map.has_key?(cache.layers, "layer_1")
@@ -233,7 +240,7 @@ defmodule Edifice.SSM.GatedSSMCoverage2Test do
     end
 
     test "custom batch_size" do
-      cache = GatedSSM.init_cache(batch_size: 4, hidden_size: 8, state_size: 4, num_layers: 1)
+      cache = init_cache(batch_size: 4, hidden_size: 8, state_size: 4, num_layers: 1)
       layer = cache.layers["layer_1"]
       assert Nx.shape(layer.h) == {4, 16, 4}
       assert Nx.shape(layer.conv_buffer) == {4, 3, 16}
@@ -241,7 +248,7 @@ defmodule Edifice.SSM.GatedSSMCoverage2Test do
 
     test "custom conv_size affects buffer shape" do
       cache =
-        GatedSSM.init_cache(
+        init_cache(
           batch_size: 1,
           hidden_size: 8,
           state_size: 2,
@@ -258,7 +265,7 @@ defmodule Edifice.SSM.GatedSSMCoverage2Test do
 
     test "config stored correctly" do
       cache =
-        GatedSSM.init_cache(
+        init_cache(
           hidden_size: 32,
           state_size: 8,
           expand_factor: 3,
@@ -298,7 +305,7 @@ defmodule Edifice.SSM.GatedSSMCoverage2Test do
       params = init_fn.(template, Axon.ModelState.empty())
 
       cache =
-        GatedSSM.init_cache(
+        init_cache(
           batch_size: 1,
           hidden_size: hidden,
           state_size: state_size,
@@ -399,7 +406,7 @@ defmodule Edifice.SSM.GatedSSMCoverage2Test do
       params = init_fn.(template, Axon.ModelState.empty())
 
       cache =
-        GatedSSM.init_cache(
+        init_cache(
           batch_size: 1,
           hidden_size: @hidden,
           state_size: @state_size,

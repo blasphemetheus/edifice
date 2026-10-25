@@ -6,6 +6,13 @@ defmodule Edifice.CoverageBatchFTest do
   """
   use ExUnit.Case, async: true
 
+  # GatedSSM.init_cache/1 is deprecated; these tests cover it deliberately.
+  # A dynamic call keeps the compiler's deprecation warning out of the run.
+  defp init_cache(opts \\ []) do
+    args = [opts]
+    apply(Edifice.SSM.GatedSSM, :init_cache, args)
+  end
+
   @moduletag timeout: 300_000
 
   @batch 2
@@ -196,7 +203,7 @@ defmodule Edifice.CoverageBatchFTest do
 
     test "init_cache returns proper cache structure" do
       cache =
-        GatedSSM.init_cache(
+        init_cache(
           batch_size: 2,
           hidden_size: 32,
           state_size: 4,
@@ -221,7 +228,7 @@ defmodule Edifice.CoverageBatchFTest do
     end
 
     test "init_cache with default options" do
-      cache = GatedSSM.init_cache()
+      cache = init_cache()
       assert cache.step == 0
       assert cache.config.hidden_size == 256
       assert cache.config.num_layers == 2

@@ -53,7 +53,7 @@ defmodule Edifice.Interpretability.ContainerOutputTest do
       # nonzero count bounded by the k budget. JumpReluSAE is exempt —
       # its soft-sigmoid gate produces NO exact zeros (that's the audit's
       # documented complaint about it, not a container bug).
-      unless module == Edifice.Interpretability.JumpReluSAE do
+      if sparse_hidden_expected?(module) do
         nonzero = hidden |> Nx.not_equal(0.0) |> Nx.sum() |> Nx.to_number()
         total = 4 * 24
         assert nonzero < total, "hidden is not sparse (#{nonzero}/#{total} nonzero)"
@@ -94,4 +94,9 @@ defmodule Edifice.Interpretability.ContainerOutputTest do
 
     assert Nx.to_binary(from_container) == Nx.to_binary(plain)
   end
+
+  # JumpReluSAE is exempt from the sparsity check (see the comment above).
+  # Kept out of the generated test body so the literal comparison does not
+  # trip the compiler's disjoint-type warning.
+  defp sparse_hidden_expected?(module), do: module != Edifice.Interpretability.JumpReluSAE
 end
