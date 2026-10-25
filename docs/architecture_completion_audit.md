@@ -28,16 +28,18 @@ checkpointing remains deferred until the upstream Nx checkpoint work merges.
 
 The recurrent microbenchmark is now complete; see
 [measured CPU/GPU timings and ExPhil integration gaps](recurrent_inference_benchmarks.md).
-Actual-checkpoint, complete-policy latency remains a separate validation step.
+Actual-checkpoint MinGRU/Mamba complete-policy latency and state/controller parity
+were validated October 25 in ExPhil. Full-update Mamba batch-8 CUDA medians are
+1.056 ms ordinary and 5.456 ms for one-row resync; see ExPhil's
+`eval_runs/recurrent_resync_profile_20261025/RESULTS.md`.
 The follow-up adds GatedDeltaNet and Mamba-2 step paths in Edifice and enables
 MinGRU's adapter in ExPhil. SSD's matmul source-decay bug was corrected; old
 checkpoints using that path need revalidation (details in the benchmark report).
 
 | Priority | Finding and evidence | Useful next action |
 |---|---|---|
-| 1 | GRU/MinGRU/Mamba have compiled step and rollback tests; the new GQA cache adds an attention alternative | Benchmark actual ExPhil observations, trained policy outputs and rollback traces. Recurrent stepping avoids window recomputation during indefinite play |
-| 2 | [NSA](../lib/edifice/attention/nsa.ex) computes `_top_k_indices` but does not gather selected blocks, and scores blocks using a query mean across the sequence | Add a future-token perturbation test for causality, then implement selected-block attention with measured costs. The source suggests a causality risk; this audit has not demonstrated a leak |
-| 2 | [MoBA](../lib/edifice/attention/moba.ex) expands routing into dense token-level attention | Implement block gathering if benchmarked sequence lengths justify it; current routing is not evidence of sparse execution speed |
+| 1 | Actual-checkpoint MinGRU/Mamba replay and host embedding now pass CUDA baseline parity | Extend full-policy profiling to other deployed architectures and evaluate closed-loop quality separately |
+| Completed October 25 | NSA/MoBA causal routing, actual selected-block execution and partial lengths fixed; local NSA attention uses gathers | [CPU/CUDA measurements and remaining paper-fidelity limits](../bench/results/sparse_attention_2026-10-25/README.md). Short contexts need not be faster; no fused sparse CUDA kernel yet |
 | 3 | [RetNetV2](../lib/edifice/attention/retnet_v2.ex) uses LayerNorm at the layer named `group_norm` | Implement grouped normalization and compare a reference fixture before relying on retention fidelity |
 | 3 | [Reservoir](../lib/edifice/recurrent/reservoir.ex) estimates spectral radius using a Frobenius-norm proxy | Measure the resulting radius and correct scaling before interpreting requested reservoir timescales |
 | Conditional on visual observations | [ViT](../lib/edifice/vision/vit.ex) ignores `_num_heads` in self-attention and broadcasts one dense-produced positional vector, in addition to failing checkpoint patch-weight layout | Restore multi-head attention and a position table, fix checkpoint transforms, then require pretrained numerical parity |

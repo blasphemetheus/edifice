@@ -1,0 +1,117 @@
+{
+  "precision": "highest",
+  "shape": "B=1 H=4 D=32",
+  "backend": "{EXLA.Backend, [client: :cuda]}",
+  "topk": 2,
+  "window": 32,
+  "compression": 8,
+  "block_size": 16,
+  "samples": 30,
+  "results": [
+    {
+      "time": 64,
+      "architecture": "moba",
+      "gathered": {
+        "median_us": 97,
+        "p95_us": 135
+      },
+      "dense_same_mask": {
+        "median_us": 85,
+        "p95_us": 104
+      },
+      "parity": true
+    },
+    {
+      "time": 64,
+      "architecture": "nsa",
+      "gathered": {
+        "median_us": 93,
+        "p95_us": 143
+      },
+      "dense_same_mask": {
+        "median_us": 97,
+        "p95_us": 243
+      },
+      "parity": true
+    },
+    {
+      "time": 256,
+      "architecture": "moba",
+      "gathered": {
+        "median_us": 94,
+        "p95_us": 165
+      },
+      "dense_same_mask": {
+        "median_us": 100,
+        "p95_us": 196
+      },
+      "parity": true
+    },
+    {
+      "time": 256,
+      "architecture": "nsa",
+      "gathered": {
+        "median_us": 120,
+        "p95_us": 297
+      },
+      "dense_same_mask": {
+        "median_us": 129,
+        "p95_us": 312
+      },
+      "parity": true
+    },
+    {
+      "time": 1024,
+      "architecture": "moba",
+      "gathered": {
+        "median_us": 695,
+        "p95_us": 830
+      },
+      "dense_same_mask": {
+        "median_us": 709,
+        "p95_us": 1058
+      },
+      "parity": true
+    },
+    {
+      "time": 1024,
+      "architecture": "nsa",
+      "gathered": {
+        "median_us": 716,
+        "p95_us": 927
+      },
+      "dense_same_mask": {
+        "median_us": 1014,
+        "p95_us": 3674
+      },
+      "parity": true
+    },
+    {
+      "time": 4096,
+      "architecture": "moba",
+      "gathered": {
+        "median_us": 2751,
+        "p95_us": 2963
+      },
+      "dense_same_mask": {
+        "median_us": 3615,
+        "p95_us": 3830
+      },
+      "parity": true
+    },
+    {
+      "time": 4096,
+      "architecture": "nsa",
+      "gathered": {
+        "median_us": 2836,
+        "p95_us": 3215
+      },
+      "dense_same_mask": {
+        "median_us": 4135,
+        "p95_us": 4647
+      },
+      "parity": true
+    }
+  ],
+  "timing": "Resident inputs; compiled output reduction and scalar host synchronization; warmup/compilation excluded"
+}

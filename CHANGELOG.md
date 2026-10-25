@@ -89,6 +89,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- NSA and MoBA now gather selected blocks before token attention and preserve
+  causal routing, including incomplete final blocks. NSA uses compressed
+  probabilities for actual top-k retrieval and gathers its local window; MoBA
+  forces the current block and enforces exact top-k cardinality on ties.
+  NSA's pooling/scalar-gate approximation is explicitly documented. Parameter
+  layouts remain compatible, but corrected outputs require checkpoint revalidation.
+  Includes output/gradient references and CPU/CUDA sparse-execution benchmarks.
+
 - Load OTP crypto before globally loading CUDA handlers, preventing lazy crypto
   NIF failures during fused Mamba Agent evaluation. Includes a cold-VM regression.
 

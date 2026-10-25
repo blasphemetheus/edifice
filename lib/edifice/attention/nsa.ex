@@ -1,12 +1,16 @@
 defmodule Edifice.Attention.NSA do
   @moduledoc """
-  NSA: Native Sparse Attention (DeepSeek-V3/V4).
+  NSA-inspired three-path sparse attention.
 
-  <!-- verified: true, date: 2026-02-23 -->
+  This portable variant uses non-overlapping average pooling, per-head routing,
+  and three learned scalar softmax gates. It is not a paper-exact NSA model:
+  learned overlapping compression, grouped-head selection and query-dependent
+  sigmoid gates are not implemented. Existing parameter names/shapes are retained,
+  but corrected causal routing changes outputs from older checkpoints.
 
-  Hardware-aligned three-path sparse attention mechanism that achieves
-  efficient long-context attention by combining global context, fine-grained
-  retrieval, and local attention in parallel paths.
+  Combines compressed context, selected-block retrieval, and local attention.
+  The selected and local paths gather tokens before scoring; the compressed
+  path retains O(T² / compression_ratio) scores. No fused sparse kernel is used.
 
   ## Key Innovation: Hardware-Aligned Sparse Attention
 
@@ -53,13 +57,13 @@ defmodule Edifice.Attention.NSA do
   ## Three Paths
 
   ### 1. Compressed Tokens (Global Context)
-  Pool Q/K/V into fewer tokens using strided convolution with compression_ratio.
-  Compute softmax attention over compressed sequence for O(n/r) complexity.
+  Each original query attends to completed average-pooled K/V blocks only.
+  This branch uses O(n²/r) scores; early queries with no completed blocks return zero.
 
   ### 2. Top-k Blocks (Fine-grained Retrieval)
   - Divide K/V into blocks of block_size
-  - Compute block-level scores: dot(Q, mean(K_block))
-  - Select top num_selected_blocks blocks
+  - Aggregate causal compressed-attention probabilities into block scores
+  - Select up to num_selected_blocks blocks (including the current block)
   - Compute attention within selected blocks
 
   ### 3. Sliding Window (Local)
@@ -83,9 +87,10 @@ defmodule Edifice.Attention.NSA do
 
   - Paper: "Native Sparse Attention: Hardware-Aligned and Natively Trainable"
   - Authors: DeepSeek-AI (2025)
-  - Used in: DeepSeek-V3, DeepSeek-V4
+  - https://arxiv.org/abs/2502.11089
   """
 
+  alias Edifice.Attention.SparseAttention, as: Sparse
   alias Edifice.Blocks.{FFN, ModelBuilder}
 
   @default_hidden_size 256
@@ -209,6 +214,15 @@ defmodule Edifice.Attention.NSA do
     compression_ratio = Keyword.get(opts, :compression_ratio, @default_compression_ratio)
     name = Keyword.get(opts, :name, "nsa_attn")
 
+    Sparse.validate_positive!(
+      num_heads: num_heads,
+      head_dim: head_dim,
+      window_size: window_size,
+      block_size: block_size,
+      num_selected_blocks: num_selected_blocks,
+      compression_ratio: compression_ratio
+    )
+
     qkv_dim = num_heads * head_dim
 
     # Q, K, V projections
@@ -242,10 +256,6 @@ defmodule Edifice.Attention.NSA do
   defp nsa_attention_impl(q, k, v, gate_weights, opts) do
     num_heads = opts[:num_heads]
     head_dim = opts[:head_dim]
-    window_size = opts[:window_size]
-    block_size = opts[:block_size]
-    num_selected_blocks = opts[:num_selected_blocks]
-    compression_ratio = opts[:compression_ratio]
 
     batch = Nx.axis_size(q, 0)
     seq_len = Nx.axis_size(q, 1)
@@ -255,18 +265,26 @@ defmodule Edifice.Attention.NSA do
     k = reshape_to_heads(k, batch, seq_len, num_heads, head_dim)
     v = reshape_to_heads(v, batch, seq_len, num_heads, head_dim)
 
-    # Path 1: Compressed attention (global context)
-    attn_compressed = compressed_attention(q, k, v, compression_ratio)
+    output = attention(q, k, v, gate_weights, opts)
+    reshape_from_heads(output, batch, seq_len, num_heads, head_dim)
+  end
 
-    # Path 2: Top-k block attention (fine-grained retrieval)
-    attn_blocks = topk_block_attention(q, k, v, block_size, num_selected_blocks)
+  @doc false
+  def attention(q, k, v, gate_weights, opts) do
+    {attn_compressed, probabilities} = Sparse.compressed(q, k, v, opts[:compression_ratio])
 
-    # Path 3: Sliding window attention (local)
-    attn_window = sliding_window_attention(q, k, v, window_size)
+    scores =
+      Sparse.compression_scores(
+        probabilities,
+        Nx.axis_size(q, 2),
+        opts[:compression_ratio],
+        opts[:block_size]
+      )
 
-    # Learnable mixing of three paths
-    # gate_weights: {3} -> softmax -> weights for each path
-    gates = Nx.exp(gate_weights)
+    selected = Sparse.select_blocks(scores, opts[:block_size], opts[:num_selected_blocks], true)
+    attn_blocks = Sparse.selected(q, k, v, selected, opts[:block_size], true)
+    attn_window = Sparse.window(q, k, v, opts[:window_size])
+    gates = Nx.exp(Nx.subtract(gate_weights, Nx.reduce_max(gate_weights)))
     gates = Nx.divide(gates, Nx.sum(gates))
     gate_c = Nx.slice(gates, [0], [1]) |> Nx.squeeze()
     gate_b = Nx.slice(gates, [1], [1]) |> Nx.squeeze()
@@ -282,246 +300,7 @@ defmodule Edifice.Attention.NSA do
         Nx.multiply(attn_window, gate_w)
       )
 
-    # Reshape back: [batch, seq, num_heads * head_dim]
-    reshape_from_heads(output, batch, seq_len, num_heads, head_dim)
-  end
-
-  # Path 1: Compressed attention via average pooling
-  defp compressed_attention(q, k, v, compression_ratio) do
-    {_batch, _num_heads, seq_len, head_dim} = Nx.shape(q)
-    compressed_len = max(div(seq_len, compression_ratio), 1)
-
-    # Average pool K and V along sequence dimension
-    # Reshape to [batch, heads, compressed_len, compression_ratio, head_dim]
-    # then mean over compression_ratio
-    k_compressed = compress_sequence(k, seq_len, compressed_len, compression_ratio)
-    v_compressed = compress_sequence(v, seq_len, compressed_len, compression_ratio)
-
-    # Also compress Q to match dimensions for full global attention
-    # Each compressed Q attends to all compressed K/V
-    q_compressed = compress_sequence(q, seq_len, compressed_len, compression_ratio)
-
-    # Scaled dot-product attention on compressed sequences
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-    scores = Nx.divide(Nx.dot(q_compressed, [3], [0, 1], k_compressed, [3], [0, 1]), scale)
-
-    # Softmax
-    weights = stable_softmax(scores)
-
-    # Weighted values: [batch, heads, compressed_len, head_dim]
-    output_compressed = Nx.dot(weights, [3], [0, 1], v_compressed, [2], [0, 1])
-
-    # Expand back to original sequence length via repeat
-    expand_sequence(output_compressed, compressed_len, seq_len)
-  end
-
-  # Compress sequence by averaging over windows
-  defp compress_sequence(x, seq_len, compressed_len, compression_ratio) do
-    {batch, num_heads, _seq, head_dim} = Nx.shape(x)
-
-    # Pad sequence to be divisible by compression_ratio if needed
-    pad_len = compressed_len * compression_ratio - seq_len
-
-    x_padded =
-      if pad_len > 0 do
-        padding =
-          Nx.broadcast(0.0, {batch, num_heads, pad_len, head_dim}) |> Nx.as_type(Nx.type(x))
-
-        Nx.concatenate([x, padding], axis: 2)
-      else
-        x
-      end
-
-    # Reshape and mean
-    x_padded
-    |> Nx.reshape({batch, num_heads, compressed_len, compression_ratio, head_dim})
-    |> Nx.mean(axes: [3])
-  end
-
-  # Expand compressed sequence back to original length
-  defp expand_sequence(x, _compressed_len, seq_len) do
-    {batch, num_heads, compressed_len, head_dim} = Nx.shape(x)
-    expansion_ratio = div(seq_len + compressed_len - 1, compressed_len)
-
-    # Repeat each compressed position
-    x
-    |> Nx.new_axis(3)
-    |> Nx.broadcast({batch, num_heads, compressed_len, expansion_ratio, head_dim})
-    |> Nx.reshape({batch, num_heads, compressed_len * expansion_ratio, head_dim})
-    |> Nx.slice_along_axis(0, seq_len, axis: 2)
-  end
-
-  # Path 2: Top-k block attention
-  defp topk_block_attention(q, k, v, block_size, num_selected_blocks) do
-    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
-    num_blocks = max(div(seq_len, block_size), 1)
-    actual_num_selected = min(num_selected_blocks, num_blocks)
-
-    # Compute block means for K
-    k_block_means = compute_block_means(k, seq_len, num_blocks, block_size)
-
-    # Score each block: dot(mean(Q), mean(K_block))
-    # [batch, heads, head_dim]
-    q_mean = Nx.mean(q, axes: [2])
-    # [batch, heads, num_blocks]
-    block_scores = Nx.dot(q_mean, [2], [0, 1], k_block_means, [3], [0, 1])
-
-    # Select top-k blocks (simplified: use top positions from argsort)
-    # Since Nx doesn't have native top-k, we use argsort
-    sorted_indices = Nx.argsort(block_scores, axis: 2, direction: :desc)
-    _top_k_indices = Nx.slice_along_axis(sorted_indices, 0, actual_num_selected, axis: 2)
-
-    # Gather K, V from selected blocks and compute attention
-    # For simplicity, we compute attention over all blocks weighted by their scores
-    # This is an approximation that's still efficient and differentiable
-    # [batch, heads, num_blocks]
-    block_weights = stable_softmax(block_scores)
-
-    # Reshape K, V into blocks: [batch, heads, num_blocks, block_size, head_dim]
-    k_blocks = reshape_to_blocks(k, seq_len, num_blocks, block_size)
-    v_blocks = reshape_to_blocks(v, seq_len, num_blocks, block_size)
-
-    # Compute attention within each block
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-
-    # Q reshaped to blocks: [batch, heads, num_blocks, block_size, head_dim]
-    q_blocks = reshape_to_blocks(q, seq_len, num_blocks, block_size)
-
-    # Scores: [batch, heads, num_blocks, block_size, block_size]
-    scores =
-      Nx.divide(
-        Nx.dot(q_blocks, [4], [0, 1, 2], k_blocks, [4], [0, 1, 2]),
-        scale
-      )
-
-    # Apply causal mask within blocks
-    rows = Nx.iota({block_size, block_size}, axis: 0)
-    cols = Nx.iota({block_size, block_size}, axis: 1)
-
-    causal_mask =
-      Nx.greater_equal(rows, cols)
-      |> Nx.reshape({1, 1, 1, block_size, block_size})
-      |> Nx.broadcast({batch, num_heads, num_blocks, block_size, block_size})
-
-    scores =
-      Nx.select(
-        causal_mask,
-        scores,
-        Nx.broadcast(-1.0e9, Nx.shape(scores))
-      )
-
-    # Softmax and weighted values per block
-    attn_weights = stable_softmax_axis(scores, 4)
-    block_outputs = Nx.dot(attn_weights, [4], [0, 1, 2], v_blocks, [3], [0, 1, 2])
-    # [batch, heads, num_blocks, block_size, head_dim]
-
-    # Weight blocks by their selection scores
-    # [batch, heads, num_blocks, 1, 1] * [batch, heads, num_blocks, block_size, head_dim]
-    block_weights_expanded = Nx.reshape(block_weights, {batch, num_heads, num_blocks, 1, 1})
-    weighted_outputs = Nx.multiply(block_outputs, block_weights_expanded)
-
-    # Reshape back to sequence
-    reshape_blocks_to_seq(weighted_outputs, seq_len, num_blocks, block_size)
-  end
-
-  # Compute block means for K
-  defp compute_block_means(k, seq_len, num_blocks, block_size) do
-    {batch, num_heads, _seq, head_dim} = Nx.shape(k)
-    padded_len = num_blocks * block_size
-
-    k_padded =
-      if padded_len > seq_len do
-        padding =
-          Nx.broadcast(0.0, {batch, num_heads, padded_len - seq_len, head_dim})
-          |> Nx.as_type(Nx.type(k))
-
-        Nx.concatenate([k, padding], axis: 2)
-      else
-        Nx.slice_along_axis(k, 0, padded_len, axis: 2)
-      end
-
-    k_padded
-    |> Nx.reshape({batch, num_heads, num_blocks, block_size, head_dim})
-    # [batch, heads, num_blocks, head_dim]
-    |> Nx.mean(axes: [3])
-  end
-
-  # Reshape sequence to blocks
-  defp reshape_to_blocks(x, seq_len, num_blocks, block_size) do
-    {batch, num_heads, _seq, head_dim} = Nx.shape(x)
-    padded_len = num_blocks * block_size
-
-    x_padded =
-      if padded_len > seq_len do
-        padding =
-          Nx.broadcast(0.0, {batch, num_heads, padded_len - seq_len, head_dim})
-          |> Nx.as_type(Nx.type(x))
-
-        Nx.concatenate([x, padding], axis: 2)
-      else
-        Nx.slice_along_axis(x, 0, padded_len, axis: 2)
-      end
-
-    Nx.reshape(x_padded, {batch, num_heads, num_blocks, block_size, head_dim})
-  end
-
-  # Reshape blocks back to sequence
-  defp reshape_blocks_to_seq(x, seq_len, num_blocks, block_size) do
-    {batch, num_heads, _n_blocks, _blk_size, head_dim} = Nx.shape(x)
-
-    x
-    |> Nx.reshape({batch, num_heads, num_blocks * block_size, head_dim})
-    |> Nx.slice_along_axis(0, seq_len, axis: 2)
-  end
-
-  # Path 3: Sliding window attention
-  defp sliding_window_attention(q, k, v, window_size) do
-    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
-    scale = Nx.sqrt(Nx.tensor(head_dim, type: Nx.type(q)))
-
-    # Full attention scores
-    scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
-
-    # Create sliding window mask
-    rows = Nx.iota({seq_len, seq_len}, axis: 0)
-    cols = Nx.iota({seq_len, seq_len}, axis: 1)
-
-    # Causal: row >= col
-    causal_mask = Nx.greater_equal(rows, cols)
-
-    # Window: row - col < window_size
-    window_mask = Nx.less(Nx.subtract(rows, cols), window_size)
-
-    # Combined: causal AND within window; expand to [batch, heads, seq_len, seq_len]
-    combined_mask =
-      Nx.logical_and(causal_mask, window_mask)
-      |> Nx.reshape({1, 1, seq_len, seq_len})
-      |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
-
-    scores =
-      Nx.select(
-        combined_mask,
-        scores,
-        Nx.broadcast(-1.0e9, Nx.shape(scores))
-      )
-
-    # Softmax and weighted values
-    weights = stable_softmax(scores)
-    Nx.dot(weights, [3], [0, 1], v, [2], [0, 1])
-  end
-
-  # Stable softmax along last axis
-  defp stable_softmax(scores) do
-    max_scores = Nx.reduce_max(scores, axes: [-1], keep_axes: true)
-    exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [-1], keep_axes: true), 1.0e-8))
-  end
-
-  # Stable softmax along specified axis
-  defp stable_softmax_axis(scores, axis) do
-    max_scores = Nx.reduce_max(scores, axes: [axis], keep_axes: true)
-    exp_scores = Nx.exp(Nx.subtract(scores, max_scores))
-    Nx.divide(exp_scores, Nx.add(Nx.sum(exp_scores, axes: [axis], keep_axes: true), 1.0e-8))
+    output
   end
 
   # Reshape [batch, seq, num_heads * dim] -> [batch, num_heads, seq, dim]
