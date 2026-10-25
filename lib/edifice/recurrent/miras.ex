@@ -218,7 +218,9 @@ defmodule Edifice.Recurrent.MIRAS do
         fn combined ->
           if variant == :moneta and p_norm == 2.0 do
             Edifice.CUDA.FusedScan.miras_scan(combined,
-              memory_size: memory_size, momentum: momentum)
+              memory_size: memory_size,
+              momentum: momentum
+            )
           else
             miras_scan(combined, memory_size, momentum, variant, p_norm)
           end

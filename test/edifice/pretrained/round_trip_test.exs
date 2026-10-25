@@ -142,6 +142,7 @@ defmodule Edifice.Pretrained.RoundTripTest do
     cond do
       match = Regex.run(~r/^block_(\d+)_attn_qkv\.kernel$/, key) ->
         [_, idx] = match
+
         # Axon kernel: {D, 3*D} (in, out) → split along axis 1 into 3 x {D, D}, transpose each → {D, D}
         q = Nx.slice(tensor, [0, 0], [embed_dim, embed_dim]) |> Nx.transpose()
         k = Nx.slice(tensor, [0, embed_dim], [embed_dim, embed_dim]) |> Nx.transpose()

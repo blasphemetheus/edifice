@@ -44,8 +44,11 @@ defmodule Edifice.Interpretability.ProbeTest do
       y = x |> Nx.slice_along_axis(0, 1, axis: 1) |> Nx.squeeze(axes: [1])
       y = Nx.greater(y, 1.65) |> Nx.as_type(:s64)
 
-      {x_eval, x} = {Nx.slice_along_axis(x, 0, 600, axis: 0), Nx.slice_along_axis(x, 600, 1_400, axis: 0)}
-      {y_eval, y} = {Nx.slice_along_axis(y, 0, 600, axis: 0), Nx.slice_along_axis(y, 600, 1_400, axis: 0)}
+      {x_eval, x} =
+        {Nx.slice_along_axis(x, 0, 600, axis: 0), Nx.slice_along_axis(x, 600, 1_400, axis: 0)}
+
+      {y_eval, y} =
+        {Nx.slice_along_axis(y, 0, 600, axis: 0), Nx.slice_along_axis(y, 600, 1_400, axis: 0)}
 
       result = Probe.fit_eval(x, y, x_eval, y_eval, 2)
 

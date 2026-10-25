@@ -128,18 +128,23 @@ defmodule Edifice.Meta.RouterNetwork do
 
     # Routing weights: softmax over specialists
     router_weights =
-      Axon.nx(router_logits, fn x ->
-        max_val = Nx.reduce_max(x, axes: [-1], keep_axes: true)
-        exp_x = Nx.exp(Nx.subtract(x, max_val))
-        Nx.divide(exp_x, Nx.sum(exp_x, axes: [-1], keep_axes: true))
-      end, name: "router_softmax")
+      Axon.nx(
+        router_logits,
+        fn x ->
+          max_val = Nx.reduce_max(x, axes: [-1], keep_axes: true)
+          exp_x = Nx.exp(Nx.subtract(x, max_val))
+          Nx.divide(exp_x, Nx.sum(exp_x, axes: [-1], keep_axes: true))
+        end,
+        name: "router_softmax"
+      )
 
     # Build specialist stacks
     specialist_outputs =
       for i <- 0..(num_specialists - 1) do
-        spec = build_specialist_stack(projected, spec_hidden, spec_layers, num_heads, dropout,
-          name: "specialist_#{i}"
-        )
+        spec =
+          build_specialist_stack(projected, spec_hidden, spec_layers, num_heads, dropout,
+            name: "specialist_#{i}"
+          )
 
         # Project specialist to output size if needed, then take last timestep
         spec =
@@ -150,20 +155,28 @@ defmodule Edifice.Meta.RouterNetwork do
           end
 
         # Last timestep: [batch, seq, H] -> [batch, H]
-        Axon.nx(spec, fn t ->
-          seq_size = Nx.axis_size(t, 1)
-          Nx.slice_along_axis(t, seq_size - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        end, name: "specialist_#{i}_last_ts")
+        Axon.nx(
+          spec,
+          fn t ->
+            seq_size = Nx.axis_size(t, 1)
+            Nx.slice_along_axis(t, seq_size - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          end,
+          name: "specialist_#{i}_last_ts"
+        )
       end
 
     # Concatenate specialist outputs along a new dim: [batch, num_specialists, H]
     concat_specs = Axon.concatenate(specialist_outputs, axis: 1, name: "concat_specialists")
 
     stacked_specs =
-      Axon.nx(concat_specs, fn tensor ->
-        {b, total} = Nx.shape(tensor)
-        Nx.reshape(tensor, {b, num_specialists, div(total, num_specialists)})
-      end, name: "reshape_specialists")
+      Axon.nx(
+        concat_specs,
+        fn tensor ->
+          {b, total} = Nx.shape(tensor)
+          Nx.reshape(tensor, {b, num_specialists, div(total, num_specialists)})
+        end,
+        name: "reshape_specialists"
+      )
 
     # Combine based on routing mode
     combined =
@@ -265,11 +278,15 @@ defmodule Edifice.Meta.RouterNetwork do
 
     # Create mask: 1 for selected specialists, 0 otherwise
     num_specialists = Nx.axis_size(weights, 1)
-    one_hot = Nx.equal(
-      Nx.new_axis(Nx.iota({num_specialists}), 0) |> Nx.new_axis(0),
-      Nx.new_axis(top_indices, 2)
-    )
-    mask = Nx.reduce_max(one_hot, axes: [1])  # [batch, num_specialists]
+
+    one_hot =
+      Nx.equal(
+        Nx.new_axis(Nx.iota({num_specialists}), 0) |> Nx.new_axis(0),
+        Nx.new_axis(top_indices, 2)
+      )
+
+    # [batch, num_specialists]
+    mask = Nx.reduce_max(one_hot, axes: [1])
 
     # Renormalize weights for selected specialists
     masked_weights = Nx.multiply(weights, mask)

@@ -88,9 +88,7 @@ defmodule Edifice.Recurrent.MultiTimescaleRecurrenceTest do
 
     test "multi-layer GRU cores" do
       {output, _, _} =
-        build_and_run(
-          scales: [%{stride: 1, hidden_size: 8, num_layers: 2}]
-        )
+        build_and_run(scales: [%{stride: 1, hidden_size: 8, num_layers: 2}])
 
       assert Nx.shape(output) == {@batch, @output_size}
     end

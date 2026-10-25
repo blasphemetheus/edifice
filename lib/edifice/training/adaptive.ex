@@ -70,7 +70,7 @@ defmodule Edifice.Training.Adaptive do
     Nx.select(flag, Nx.broadcast(Nx.tensor(0.0, type: Nx.type(tensor)), tensor), tensor)
   end
 
-  deftransformp get_eps(opts), do: Keyword.get(opts, :eps, 1.0e-3)
+  deftransformp(get_eps(opts), do: Keyword.get(opts, :eps, 1.0e-3))
 
   @doc """
   Adaptive Gradient Clipping (AGC) inside defn.
@@ -199,7 +199,12 @@ defmodule Edifice.Training.Adaptive do
           new_step_state =
             if Map.has_key?(state.step_state, :gradients) do
               grads = state.step_state.gradients
-              zeroed = deep_map_tensors(grads, fn t -> Nx.broadcast(Nx.tensor(0.0, type: Nx.type(t)), t) end)
+
+              zeroed =
+                deep_map_tensors(grads, fn t ->
+                  Nx.broadcast(Nx.tensor(0.0, type: Nx.type(t)), t)
+                end)
+
               put_in(state.step_state, [:gradients], zeroed)
             else
               state.step_state
@@ -274,9 +279,7 @@ defmodule Edifice.Training.Adaptive do
           streak = state.handler_metadata.nan_streak + 1
 
           if streak >= patience do
-            Logger.error(
-              "[Adaptive] Loss NaN for #{streak} consecutive steps — halting training"
-            )
+            Logger.error("[Adaptive] Loss NaN for #{streak} consecutive steps — halting training")
 
             {:halt_loop, state}
           else

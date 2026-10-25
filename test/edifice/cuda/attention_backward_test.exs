@@ -24,9 +24,15 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, _key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
 
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, heads, seq, dim})
 
@@ -45,9 +51,15 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(123)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, _key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
 
       # Reference: autodiff of fallback forward
       {ref_gq, ref_gk, ref_gv} =
@@ -72,9 +84,15 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(456)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, _key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
 
       {ref_gq, ref_gk, ref_gv} =
         Nx.Defn.grad({q, k, v}, fn {q, k, v} ->
@@ -98,9 +116,15 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(124)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
-      {v, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+
+      {v, _key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
 
       {ref_gq, ref_gk, ref_gv} =
         Nx.Defn.grad({q, k, v}, fn {q, k, v} ->
@@ -124,9 +148,15 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(789)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, _key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
 
       {ref_gq, ref_gk, ref_gv} =
         Nx.Defn.grad({q, k, v}, fn {q, k, v} ->
@@ -156,9 +186,15 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, _key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
 
       v_max = Nx.reduce_max(v, axes: [2], keep_axes: true)
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, heads, seq, dim})
@@ -178,9 +214,15 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(321)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, _key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
 
       v_max = Nx.reduce_max(v, axes: [2], keep_axes: true)
 
@@ -207,9 +249,15 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(322)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
-      {v, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+
+      {v, _key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
 
       v_max = Nx.reduce_max(v, axes: [2], keep_axes: true)
 
@@ -236,9 +284,15 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(654)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, _key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
 
       v_max = Nx.reduce_max(v, axes: [2], keep_axes: true)
 
@@ -271,9 +325,16 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
       {cs, _key} = Nx.Random.uniform(key, -2.0, 0.0, shape: {batch, heads, seq}, type: {:f, 32})
 
       # Make cs monotonically decreasing (cumulative log-forget)
@@ -297,10 +358,19 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(111)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {cs_raw, _key} = Nx.Random.uniform(key, -1.0, 0.0, shape: {batch, heads, seq}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {cs_raw, _key} =
+        Nx.Random.uniform(key, -1.0, 0.0, shape: {batch, heads, seq}, type: {:f, 32})
+
       cs = Nx.cumulative_sum(cs_raw, axis: 2)
 
       {ref_gq, ref_gk, ref_gv} =
@@ -325,10 +395,19 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(222)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {cs_raw, _key} = Nx.Random.uniform(key, -1.0, 0.0, shape: {batch, heads, seq}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {cs_raw, _key} =
+        Nx.Random.uniform(key, -1.0, 0.0, shape: {batch, heads, seq}, type: {:f, 32})
+
       cs = Nx.cumulative_sum(cs_raw, axis: 2)
 
       ref_gcs =
@@ -351,10 +430,19 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(223)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
-      {v, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
-      {cs_raw, _key} = Nx.Random.uniform(key, -1.0, 0.0, shape: {batch, heads, seq}, type: {:bf, 16})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:bf, 16})
+
+      {cs_raw, _key} =
+        Nx.Random.uniform(key, -1.0, 0.0, shape: {batch, heads, seq}, type: {:bf, 16})
+
       cs = Nx.cumulative_sum(cs_raw, axis: 2)
 
       {ref_gq, ref_gk, ref_gv} =
@@ -385,10 +473,19 @@ defmodule Edifice.CUDA.AttentionBackwardTest do
       dim = 4
 
       key = Nx.Random.key(333)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {cs_raw, _key} = Nx.Random.uniform(key, -1.0, 0.0, shape: {batch, heads, seq}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {cs_raw, _key} =
+        Nx.Random.uniform(key, -1.0, 0.0, shape: {batch, heads, seq}, type: {:f, 32})
+
       cs = Nx.cumulative_sum(cs_raw, axis: 2)
 
       {ref_gq, ref_gk, ref_gv} =

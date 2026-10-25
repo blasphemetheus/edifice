@@ -70,13 +70,11 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXtTest do
     end
 
     test "maps layer scale parameter" do
-      assert ConvNeXt.map_key(
-               "convnext.encoder.stages.0.layers.0.layer_scale_parameter"
-             ) == "stage0_block0_layer_scale.stage0_block0_gamma"
+      assert ConvNeXt.map_key("convnext.encoder.stages.0.layers.0.layer_scale_parameter") ==
+               "stage0_block0_layer_scale.stage0_block0_gamma"
 
-      assert ConvNeXt.map_key(
-               "convnext.encoder.stages.2.layers.5.layer_scale_parameter"
-             ) == "stage2_block5_layer_scale.stage2_block5_gamma"
+      assert ConvNeXt.map_key("convnext.encoder.stages.2.layers.5.layer_scale_parameter") ==
+               "stage2_block5_layer_scale.stage2_block5_gamma"
     end
 
     test "maps higher stage/block indices" do
@@ -91,30 +89,24 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXtTest do
   describe "map_key/1 - downsampling" do
     test "maps downsampling with index shift (HF stage N → Edifice downsample N-1)" do
       # HF stages.1.downsampling_layer → Edifice downsample_0
-      assert ConvNeXt.map_key(
-               "convnext.encoder.stages.1.downsampling_layer.0.weight"
-             ) == "downsample_0_norm.gamma"
+      assert ConvNeXt.map_key("convnext.encoder.stages.1.downsampling_layer.0.weight") ==
+               "downsample_0_norm.gamma"
 
-      assert ConvNeXt.map_key(
-               "convnext.encoder.stages.1.downsampling_layer.0.bias"
-             ) == "downsample_0_norm.beta"
+      assert ConvNeXt.map_key("convnext.encoder.stages.1.downsampling_layer.0.bias") ==
+               "downsample_0_norm.beta"
 
-      assert ConvNeXt.map_key(
-               "convnext.encoder.stages.1.downsampling_layer.1.weight"
-             ) == "downsample_0_conv.kernel"
+      assert ConvNeXt.map_key("convnext.encoder.stages.1.downsampling_layer.1.weight") ==
+               "downsample_0_conv.kernel"
 
-      assert ConvNeXt.map_key(
-               "convnext.encoder.stages.1.downsampling_layer.1.bias"
-             ) == "downsample_0_conv.bias"
+      assert ConvNeXt.map_key("convnext.encoder.stages.1.downsampling_layer.1.bias") ==
+               "downsample_0_conv.bias"
 
       # HF stages.3.downsampling_layer → Edifice downsample_2
-      assert ConvNeXt.map_key(
-               "convnext.encoder.stages.3.downsampling_layer.0.weight"
-             ) == "downsample_2_norm.gamma"
+      assert ConvNeXt.map_key("convnext.encoder.stages.3.downsampling_layer.0.weight") ==
+               "downsample_2_norm.gamma"
 
-      assert ConvNeXt.map_key(
-               "convnext.encoder.stages.3.downsampling_layer.1.weight"
-             ) == "downsample_2_conv.kernel"
+      assert ConvNeXt.map_key("convnext.encoder.stages.3.downsampling_layer.1.weight") ==
+               "downsample_2_conv.kernel"
     end
   end
 
@@ -229,31 +221,23 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXtTest do
 
       tensors = %{
         # Stem
-        "convnext.embeddings.patch_embeddings.weight" =>
-          Nx.iota({dim, 3, 4, 4}, type: :f32),
-        "convnext.embeddings.patch_embeddings.bias" =>
-          Nx.iota({dim}, type: :f32),
-        "convnext.embeddings.layernorm.weight" =>
-          Nx.broadcast(Nx.tensor(1.0, type: :f32), {dim}),
-        "convnext.embeddings.layernorm.bias" =>
-          Nx.broadcast(Nx.tensor(0.0, type: :f32), {dim}),
+        "convnext.embeddings.patch_embeddings.weight" => Nx.iota({dim, 3, 4, 4}, type: :f32),
+        "convnext.embeddings.patch_embeddings.bias" => Nx.iota({dim}, type: :f32),
+        "convnext.embeddings.layernorm.weight" => Nx.broadcast(Nx.tensor(1.0, type: :f32), {dim}),
+        "convnext.embeddings.layernorm.bias" => Nx.broadcast(Nx.tensor(0.0, type: :f32), {dim}),
         # One block in stage 0
-        "convnext.encoder.stages.0.layers.0.dwconv.weight" =>
-          Nx.iota({dim, 1, 7, 7}, type: :f32),
-        "convnext.encoder.stages.0.layers.0.dwconv.bias" =>
-          Nx.iota({dim}, type: :f32),
+        "convnext.encoder.stages.0.layers.0.dwconv.weight" => Nx.iota({dim, 1, 7, 7}, type: :f32),
+        "convnext.encoder.stages.0.layers.0.dwconv.bias" => Nx.iota({dim}, type: :f32),
         "convnext.encoder.stages.0.layers.0.layernorm.weight" =>
           Nx.broadcast(Nx.tensor(1.0, type: :f32), {dim}),
         "convnext.encoder.stages.0.layers.0.layernorm.bias" =>
           Nx.broadcast(Nx.tensor(0.0, type: :f32), {dim}),
         "convnext.encoder.stages.0.layers.0.pwconv1.weight" =>
           Nx.iota({dim * 4, dim}, type: :f32),
-        "convnext.encoder.stages.0.layers.0.pwconv1.bias" =>
-          Nx.iota({dim * 4}, type: :f32),
+        "convnext.encoder.stages.0.layers.0.pwconv1.bias" => Nx.iota({dim * 4}, type: :f32),
         "convnext.encoder.stages.0.layers.0.pwconv2.weight" =>
           Nx.iota({dim, dim * 4}, type: :f32),
-        "convnext.encoder.stages.0.layers.0.pwconv2.bias" =>
-          Nx.iota({dim}, type: :f32),
+        "convnext.encoder.stages.0.layers.0.pwconv2.bias" => Nx.iota({dim}, type: :f32),
         "convnext.encoder.stages.0.layers.0.layer_scale_parameter" =>
           Nx.broadcast(Nx.tensor(1.0e-6, type: :f32), {dim}),
         # Downsample between stage 0 and 1 (in HF: stages.1.downsampling_layer)
@@ -263,17 +247,12 @@ defmodule Edifice.Pretrained.KeyMaps.ConvNeXtTest do
           Nx.broadcast(Nx.tensor(0.0, type: :f32), {dim}),
         "convnext.encoder.stages.1.downsampling_layer.1.weight" =>
           Nx.iota({dim * 2, dim, 2, 2}, type: :f32),
-        "convnext.encoder.stages.1.downsampling_layer.1.bias" =>
-          Nx.iota({dim * 2}, type: :f32),
+        "convnext.encoder.stages.1.downsampling_layer.1.bias" => Nx.iota({dim * 2}, type: :f32),
         # Final norm + classifier
-        "convnext.layernorm.weight" =>
-          Nx.broadcast(Nx.tensor(1.0, type: :f32), {dim}),
-        "convnext.layernorm.bias" =>
-          Nx.broadcast(Nx.tensor(0.0, type: :f32), {dim}),
-        "classifier.weight" =>
-          Nx.iota({10, dim}, type: :f32),
-        "classifier.bias" =>
-          Nx.iota({10}, type: :f32)
+        "convnext.layernorm.weight" => Nx.broadcast(Nx.tensor(1.0, type: :f32), {dim}),
+        "convnext.layernorm.bias" => Nx.broadcast(Nx.tensor(0.0, type: :f32), {dim}),
+        "classifier.weight" => Nx.iota({10, dim}, type: :f32),
+        "classifier.bias" => Nx.iota({10}, type: :f32)
       }
 
       path = write_fixture(tensors)

@@ -140,9 +140,7 @@ defmodule Edifice.Recurrent.DeepResLSTM do
     normed = apply_norm(x, norm, hidden_size, "block_#{layer_idx}_prenorm")
 
     output_seq =
-      Edifice.Recurrent.build_raw_rnn(normed, hidden_size, :lstm,
-        name: "lstm_#{layer_idx}"
-      )
+      Edifice.Recurrent.build_raw_rnn(normed, hidden_size, :lstm, name: "lstm_#{layer_idx}")
 
     # Zero-initialized decoder — starts as identity (residual passes through unchanged)
     decoded =

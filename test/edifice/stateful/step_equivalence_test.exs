@@ -40,7 +40,8 @@ defmodule Edifice.StatefulStepEquivalenceTest do
     end
 
     test "batch of 2" do
-      assert_step_matches_forward(:min_gru,
+      assert_step_matches_forward(
+        :min_gru,
         [embed_dim: 8, hidden_size: 8, num_layers: 2, dropout: 0.0],
         batch: 2
       )
@@ -172,10 +173,20 @@ defmodule Edifice.StatefulStepEquivalenceTest do
 
       {params, predict_default, x} = Edifice.StatefulCase.build_forward(:gated_ssm, opts, 6, 1, 3)
 
-      legacy_model = Edifice.build(:gated_ssm, Keyword.put(opts, :scan_mode, :legacy) |> Keyword.put(:seq_len, nil))
+      legacy_model =
+        Edifice.build(
+          :gated_ssm,
+          Keyword.put(opts, :scan_mode, :legacy) |> Keyword.put(:seq_len, nil)
+        )
+
       {_, predict_legacy} = Axon.build(legacy_model, mode: :inference)
 
-      causal_model = Edifice.build(:gated_ssm, Keyword.put(opts, :scan_mode, :causal) |> Keyword.put(:seq_len, nil))
+      causal_model =
+        Edifice.build(
+          :gated_ssm,
+          Keyword.put(opts, :scan_mode, :causal) |> Keyword.put(:seq_len, nil)
+        )
+
       {_, predict_causal} = Axon.build(causal_model, mode: :inference)
 
       out_default = predict_default.(params, x)

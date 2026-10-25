@@ -29,7 +29,9 @@ defmodule Edifice.RecipesTest do
 
   defp make_classification_data(n \\ 10) do
     Stream.repeatedly(fn ->
-      {input, _key} = Nx.Random.uniform(Nx.Random.key(:rand.uniform(10000)), shape: {@batch, @embed_dim})
+      {input, _key} =
+        Nx.Random.uniform(Nx.Random.key(:rand.uniform(10000)), shape: {@batch, @embed_dim})
+
       # One-hot labels
       labels = Nx.iota({@batch}, type: :s64) |> Nx.remainder(@num_classes)
       target = Nx.equal(Nx.new_axis(labels, 1), Nx.iota({1, @num_classes})) |> Nx.as_type(:f32)
@@ -46,7 +48,9 @@ defmodule Edifice.RecipesTest do
 
   defp make_regression_data(n \\ 10) do
     Stream.repeatedly(fn ->
-      {input, _key} = Nx.Random.uniform(Nx.Random.key(:rand.uniform(10000)), shape: {@batch, @embed_dim})
+      {input, _key} =
+        Nx.Random.uniform(Nx.Random.key(:rand.uniform(10000)), shape: {@batch, @embed_dim})
+
       target = Nx.broadcast(1.0, {@batch, 1})
       {%{"x" => input}, target}
     end)
@@ -56,7 +60,9 @@ defmodule Edifice.RecipesTest do
   defp make_contrastive_data(n \\ 10) do
     Stream.repeatedly(fn ->
       # Concatenated positive pairs: first half = view1, second half = view2
-      {input, _key} = Nx.Random.uniform(Nx.Random.key(:rand.uniform(10000)), shape: {2 * @batch, @embed_dim})
+      {input, _key} =
+        Nx.Random.uniform(Nx.Random.key(:rand.uniform(10000)), shape: {2 * @batch, @embed_dim})
+
       # Dummy labels (not used by infonce loss)
       labels = Nx.broadcast(0.0, {2 * @batch, @embed_dim})
       {%{"x" => input}, labels}
@@ -109,11 +115,14 @@ defmodule Edifice.RecipesTest do
 
     test "respects gradient clipping config" do
       model = build_lm()
-      loop = Recipes.language_model(model,
-        vocab_size: @num_classes,
-        max_grad_norm: 0.5,
-        log: false
-      )
+
+      loop =
+        Recipes.language_model(model,
+          vocab_size: @num_classes,
+          max_grad_norm: 0.5,
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
   end
@@ -192,7 +201,10 @@ defmodule Edifice.RecipesTest do
     test "classify accepts validation_data" do
       model = build_classifier()
       val_data = make_classification_data(3)
-      loop = Recipes.classify(model, num_classes: @num_classes, validation_data: val_data, log: false)
+
+      loop =
+        Recipes.classify(model, num_classes: @num_classes, validation_data: val_data, log: false)
+
       assert %Axon.Loop{} = loop
     end
 
@@ -207,7 +219,14 @@ defmodule Edifice.RecipesTest do
   describe "checkpoint_path option" do
     test "classify accepts checkpoint_path" do
       model = build_classifier()
-      loop = Recipes.classify(model, num_classes: @num_classes, checkpoint_path: "/tmp/ckpt", log: false)
+
+      loop =
+        Recipes.classify(model,
+          num_classes: @num_classes,
+          checkpoint_path: "/tmp/ckpt",
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
 
@@ -302,21 +321,27 @@ defmodule Edifice.RecipesTest do
 
   describe "monitor option" do
     test "classify accepts monitor: true" do
-      loop = Recipes.classify(build_classifier(), num_classes: @num_classes, monitor: true, log: false)
+      loop =
+        Recipes.classify(build_classifier(), num_classes: @num_classes, monitor: true, log: false)
+
       assert %Axon.Loop{} = loop
     end
 
     test "classify accepts monitor keyword opts" do
-      loop = Recipes.classify(build_classifier(),
-        num_classes: @num_classes,
-        monitor: [metrics: [:loss], every: 5],
-        log: false
-      )
+      loop =
+        Recipes.classify(build_classifier(),
+          num_classes: @num_classes,
+          monitor: [metrics: [:loss], every: 5],
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
 
     test "language_model accepts monitor: true" do
-      loop = Recipes.language_model(build_lm(), vocab_size: @num_classes, monitor: true, log: false)
+      loop =
+        Recipes.language_model(build_lm(), vocab_size: @num_classes, monitor: true, log: false)
+
       assert %Axon.Loop{} = loop
     end
 
@@ -329,20 +354,24 @@ defmodule Edifice.RecipesTest do
 
   describe "adaptive option" do
     test "classify accepts adaptive with skip_spikes" do
-      loop = Recipes.classify(build_classifier(),
-        num_classes: @num_classes,
-        adaptive: [skip_spikes: true],
-        log: false
-      )
+      loop =
+        Recipes.classify(build_classifier(),
+          num_classes: @num_classes,
+          adaptive: [skip_spikes: true],
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
 
     test "language_model accepts adaptive with nan_halt" do
-      loop = Recipes.language_model(build_lm(),
-        vocab_size: @num_classes,
-        adaptive: [nan_halt: [patience: 3]],
-        log: false
-      )
+      loop =
+        Recipes.language_model(build_lm(),
+          vocab_size: @num_classes,
+          adaptive: [nan_halt: [patience: 3]],
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
 
@@ -353,12 +382,14 @@ defmodule Edifice.RecipesTest do
     end
 
     test "classify accepts both monitor and adaptive" do
-      loop = Recipes.classify(build_classifier(),
-        num_classes: @num_classes,
-        monitor: true,
-        adaptive: [skip_spikes: true, nan_halt: true],
-        log: false
-      )
+      loop =
+        Recipes.classify(build_classifier(),
+          num_classes: @num_classes,
+          monitor: true,
+          adaptive: [skip_spikes: true, nan_halt: true],
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
   end
@@ -369,22 +400,42 @@ defmodule Edifice.RecipesTest do
 
   describe "optimizer option" do
     test "classify with adam" do
-      loop = Recipes.classify(build_classifier(), num_classes: @num_classes, optimizer: :adam, log: false)
+      loop =
+        Recipes.classify(build_classifier(),
+          num_classes: @num_classes,
+          optimizer: :adam,
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
 
     test "classify with radam" do
-      loop = Recipes.classify(build_classifier(), num_classes: @num_classes, optimizer: :radam, log: false)
+      loop =
+        Recipes.classify(build_classifier(),
+          num_classes: @num_classes,
+          optimizer: :radam,
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
 
     test "classify with sgd" do
-      loop = Recipes.classify(build_classifier(), num_classes: @num_classes, optimizer: :sgd, log: false)
+      loop =
+        Recipes.classify(build_classifier(),
+          num_classes: @num_classes,
+          optimizer: :sgd,
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
 
     test "language_model with lamb" do
-      loop = Recipes.language_model(build_lm(), vocab_size: @num_classes, optimizer: :lamb, log: false)
+      loop =
+        Recipes.language_model(build_lm(), vocab_size: @num_classes, optimizer: :lamb, log: false)
+
       assert %Axon.Loop{} = loop
     end
 
@@ -397,17 +448,35 @@ defmodule Edifice.RecipesTest do
 
   describe "schedule option" do
     test "classify with exponential_decay" do
-      loop = Recipes.classify(build_classifier(), num_classes: @num_classes, schedule: :exponential_decay, log: false)
+      loop =
+        Recipes.classify(build_classifier(),
+          num_classes: @num_classes,
+          schedule: :exponential_decay,
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
 
     test "classify with linear_decay" do
-      loop = Recipes.classify(build_classifier(), num_classes: @num_classes, schedule: :linear_decay, log: false)
+      loop =
+        Recipes.classify(build_classifier(),
+          num_classes: @num_classes,
+          schedule: :linear_decay,
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
 
     test "classify with constant" do
-      loop = Recipes.classify(build_classifier(), num_classes: @num_classes, schedule: :constant, log: false)
+      loop =
+        Recipes.classify(build_classifier(),
+          num_classes: @num_classes,
+          schedule: :constant,
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
 
@@ -420,32 +489,39 @@ defmodule Edifice.RecipesTest do
 
   describe "extra_metrics option" do
     test "classify with precision and recall" do
-      loop = Recipes.classify(build_classifier(),
-        num_classes: @num_classes,
-        extra_metrics: [:precision, :recall],
-        log: false
-      )
+      loop =
+        Recipes.classify(build_classifier(),
+          num_classes: @num_classes,
+          extra_metrics: [:precision, :recall],
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
 
     test "fine_tune with extra_metrics" do
       {init_fn, _} = Axon.build(build_classifier())
       params = init_fn.(Nx.template({1, @embed_dim}, :f32), Axon.ModelState.empty())
-      loop = Recipes.fine_tune(build_classifier(), params,
-        extra_metrics: [:precision, :sensitivity],
-        log: false
-      )
+
+      loop =
+        Recipes.fine_tune(build_classifier(), params,
+          extra_metrics: [:precision, :sensitivity],
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
   end
 
   describe "reduce_lr_on_plateau option" do
     test "classify with reduce_lr_on_plateau: true" do
-      loop = Recipes.classify(build_classifier(),
-        num_classes: @num_classes,
-        reduce_lr_on_plateau: true,
-        log: false
-      )
+      loop =
+        Recipes.classify(build_classifier(),
+          num_classes: @num_classes,
+          reduce_lr_on_plateau: true,
+          log: false
+        )
+
       assert %Axon.Loop{} = loop
     end
 

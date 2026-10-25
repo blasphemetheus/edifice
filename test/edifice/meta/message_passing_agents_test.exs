@@ -89,8 +89,18 @@ defmodule Edifice.Meta.MessagePassingAgentsTest do
         )
 
       key = Nx.Random.key(42)
-      {input_a, key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch_size, @seq_len, @embed_dim}, type: {:f, 32})
-      {input_b, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch_size, @seq_len, @embed_dim}, type: {:f, 32})
+
+      {input_a, key} =
+        Nx.Random.uniform(key, -1.0, 1.0,
+          shape: {@batch_size, @seq_len, @embed_dim},
+          type: {:f, 32}
+        )
+
+      {input_b, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0,
+          shape: {@batch_size, @seq_len, @embed_dim},
+          type: {:f, 32}
+        )
 
       adj = fully_connected_adj()
 

@@ -82,31 +82,36 @@ defmodule Edifice.CUDA.AutoTuneTest do
     test "extracts hidden from 4H for slstm_scan" do
       # slstm_scan tensor is {B, T, 4*H}, key dim should be H
       :persistent_term.put({:edifice_autotune, :slstm_scan, 32, {:f, 32}}, :fallback)
-      tensor = Nx.iota({2, 4, 128}, type: {:f, 32})  # 4*32 = 128
+      # 4*32 = 128
+      tensor = Nx.iota({2, 4, 128}, type: {:f, 32})
       refute AutoTune.use_fused?(:slstm_scan, tensor)
     end
 
     test "extracts hidden from 3H for gru_scan" do
       :persistent_term.put({:edifice_autotune, :gru_scan, 32, {:f, 32}}, :fallback)
-      tensor = Nx.iota({2, 4, 96}, type: {:f, 32})  # 3*32 = 96
+      # 3*32 = 96
+      tensor = Nx.iota({2, 4, 96}, type: {:f, 32})
       refute AutoTune.use_fused?(:gru_scan, tensor)
     end
 
     test "extracts memory_size from 4M for titans_scan" do
       :persistent_term.put({:edifice_autotune, :titans_scan, 16, {:f, 32}}, :fallback)
-      tensor = Nx.iota({2, 4, 64}, type: {:f, 32})  # 4*16 = 64
+      # 4*16 = 64
+      tensor = Nx.iota({2, 4, 64}, type: {:f, 32})
       refute AutoTune.use_fused?(:titans_scan, tensor)
     end
 
     test "extracts memory_size from 5M for miras_scan" do
       :persistent_term.put({:edifice_autotune, :miras_scan, 10, {:f, 32}}, :fallback)
-      tensor = Nx.iota({2, 4, 50}, type: {:f, 32})  # 5*10 = 50
+      # 5*10 = 50
+      tensor = Nx.iota({2, 4, 50}, type: {:f, 32})
       refute AutoTune.use_fused?(:miras_scan, tensor)
     end
 
     test "extracts head_dim for 4D attention kernels" do
       :persistent_term.put({:edifice_autotune, :flash_attention, 16, {:f, 32}}, :fallback)
-      tensor = Nx.iota({2, 4, 8, 16}, type: {:f, 32})  # head_dim = 16
+      # head_dim = 16
+      tensor = Nx.iota({2, 4, 8, 16}, type: {:f, 32})
       refute AutoTune.use_fused?(:flash_attention, tensor)
     end
   end
@@ -141,12 +146,18 @@ defmodule Edifice.CUDA.AutoTuneTest do
 
       # Clear and verify empty
       AutoTune.clear_cache()
-      assert :persistent_term.get({:edifice_autotune, :mingru, 64, {:f, 32}}, :not_cached) == :not_cached
+
+      assert :persistent_term.get({:edifice_autotune, :mingru, 64, {:f, 32}}, :not_cached) ==
+               :not_cached
 
       # Load
       assert {:ok, 2} = AutoTune.load_disk_cache(path)
-      assert :persistent_term.get({:edifice_autotune, :mingru, 64, {:f, 32}}, :not_cached) == :fused
-      assert :persistent_term.get({:edifice_autotune, :gru_scan, 64, {:f, 32}}, :not_cached) == :fallback
+
+      assert :persistent_term.get({:edifice_autotune, :mingru, 64, {:f, 32}}, :not_cached) ==
+               :fused
+
+      assert :persistent_term.get({:edifice_autotune, :gru_scan, 64, {:f, 32}}, :not_cached) ==
+               :fallback
     end
 
     @tag :tmp_dir
@@ -176,8 +187,11 @@ defmodule Edifice.CUDA.AutoTuneTest do
 
       AutoTune.clear_cache()
 
-      assert :persistent_term.get({:edifice_autotune, :mingru, 64, {:f, 32}}, :not_cached) == :not_cached
-      assert :persistent_term.get({:edifice_autotune, :minlstm, 64, {:f, 32}}, :not_cached) == :not_cached
+      assert :persistent_term.get({:edifice_autotune, :mingru, 64, {:f, 32}}, :not_cached) ==
+               :not_cached
+
+      assert :persistent_term.get({:edifice_autotune, :minlstm, 64, {:f, 32}}, :not_cached) ==
+               :not_cached
     end
   end
 

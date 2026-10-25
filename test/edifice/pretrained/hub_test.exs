@@ -22,15 +22,16 @@ defmodule Edifice.Pretrained.HubTest do
 
   describe "parse_shard_index/1" do
     test "extracts unique sorted filenames from weight_map" do
-      json = Jason.encode!(%{
-        "metadata" => %{"total_size" => 100},
-        "weight_map" => %{
-          "layer.0.weight" => "model-00002-of-00003.safetensors",
-          "layer.0.bias" => "model-00002-of-00003.safetensors",
-          "layer.1.weight" => "model-00001-of-00003.safetensors",
-          "embed.weight" => "model-00003-of-00003.safetensors"
-        }
-      })
+      json =
+        Jason.encode!(%{
+          "metadata" => %{"total_size" => 100},
+          "weight_map" => %{
+            "layer.0.weight" => "model-00002-of-00003.safetensors",
+            "layer.0.bias" => "model-00002-of-00003.safetensors",
+            "layer.1.weight" => "model-00001-of-00003.safetensors",
+            "embed.weight" => "model-00003-of-00003.safetensors"
+          }
+        })
 
       filenames = Hub.parse_shard_index(json)
 
@@ -42,13 +43,14 @@ defmodule Edifice.Pretrained.HubTest do
     end
 
     test "deduplicates filenames" do
-      json = Jason.encode!(%{
-        "weight_map" => %{
-          "a" => "shard-1.safetensors",
-          "b" => "shard-1.safetensors",
-          "c" => "shard-2.safetensors"
-        }
-      })
+      json =
+        Jason.encode!(%{
+          "weight_map" => %{
+            "a" => "shard-1.safetensors",
+            "b" => "shard-1.safetensors",
+            "c" => "shard-2.safetensors"
+          }
+        })
 
       filenames = Hub.parse_shard_index(json)
       assert filenames == ["shard-1.safetensors", "shard-2.safetensors"]

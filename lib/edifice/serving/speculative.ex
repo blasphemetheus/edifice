@@ -90,18 +90,42 @@ defmodule Edifice.Serving.Speculative do
 
     # Initial state: just the prompt tokens
     do_speculative_loop(
-      draft_fn, draft_params, verify_fn, verify_params,
-      prompt, embed_fn, seq_len, draft_steps, max_tokens,
-      temperature, sampling_opts, key, stop_token, on_accept,
-      batch_size, 0
+      draft_fn,
+      draft_params,
+      verify_fn,
+      verify_params,
+      prompt,
+      embed_fn,
+      seq_len,
+      draft_steps,
+      max_tokens,
+      temperature,
+      sampling_opts,
+      key,
+      stop_token,
+      on_accept,
+      batch_size,
+      0
     )
   end
 
   defp do_speculative_loop(
-         draft_fn, draft_params, verify_fn, verify_params,
-         tokens, embed_fn, seq_len, draft_steps, max_tokens,
-         temperature, sampling_opts, key, stop_token, on_accept,
-         batch_size, round
+         draft_fn,
+         draft_params,
+         verify_fn,
+         verify_params,
+         tokens,
+         embed_fn,
+         seq_len,
+         draft_steps,
+         max_tokens,
+         temperature,
+         sampling_opts,
+         key,
+         stop_token,
+         on_accept,
+         batch_size,
+         round
        ) do
     current_len = Nx.axis_size(tokens, 1)
     _remaining = max_tokens - (current_len - Nx.axis_size(tokens, 1)) + max_tokens
@@ -111,13 +135,32 @@ defmodule Edifice.Serving.Speculative do
     else
       # Step 1: Draft K tokens autoregressively from the draft model
       {draft_tokens, key} =
-        draft_k_tokens(draft_fn, draft_params, tokens, embed_fn, seq_len,
-          draft_steps, temperature, sampling_opts, key, batch_size)
+        draft_k_tokens(
+          draft_fn,
+          draft_params,
+          tokens,
+          embed_fn,
+          seq_len,
+          draft_steps,
+          temperature,
+          sampling_opts,
+          key,
+          batch_size
+        )
 
       # Step 2: Verify all draft tokens with the verifier in one forward pass
       verifier_tokens =
-        verify_draft(verify_fn, verify_params, tokens, draft_tokens, embed_fn,
-          seq_len, temperature, sampling_opts, batch_size)
+        verify_draft(
+          verify_fn,
+          verify_params,
+          tokens,
+          draft_tokens,
+          embed_fn,
+          seq_len,
+          temperature,
+          sampling_opts,
+          batch_size
+        )
 
       # Step 3: Accept-reject
       accepted_count =
@@ -128,7 +171,9 @@ defmodule Edifice.Serving.Speculative do
       if on_accept, do: on_accept.(accepted_count, round)
 
       # Step 4: Append accepted tokens + first verifier correction
-      accepted = Nx.slice_along_axis(verifier_tokens, 0, min(accepted_count + 1, draft_steps), axis: 1)
+      accepted =
+        Nx.slice_along_axis(verifier_tokens, 0, min(accepted_count + 1, draft_steps), axis: 1)
+
       accepted = Nx.reshape(accepted, {batch_size, Nx.axis_size(accepted, 1)})
       tokens = Nx.concatenate([tokens, accepted], axis: 1)
 
@@ -142,10 +187,22 @@ defmodule Edifice.Serving.Speculative do
           Nx.slice_along_axis(tokens, 0, max_tokens, axis: 1)
         else
           do_speculative_loop(
-            draft_fn, draft_params, verify_fn, verify_params,
-            tokens, embed_fn, seq_len, draft_steps, max_tokens,
-            temperature, sampling_opts, key, stop_token, on_accept,
-            batch_size, round + 1
+            draft_fn,
+            draft_params,
+            verify_fn,
+            verify_params,
+            tokens,
+            embed_fn,
+            seq_len,
+            draft_steps,
+            max_tokens,
+            temperature,
+            sampling_opts,
+            key,
+            stop_token,
+            on_accept,
+            batch_size,
+            round + 1
           )
         end
       end
@@ -153,14 +210,26 @@ defmodule Edifice.Serving.Speculative do
   end
 
   # Generate K tokens from the draft model autoregressively
-  defp draft_k_tokens(draft_fn, draft_params, context, embed_fn, seq_len,
-         k, temperature, sampling_opts, key, batch_size) do
+  defp draft_k_tokens(
+         draft_fn,
+         draft_params,
+         context,
+         embed_fn,
+         seq_len,
+         k,
+         temperature,
+         sampling_opts,
+         key,
+         batch_size
+       ) do
     {draft_tokens, key} =
       Enum.reduce(1..k, {[], key}, fn _step, {acc, key} ->
         # Build full sequence: context + previously drafted tokens
         prev =
           case acc do
-            [] -> context
+            [] ->
+              context
+
             _ ->
               drafted = acc |> Enum.reverse() |> Nx.concatenate(axis: 1)
               Nx.concatenate([context, drafted], axis: 1)
@@ -183,8 +252,17 @@ defmodule Edifice.Serving.Speculative do
   end
 
   # Verify draft tokens: run verifier on context + draft_tokens
-  defp verify_draft(verify_fn, verify_params, context, draft_tokens, embed_fn,
-         seq_len, temperature, _sampling_opts, batch_size) do
+  defp verify_draft(
+         verify_fn,
+         verify_params,
+         context,
+         draft_tokens,
+         embed_fn,
+         seq_len,
+         temperature,
+         _sampling_opts,
+         batch_size
+       ) do
     k = Nx.axis_size(draft_tokens, 1)
     full_seq = Nx.concatenate([context, draft_tokens], axis: 1)
     context_len = Nx.axis_size(context, 1)
@@ -220,7 +298,10 @@ defmodule Edifice.Serving.Speculative do
       Nx.slice_along_axis(embedded, current_len - seq_len, seq_len, axis: 1)
     else
       {batch, _len, dim} = Nx.shape(embedded)
-      pad = Nx.broadcast(0.0, {batch, seq_len - current_len, dim}) |> Nx.as_type(Nx.type(embedded))
+
+      pad =
+        Nx.broadcast(0.0, {batch, seq_len - current_len, dim}) |> Nx.as_type(Nx.type(embedded))
+
       Nx.concatenate([embedded, pad], axis: 1)
     end
   end

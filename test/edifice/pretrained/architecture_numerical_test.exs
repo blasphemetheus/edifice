@@ -103,6 +103,7 @@ defmodule Edifice.Pretrained.ArchitectureNumericalTest do
         ] ++
           Enum.flat_map(0..1, fn i ->
             block_idx = i + 1
+
             [
               {"blocks.#{i}.prenorm.weight", ["block_#{block_idx}_prenorm", "gamma"], :identity},
               {"blocks.#{i}.prenorm.bias", ["block_#{block_idx}_prenorm", "beta"], :identity},
@@ -112,19 +113,26 @@ defmodule Edifice.Pretrained.ArchitectureNumericalTest do
               Enum.flat_map(
                 [{"wii", "wii"}, {"wif", "wif"}, {"wig", "wig"}, {"wio", "wio"}],
                 fn {pt_gate, ax_gate} ->
-                  [{"blocks.#{i}.lstm.input_kernel.#{pt_gate}", ["lstm_#{block_idx}", "input_kernel", ax_gate], :transpose_2d}]
+                  [
+                    {"blocks.#{i}.lstm.input_kernel.#{pt_gate}",
+                     ["lstm_#{block_idx}", "input_kernel", ax_gate], :transpose_2d}
+                  ]
                 end
               ) ++
               Enum.flat_map(
                 [{"whi", "whi"}, {"whf", "whf"}, {"whg", "whg"}, {"who", "who"}],
                 fn {pt_gate, ax_gate} ->
-                  [{"blocks.#{i}.lstm.hidden_kernel.#{pt_gate}", ["lstm_#{block_idx}", "hidden_kernel", ax_gate], :transpose_2d}]
+                  [
+                    {"blocks.#{i}.lstm.hidden_kernel.#{pt_gate}",
+                     ["lstm_#{block_idx}", "hidden_kernel", ax_gate], :transpose_2d}
+                  ]
                 end
               ) ++
               Enum.map(
                 [{"bi", "bi"}, {"bf", "bf"}, {"bg", "bg"}, {"bo", "bo"}],
                 fn {pt_gate, ax_gate} ->
-                  {"blocks.#{i}.lstm.bias.#{pt_gate}", ["lstm_#{block_idx}", "bias", ax_gate], :identity}
+                  {"blocks.#{i}.lstm.bias.#{pt_gate}", ["lstm_#{block_idx}", "bias", ax_gate],
+                   :identity}
                 end
               )
           end)

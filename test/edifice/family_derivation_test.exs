@@ -17,6 +17,6 @@ defmodule Edifice.FamilyDerivationTest do
   end
 
   test "no family is empty" do
-    assert (for {fam, []} <- Edifice.list_families(), do: fam) == []
+    assert for({fam, []} <- Edifice.list_families(), do: fam) == []
   end
 end

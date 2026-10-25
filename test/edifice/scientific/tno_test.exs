@@ -99,6 +99,7 @@ defmodule Edifice.Scientific.TNOTest do
 
     test "1D coordinates" do
       opts = Keyword.merge(@small_opts, coord_dim: 1)
+
       inputs = %{
         "sensors" => random_tensor({@batch, @num_sensors}),
         "history" => random_tensor({@batch, @history_dim}),

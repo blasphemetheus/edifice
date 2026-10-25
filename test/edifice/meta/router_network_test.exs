@@ -96,8 +96,18 @@ defmodule Edifice.Meta.RouterNetworkTest do
         )
 
       key = Nx.Random.key(42)
-      {input_a, key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch_size, @seq_len, @embed_dim}, type: {:f, 32})
-      {input_b, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch_size, @seq_len, @embed_dim}, type: {:f, 32})
+
+      {input_a, key} =
+        Nx.Random.uniform(key, -1.0, 1.0,
+          shape: {@batch_size, @seq_len, @embed_dim},
+          type: {:f, 32}
+        )
+
+      {input_b, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0,
+          shape: {@batch_size, @seq_len, @embed_dim},
+          type: {:f, 32}
+        )
 
       output_a = predict_fn.(params, %{"state_sequence" => input_a})
       output_b = predict_fn.(params, %{"state_sequence" => input_b})

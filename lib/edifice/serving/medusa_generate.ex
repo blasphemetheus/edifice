@@ -86,16 +86,38 @@ defmodule Edifice.Serving.MedusaGenerate do
     _key = Nx.Random.key(seed)
 
     do_medusa_loop(
-      base_fn, base_params, heads_fn, heads_params,
-      prompt, embed_fn, seq_len, max_tokens, top_k,
-      stop_token, num_medusa_heads, on_accept, batch_size, 0
+      base_fn,
+      base_params,
+      heads_fn,
+      heads_params,
+      prompt,
+      embed_fn,
+      seq_len,
+      max_tokens,
+      top_k,
+      stop_token,
+      num_medusa_heads,
+      on_accept,
+      batch_size,
+      0
     )
   end
 
   defp do_medusa_loop(
-         base_fn, base_params, heads_fn, heads_params,
-         tokens, embed_fn, seq_len, max_tokens, top_k,
-         stop_token, num_medusa_heads, on_accept, batch_size, round
+         base_fn,
+         base_params,
+         heads_fn,
+         heads_params,
+         tokens,
+         embed_fn,
+         seq_len,
+         max_tokens,
+         top_k,
+         stop_token,
+         num_medusa_heads,
+         on_accept,
+         batch_size,
+         round
        ) do
     current_len = Nx.axis_size(tokens, 1)
 
@@ -150,9 +172,20 @@ defmodule Edifice.Serving.MedusaGenerate do
           tokens
         else
           do_medusa_loop(
-            base_fn, base_params, heads_fn, heads_params,
-            tokens, embed_fn, seq_len, max_tokens, top_k,
-            stop_token, num_medusa_heads, on_accept, batch_size, round + 1
+            base_fn,
+            base_params,
+            heads_fn,
+            heads_params,
+            tokens,
+            embed_fn,
+            seq_len,
+            max_tokens,
+            top_k,
+            stop_token,
+            num_medusa_heads,
+            on_accept,
+            batch_size,
+            round + 1
           )
         end
       else
@@ -167,9 +200,20 @@ defmodule Edifice.Serving.MedusaGenerate do
           tokens
         else
           do_medusa_loop(
-            base_fn, base_params, heads_fn, heads_params,
-            tokens, embed_fn, seq_len, max_tokens, top_k,
-            stop_token, num_medusa_heads, on_accept, batch_size, round + 1
+            base_fn,
+            base_params,
+            heads_fn,
+            heads_params,
+            tokens,
+            embed_fn,
+            seq_len,
+            max_tokens,
+            top_k,
+            stop_token,
+            num_medusa_heads,
+            on_accept,
+            batch_size,
+            round + 1
           )
         end
       end
@@ -213,7 +257,10 @@ defmodule Edifice.Serving.MedusaGenerate do
       Nx.slice_along_axis(embedded, current_len - seq_len, seq_len, axis: 1)
     else
       {batch, _len, dim} = Nx.shape(embedded)
-      pad = Nx.broadcast(0.0, {batch, seq_len - current_len, dim}) |> Nx.as_type(Nx.type(embedded))
+
+      pad =
+        Nx.broadcast(0.0, {batch, seq_len - current_len, dim}) |> Nx.as_type(Nx.type(embedded))
+
       Nx.concatenate([embedded, pad], axis: 1)
     end
   end

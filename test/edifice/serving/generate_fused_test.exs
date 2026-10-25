@@ -23,7 +23,11 @@ defmodule Edifice.Serving.GenerateFusedTest do
 
     predict_fn = fn _params, input ->
       batch_size = Nx.axis_size(input["state_sequence"], 0)
-      Nx.broadcast(Nx.reshape(logits_row, {1, 1, @vocab_size}), {batch_size, @seq_len, @vocab_size})
+
+      Nx.broadcast(
+        Nx.reshape(logits_row, {1, 1, @vocab_size}),
+        {batch_size, @seq_len, @vocab_size}
+      )
     end
 
     {predict_fn, %{}}
@@ -34,14 +38,15 @@ defmodule Edifice.Serving.GenerateFusedTest do
       {predict_fn, params} = build_constant_logit_model(5)
       embed_fn = make_embed_fn()
 
-      tokens = GenerateFused.generate(predict_fn, params,
-        prompt: Nx.tensor([[1, 2, 3]]),
-        embed_fn: embed_fn,
-        seq_len: @seq_len,
-        max_tokens: @max_tokens,
-        temperature: 0.01,
-        seed: 42
-      )
+      tokens =
+        GenerateFused.generate(predict_fn, params,
+          prompt: Nx.tensor([[1, 2, 3]]),
+          embed_fn: embed_fn,
+          seq_len: @seq_len,
+          max_tokens: @max_tokens,
+          temperature: 0.01,
+          seed: 42
+        )
 
       assert Nx.shape(tokens) == {1, @max_tokens}
 
@@ -54,24 +59,28 @@ defmodule Edifice.Serving.GenerateFusedTest do
       embed_fn = make_embed_fn()
 
       {predict_fn_7, params_7} = build_constant_logit_model(7)
-      tokens_7 = GenerateFused.generate(predict_fn_7, params_7,
-        prompt: Nx.tensor([[0]]),
-        embed_fn: embed_fn,
-        seq_len: @seq_len,
-        max_tokens: 5,
-        temperature: 0.01,
-        seed: 1
-      )
+
+      tokens_7 =
+        GenerateFused.generate(predict_fn_7, params_7,
+          prompt: Nx.tensor([[0]]),
+          embed_fn: embed_fn,
+          seq_len: @seq_len,
+          max_tokens: 5,
+          temperature: 0.01,
+          seed: 1
+        )
 
       {predict_fn_3, params_3} = build_constant_logit_model(3)
-      tokens_3 = GenerateFused.generate(predict_fn_3, params_3,
-        prompt: Nx.tensor([[0]]),
-        embed_fn: embed_fn,
-        seq_len: @seq_len,
-        max_tokens: 5,
-        temperature: 0.01,
-        seed: 1
-      )
+
+      tokens_3 =
+        GenerateFused.generate(predict_fn_3, params_3,
+          prompt: Nx.tensor([[0]]),
+          embed_fn: embed_fn,
+          seq_len: @seq_len,
+          max_tokens: 5,
+          temperature: 0.01,
+          seed: 1
+        )
 
       # tokens_7 should be all 7s, tokens_3 should be all 3s
       assert Enum.all?(Nx.to_flat_list(tokens_7), &(&1 == 7))
@@ -85,24 +94,26 @@ defmodule Edifice.Serving.GenerateFusedTest do
       embed_fn = make_embed_fn()
 
       # Low temp: should be mostly 5
-      tokens_low = GenerateFused.generate(predict_fn, params,
-        prompt: Nx.tensor([[0]]),
-        embed_fn: embed_fn,
-        seq_len: @seq_len,
-        max_tokens: 20,
-        temperature: 0.01,
-        seed: 42
-      )
+      tokens_low =
+        GenerateFused.generate(predict_fn, params,
+          prompt: Nx.tensor([[0]]),
+          embed_fn: embed_fn,
+          seq_len: @seq_len,
+          max_tokens: 20,
+          temperature: 0.01,
+          seed: 42
+        )
 
       # High temp: should have variety
-      tokens_high = GenerateFused.generate(predict_fn, params,
-        prompt: Nx.tensor([[0]]),
-        embed_fn: embed_fn,
-        seq_len: @seq_len,
-        max_tokens: 20,
-        temperature: 5.0,
-        seed: 42
-      )
+      tokens_high =
+        GenerateFused.generate(predict_fn, params,
+          prompt: Nx.tensor([[0]]),
+          embed_fn: embed_fn,
+          seq_len: @seq_len,
+          max_tokens: 20,
+          temperature: 5.0,
+          seed: 42
+        )
 
       unique_low = tokens_low |> Nx.to_flat_list() |> Enum.uniq() |> length()
       unique_high = tokens_high |> Nx.to_flat_list() |> Enum.uniq() |> length()
@@ -118,15 +129,16 @@ defmodule Edifice.Serving.GenerateFusedTest do
       {predict_fn, params} = build_constant_logit_model(5)
       embed_fn = make_embed_fn()
 
-      tokens = GenerateFused.generate(predict_fn, params,
-        prompt: Nx.tensor([[0]]),
-        embed_fn: embed_fn,
-        seq_len: @seq_len,
-        max_tokens: @max_tokens,
-        temperature: 0.01,
-        stop_token: 5,
-        seed: 42
-      )
+      tokens =
+        GenerateFused.generate(predict_fn, params,
+          prompt: Nx.tensor([[0]]),
+          embed_fn: embed_fn,
+          seq_len: @seq_len,
+          max_tokens: @max_tokens,
+          temperature: 0.01,
+          stop_token: 5,
+          seed: 42
+        )
 
       token_list = Nx.to_flat_list(tokens)
 
@@ -141,14 +153,15 @@ defmodule Edifice.Serving.GenerateFusedTest do
       {predict_fn, params} = build_constant_logit_model(4)
       embed_fn = make_embed_fn()
 
-      tokens = GenerateFused.generate(predict_fn, params,
-        prompt: Nx.tensor([[1, 2], [3, 4]]),
-        embed_fn: embed_fn,
-        seq_len: @seq_len,
-        max_tokens: 5,
-        temperature: 0.01,
-        seed: 42
-      )
+      tokens =
+        GenerateFused.generate(predict_fn, params,
+          prompt: Nx.tensor([[1, 2], [3, 4]]),
+          embed_fn: embed_fn,
+          seq_len: @seq_len,
+          max_tokens: 5,
+          temperature: 0.01,
+          seed: 42
+        )
 
       assert Nx.shape(tokens) == {2, 5}
 

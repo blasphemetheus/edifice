@@ -226,17 +226,42 @@ defmodule Edifice.Detection.DETR do
       case norm_position do
         :post ->
           decoder_stack_post_norm(
-            target, memory, queries, spatial_pe,
-            num_decoder_layers, hidden_dim, num_heads, ffn_dim, dropout
+            target,
+            memory,
+            queries,
+            spatial_pe,
+            num_decoder_layers,
+            hidden_dim,
+            num_heads,
+            ffn_dim,
+            dropout
           )
 
         _pre ->
           TransformerBlock.stack(target, memory, num_decoder_layers,
             attention_fn: fn x_norm, name ->
-              attention_with_pe(x_norm, x_norm, x_norm, queries, queries, hidden_dim, num_heads, name)
+              attention_with_pe(
+                x_norm,
+                x_norm,
+                x_norm,
+                queries,
+                queries,
+                hidden_dim,
+                num_heads,
+                name
+              )
             end,
             cross_attention_fn: fn q_norm, mem, name ->
-              attention_with_pe(q_norm, mem, mem, queries, spatial_pe, hidden_dim, num_heads, name)
+              attention_with_pe(
+                q_norm,
+                mem,
+                mem,
+                queries,
+                spatial_pe,
+                hidden_dim,
+                num_heads,
+                name
+              )
             end,
             hidden_size: hidden_dim,
             custom_ffn: fn x_norm, name ->
@@ -421,7 +446,16 @@ defmodule Edifice.Detection.DETR do
   # attn(x) → LN(x + attn) → FFN(x) → LN(x + ffn)
   defp encoder_layer_post_norm(x, spatial_pe, hidden_dim, num_heads, ffn_dim, dropout, name) do
     self_attn =
-      attention_with_pe(x, x, x, spatial_pe, spatial_pe, hidden_dim, num_heads, "#{name}_self_attn")
+      attention_with_pe(
+        x,
+        x,
+        x,
+        spatial_pe,
+        spatial_pe,
+        hidden_dim,
+        num_heads,
+        "#{name}_self_attn"
+      )
 
     self_attn = maybe_dropout(self_attn, dropout, "#{name}_self_attn_drop")
     x = Axon.add(x, self_attn, name: "#{name}_self_attn_residual")
@@ -463,7 +497,14 @@ defmodule Edifice.Detection.DETR do
         # Self-attention (queries attend to each other)
         self_attn =
           attention_with_pe(
-            x, x, x, queries, queries, hidden_dim, num_heads, "#{name}_attn"
+            x,
+            x,
+            x,
+            queries,
+            queries,
+            hidden_dim,
+            num_heads,
+            "#{name}_attn"
           )
 
         self_attn = maybe_dropout(self_attn, dropout, "#{name}_attn_dropout")
@@ -473,7 +514,14 @@ defmodule Edifice.Detection.DETR do
         # Cross-attention (queries attend to encoder memory)
         cross_attn =
           attention_with_pe(
-            x, memory, memory, queries, spatial_pe, hidden_dim, num_heads, "#{name}_cross_attn"
+            x,
+            memory,
+            memory,
+            queries,
+            spatial_pe,
+            hidden_dim,
+            num_heads,
+            "#{name}_cross_attn"
           )
 
         cross_attn = maybe_dropout(cross_attn, dropout, "#{name}_cross_attn_dropout")

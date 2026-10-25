@@ -46,9 +46,7 @@ defmodule Edifice.StatefulJitStepTest do
   describe "jitted step == full forward (Evaluator)" do
     for {arch, build_opts} <- @archs do
       test "#{arch}" do
-        assert_step_matches_forward(unquote(arch), unquote(build_opts),
-          step_opts: @evaluator
-        )
+        assert_step_matches_forward(unquote(arch), unquote(build_opts), step_opts: @evaluator)
       end
     end
   end

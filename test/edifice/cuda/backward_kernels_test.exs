@@ -23,8 +23,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 3
 
       key = Nx.Random.key(42)
-      {a_vals, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {b_vals, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {a_vals, key} =
+        Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {b_vals, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
 
       # Forward scan to get output
       forward_out = Edifice.CUDA.FusedScan.linear_scan_fallback(a_vals, b_vals)
@@ -54,8 +58,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 2
 
       key = Nx.Random.key(99)
-      {a_vals, key} = Nx.Random.uniform(key, 0.2, 0.8, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {b_vals, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {a_vals, key} =
+        Nx.Random.uniform(key, 0.2, 0.8, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {b_vals, _key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
       forward_out = Edifice.CUDA.FusedScan.linear_scan_fallback(a_vals, b_vals)
@@ -66,8 +74,20 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
 
       # Finite difference for a_vals
       eps = 1.0e-3
-      numerical_grad_a = finite_diff_grad(a_vals, fn a -> Edifice.CUDA.FusedScan.linear_scan_fallback(a, b_vals) |> Nx.sum() end, eps)
-      numerical_grad_b = finite_diff_grad(b_vals, fn b -> Edifice.CUDA.FusedScan.linear_scan_fallback(a_vals, b) |> Nx.sum() end, eps)
+
+      numerical_grad_a =
+        finite_diff_grad(
+          a_vals,
+          fn a -> Edifice.CUDA.FusedScan.linear_scan_fallback(a, b_vals) |> Nx.sum() end,
+          eps
+        )
+
+      numerical_grad_b =
+        finite_diff_grad(
+          b_vals,
+          fn b -> Edifice.CUDA.FusedScan.linear_scan_fallback(a_vals, b) |> Nx.sum() end,
+          eps
+        )
 
       assert_all_close(grad_a, numerical_grad_a, atol: 1.0e-2)
       assert_all_close(grad_b, numerical_grad_b, atol: 1.0e-2)
@@ -99,8 +119,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 32
 
       key = Nx.Random.key(123)
-      {a_vals, key} = Nx.Random.uniform(key, 0.3, 0.7, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {b_vals, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {a_vals, key} =
+        Nx.Random.uniform(key, 0.3, 0.7, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {b_vals, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
 
       forward_out = Edifice.CUDA.FusedScan.linear_scan_fallback(a_vals, b_vals)
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, hidden})
@@ -124,8 +148,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 3
 
       key = Nx.Random.key(42)
-      {a_vals, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
-      {b_vals, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {a_vals, key} =
+        Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {b_vals, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
 
       forward_out = Edifice.CUDA.FusedScan.linear_scan_fallback(a_vals, b_vals)
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, hidden})
@@ -156,7 +184,9 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
 
       key = Nx.Random.key(42)
       {z, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {candidates, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {candidates, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
 
@@ -187,7 +217,13 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, hidden})
 
       {grad_z, grad_cand, _grad_h0} =
-        Edifice.CUDA.FusedScan.mingru_backward_fallback(z, candidates, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.mingru_backward_fallback(
+          z,
+          candidates,
+          h0,
+          forward_out,
+          grad_output
+        )
 
       assert_all_close(grad_z, ref_grad_z, atol: 1.0e-5)
       assert_all_close(grad_cand, ref_grad_cand, atol: 1.0e-5)
@@ -199,13 +235,18 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 3
 
       key = Nx.Random.key(42)
-      {z, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
-      {candidates, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {z, key} =
+        Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {candidates, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:bf, 16}), {batch, hidden})
 
       forward_fn = fn z, cand ->
         {_batch, seq_len, _hidden} = Nx.shape(z)
+
         {_, h_list} =
           Enum.reduce(0..(seq_len - 1), {h0, []}, fn t, {h_prev, acc} ->
             z_t = Nx.slice_along_axis(z, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
@@ -213,6 +254,7 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
             h_t = Nx.add(Nx.multiply(Nx.subtract(1.0, z_t), h_prev), Nx.multiply(z_t, c_t))
             {h_t, [h_t | acc]}
           end)
+
         h_list |> Enum.reverse() |> Nx.stack(axis: 1)
       end
 
@@ -223,7 +265,13 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         Nx.Defn.grad({z, candidates}, fn {z, cand} -> forward_fn.(z, cand) |> Nx.sum() end)
 
       {grad_z, grad_cand, _} =
-        Edifice.CUDA.FusedScan.mingru_backward_fallback(z, candidates, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.mingru_backward_fallback(
+          z,
+          candidates,
+          h0,
+          forward_out,
+          grad_output
+        )
 
       assert_all_close(grad_z, ref_grad_z, atol: 0.05)
       assert_all_close(grad_cand, ref_grad_cand, atol: 0.05)
@@ -236,7 +284,9 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
 
       key = Nx.Random.key(77)
       {z, key} = Nx.Random.uniform(key, 0.2, 0.8, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {candidates, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {candidates, _key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
 
@@ -258,11 +308,19 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, hidden})
 
       {grad_z, grad_cand, _} =
-        Edifice.CUDA.FusedScan.mingru_backward_fallback(z, candidates, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.mingru_backward_fallback(
+          z,
+          candidates,
+          h0,
+          forward_out,
+          grad_output
+        )
 
       eps = 1.0e-3
       numerical_z = finite_diff_grad(z, fn z -> forward_fn.(z, candidates) |> Nx.sum() end, eps)
-      numerical_cand = finite_diff_grad(candidates, fn c -> forward_fn.(z, c) |> Nx.sum() end, eps)
+
+      numerical_cand =
+        finite_diff_grad(candidates, fn c -> forward_fn.(z, c) |> Nx.sum() end, eps)
 
       assert_all_close(grad_z, numerical_z, atol: 1.0e-2)
       assert_all_close(grad_cand, numerical_cand, atol: 1.0e-2)
@@ -298,9 +356,15 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 3
 
       key = Nx.Random.key(42)
-      {f_gate, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {i_gate, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {candidates, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {f_gate, key} =
+        Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {i_gate, key} =
+        Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {candidates, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
       norm_eps = 1.0e-6
@@ -336,7 +400,14 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, hidden})
 
       {grad_f, grad_i, grad_cand, _grad_h0} =
-        Edifice.CUDA.FusedScan.minlstm_backward_fallback(f_gate, i_gate, candidates, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.minlstm_backward_fallback(
+          f_gate,
+          i_gate,
+          candidates,
+          h0,
+          forward_out,
+          grad_output
+        )
 
       assert_all_close(grad_f, ref_grad_f, atol: 1.0e-4)
       assert_all_close(grad_i, ref_grad_i, atol: 1.0e-4)
@@ -349,9 +420,15 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 2
 
       key = Nx.Random.key(55)
-      {f_gate, key} = Nx.Random.uniform(key, 0.2, 0.8, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {i_gate, key} = Nx.Random.uniform(key, 0.2, 0.8, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {candidates, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {f_gate, key} =
+        Nx.Random.uniform(key, 0.2, 0.8, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {i_gate, key} =
+        Nx.Random.uniform(key, 0.2, 0.8, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {candidates, _key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
       norm_eps = 1.0e-6
@@ -378,12 +455,25 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, hidden})
 
       {grad_f, grad_i, grad_cand, _} =
-        Edifice.CUDA.FusedScan.minlstm_backward_fallback(f_gate, i_gate, candidates, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.minlstm_backward_fallback(
+          f_gate,
+          i_gate,
+          candidates,
+          h0,
+          forward_out,
+          grad_output
+        )
 
       eps = 1.0e-3
-      numerical_f = finite_diff_grad(f_gate, fn f -> forward_fn.(f, i_gate, candidates) |> Nx.sum() end, eps)
-      numerical_i = finite_diff_grad(i_gate, fn i -> forward_fn.(f_gate, i, candidates) |> Nx.sum() end, eps)
-      numerical_cand = finite_diff_grad(candidates, fn c -> forward_fn.(f_gate, i_gate, c) |> Nx.sum() end, eps)
+
+      numerical_f =
+        finite_diff_grad(f_gate, fn f -> forward_fn.(f, i_gate, candidates) |> Nx.sum() end, eps)
+
+      numerical_i =
+        finite_diff_grad(i_gate, fn i -> forward_fn.(f_gate, i, candidates) |> Nx.sum() end, eps)
+
+      numerical_cand =
+        finite_diff_grad(candidates, fn c -> forward_fn.(f_gate, i_gate, c) |> Nx.sum() end, eps)
 
       assert_all_close(grad_f, numerical_f, atol: 1.0e-2)
       assert_all_close(grad_i, numerical_i, atol: 1.0e-2)
@@ -396,9 +486,15 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 16
 
       key = Nx.Random.key(200)
-      {f_gate, key} = Nx.Random.uniform(key, 0.2, 0.8, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {i_gate, key} = Nx.Random.uniform(key, 0.2, 0.8, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {candidates, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {f_gate, key} =
+        Nx.Random.uniform(key, 0.2, 0.8, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {i_gate, key} =
+        Nx.Random.uniform(key, 0.2, 0.8, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {candidates, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
       norm_eps = 1.0e-6
@@ -430,7 +526,14 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         end)
 
       {grad_f, grad_i, grad_cand, _} =
-        Edifice.CUDA.FusedScan.minlstm_backward_fallback(f_gate, i_gate, candidates, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.minlstm_backward_fallback(
+          f_gate,
+          i_gate,
+          candidates,
+          h0,
+          forward_out,
+          grad_output
+        )
 
       assert_all_close(grad_f, ref_grad_f, atol: 1.0e-3)
       assert_all_close(grad_i, ref_grad_i, atol: 1.0e-3)
@@ -443,9 +546,15 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 3
 
       key = Nx.Random.key(42)
-      {f_gate, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
-      {i_gate, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
-      {candidates, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {f_gate, key} =
+        Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {i_gate, key} =
+        Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {candidates, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:bf, 16}), {batch, hidden})
       norm_eps = 1.0e-6
@@ -455,6 +564,7 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         gate_sum = Nx.add(f, Nx.add(i, norm_eps))
         f_norm = Nx.divide(f, gate_sum)
         i_norm = Nx.divide(i, gate_sum)
+
         {_, h_list} =
           Enum.reduce(0..(seq_len - 1), {h0, []}, fn t, {c_prev, acc} ->
             f_t = Nx.slice_along_axis(f_norm, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
@@ -463,6 +573,7 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
             c_t = Nx.add(Nx.multiply(f_t, c_prev), Nx.multiply(i_t, cand_t))
             {c_t, [c_t | acc]}
           end)
+
         h_list |> Enum.reverse() |> Nx.stack(axis: 1)
       end
 
@@ -475,7 +586,14 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         end)
 
       {grad_f, grad_i, grad_cand, _} =
-        Edifice.CUDA.FusedScan.minlstm_backward_fallback(f_gate, i_gate, candidates, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.minlstm_backward_fallback(
+          f_gate,
+          i_gate,
+          candidates,
+          h0,
+          forward_out,
+          grad_output
+        )
 
       assert_all_close(grad_f, ref_grad_f, atol: 0.05)
       assert_all_close(grad_i, ref_grad_i, atol: 0.05)
@@ -495,7 +613,9 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
 
       key = Nx.Random.key(42)
       {z, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {c, _key} = Nx.Random.uniform(key, 0.5, 2.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {c, _key} =
+        Nx.Random.uniform(key, 0.5, 2.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
 
@@ -533,7 +653,9 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
 
       key = Nx.Random.key(99)
       {z, key} = Nx.Random.uniform(key, 0.2, 0.8, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {c, _key} = Nx.Random.uniform(key, 0.5, 2.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {c, _key} =
+        Nx.Random.uniform(key, 0.5, 2.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
       forward_out = elu_gru_forward(z, c, h0)
@@ -556,8 +678,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 3
 
       key = Nx.Random.key(42)
-      {z, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
-      {c, _key} = Nx.Random.uniform(key, 0.5, 2.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {z, key} =
+        Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {c, _key} =
+        Nx.Random.uniform(key, 0.5, 2.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:bf, 16}), {batch, hidden})
       forward_out = elu_gru_forward(z, c, h0)
@@ -586,7 +712,9 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
 
       key = Nx.Random.key(42)
       {z, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {candidates, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {candidates, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
 
@@ -611,7 +739,13 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         Nx.Defn.grad({z, candidates}, fn {z, c} -> forward_fn.(z, c) |> Nx.sum() end)
 
       {grad_z, grad_cand, _} =
-        Edifice.CUDA.FusedScan.real_gru_backward_fallback(z, candidates, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.real_gru_backward_fallback(
+          z,
+          candidates,
+          h0,
+          forward_out,
+          grad_output
+        )
 
       assert_all_close(grad_z, ref_grad_z, atol: 1.0e-5)
       assert_all_close(grad_cand, ref_grad_cand, atol: 1.0e-5)
@@ -623,13 +757,18 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 3
 
       key = Nx.Random.key(42)
-      {z, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
-      {candidates, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {z, key} =
+        Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {candidates, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:bf, 16}), {batch, hidden})
 
       forward_fn = fn z, cand ->
         {_batch, seq_len, _hidden} = Nx.shape(z)
+
         {_, h_list} =
           Enum.reduce(0..(seq_len - 1), {h0, []}, fn t, {h_prev, acc} ->
             z_t = Nx.slice_along_axis(z, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
@@ -637,6 +776,7 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
             h_t = Nx.add(Nx.multiply(Nx.subtract(1.0, z_t), h_prev), Nx.multiply(z_t, c_t))
             {h_t, [h_t | acc]}
           end)
+
         h_list |> Enum.reverse() |> Nx.stack(axis: 1)
       end
 
@@ -647,7 +787,13 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         Nx.Defn.grad({z, candidates}, fn {z, c} -> forward_fn.(z, c) |> Nx.sum() end)
 
       {grad_z, grad_cand, _} =
-        Edifice.CUDA.FusedScan.real_gru_backward_fallback(z, candidates, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.real_gru_backward_fallback(
+          z,
+          candidates,
+          h0,
+          forward_out,
+          grad_output
+        )
 
       assert_all_close(grad_z, ref_grad_z, atol: 0.05)
       assert_all_close(grad_cand, ref_grad_cand, atol: 0.05)
@@ -665,8 +811,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 3
 
       key = Nx.Random.key(42)
-      {a_sig, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {b_vals, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {a_sig, key} =
+        Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {b_vals, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
 
@@ -691,8 +841,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 3
 
       key = Nx.Random.key(42)
-      {a_sig, key} = Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
-      {b_vals, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {a_sig, key} =
+        Nx.Random.uniform(key, 0.1, 0.9, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {b_vals, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:bf, 16}), {batch, hidden})
       forward_out = Edifice.CUDA.FusedScan.linear_scan_fallback(a_sig, b_vals)
@@ -722,8 +876,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 2
 
       key = Nx.Random.key(42)
-      {wx, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 4 * hidden}, type: {:f, 32})
-      {r_weight, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 4 * hidden}, type: {:f, 32})
+
+      {wx, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 4 * hidden}, type: {:f, 32})
+
+      {r_weight, _key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 4 * hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
       c0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
@@ -739,12 +897,30 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         Nx.Defn.grad({wx, r_weight}, fn {w, r} -> forward_fn.(w, r) |> Nx.sum() end)
 
       {grad_wx, _grad_h0, _grad_c0} =
-        Edifice.CUDA.FusedScan.lstm_backward_fallback(wx, r_weight, h0, c0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.lstm_backward_fallback(
+          wx,
+          r_weight,
+          h0,
+          c0,
+          forward_out,
+          grad_output
+        )
 
       # Compute grad_R in the same way fused_scan.ex does
-      h_prev = Nx.concatenate([Nx.reshape(h0, {batch, 1, hidden}), Nx.slice_along_axis(forward_out, 0, seq_len - 1, axis: 1)], axis: 1)
-      grad_r = Nx.dot(Nx.reshape(h_prev, {batch * seq_len, hidden}) |> Nx.transpose(),
-                       Nx.reshape(grad_wx, {batch * seq_len, 4 * hidden}))
+      h_prev =
+        Nx.concatenate(
+          [
+            Nx.reshape(h0, {batch, 1, hidden}),
+            Nx.slice_along_axis(forward_out, 0, seq_len - 1, axis: 1)
+          ],
+          axis: 1
+        )
+
+      grad_r =
+        Nx.dot(
+          Nx.reshape(h_prev, {batch * seq_len, hidden}) |> Nx.transpose(),
+          Nx.reshape(grad_wx, {batch * seq_len, 4 * hidden})
+        )
 
       assert_all_close(grad_wx, ref_grad_wx, atol: 1.0e-4)
       assert_all_close(grad_r, ref_grad_r, atol: 1.0e-4)
@@ -756,8 +932,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 2
 
       key = Nx.Random.key(99)
-      {wx, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, 4 * hidden}, type: {:f, 32})
-      {r_weight, _key} = Nx.Random.uniform(key, -0.2, 0.2, shape: {hidden, 4 * hidden}, type: {:f, 32})
+
+      {wx, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, 4 * hidden}, type: {:f, 32})
+
+      {r_weight, _key} =
+        Nx.Random.uniform(key, -0.2, 0.2, shape: {hidden, 4 * hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
       c0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
@@ -766,10 +946,23 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, hidden})
 
       {grad_wx, _, _} =
-        Edifice.CUDA.FusedScan.lstm_backward_fallback(wx, r_weight, h0, c0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.lstm_backward_fallback(
+          wx,
+          r_weight,
+          h0,
+          c0,
+          forward_out,
+          grad_output
+        )
 
       eps = 1.0e-3
-      numer_wx = finite_diff_grad(wx, fn w -> lstm_forward(w, r_weight, h0, c0, hidden) |> Nx.sum() end, eps)
+
+      numer_wx =
+        finite_diff_grad(
+          wx,
+          fn w -> lstm_forward(w, r_weight, h0, c0, hidden) |> Nx.sum() end,
+          eps
+        )
 
       assert_all_close(grad_wx, numer_wx, atol: 1.0e-2)
     end
@@ -780,8 +973,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 2
 
       key = Nx.Random.key(42)
-      {wx, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 4 * hidden}, type: {:bf, 16})
-      {r_weight, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 4 * hidden}, type: {:bf, 16})
+
+      {wx, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 4 * hidden}, type: {:bf, 16})
+
+      {r_weight, _key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 4 * hidden}, type: {:bf, 16})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:bf, 16}), {batch, hidden})
       c0 = Nx.broadcast(Nx.tensor(0.0, type: {:bf, 16}), {batch, hidden})
@@ -790,10 +987,19 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, hidden})
 
       {ref_grad_wx, _ref_grad_r} =
-        Nx.Defn.grad({wx, r_weight}, fn {w, r} -> lstm_forward(w, r, h0, c0, hidden) |> Nx.sum() end)
+        Nx.Defn.grad({wx, r_weight}, fn {w, r} ->
+          lstm_forward(w, r, h0, c0, hidden) |> Nx.sum()
+        end)
 
       {grad_wx, _, _} =
-        Edifice.CUDA.FusedScan.lstm_backward_fallback(wx, r_weight, h0, c0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.lstm_backward_fallback(
+          wx,
+          r_weight,
+          h0,
+          c0,
+          forward_out,
+          grad_output
+        )
 
       assert_all_close(grad_wx, ref_grad_wx, atol: 0.1)
     end
@@ -810,8 +1016,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 2
 
       key = Nx.Random.key(42)
-      {wx, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 3 * hidden}, type: {:f, 32})
-      {r_weight, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 3 * hidden}, type: {:f, 32})
+
+      {wx, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 3 * hidden}, type: {:f, 32})
+
+      {r_weight, _key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 3 * hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
 
@@ -826,12 +1036,30 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         Nx.Defn.grad({wx, r_weight}, fn {w, r} -> forward_fn.(w, r) |> Nx.sum() end)
 
       {grad_wx, grad_rh, _grad_h0} =
-        Edifice.CUDA.FusedScan.gru_backward_fallback(wx, r_weight, h0, nil, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.gru_backward_fallback(
+          wx,
+          r_weight,
+          h0,
+          nil,
+          forward_out,
+          grad_output
+        )
 
       # Compute grad_R from grad_rh
-      h_prev = Nx.concatenate([Nx.reshape(h0, {batch, 1, hidden}), Nx.slice_along_axis(forward_out, 0, seq_len - 1, axis: 1)], axis: 1)
-      grad_r = Nx.dot(Nx.reshape(h_prev, {batch * seq_len, hidden}) |> Nx.transpose(),
-                       Nx.reshape(grad_rh, {batch * seq_len, 3 * hidden}))
+      h_prev =
+        Nx.concatenate(
+          [
+            Nx.reshape(h0, {batch, 1, hidden}),
+            Nx.slice_along_axis(forward_out, 0, seq_len - 1, axis: 1)
+          ],
+          axis: 1
+        )
+
+      grad_r =
+        Nx.dot(
+          Nx.reshape(h_prev, {batch * seq_len, hidden}) |> Nx.transpose(),
+          Nx.reshape(grad_rh, {batch * seq_len, 3 * hidden})
+        )
 
       assert_all_close(grad_wx, ref_grad_wx, atol: 1.0e-4)
       assert_all_close(grad_r, ref_grad_r, atol: 1.0e-4)
@@ -843,8 +1071,13 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 3
 
       key = Nx.Random.key(11)
-      {wx, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 3 * hidden}, type: {:f, 32})
-      {r_weight, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 3 * hidden}, type: {:f, 32})
+
+      {wx, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 3 * hidden}, type: {:f, 32})
+
+      {r_weight, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 3 * hidden}, type: {:f, 32})
+
       {bhn, key} = Nx.Random.uniform(key, -0.4, 0.4, shape: {hidden}, type: {:f, 32})
       {h0, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, hidden}, type: {:f, 32})
 
@@ -860,8 +1093,13 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 2
 
       key = Nx.Random.key(7)
-      {wx, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 3 * hidden}, type: {:f, 32})
-      {r_weight, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 3 * hidden}, type: {:f, 32})
+
+      {wx, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 3 * hidden}, type: {:f, 32})
+
+      {r_weight, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 3 * hidden}, type: {:f, 32})
+
       {bhn, key} = Nx.Random.uniform(key, -0.4, 0.4, shape: {hidden}, type: {:f, 32})
       {h0, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, hidden}, type: {:f, 32})
 
@@ -874,11 +1112,29 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         end)
 
       {grad_wx, grad_rh, _grad_h0} =
-        Edifice.CUDA.FusedScan.gru_backward_fallback(wx, r_weight, h0, bhn, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.gru_backward_fallback(
+          wx,
+          r_weight,
+          h0,
+          bhn,
+          forward_out,
+          grad_output
+        )
 
-      h_prev = Nx.concatenate([Nx.reshape(h0, {batch, 1, hidden}), Nx.slice_along_axis(forward_out, 0, seq_len - 1, axis: 1)], axis: 1)
-      grad_r = Nx.dot(Nx.reshape(h_prev, {batch * seq_len, hidden}) |> Nx.transpose(),
-                       Nx.reshape(grad_rh, {batch * seq_len, 3 * hidden}))
+      h_prev =
+        Nx.concatenate(
+          [
+            Nx.reshape(h0, {batch, 1, hidden}),
+            Nx.slice_along_axis(forward_out, 0, seq_len - 1, axis: 1)
+          ],
+          axis: 1
+        )
+
+      grad_r =
+        Nx.dot(
+          Nx.reshape(h_prev, {batch * seq_len, hidden}) |> Nx.transpose(),
+          Nx.reshape(grad_rh, {batch * seq_len, 3 * hidden})
+        )
 
       # grad_bhn = sum over (b, t) of grad_rh's n-column
       grad_bhn =
@@ -897,8 +1153,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 2
 
       key = Nx.Random.key(99)
-      {wx, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, 3 * hidden}, type: {:f, 32})
-      {r_weight, _key} = Nx.Random.uniform(key, -0.2, 0.2, shape: {hidden, 3 * hidden}, type: {:f, 32})
+
+      {wx, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, 3 * hidden}, type: {:f, 32})
+
+      {r_weight, _key} =
+        Nx.Random.uniform(key, -0.2, 0.2, shape: {hidden, 3 * hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
 
@@ -906,10 +1166,19 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, hidden})
 
       {grad_wx, _, _} =
-        Edifice.CUDA.FusedScan.gru_backward_fallback(wx, r_weight, h0, nil, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.gru_backward_fallback(
+          wx,
+          r_weight,
+          h0,
+          nil,
+          forward_out,
+          grad_output
+        )
 
       eps = 1.0e-3
-      numer_wx = finite_diff_grad(wx, fn w -> gru_forward(w, r_weight, h0, hidden) |> Nx.sum() end, eps)
+
+      numer_wx =
+        finite_diff_grad(wx, fn w -> gru_forward(w, r_weight, h0, hidden) |> Nx.sum() end, eps)
 
       assert_all_close(grad_wx, numer_wx, atol: 1.0e-2)
     end
@@ -920,8 +1189,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 2
 
       key = Nx.Random.key(42)
-      {wx, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 3 * hidden}, type: {:bf, 16})
-      {r_weight, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 3 * hidden}, type: {:bf, 16})
+
+      {wx, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, 3 * hidden}, type: {:bf, 16})
+
+      {r_weight, _key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {hidden, 3 * hidden}, type: {:bf, 16})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:bf, 16}), {batch, hidden})
 
@@ -932,7 +1205,14 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         Nx.Defn.grad({wx, r_weight}, fn {w, r} -> gru_forward(w, r, h0, hidden) |> Nx.sum() end)
 
       {grad_wx, _, _} =
-        Edifice.CUDA.FusedScan.gru_backward_fallback(wx, r_weight, h0, nil, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.gru_backward_fallback(
+          wx,
+          r_weight,
+          h0,
+          nil,
+          forward_out,
+          grad_output
+        )
 
       assert_all_close(grad_wx, ref_grad_wx, atol: 0.1)
     end
@@ -949,8 +1229,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 3
 
       key = Nx.Random.key(42)
-      {tau, key} = Nx.Random.uniform(key, 0.5, 2.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {activation, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {tau, key} =
+        Nx.Random.uniform(key, 0.5, 2.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {activation, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
       forward_out = liquid_forward(tau, activation, h0)
@@ -960,7 +1244,13 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         Nx.Defn.grad({tau, activation}, fn {t, a} -> liquid_forward(t, a, h0) |> Nx.sum() end)
 
       {grad_tau, grad_act, _} =
-        Edifice.CUDA.FusedScan.liquid_backward_fallback(tau, activation, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.liquid_backward_fallback(
+          tau,
+          activation,
+          h0,
+          forward_out,
+          grad_output
+        )
 
       assert_all_close(grad_tau, ref_grad_tau, atol: 1.0e-4)
       assert_all_close(grad_act, ref_grad_act, atol: 1.0e-4)
@@ -972,8 +1262,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 3
 
       key = Nx.Random.key(42)
-      {tau, key} = Nx.Random.uniform(key, 0.5, 2.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
-      {activation, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {tau, key} =
+        Nx.Random.uniform(key, 0.5, 2.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {activation, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:bf, 16}), {batch, hidden})
       forward_out = liquid_forward(tau, activation, h0)
@@ -983,7 +1277,13 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         Nx.Defn.grad({tau, activation}, fn {t, a} -> liquid_forward(t, a, h0) |> Nx.sum() end)
 
       {grad_tau, grad_act, _} =
-        Edifice.CUDA.FusedScan.liquid_backward_fallback(tau, activation, h0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.liquid_backward_fallback(
+          tau,
+          activation,
+          h0,
+          forward_out,
+          grad_output
+        )
 
       assert_all_close(grad_tau, ref_grad_tau, atol: 0.1)
       assert_all_close(grad_act, ref_grad_act, atol: 0.05)
@@ -1002,14 +1302,35 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       head_dim = 2
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {v, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {beta, _key} = Nx.Random.uniform(key, 0.1, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {beta, _key} =
+        Nx.Random.uniform(key, 0.1, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
 
       forward_fn = fn q, k, v, beta -> delta_net_forward(q, k, v, beta) end
 
-      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
+      grad_output =
+        Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
 
       {ref_gq, ref_gk, ref_gv, ref_gbeta} =
         Nx.Defn.grad({q, k, v, beta}, fn {q, k, v, b} -> forward_fn.(q, k, v, b) |> Nx.sum() end)
@@ -1030,15 +1351,38 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       head_dim = 2
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {k, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {v, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {beta, _key} = Nx.Random.uniform(key, 0.1, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
 
-      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, num_heads, head_dim})
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {beta, _key} =
+        Nx.Random.uniform(key, 0.1, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      grad_output =
+        Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, num_heads, head_dim})
 
       {ref_gq, ref_gk, ref_gv, ref_gbeta} =
-        Nx.Defn.grad({q, k, v, beta}, fn {q, k, v, b} -> delta_net_forward(q, k, v, b) |> Nx.sum() end)
+        Nx.Defn.grad({q, k, v, beta}, fn {q, k, v, b} ->
+          delta_net_forward(q, k, v, b) |> Nx.sum()
+        end)
 
       {gq, gk, gv, gbeta} =
         Edifice.CUDA.FusedScan.delta_rule_backward_fallback(q, k, v, beta, grad_output)
@@ -1062,13 +1406,36 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       head_dim = 2
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {v, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {beta, key} = Nx.Random.uniform(key, 0.1, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {alpha, _key} = Nx.Random.uniform(key, 0.8, 0.99, shape: {batch, seq_len, num_heads}, type: {:f, 32})
 
-      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {beta, key} =
+        Nx.Random.uniform(key, 0.1, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {alpha, _key} =
+        Nx.Random.uniform(key, 0.8, 0.99, shape: {batch, seq_len, num_heads}, type: {:f, 32})
+
+      grad_output =
+        Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
 
       {ref_gq, ref_gk, ref_gv, ref_gbeta, ref_galpha} =
         Nx.Defn.grad({q, k, v, beta, alpha}, fn {q, k, v, b, a} ->
@@ -1076,7 +1443,14 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         end)
 
       {gq, gk, gv, gbeta, galpha} =
-        Edifice.CUDA.FusedScan.gated_delta_net_backward_fallback(q, k, v, beta, alpha, grad_output)
+        Edifice.CUDA.FusedScan.gated_delta_net_backward_fallback(
+          q,
+          k,
+          v,
+          beta,
+          alpha,
+          grad_output
+        )
 
       assert_all_close(gq, ref_gq, atol: 1.0e-3)
       assert_all_close(gk, ref_gk, atol: 1.0e-3)
@@ -1092,13 +1466,36 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       head_dim = 2
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {k, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {v, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {beta, key} = Nx.Random.uniform(key, 0.1, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {alpha, _key} = Nx.Random.uniform(key, 0.8, 0.99, shape: {batch, seq_len, num_heads}, type: {:bf, 16})
 
-      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, num_heads, head_dim})
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {beta, key} =
+        Nx.Random.uniform(key, 0.1, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {alpha, _key} =
+        Nx.Random.uniform(key, 0.8, 0.99, shape: {batch, seq_len, num_heads}, type: {:bf, 16})
+
+      grad_output =
+        Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, num_heads, head_dim})
 
       {ref_gq, ref_gk, ref_gv, ref_gbeta, ref_galpha} =
         Nx.Defn.grad({q, k, v, beta, alpha}, fn {q, k, v, b, a} ->
@@ -1106,7 +1503,14 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         end)
 
       {gq, gk, gv, gbeta, galpha} =
-        Edifice.CUDA.FusedScan.gated_delta_net_backward_fallback(q, k, v, beta, alpha, grad_output)
+        Edifice.CUDA.FusedScan.gated_delta_net_backward_fallback(
+          q,
+          k,
+          v,
+          beta,
+          alpha,
+          grad_output
+        )
 
       assert_all_close(gq, ref_gq, atol: 0.1)
       assert_all_close(gk, ref_gk, atol: 0.1)
@@ -1128,11 +1532,20 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       state_size = 2
 
       key = Nx.Random.key(42)
-      {x, key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {dt, key} = Nx.Random.uniform(key, 0.01, 0.05, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {x, key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {dt, key} =
+        Nx.Random.uniform(key, 0.01, 0.05, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
       a = Nx.broadcast(Nx.tensor(-0.5, type: {:f, 32}), {hidden, state_size})
-      {b, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, state_size}, type: {:f, 32})
-      {c, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, state_size}, type: {:f, 32})
+
+      {b, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, state_size}, type: {:f, 32})
+
+      {c, _key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, state_size}, type: {:f, 32})
 
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, hidden})
 
@@ -1157,11 +1570,20 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       state_size = 2
 
       key = Nx.Random.key(42)
-      {x, key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
-      {dt, key} = Nx.Random.uniform(key, 0.01, 0.05, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {x, key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
+      {dt, key} =
+        Nx.Random.uniform(key, 0.01, 0.05, shape: {batch, seq_len, hidden}, type: {:bf, 16})
+
       a = Nx.broadcast(Nx.tensor(-0.5, type: {:bf, 16}), {hidden, state_size})
-      {b, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, state_size}, type: {:bf, 16})
-      {c, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, state_size}, type: {:bf, 16})
+
+      {b, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, state_size}, type: {:bf, 16})
+
+      {c, _key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, state_size}, type: {:bf, 16})
 
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, hidden})
 
@@ -1192,13 +1614,36 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       head_dim = 2
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {v, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {alpha, key} = Nx.Random.uniform(key, -0.5, -0.1, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {beta, _key} = Nx.Random.uniform(key, 0.3, 0.7, shape: {batch, seq_len, num_heads}, type: {:f, 32})
 
-      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {alpha, key} =
+        Nx.Random.uniform(key, -0.5, -0.1,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {beta, _key} =
+        Nx.Random.uniform(key, 0.3, 0.7, shape: {batch, seq_len, num_heads}, type: {:f, 32})
+
+      grad_output =
+        Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
 
       {ref_gq, ref_gk, ref_gv, ref_galpha, ref_gbeta} =
         Nx.Defn.grad({q, k, v, alpha, beta}, fn {q, k, v, a, b} ->
@@ -1220,13 +1665,36 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       head_dim = 2
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {k, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {v, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {alpha, key} = Nx.Random.uniform(key, -0.5, -0.1, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {beta, _key} = Nx.Random.uniform(key, 0.3, 0.7, shape: {batch, seq_len, num_heads}, type: {:bf, 16})
 
-      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, num_heads, head_dim})
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.5, 0.5,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {alpha, key} =
+        Nx.Random.uniform(key, -0.5, -0.1,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {beta, _key} =
+        Nx.Random.uniform(key, 0.3, 0.7, shape: {batch, seq_len, num_heads}, type: {:bf, 16})
+
+      grad_output =
+        Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, num_heads, head_dim})
 
       {ref_gq, _ref_gk, ref_gv, _ref_galpha, ref_gbeta} =
         Nx.Defn.grad({q, k, v, alpha, beta}, fn {q, k, v, a, b} ->
@@ -1254,17 +1722,49 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       head_dim = 2
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {v, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {alpha, key} = Nx.Random.uniform(key, 0.8, 0.95, shape: {batch, seq_len, num_heads}, type: {:f, 32})
-      {beta, key} = Nx.Random.uniform(key, 0.1, 0.3, shape: {batch, seq_len, num_heads}, type: {:f, 32})
-      {gamma, _key} = Nx.Random.uniform(key, 0.05, 0.15, shape: {batch, seq_len, num_heads}, type: {:f, 32})
 
-      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.3, 0.3,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {alpha, key} =
+        Nx.Random.uniform(key, 0.8, 0.95, shape: {batch, seq_len, num_heads}, type: {:f, 32})
+
+      {beta, key} =
+        Nx.Random.uniform(key, 0.1, 0.3, shape: {batch, seq_len, num_heads}, type: {:f, 32})
+
+      {gamma, _key} =
+        Nx.Random.uniform(key, 0.05, 0.15, shape: {batch, seq_len, num_heads}, type: {:f, 32})
+
+      grad_output =
+        Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
 
       {gq, gk, gv, ga, gb, gg} =
-        Edifice.CUDA.FusedScan.rla_backward_fallback(q, k, v, alpha, beta, gamma, grad_output, :rla, 1.0)
+        Edifice.CUDA.FusedScan.rla_backward_fallback(
+          q,
+          k,
+          v,
+          alpha,
+          beta,
+          gamma,
+          grad_output,
+          :rla,
+          1.0
+        )
 
       assert Nx.all(Nx.is_nan(gq) |> Nx.logical_not()) |> Nx.to_number() == 1
       assert Nx.all(Nx.is_nan(gv) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -1280,17 +1780,49 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       head_dim = 2
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {v, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {alpha, key} = Nx.Random.uniform(key, 0.8, 0.95, shape: {batch, seq_len, num_heads}, type: {:bf, 16})
-      {beta, key} = Nx.Random.uniform(key, 0.1, 0.3, shape: {batch, seq_len, num_heads}, type: {:bf, 16})
-      {gamma, _key} = Nx.Random.uniform(key, 0.05, 0.15, shape: {batch, seq_len, num_heads}, type: {:bf, 16})
 
-      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, num_heads, head_dim})
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.3, 0.3,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {alpha, key} =
+        Nx.Random.uniform(key, 0.8, 0.95, shape: {batch, seq_len, num_heads}, type: {:bf, 16})
+
+      {beta, key} =
+        Nx.Random.uniform(key, 0.1, 0.3, shape: {batch, seq_len, num_heads}, type: {:bf, 16})
+
+      {gamma, _key} =
+        Nx.Random.uniform(key, 0.05, 0.15, shape: {batch, seq_len, num_heads}, type: {:bf, 16})
+
+      grad_output =
+        Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, num_heads, head_dim})
 
       {gq, gk, gv, ga, gb, gg} =
-        Edifice.CUDA.FusedScan.rla_backward_fallback(q, k, v, alpha, beta, gamma, grad_output, :rla, 1.0)
+        Edifice.CUDA.FusedScan.rla_backward_fallback(
+          q,
+          k,
+          v,
+          alpha,
+          beta,
+          gamma,
+          grad_output,
+          :rla,
+          1.0
+        )
 
       assert Nx.all(Nx.is_nan(gq) |> Nx.logical_not()) |> Nx.to_number() == 1
       assert Nx.all(Nx.is_nan(gv) |> Nx.logical_not()) |> Nx.to_number() == 1
@@ -1310,11 +1842,22 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       inner_size = 4
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, inner_size}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, inner_size}, type: {:f, 32})
-      {v, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, inner_size}, type: {:f, 32})
-      {eta, key} = Nx.Random.uniform(key, 0.01, 0.1, shape: {batch, seq_len, inner_size}, type: {:f, 32})
-      {w0, _key} = Nx.Random.uniform(key, -0.1, 0.1, shape: {inner_size, inner_size}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, inner_size}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, inner_size}, type: {:f, 32})
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, inner_size}, type: {:f, 32})
+
+      {eta, key} =
+        Nx.Random.uniform(key, 0.01, 0.1, shape: {batch, seq_len, inner_size}, type: {:f, 32})
+
+      {w0, _key} =
+        Nx.Random.uniform(key, -0.1, 0.1, shape: {inner_size, inner_size}, type: {:f, 32})
+
       ln_gamma = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {inner_size})
       ln_beta = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {inner_size})
 
@@ -1326,7 +1869,16 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         end)
 
       {gq, gk, gv, geta, _gw0, _glng, _glnb} =
-        Edifice.CUDA.FusedScan.ttt_backward_fallback(q, k, v, eta, w0, ln_gamma, ln_beta, grad_output)
+        Edifice.CUDA.FusedScan.ttt_backward_fallback(
+          q,
+          k,
+          v,
+          eta,
+          w0,
+          ln_gamma,
+          ln_beta,
+          grad_output
+        )
 
       assert_all_close(gq, ref_gq, atol: 1.0e-3)
       assert_all_close(gk, ref_gk, atol: 1.0e-3)
@@ -1340,11 +1892,22 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       inner_size = 4
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, inner_size}, type: {:bf, 16})
-      {k, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, inner_size}, type: {:bf, 16})
-      {v, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, inner_size}, type: {:bf, 16})
-      {eta, key} = Nx.Random.uniform(key, 0.01, 0.1, shape: {batch, seq_len, inner_size}, type: {:bf, 16})
-      {w0, _key} = Nx.Random.uniform(key, -0.1, 0.1, shape: {inner_size, inner_size}, type: {:bf, 16})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, inner_size}, type: {:bf, 16})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, inner_size}, type: {:bf, 16})
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, inner_size}, type: {:bf, 16})
+
+      {eta, key} =
+        Nx.Random.uniform(key, 0.01, 0.1, shape: {batch, seq_len, inner_size}, type: {:bf, 16})
+
+      {w0, _key} =
+        Nx.Random.uniform(key, -0.1, 0.1, shape: {inner_size, inner_size}, type: {:bf, 16})
+
       ln_gamma = Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {inner_size})
       ln_beta = Nx.broadcast(Nx.tensor(0.0, type: {:bf, 16}), {inner_size})
 
@@ -1356,7 +1919,16 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         end)
 
       {gq, gk, gv, geta, _, _, _} =
-        Edifice.CUDA.FusedScan.ttt_backward_fallback(q, k, v, eta, w0, ln_gamma, ln_beta, grad_output)
+        Edifice.CUDA.FusedScan.ttt_backward_fallback(
+          q,
+          k,
+          v,
+          eta,
+          w0,
+          ln_gamma,
+          ln_beta,
+          grad_output
+        )
 
       assert_all_close(gq, ref_gq, atol: 0.15)
       assert_all_close(gk, ref_gk, atol: 0.15)
@@ -1378,12 +1950,33 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       num_householder = 2
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, num_heads, head_dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, num_householder, num_heads, head_dim}, type: {:f, 32})
-      {v, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, num_householder, num_heads, head_dim}, type: {:f, 32})
-      {beta, _key} = Nx.Random.uniform(key, 0.1, 0.5, shape: {batch, seq_len, num_householder, num_heads}, type: {:f, 32})
 
-      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3,
+          shape: {batch, seq_len, num_householder, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.3, 0.3,
+          shape: {batch, seq_len, num_householder, num_heads, head_dim},
+          type: {:f, 32}
+        )
+
+      {beta, _key} =
+        Nx.Random.uniform(key, 0.1, 0.5,
+          shape: {batch, seq_len, num_householder, num_heads},
+          type: {:f, 32}
+        )
+
+      grad_output =
+        Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
 
       {gq, gk, gv, gbeta} =
         Edifice.CUDA.FusedScan.delta_product_backward_fallback(q, k, v, beta, grad_output)
@@ -1403,12 +1996,33 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       num_householder = 2
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, num_heads, head_dim}, type: {:bf, 16})
-      {k, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, num_householder, num_heads, head_dim}, type: {:bf, 16})
-      {v, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, num_householder, num_heads, head_dim}, type: {:bf, 16})
-      {beta, _key} = Nx.Random.uniform(key, 0.1, 0.5, shape: {batch, seq_len, num_householder, num_heads}, type: {:bf, 16})
 
-      grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, num_heads, head_dim})
+      {q, key} =
+        Nx.Random.uniform(key, -0.3, 0.3,
+          shape: {batch, seq_len, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.3, 0.3,
+          shape: {batch, seq_len, num_householder, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {v, key} =
+        Nx.Random.uniform(key, -0.3, 0.3,
+          shape: {batch, seq_len, num_householder, num_heads, head_dim},
+          type: {:bf, 16}
+        )
+
+      {beta, _key} =
+        Nx.Random.uniform(key, 0.1, 0.5,
+          shape: {batch, seq_len, num_householder, num_heads},
+          type: {:bf, 16}
+        )
+
+      grad_output =
+        Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, num_heads, head_dim})
 
       {gq, gk, gv, gbeta} =
         Edifice.CUDA.FusedScan.delta_product_backward_fallback(q, k, v, beta, grad_output)
@@ -1431,8 +2045,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 2
 
       key = Nx.Random.key(42)
-      {wx, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, 4 * hidden}, type: {:f, 32})
-      {r_weight, _key} = Nx.Random.uniform(key, -0.2, 0.2, shape: {hidden, 4 * hidden}, type: {:f, 32})
+
+      {wx, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, 4 * hidden}, type: {:f, 32})
+
+      {r_weight, _key} =
+        Nx.Random.uniform(key, -0.2, 0.2, shape: {hidden, 4 * hidden}, type: {:f, 32})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
       c0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
@@ -1441,10 +2059,19 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:f, 32}), {batch, seq_len, hidden})
 
       {ref_grad_wx, _ref_grad_r} =
-        Nx.Defn.grad({wx, r_weight}, fn {w, r} -> slstm_forward(w, r, h0, c0, hidden) |> Nx.sum() end)
+        Nx.Defn.grad({wx, r_weight}, fn {w, r} ->
+          slstm_forward(w, r, h0, c0, hidden) |> Nx.sum()
+        end)
 
       {grad_wx, _, _} =
-        Edifice.CUDA.FusedScan.slstm_backward_fallback(wx, r_weight, h0, c0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.slstm_backward_fallback(
+          wx,
+          r_weight,
+          h0,
+          c0,
+          forward_out,
+          grad_output
+        )
 
       assert_all_close(grad_wx, ref_grad_wx, atol: 0.02)
     end
@@ -1455,8 +2082,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       hidden = 2
 
       key = Nx.Random.key(42)
-      {wx, key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, 4 * hidden}, type: {:bf, 16})
-      {r_weight, _key} = Nx.Random.uniform(key, -0.2, 0.2, shape: {hidden, 4 * hidden}, type: {:bf, 16})
+
+      {wx, key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq_len, 4 * hidden}, type: {:bf, 16})
+
+      {r_weight, _key} =
+        Nx.Random.uniform(key, -0.2, 0.2, shape: {hidden, 4 * hidden}, type: {:bf, 16})
 
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:bf, 16}), {batch, hidden})
       c0 = Nx.broadcast(Nx.tensor(0.0, type: {:bf, 16}), {batch, hidden})
@@ -1465,10 +2096,19 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
       grad_output = Nx.broadcast(Nx.tensor(1.0, type: {:bf, 16}), {batch, seq_len, hidden})
 
       {ref_grad_wx, _} =
-        Nx.Defn.grad({wx, r_weight}, fn {w, r} -> slstm_forward(w, r, h0, c0, hidden) |> Nx.sum() end)
+        Nx.Defn.grad({wx, r_weight}, fn {w, r} ->
+          slstm_forward(w, r, h0, c0, hidden) |> Nx.sum()
+        end)
 
       {grad_wx, _, _} =
-        Edifice.CUDA.FusedScan.slstm_backward_fallback(wx, r_weight, h0, c0, forward_out, grad_output)
+        Edifice.CUDA.FusedScan.slstm_backward_fallback(
+          wx,
+          r_weight,
+          h0,
+          c0,
+          forward_out,
+          grad_output
+        )
 
       assert_all_close(grad_wx, ref_grad_wx, atol: 0.15)
     end
@@ -1534,13 +2174,29 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         wx_t = Nx.slice_along_axis(wx, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         rh_t = Nx.dot(h_p, [1], recurrent_weight, [0])
 
-        r_t = Nx.add(Nx.slice_along_axis(wx_t, 0, hidden, axis: 1),
-                     Nx.slice_along_axis(rh_t, 0, hidden, axis: 1)) |> Nx.sigmoid()
-        z_t = Nx.add(Nx.slice_along_axis(wx_t, hidden, hidden, axis: 1),
-                     Nx.slice_along_axis(rh_t, hidden, hidden, axis: 1)) |> Nx.sigmoid()
+        r_t =
+          Nx.add(
+            Nx.slice_along_axis(wx_t, 0, hidden, axis: 1),
+            Nx.slice_along_axis(rh_t, 0, hidden, axis: 1)
+          )
+          |> Nx.sigmoid()
+
+        z_t =
+          Nx.add(
+            Nx.slice_along_axis(wx_t, hidden, hidden, axis: 1),
+            Nx.slice_along_axis(rh_t, hidden, hidden, axis: 1)
+          )
+          |> Nx.sigmoid()
+
         rh_n = Nx.add(Nx.slice_along_axis(rh_t, 2 * hidden, hidden, axis: 1), bhn)
-        n_t = Nx.add(Nx.slice_along_axis(wx_t, 2 * hidden, hidden, axis: 1),
-                     Nx.multiply(r_t, rh_n)) |> Nx.tanh()
+
+        n_t =
+          Nx.add(
+            Nx.slice_along_axis(wx_t, 2 * hidden, hidden, axis: 1),
+            Nx.multiply(r_t, rh_n)
+          )
+          |> Nx.tanh()
+
         h_t = Nx.add(Nx.multiply(Nx.subtract(1.0, z_t), n_t), Nx.multiply(z_t, h_p))
 
         {h_t, [h_t | acc]}
@@ -1577,11 +2233,22 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         v_t = Nx.slice_along_axis(v, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        sk = Nx.dot(s_prev, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+        sk =
+          Nx.dot(s_prev, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+
         diff = Nx.subtract(v_t, sk)
-        delta = Nx.multiply(Nx.new_axis(beta_t, -1), Nx.multiply(Nx.new_axis(diff, -1), Nx.new_axis(k_t, -2)))
+
+        delta =
+          Nx.multiply(
+            Nx.new_axis(beta_t, -1),
+            Nx.multiply(Nx.new_axis(diff, -1), Nx.new_axis(k_t, -2))
+          )
+
         s_t = Nx.add(s_prev, delta)
-        o_t = Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+
+        o_t =
+          Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+
         {s_t, [o_t | acc]}
       end)
 
@@ -1603,11 +2270,24 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
 
         alpha_broad = alpha_t |> Nx.new_axis(-1) |> Nx.new_axis(-1)
         s_decayed = Nx.multiply(alpha_broad, s_prev)
-        sk = Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+
+        sk =
+          Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1])
+          |> Nx.squeeze(axes: [-1])
+
         diff = Nx.subtract(v_t, sk)
-        delta = Nx.multiply(Nx.new_axis(beta_t, -1), Nx.multiply(Nx.new_axis(diff, -1), Nx.new_axis(k_t, -2)))
+
+        delta =
+          Nx.multiply(
+            Nx.new_axis(beta_t, -1),
+            Nx.multiply(Nx.new_axis(diff, -1), Nx.new_axis(k_t, -2))
+          )
+
         s_t = Nx.add(s_decayed, delta)
-        o_t = Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+
+        o_t =
+          Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+
         {s_t, [o_t | acc]}
       end)
 
@@ -1655,12 +2335,19 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
 
         decay = Nx.exp(alpha_t) |> Nx.new_axis(3)
         s_decayed = Nx.multiply(decay, s_prev)
-        sk = Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+
+        sk =
+          Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1])
+          |> Nx.squeeze(axes: [-1])
+
         error = Nx.subtract(v_t, sk)
         beta_bc = beta_t |> Nx.new_axis(-1) |> Nx.new_axis(-1)
         delta = Nx.multiply(beta_bc, Nx.multiply(Nx.new_axis(error, -1), Nx.new_axis(k_t, -2)))
         s_t = Nx.add(s_decayed, delta)
-        o_t = Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+
+        o_t =
+          Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+
         {s_t, [o_t | acc]}
       end)
 
@@ -1692,7 +2379,12 @@ defmodule Edifice.CUDA.BackwardKernelsTest do
         pred_normed = Nx.add(Nx.multiply(pred_normed, ln_gamma), ln_beta)
 
         error = Nx.subtract(pred_normed, v_t)
-        grad = Nx.dot(Nx.new_axis(Nx.multiply(eta_t, error), 2), [2], [0], Nx.new_axis(k_t, 1), [1], [0])
+
+        grad =
+          Nx.dot(Nx.new_axis(Nx.multiply(eta_t, error), 2), [2], [0], Nx.new_axis(k_t, 1), [1], [
+            0
+          ])
+
         w_new = Nx.subtract(w_prev, grad)
 
         out = Nx.dot(w_new, [2], [0], Nx.new_axis(q_t, 2), [1], [0]) |> Nx.squeeze(axes: [2])

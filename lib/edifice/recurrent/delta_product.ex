@@ -322,8 +322,10 @@ defmodule Edifice.Recurrent.DeltaProduct do
             beta_broad = beta_tj |> Nx.new_axis(-1) |> Nx.new_axis(-1)
 
             # k k^T: [B, H, d, d]
-            k_col = Nx.new_axis(k_normalized, -1)    # [B, H, d, 1]
-            k_row = Nx.new_axis(k_normalized, -2)    # [B, H, 1, d]
+            # [B, H, d, 1]
+            k_col = Nx.new_axis(k_normalized, -1)
+            # [B, H, 1, d]
+            k_row = Nx.new_axis(k_normalized, -2)
             kk_t = Nx.dot(k_col, [3], [0, 1], k_row, [2], [0, 1])
 
             # S = S - beta * (k k^T @ S) + beta * k * v^T
@@ -331,7 +333,8 @@ defmodule Edifice.Recurrent.DeltaProduct do
             s_after_decay = Nx.subtract(s_acc, Nx.multiply(beta_broad, kkt_s))
 
             # + beta * k * v^T
-            v_row = Nx.new_axis(v_tj, -2)            # [B, H, 1, d]
+            # [B, H, 1, d]
+            v_row = Nx.new_axis(v_tj, -2)
             kv_t = Nx.dot(k_col, [3], [0, 1], v_row, [2], [0, 1])
             Nx.add(s_after_decay, Nx.multiply(beta_broad, kv_t))
           end)

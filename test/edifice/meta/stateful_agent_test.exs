@@ -30,10 +30,11 @@ defmodule Edifice.Meta.StatefulAgentTest do
     input = Nx.broadcast(0.5, {@batch_size, @seq_len, embed_dim})
     zero_state = Nx.broadcast(0.0, {@batch_size, state_size})
 
-    result = predict_fn.(params, %{
-      "state_sequence" => input,
-      "agent_state" => zero_state
-    })
+    result =
+      predict_fn.(params, %{
+        "state_sequence" => input,
+        "agent_state" => zero_state
+      })
 
     {result, params, predict_fn}
   end
@@ -75,21 +76,34 @@ defmodule Edifice.Meta.StatefulAgentTest do
       {_result, params, predict_fn} = build_and_run(default_opts())
 
       key = Nx.Random.key(42)
-      {input1, key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch_size, @seq_len, @embed_dim}, type: {:f, 32})
-      {input2, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch_size, @seq_len, @embed_dim}, type: {:f, 32})
+
+      {input1, key} =
+        Nx.Random.uniform(key, -1.0, 1.0,
+          shape: {@batch_size, @seq_len, @embed_dim},
+          type: {:f, 32}
+        )
+
+      {input2, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0,
+          shape: {@batch_size, @seq_len, @embed_dim},
+          type: {:f, 32}
+        )
+
       zero_state = Nx.broadcast(0.0, {@batch_size, @state_size})
 
       # Turn 1
-      {_out1, state1} = predict_fn.(params, %{
-        "state_sequence" => input1,
-        "agent_state" => zero_state
-      })
+      {_out1, state1} =
+        predict_fn.(params, %{
+          "state_sequence" => input1,
+          "agent_state" => zero_state
+        })
 
       # Turn 2: different input + state from turn 1
-      {_out2, state2} = predict_fn.(params, %{
-        "state_sequence" => input2,
-        "agent_state" => state1
-      })
+      {_out2, state2} =
+        predict_fn.(params, %{
+          "state_sequence" => input2,
+          "agent_state" => state1
+        })
 
       # States should differ (different inputs + accumulated memory)
       diff = Nx.subtract(state1, state2) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
@@ -136,19 +150,32 @@ defmodule Edifice.Meta.StatefulAgentTest do
       {_result, params, predict_fn} = build_and_run(default_opts(state_mode: :gru))
 
       key = Nx.Random.key(99)
-      {input1, key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch_size, @seq_len, @embed_dim}, type: {:f, 32})
-      {input2, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch_size, @seq_len, @embed_dim}, type: {:f, 32})
+
+      {input1, key} =
+        Nx.Random.uniform(key, -1.0, 1.0,
+          shape: {@batch_size, @seq_len, @embed_dim},
+          type: {:f, 32}
+        )
+
+      {input2, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0,
+          shape: {@batch_size, @seq_len, @embed_dim},
+          type: {:f, 32}
+        )
+
       zero_state = Nx.broadcast(0.0, {@batch_size, @state_size})
 
-      {_out1, state1} = predict_fn.(params, %{
-        "state_sequence" => input1,
-        "agent_state" => zero_state
-      })
+      {_out1, state1} =
+        predict_fn.(params, %{
+          "state_sequence" => input1,
+          "agent_state" => zero_state
+        })
 
-      {_out2, state2} = predict_fn.(params, %{
-        "state_sequence" => input2,
-        "agent_state" => state1
-      })
+      {_out2, state2} =
+        predict_fn.(params, %{
+          "state_sequence" => input2,
+          "agent_state" => state1
+        })
 
       diff = Nx.subtract(state1, state2) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
       assert diff > 1.0e-6, "GRU state should change between turns (diff=#{diff})"

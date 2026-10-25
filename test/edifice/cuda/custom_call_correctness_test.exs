@@ -28,7 +28,9 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
         seq = 4
         m = 4
         key = Nx.Random.key(42)
-        {combined, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, 4 * m}, type: {:f, 32})
+
+        {combined, _key} =
+          Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, 4 * m}, type: {:f, 32})
 
         result = FusedScan.titans_scan(combined, memory_size: m, momentum: @momentum)
 
@@ -46,19 +48,22 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       seq = 8
       m = 4
       key = Nx.Random.key(123)
-      {combined, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, 4 * m}, type: {:f, 32})
+
+      {combined, _key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, 4 * m}, type: {:f, 32})
 
       result_low = FusedScan.titans_scan(combined, memory_size: m, momentum: 0.1)
       result_high = FusedScan.titans_scan(combined, memory_size: m, momentum: 0.99)
 
       # With different momentum, outputs should differ
-      max_diff = Nx.subtract(result_low, result_high)
-                 |> Nx.abs()
-                 |> Nx.reduce_max()
-                 |> Nx.to_number()
+      max_diff =
+        Nx.subtract(result_low, result_high)
+        |> Nx.abs()
+        |> Nx.reduce_max()
+        |> Nx.to_number()
 
       assert max_diff > 1.0e-6,
-        "momentum=0.1 and momentum=0.99 produced identical outputs (max_diff=#{max_diff})"
+             "momentum=0.1 and momentum=0.99 produced identical outputs (max_diff=#{max_diff})"
     end
 
     test "momentum=0 with zero init matches direct gradient application" do
@@ -68,19 +73,22 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       seq = 2
       m = 2
       key = Nx.Random.key(77)
-      {combined, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq, 4 * m}, type: {:f, 32})
+
+      {combined, _key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq, 4 * m}, type: {:f, 32})
 
       result_zero_mom = FusedScan.titans_scan(combined, memory_size: m, momentum: 0.0)
       result_small_mom = FusedScan.titans_scan(combined, memory_size: m, momentum: 0.01)
 
       # With very small momentum, result should be close to zero-momentum
-      max_diff = Nx.subtract(result_zero_mom, result_small_mom)
-                 |> Nx.abs()
-                 |> Nx.reduce_max()
-                 |> Nx.to_number()
+      max_diff =
+        Nx.subtract(result_zero_mom, result_small_mom)
+        |> Nx.abs()
+        |> Nx.reduce_max()
+        |> Nx.to_number()
 
       assert max_diff < 0.1,
-        "momentum=0 and momentum=0.01 differ too much (max_diff=#{max_diff})"
+             "momentum=0 and momentum=0.01 differ too much (max_diff=#{max_diff})"
     end
   end
 
@@ -97,7 +105,9 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
         seq = 4
         m = 4
         key = Nx.Random.key(42)
-        {combined, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, 5 * m}, type: {:f, 32})
+
+        {combined, _key} =
+          Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, 5 * m}, type: {:f, 32})
 
         result = FusedScan.miras_scan(combined, memory_size: m, momentum: @momentum)
 
@@ -115,18 +125,21 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       seq = 8
       m = 4
       key = Nx.Random.key(456)
-      {combined, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, 5 * m}, type: {:f, 32})
+
+      {combined, _key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, 5 * m}, type: {:f, 32})
 
       result_low = FusedScan.miras_scan(combined, memory_size: m, momentum: 0.1)
       result_high = FusedScan.miras_scan(combined, memory_size: m, momentum: 0.99)
 
-      max_diff = Nx.subtract(result_low, result_high)
-                 |> Nx.abs()
-                 |> Nx.reduce_max()
-                 |> Nx.to_number()
+      max_diff =
+        Nx.subtract(result_low, result_high)
+        |> Nx.abs()
+        |> Nx.reduce_max()
+        |> Nx.to_number()
 
       assert max_diff > 1.0e-6,
-        "momentum=0.1 and momentum=0.99 produced identical outputs (max_diff=#{max_diff})"
+             "momentum=0.1 and momentum=0.99 produced identical outputs (max_diff=#{max_diff})"
     end
 
     test "momentum=0 with zero init matches direct gradient application" do
@@ -134,18 +147,21 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       seq = 2
       m = 2
       key = Nx.Random.key(88)
-      {combined, _key} = Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq, 5 * m}, type: {:f, 32})
+
+      {combined, _key} =
+        Nx.Random.uniform(key, -0.3, 0.3, shape: {batch, seq, 5 * m}, type: {:f, 32})
 
       result_zero_mom = FusedScan.miras_scan(combined, memory_size: m, momentum: 0.0)
       result_small_mom = FusedScan.miras_scan(combined, memory_size: m, momentum: 0.01)
 
-      max_diff = Nx.subtract(result_zero_mom, result_small_mom)
-                 |> Nx.abs()
-                 |> Nx.reduce_max()
-                 |> Nx.to_number()
+      max_diff =
+        Nx.subtract(result_zero_mom, result_small_mom)
+        |> Nx.abs()
+        |> Nx.reduce_max()
+        |> Nx.to_number()
 
       assert max_diff < 0.1,
-        "momentum=0 and momentum=0.01 differ too much (max_diff=#{max_diff})"
+             "momentum=0 and momentum=0.01 differ too much (max_diff=#{max_diff})"
     end
   end
 
@@ -187,10 +203,11 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       # Manual computation: h_t = tanh(wx_t + W_res @ h_{t-1})
       h = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
 
-      h = Enum.reduce(0..(seq - 1), h, fn t, h_prev ->
-        wx_t = Nx.slice_along_axis(wx, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        Nx.tanh(Nx.add(wx_t, Nx.dot(h_prev, w_res)))
-      end)
+      h =
+        Enum.reduce(0..(seq - 1), h, fn t, h_prev ->
+          wx_t = Nx.slice_along_axis(wx, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          Nx.tanh(Nx.add(wx_t, Nx.dot(h_prev, w_res)))
+        end)
 
       max_diff = Nx.subtract(result, h) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
       assert max_diff < 1.0e-5, "leak_rate=1.0 should match manual computation (diff=#{max_diff})"
@@ -207,13 +224,14 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       result_full = FusedScan.reservoir_scan(wx, w_res, leak_rate: 1.0)
       result_half = FusedScan.reservoir_scan(wx, w_res, leak_rate: 0.5)
 
-      max_diff = Nx.subtract(result_full, result_half)
-                 |> Nx.abs()
-                 |> Nx.reduce_max()
-                 |> Nx.to_number()
+      max_diff =
+        Nx.subtract(result_full, result_half)
+        |> Nx.abs()
+        |> Nx.reduce_max()
+        |> Nx.to_number()
 
       assert max_diff > 1.0e-4,
-        "leak_rate=1.0 vs 0.5 should produce different outputs (max_diff=#{max_diff})"
+             "leak_rate=1.0 vs 0.5 should produce different outputs (max_diff=#{max_diff})"
     end
   end
 
@@ -229,9 +247,15 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       dim = 4
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, heads, seq, dim}, type: {:f, 32})
 
       causal_result = FusedScan.flash_attention(q, k, v, causal: true)
       non_causal_result = FusedScan.flash_attention(q, k, v, causal: false)
@@ -240,15 +264,23 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       last_causal = Nx.slice_along_axis(causal_result, seq - 1, 1, axis: 2)
       last_non_causal = Nx.slice_along_axis(non_causal_result, seq - 1, 1, axis: 2)
 
-      diff = Nx.subtract(last_causal, last_non_causal) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
+      diff =
+        Nx.subtract(last_causal, last_non_causal) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
+
       assert diff < 1.0e-4, "Last token should match between causal and non-causal (diff=#{diff})"
 
       # First token (t=0) in causal only sees itself; non-causal sees all tokens
       first_causal = Nx.slice_along_axis(causal_result, 0, 1, axis: 2)
       first_non_causal = Nx.slice_along_axis(non_causal_result, 0, 1, axis: 2)
 
-      diff2 = Nx.subtract(first_causal, first_non_causal) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
-      assert diff2 > 1.0e-6, "First token should differ between causal and non-causal (diff=#{diff2})"
+      diff2 =
+        Nx.subtract(first_causal, first_non_causal)
+        |> Nx.abs()
+        |> Nx.reduce_max()
+        |> Nx.to_number()
+
+      assert diff2 > 1.0e-6,
+             "First token should differ between causal and non-causal (diff=#{diff2})"
     end
 
     test "matches naive attention with causal mask" do
@@ -258,14 +290,22 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       dim = 4
 
       key = Nx.Random.key(99)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, _key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
 
       flash_result = FusedScan.flash_attention(q, k, v, causal: true)
       naive_result = naive_causal_attention(q, k, v)
 
-      max_diff = Nx.subtract(flash_result, naive_result) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
+      max_diff =
+        Nx.subtract(flash_result, naive_result) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
+
       assert max_diff < 1.0e-4, "Flash vs naive causal attention max_diff=#{max_diff}"
     end
   end
@@ -282,9 +322,15 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       dim = 4
 
       key = Nx.Random.key(42)
-      {q, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {k, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
-      {v, _key} = Nx.Random.uniform(key, 0.1, 1.0, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {q, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {k, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, heads, seq, dim}, type: {:f, 32})
+
+      {v, _key} =
+        Nx.Random.uniform(key, 0.1, 1.0, shape: {batch, heads, seq, dim}, type: {:f, 32})
 
       causal_result = FusedScan.laser_attention(q, k, v, causal: true)
       non_causal_result = FusedScan.laser_attention(q, k, v, causal: false)
@@ -293,15 +339,23 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       last_causal = Nx.slice_along_axis(causal_result, seq - 1, 1, axis: 2)
       last_non_causal = Nx.slice_along_axis(non_causal_result, seq - 1, 1, axis: 2)
 
-      diff = Nx.subtract(last_causal, last_non_causal) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
+      diff =
+        Nx.subtract(last_causal, last_non_causal) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
+
       assert diff < 1.0e-4, "Last token should match between causal and non-causal (diff=#{diff})"
 
       # First token (t=0) in causal only sees itself; non-causal sees all tokens
       first_causal = Nx.slice_along_axis(causal_result, 0, 1, axis: 2)
       first_non_causal = Nx.slice_along_axis(non_causal_result, 0, 1, axis: 2)
 
-      diff2 = Nx.subtract(first_causal, first_non_causal) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
-      assert diff2 > 1.0e-6, "First token should differ between causal and non-causal (diff=#{diff2})"
+      diff2 =
+        Nx.subtract(first_causal, first_non_causal)
+        |> Nx.abs()
+        |> Nx.reduce_max()
+        |> Nx.to_number()
+
+      assert diff2 > 1.0e-6,
+             "First token should differ between causal and non-causal (diff=#{diff2})"
     end
   end
 
@@ -315,19 +369,22 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       seq = 8
       m = 8
       key = Nx.Random.key(2024)
-      {combined, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, 4 * m}, type: {:f, 32})
+
+      {combined, _key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, 4 * m}, type: {:f, 32})
 
       result_low = FusedScan.titans_scan(combined, memory_size: m, momentum: 0.1)
       result_high = FusedScan.titans_scan(combined, memory_size: m, momentum: 0.99)
 
-      max_diff = Nx.subtract(result_low, result_high)
-                 |> Nx.abs()
-                 |> Nx.reduce_max()
-                 |> Nx.to_number()
+      max_diff =
+        Nx.subtract(result_low, result_high)
+        |> Nx.abs()
+        |> Nx.reduce_max()
+        |> Nx.to_number()
 
       assert max_diff > 1.0e-4,
-        "Titans: momentum=0.1 vs 0.99 should produce different outputs (max_diff=#{max_diff}). " <>
-        "If this fails, the momentum parameter may be ignored by the dispatch path."
+             "Titans: momentum=0.1 vs 0.99 should produce different outputs (max_diff=#{max_diff}). " <>
+               "If this fails, the momentum parameter may be ignored by the dispatch path."
     end
 
     test "miras_scan: changing momentum changes output" do
@@ -335,19 +392,22 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       seq = 8
       m = 8
       key = Nx.Random.key(2024)
-      {combined, _key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, 5 * m}, type: {:f, 32})
+
+      {combined, _key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq, 5 * m}, type: {:f, 32})
 
       result_low = FusedScan.miras_scan(combined, memory_size: m, momentum: 0.1)
       result_high = FusedScan.miras_scan(combined, memory_size: m, momentum: 0.99)
 
-      max_diff = Nx.subtract(result_low, result_high)
-                 |> Nx.abs()
-                 |> Nx.reduce_max()
-                 |> Nx.to_number()
+      max_diff =
+        Nx.subtract(result_low, result_high)
+        |> Nx.abs()
+        |> Nx.reduce_max()
+        |> Nx.to_number()
 
       assert max_diff > 1.0e-4,
-        "MIRAS: momentum=0.1 vs 0.99 should produce different outputs (max_diff=#{max_diff}). " <>
-        "If this fails, the momentum parameter may be ignored by the dispatch path."
+             "MIRAS: momentum=0.1 vs 0.99 should produce different outputs (max_diff=#{max_diff}). " <>
+               "If this fails, the momentum parameter may be ignored by the dispatch path."
     end
 
     test "reservoir_scan: changing leak_rate changes output" do
@@ -361,14 +421,15 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
       result_full = FusedScan.reservoir_scan(wx, w_res, leak_rate: 1.0)
       result_half = FusedScan.reservoir_scan(wx, w_res, leak_rate: 0.5)
 
-      max_diff = Nx.subtract(result_full, result_half)
-                 |> Nx.abs()
-                 |> Nx.reduce_max()
-                 |> Nx.to_number()
+      max_diff =
+        Nx.subtract(result_full, result_half)
+        |> Nx.abs()
+        |> Nx.reduce_max()
+        |> Nx.to_number()
 
       assert max_diff > 1.0e-4,
-        "Reservoir: leak_rate=1.0 vs 0.5 should produce different outputs (max_diff=#{max_diff}). " <>
-        "If this fails, the leak_rate parameter may be ignored by the dispatch path."
+             "Reservoir: leak_rate=1.0 vs 0.5 should produce different outputs (max_diff=#{max_diff}). " <>
+               "If this fails, the leak_rate parameter may be ignored by the dispatch path."
     end
   end
 
@@ -384,9 +445,10 @@ defmodule Edifice.CUDA.CustomCallCorrectnessTest do
     scores = Nx.dot(q, [3], [0, 1], k, [3], [0, 1]) |> Nx.divide(scale)
 
     # Causal mask: lower triangular [1, 1, seq, seq] for broadcasting
-    mask = Nx.iota({seq, seq}, axis: 0)
-           |> Nx.greater_equal(Nx.iota({seq, seq}, axis: 1))
-           |> Nx.reshape({1, 1, seq, seq})
+    mask =
+      Nx.iota({seq, seq}, axis: 0)
+      |> Nx.greater_equal(Nx.iota({seq, seq}, axis: 1))
+      |> Nx.reshape({1, 1, seq, seq})
 
     neg_inf = Nx.tensor(-1.0e9, type: {:f, 32})
     scores = Nx.select(mask, scores, neg_inf)

@@ -64,7 +64,9 @@ defmodule Edifice.Recurrent.BlockScanWiringTest do
       packed = DeepResLSTM.pack_block_weights(params, num_layers, h)
 
       key = Nx.Random.key(42)
-      {input, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch, @seq_len, h}, type: {:f, 32})
+
+      {input, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch, @seq_len, h}, type: {:f, 32})
 
       # fused_block_inference calls FusedScan.lstm_block which falls back to pure Nx
       output = DeepResLSTM.fused_block_inference(input, packed, num_layers)
@@ -81,7 +83,9 @@ defmodule Edifice.Recurrent.BlockScanWiringTest do
       packed = DeepResLSTM.pack_block_weights(params, num_layers, h)
 
       key = Nx.Random.key(42)
-      {input, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch, @seq_len, h}, type: {:f, 32})
+
+      {input, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch, @seq_len, h}, type: {:f, 32})
 
       # Through module helper (zeros h0, c0 by default)
       mod_out = DeepResLSTM.fused_block_inference(input, packed, num_layers)
@@ -142,7 +146,9 @@ defmodule Edifice.Recurrent.BlockScanWiringTest do
       packed = Rec.pack_block_weights(params, num_layers, h, :lstm)
 
       key = Nx.Random.key(42)
-      {input, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch, @seq_len, h}, type: {:f, 32})
+
+      {input, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch, @seq_len, h}, type: {:f, 32})
 
       output = Rec.fused_lstm_block_inference(input, packed, num_layers)
 
@@ -193,7 +199,9 @@ defmodule Edifice.Recurrent.BlockScanWiringTest do
       packed = Rec.pack_block_weights(params, num_layers, h, :gru)
 
       key = Nx.Random.key(42)
-      {input, _key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch, @seq_len, h}, type: {:f, 32})
+
+      {input, _key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {@batch, @seq_len, h}, type: {:f, 32})
 
       output = Rec.fused_gru_block_inference(input, packed, num_layers)
 

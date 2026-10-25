@@ -222,7 +222,9 @@ defmodule Edifice.Recurrent.Titans do
         recurrence_input,
         fn combined ->
           Edifice.CUDA.FusedScan.titans_scan(combined,
-            memory_size: memory_size, momentum: momentum)
+            memory_size: memory_size,
+            momentum: momentum
+          )
         end,
         name: "#{name}_recurrence"
       )

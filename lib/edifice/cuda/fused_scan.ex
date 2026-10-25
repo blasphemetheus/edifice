@@ -483,6 +483,7 @@ defmodule Edifice.CUDA.FusedScan do
     Nx.Defn.Kernel.custom_grad(forward_output, [gates, candidates], fn grad_output ->
       {grad_z, grad_cand, _grad_h0} =
         mingru_backward_dispatch(z, candidates, h0, forward_output, grad_output)
+
       # Chain rule: d/d(raw_gates) = d/d(z) * sigmoid'(raw_gates) = d/d(z) * z * (1-z)
       grad_gates = Nx.multiply(grad_z, Nx.multiply(z, Nx.subtract(1.0, z)))
       [grad_gates, grad_cand]
@@ -510,14 +511,19 @@ defmodule Edifice.CUDA.FusedScan do
 
     # Attach backward custom call via custom_grad
     # custom_grad inputs are [raw_forget_gates, raw_input_gates, candidates] (pre-sigmoid)
-    Nx.Defn.Kernel.custom_grad(forward_output, [forget_gates, input_gates, candidates], fn grad_output ->
-      {grad_f, grad_i, grad_cand, _grad_h0} =
-        minlstm_backward_dispatch(f, i, candidates, h0, forward_output, grad_output)
-      # Chain rule: d/d(raw) = d/d(sigmoid_out) * sigmoid_out * (1 - sigmoid_out)
-      grad_raw_f = Nx.multiply(grad_f, Nx.multiply(f, Nx.subtract(1.0, f)))
-      grad_raw_i = Nx.multiply(grad_i, Nx.multiply(i, Nx.subtract(1.0, i)))
-      [grad_raw_f, grad_raw_i, grad_cand]
-    end)
+    Nx.Defn.Kernel.custom_grad(
+      forward_output,
+      [forget_gates, input_gates, candidates],
+      fn grad_output ->
+        {grad_f, grad_i, grad_cand, _grad_h0} =
+          minlstm_backward_dispatch(f, i, candidates, h0, forward_output, grad_output)
+
+        # Chain rule: d/d(raw) = d/d(sigmoid_out) * sigmoid_out * (1 - sigmoid_out)
+        grad_raw_f = Nx.multiply(grad_f, Nx.multiply(f, Nx.subtract(1.0, f)))
+        grad_raw_i = Nx.multiply(grad_i, Nx.multiply(i, Nx.subtract(1.0, i)))
+        [grad_raw_f, grad_raw_i, grad_cand]
+      end
+    )
   end
 
   # Fallback scans for custom call path — take pre-processed inputs
@@ -562,29 +568,33 @@ defmodule Edifice.CUDA.FusedScan do
     grad_cand = Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, seq_len, hidden})
 
     {_, gz, gc, dh_acc} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_z, grad_cand, Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden})}, fn t, {_, gz, gc, dh_prev} ->
-        grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        dh = Nx.add(grad_t, dh_prev)
+      Enum.reduce(
+        (seq_len - 1)..0//-1,
+        {nil, grad_z, grad_cand, Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden})},
+        fn t, {_, gz, gc, dh_prev} ->
+          grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          dh = Nx.add(grad_t, dh_prev)
 
-        z_t = Nx.slice_along_axis(z, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        c_t = Nx.slice_along_axis(candidates, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          z_t = Nx.slice_along_axis(z, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          c_t = Nx.slice_along_axis(candidates, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        h_prev =
-          if t == 0 do
-            h0
-          else
-            Nx.slice_along_axis(forward_out, t - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
-          end
+          h_prev =
+            if t == 0 do
+              h0
+            else
+              Nx.slice_along_axis(forward_out, t - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+            end
 
-        dz_t = Nx.multiply(dh, Nx.subtract(c_t, h_prev))
-        dc_t = Nx.multiply(dh, z_t)
-        dh_next = Nx.multiply(dh, Nx.subtract(1.0, z_t))
+          dz_t = Nx.multiply(dh, Nx.subtract(c_t, h_prev))
+          dc_t = Nx.multiply(dh, z_t)
+          dh_next = Nx.multiply(dh, Nx.subtract(1.0, z_t))
 
-        gz = Nx.put_slice(gz, [0, t, 0], Nx.new_axis(dz_t, 1))
-        gc = Nx.put_slice(gc, [0, t, 0], Nx.new_axis(dc_t, 1))
+          gz = Nx.put_slice(gz, [0, t, 0], Nx.new_axis(dz_t, 1))
+          gc = Nx.put_slice(gc, [0, t, 0], Nx.new_axis(dc_t, 1))
 
-        {nil, gz, gc, dh_next}
-      end)
+          {nil, gz, gc, dh_next}
+        end
+      )
 
     {gz, gc, dh_acc}
   end
@@ -639,47 +649,65 @@ defmodule Edifice.CUDA.FusedScan do
     grad_cand = Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, seq_len, hidden})
 
     {_, gf, gi, gcand, dc_acc} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_f, grad_i, grad_cand, Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden})}, fn t, {_, gf, gi, gcand, dc_prev} ->
-        grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        dc = Nx.add(grad_t, dc_prev)
+      Enum.reduce(
+        (seq_len - 1)..0//-1,
+        {nil, grad_f, grad_i, grad_cand,
+         Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden})},
+        fn t, {_, gf, gi, gcand, dc_prev} ->
+          grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          dc = Nx.add(grad_t, dc_prev)
 
-        f_t = Nx.slice_along_axis(f_gate, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        i_t = Nx.slice_along_axis(i_gate, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        cand_t = Nx.slice_along_axis(candidates, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          f_t = Nx.slice_along_axis(f_gate, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          i_t = Nx.slice_along_axis(i_gate, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          cand_t = Nx.slice_along_axis(candidates, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        # Normalization
-        s = Nx.add(f_t, Nx.add(i_t, norm_eps))
-        f_norm = Nx.divide(f_t, s)
-        i_norm = Nx.divide(i_t, s)
+          # Normalization
+          s = Nx.add(f_t, Nx.add(i_t, norm_eps))
+          f_norm = Nx.divide(f_t, s)
+          i_norm = Nx.divide(i_t, s)
 
-        c_prev =
-          if t == 0 do
-            h0
-          else
-            Nx.slice_along_axis(forward_out, t - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
-          end
+          c_prev =
+            if t == 0 do
+              h0
+            else
+              Nx.slice_along_axis(forward_out, t - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+            end
 
-        # Gradients w.r.t. normalized gates
-        df_norm = Nx.multiply(dc, c_prev)
-        di_norm = Nx.multiply(dc, cand_t)
+          # Gradients w.r.t. normalized gates
+          df_norm = Nx.multiply(dc, c_prev)
+          di_norm = Nx.multiply(dc, cand_t)
 
-        # Gradient w.r.t. candidates
-        dcand_t = Nx.multiply(dc, i_norm)
+          # Gradient w.r.t. candidates
+          dcand_t = Nx.multiply(dc, i_norm)
 
-        # Accumulate gradient for c_{t-1}
-        dc_next = Nx.multiply(dc, f_norm)
+          # Accumulate gradient for c_{t-1}
+          dc_next = Nx.multiply(dc, f_norm)
 
-        # Through normalization (quotient rule)
-        s2 = Nx.multiply(s, s)
-        df_t = Nx.divide(Nx.subtract(Nx.multiply(df_norm, Nx.add(i_t, norm_eps)), Nx.multiply(di_norm, i_t)), s2)
-        di_t = Nx.divide(Nx.add(Nx.negate(Nx.multiply(df_norm, f_t)), Nx.multiply(di_norm, Nx.add(f_t, norm_eps))), s2)
+          # Through normalization (quotient rule)
+          s2 = Nx.multiply(s, s)
 
-        gf = Nx.put_slice(gf, [0, t, 0], Nx.new_axis(df_t, 1))
-        gi = Nx.put_slice(gi, [0, t, 0], Nx.new_axis(di_t, 1))
-        gcand = Nx.put_slice(gcand, [0, t, 0], Nx.new_axis(dcand_t, 1))
+          df_t =
+            Nx.divide(
+              Nx.subtract(Nx.multiply(df_norm, Nx.add(i_t, norm_eps)), Nx.multiply(di_norm, i_t)),
+              s2
+            )
 
-        {nil, gf, gi, gcand, dc_next}
-      end)
+          di_t =
+            Nx.divide(
+              Nx.add(
+                Nx.negate(Nx.multiply(df_norm, f_t)),
+                Nx.multiply(di_norm, Nx.add(f_t, norm_eps))
+              ),
+              s2
+            )
+
+          gf = Nx.put_slice(gf, [0, t, 0], Nx.new_axis(df_t, 1))
+          gi = Nx.put_slice(gi, [0, t, 0], Nx.new_axis(di_t, 1))
+          gcand = Nx.put_slice(gcand, [0, t, 0], Nx.new_axis(dcand_t, 1))
+
+          {nil, gf, gi, gcand, dc_next}
+        end
+      )
 
     {gf, gi, gcand, dc_acc}
   end
@@ -693,7 +721,12 @@ defmodule Edifice.CUDA.FusedScan do
 
     # Pre-compute post-activation values for backward kernel
     z = Nx.sigmoid(gates)
-    c_act = Nx.add(1.0, Nx.select(Nx.greater(candidates, 0), candidates, Nx.subtract(Nx.exp(candidates), 1.0)))
+
+    c_act =
+      Nx.add(
+        1.0,
+        Nx.select(Nx.greater(candidates, 0), candidates, Nx.subtract(Nx.exp(candidates), 1.0))
+      )
 
     forward_output =
       Edifice.Block.run(:fused_elu_gru_scan, [gates, candidates, h0], output, fn g, c, h0 ->
@@ -704,11 +737,18 @@ defmodule Edifice.CUDA.FusedScan do
     Nx.Defn.Kernel.custom_grad(forward_output, [gates, candidates], fn grad_output ->
       {grad_z, grad_c, _grad_h0} =
         elu_gru_backward_dispatch(z, c_act, h0, forward_output, grad_output)
+
       # Chain rule for sigmoid: d/d(raw_gates) = grad_z * z * (1-z)
       grad_gates = Nx.multiply(grad_z, Nx.multiply(z, Nx.subtract(1.0, z)))
       # Chain rule for ELU: d/d(raw_cand) = grad_c * elu'(raw_cand)
       # elu'(x) = 1 if x >= 0, exp(x) if x < 0
-      elu_deriv = Nx.select(Nx.greater(candidates, 0), Nx.broadcast(1.0, Nx.shape(candidates)), Nx.exp(candidates))
+      elu_deriv =
+        Nx.select(
+          Nx.greater(candidates, 0),
+          Nx.broadcast(1.0, Nx.shape(candidates)),
+          Nx.exp(candidates)
+        )
+
       grad_cand_raw = Nx.multiply(grad_c, elu_deriv)
       [grad_gates, grad_cand_raw]
     end)
@@ -747,6 +787,7 @@ defmodule Edifice.CUDA.FusedScan do
     Nx.Defn.Kernel.custom_grad(forward_output, [gates, candidates], fn grad_output ->
       {grad_z, grad_cand, _grad_h0} =
         real_gru_backward_dispatch(z, candidates, h0, forward_output, grad_output)
+
       grad_gates = Nx.multiply(grad_z, Nx.multiply(z, Nx.subtract(1.0, z)))
       [grad_gates, grad_cand]
     end)
@@ -784,6 +825,7 @@ defmodule Edifice.CUDA.FusedScan do
     Nx.Defn.Kernel.custom_grad(forward_output, [a_vals, b_vals], fn grad_output ->
       {grad_a, grad_b, _grad_h0} =
         diag_linear_backward_dispatch(a_sig, h0, forward_output, grad_output)
+
       # Chain rule: d/d(raw_a) = grad_a * sigmoid(a) * (1 - sigmoid(a))
       grad_raw_a = Nx.multiply(grad_a, Nx.multiply(a_sig, Nx.subtract(1.0, a_sig)))
       [grad_raw_a, grad_b]
@@ -819,6 +861,7 @@ defmodule Edifice.CUDA.FusedScan do
     Nx.Defn.Kernel.custom_grad(forward_output, [tau, activation], fn grad_output ->
       {grad_tau, grad_act, _grad_h0} =
         liquid_backward_dispatch(tau, activation, h0, forward_output, grad_output)
+
       [grad_tau, grad_act]
     end)
   end
@@ -854,6 +897,7 @@ defmodule Edifice.CUDA.FusedScan do
     Nx.Defn.Kernel.custom_grad(forward_output, [a_vals, b_vals], fn grad_output ->
       {grad_a, grad_b, _grad_h0} =
         linear_scan_backward_dispatch(a_vals, h0, forward_output, grad_output)
+
       [grad_a, grad_b]
     end)
   end
@@ -898,28 +942,32 @@ defmodule Edifice.CUDA.FusedScan do
     grad_b = Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, seq_len, hidden})
 
     {_, grad_a_acc, grad_b_acc, dh_acc} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_a, grad_b, Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden})}, fn t, {_, ga, gb, dh_prev} ->
-        grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        dh = Nx.add(grad_t, dh_prev)
+      Enum.reduce(
+        (seq_len - 1)..0//-1,
+        {nil, grad_a, grad_b, Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden})},
+        fn t, {_, ga, gb, dh_prev} ->
+          grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          dh = Nx.add(grad_t, dh_prev)
 
-        h_prev =
-          if t == 0 do
-            h0
-          else
-            Nx.slice_along_axis(forward_out, t - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
-          end
+          h_prev =
+            if t == 0 do
+              h0
+            else
+              Nx.slice_along_axis(forward_out, t - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+            end
 
-        a_t = Nx.slice_along_axis(a_vals, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          a_t = Nx.slice_along_axis(a_vals, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        da_t = Nx.multiply(dh, h_prev)
-        db_t = dh
-        dh_next = Nx.multiply(dh, a_t)
+          da_t = Nx.multiply(dh, h_prev)
+          db_t = dh
+          dh_next = Nx.multiply(dh, a_t)
 
-        ga = Nx.put_slice(ga, [0, t, 0], Nx.new_axis(da_t, 1))
-        gb = Nx.put_slice(gb, [0, t, 0], Nx.new_axis(db_t, 1))
+          ga = Nx.put_slice(ga, [0, t, 0], Nx.new_axis(da_t, 1))
+          gb = Nx.put_slice(gb, [0, t, 0], Nx.new_axis(db_t, 1))
 
-        {nil, ga, gb, dh_next}
-      end)
+          {nil, ga, gb, dh_next}
+        end
+      )
 
     {grad_a_acc, grad_b_acc, dh_acc}
   end
@@ -955,29 +1003,33 @@ defmodule Edifice.CUDA.FusedScan do
     grad_c = Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, seq_len, hidden})
 
     {_, gz, gc, dh_acc} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_z, grad_c, Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden})}, fn t, {_, gz, gc, dh_prev} ->
-        grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        dh = Nx.add(grad_t, dh_prev)
+      Enum.reduce(
+        (seq_len - 1)..0//-1,
+        {nil, grad_z, grad_c, Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden})},
+        fn t, {_, gz, gc, dh_prev} ->
+          grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          dh = Nx.add(grad_t, dh_prev)
 
-        z_t = Nx.slice_along_axis(z, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        c_t = Nx.slice_along_axis(c, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          z_t = Nx.slice_along_axis(z, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          c_t = Nx.slice_along_axis(c, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        h_prev =
-          if t == 0 do
-            h0
-          else
-            Nx.slice_along_axis(forward_out, t - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
-          end
+          h_prev =
+            if t == 0 do
+              h0
+            else
+              Nx.slice_along_axis(forward_out, t - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+            end
 
-        gz_t = Nx.multiply(dh, Nx.subtract(c_t, h_prev))
-        gc_t = Nx.multiply(dh, z_t)
-        dh_next = Nx.multiply(dh, Nx.subtract(1.0, z_t))
+          gz_t = Nx.multiply(dh, Nx.subtract(c_t, h_prev))
+          gc_t = Nx.multiply(dh, z_t)
+          dh_next = Nx.multiply(dh, Nx.subtract(1.0, z_t))
 
-        gz = Nx.put_slice(gz, [0, t, 0], Nx.new_axis(gz_t, 1))
-        gc = Nx.put_slice(gc, [0, t, 0], Nx.new_axis(gc_t, 1))
+          gz = Nx.put_slice(gz, [0, t, 0], Nx.new_axis(gz_t, 1))
+          gc = Nx.put_slice(gc, [0, t, 0], Nx.new_axis(gc_t, 1))
 
-        {nil, gz, gc, dh_next}
-      end)
+          {nil, gz, gc, dh_next}
+        end
+      )
 
     {gz, gc, dh_acc}
   end
@@ -1080,32 +1132,43 @@ defmodule Edifice.CUDA.FusedScan do
 
     # Backward pass
     {_, gwx, dh_acc, dc_acc} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_wx, Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden}), Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden})}, fn t, {_, gwx, dh_prev, dc_prev} ->
-        grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        dh = Nx.add(grad_t, dh_prev)
+      Enum.reduce(
+        (seq_len - 1)..0//-1,
+        {nil, grad_wx, Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden}),
+         Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden})},
+        fn t, {_, gwx, dh_prev, dc_prev} ->
+          grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          dh = Nx.add(grad_t, dh_prev)
 
-        {i_t, f_t, g_t, o_t} = Enum.at(gates_fwd, t)
-        c_t = Enum.at(cells_fwd, t)
-        c_prev = if t == 0, do: c0, else: Enum.at(cells_fwd, t - 1)
-        tanh_c = Nx.tanh(c_t)
+          {i_t, f_t, g_t, o_t} = Enum.at(gates_fwd, t)
+          c_t = Enum.at(cells_fwd, t)
+          c_prev = if t == 0, do: c0, else: Enum.at(cells_fwd, t - 1)
+          tanh_c = Nx.tanh(c_t)
 
-        do_pre = Nx.multiply(Nx.multiply(dh, tanh_c), Nx.multiply(o_t, Nx.subtract(1.0, o_t)))
-        dc = Nx.add(Nx.multiply(Nx.multiply(dh, o_t), Nx.subtract(1.0, Nx.multiply(tanh_c, tanh_c))), dc_prev)
-        di_pre = Nx.multiply(Nx.multiply(dc, g_t), Nx.multiply(i_t, Nx.subtract(1.0, i_t)))
-        df_pre = Nx.multiply(Nx.multiply(dc, c_prev), Nx.multiply(f_t, Nx.subtract(1.0, f_t)))
-        dg_pre = Nx.multiply(Nx.multiply(dc, i_t), Nx.subtract(1.0, Nx.multiply(g_t, g_t)))
-        dc_next = Nx.multiply(dc, f_t)
+          do_pre = Nx.multiply(Nx.multiply(dh, tanh_c), Nx.multiply(o_t, Nx.subtract(1.0, o_t)))
 
-        # Concatenate gate gradients
-        gwx_t = Nx.concatenate([di_pre, df_pre, dg_pre, do_pre], axis: 1)
-        gwx = Nx.put_slice(gwx, [0, t, 0], Nx.new_axis(gwx_t, 1))
+          dc =
+            Nx.add(
+              Nx.multiply(Nx.multiply(dh, o_t), Nx.subtract(1.0, Nx.multiply(tanh_c, tanh_c))),
+              dc_prev
+            )
 
-        # dh_acc through R^T
-        dgate = Nx.concatenate([di_pre, df_pre, dg_pre, do_pre], axis: 1)
-        dh_next = Nx.dot(dgate, [1], Nx.transpose(recurrent_weight), [0])
+          di_pre = Nx.multiply(Nx.multiply(dc, g_t), Nx.multiply(i_t, Nx.subtract(1.0, i_t)))
+          df_pre = Nx.multiply(Nx.multiply(dc, c_prev), Nx.multiply(f_t, Nx.subtract(1.0, f_t)))
+          dg_pre = Nx.multiply(Nx.multiply(dc, i_t), Nx.subtract(1.0, Nx.multiply(g_t, g_t)))
+          dc_next = Nx.multiply(dc, f_t)
 
-        {nil, gwx, dh_next, dc_next}
-      end)
+          # Concatenate gate gradients
+          gwx_t = Nx.concatenate([di_pre, df_pre, dg_pre, do_pre], axis: 1)
+          gwx = Nx.put_slice(gwx, [0, t, 0], Nx.new_axis(gwx_t, 1))
+
+          # dh_acc through R^T
+          dgate = Nx.concatenate([di_pre, df_pre, dg_pre, do_pre], axis: 1)
+          dh_next = Nx.dot(dgate, [1], Nx.transpose(recurrent_weight), [0])
+
+          {nil, gwx, dh_next, dc_next}
+        end
+      )
 
     {gwx, dh_acc, dc_acc}
   end
@@ -1146,13 +1209,29 @@ defmodule Edifice.CUDA.FusedScan do
         wx_t = Nx.slice_along_axis(wx, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         rh_t = Nx.dot(h_p, [1], recurrent_weight, [0])
 
-        r_t = Nx.add(Nx.slice_along_axis(wx_t, 0, hidden, axis: 1),
-                     Nx.slice_along_axis(rh_t, 0, hidden, axis: 1)) |> Nx.sigmoid()
-        z_t = Nx.add(Nx.slice_along_axis(wx_t, hidden, hidden, axis: 1),
-                     Nx.slice_along_axis(rh_t, hidden, hidden, axis: 1)) |> Nx.sigmoid()
+        r_t =
+          Nx.add(
+            Nx.slice_along_axis(wx_t, 0, hidden, axis: 1),
+            Nx.slice_along_axis(rh_t, 0, hidden, axis: 1)
+          )
+          |> Nx.sigmoid()
+
+        z_t =
+          Nx.add(
+            Nx.slice_along_axis(wx_t, hidden, hidden, axis: 1),
+            Nx.slice_along_axis(rh_t, hidden, hidden, axis: 1)
+          )
+          |> Nx.sigmoid()
+
         rh_n = Nx.add(Nx.slice_along_axis(rh_t, 2 * hidden, hidden, axis: 1), bhn)
-        n_t = Nx.add(Nx.slice_along_axis(wx_t, 2 * hidden, hidden, axis: 1),
-                     Nx.multiply(r_t, rh_n)) |> Nx.tanh()
+
+        n_t =
+          Nx.add(
+            Nx.slice_along_axis(wx_t, 2 * hidden, hidden, axis: 1),
+            Nx.multiply(r_t, rh_n)
+          )
+          |> Nx.tanh()
+
         h_t = Nx.add(Nx.multiply(Nx.subtract(1.0, z_t), n_t), Nx.multiply(z_t, h_p))
 
         {h_t, [{r_t, z_t, n_t, rh_n} | acc]}
@@ -1162,32 +1241,46 @@ defmodule Edifice.CUDA.FusedScan do
 
     # Backward pass
     {_, gwx, grh, dh_acc} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_wx, grad_rh, Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden})}, fn t, {_, gwx, grh, dh_prev} ->
-        grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        h_prev = if t == 0, do: h0, else: Nx.slice_along_axis(forward_out, t - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+      Enum.reduce(
+        (seq_len - 1)..0//-1,
+        {nil, grad_wx, grad_rh, Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden})},
+        fn t, {_, gwx, grh, dh_prev} ->
+          grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        {r_t, z_t, n_t, rh_n} = Enum.at(gates_fwd, t)
-        dh = Nx.add(grad_t, dh_prev)
+          h_prev =
+            if t == 0,
+              do: h0,
+              else: Nx.slice_along_axis(forward_out, t - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        dn = Nx.multiply(dh, Nx.subtract(1.0, z_t))
-        dz_pre = Nx.multiply(Nx.multiply(dh, Nx.subtract(h_prev, n_t)), Nx.multiply(z_t, Nx.subtract(1.0, z_t)))
-        dn_pre = Nx.multiply(dn, Nx.subtract(1.0, Nx.multiply(n_t, n_t)))
-        dr_pre = Nx.multiply(Nx.multiply(dn_pre, rh_n), Nx.multiply(r_t, Nx.subtract(1.0, r_t)))
-        d_rh_n = Nx.multiply(dn_pre, r_t)
+          {r_t, z_t, n_t, rh_n} = Enum.at(gates_fwd, t)
+          dh = Nx.add(grad_t, dh_prev)
 
-        gwx_t = Nx.concatenate([dr_pre, dz_pre, dn_pre], axis: 1)
-        gwx = Nx.put_slice(gwx, [0, t, 0], Nx.new_axis(gwx_t, 1))
+          dn = Nx.multiply(dh, Nx.subtract(1.0, z_t))
 
-        grh_t = Nx.concatenate([dr_pre, dz_pre, d_rh_n], axis: 1)
-        grh = Nx.put_slice(grh, [0, t, 0], Nx.new_axis(grh_t, 1))
+          dz_pre =
+            Nx.multiply(
+              Nx.multiply(dh, Nx.subtract(h_prev, n_t)),
+              Nx.multiply(z_t, Nx.subtract(1.0, z_t))
+            )
 
-        # dh_acc through R^T using d_rh_n for n column
-        dgate_rh = Nx.concatenate([dr_pre, dz_pre, d_rh_n], axis: 1)
-        dh_from_r = Nx.dot(dgate_rh, [1], Nx.transpose(recurrent_weight), [0])
-        dh_next = Nx.add(Nx.multiply(dh, z_t), dh_from_r)
+          dn_pre = Nx.multiply(dn, Nx.subtract(1.0, Nx.multiply(n_t, n_t)))
+          dr_pre = Nx.multiply(Nx.multiply(dn_pre, rh_n), Nx.multiply(r_t, Nx.subtract(1.0, r_t)))
+          d_rh_n = Nx.multiply(dn_pre, r_t)
 
-        {nil, gwx, grh, dh_next}
-      end)
+          gwx_t = Nx.concatenate([dr_pre, dz_pre, dn_pre], axis: 1)
+          gwx = Nx.put_slice(gwx, [0, t, 0], Nx.new_axis(gwx_t, 1))
+
+          grh_t = Nx.concatenate([dr_pre, dz_pre, d_rh_n], axis: 1)
+          grh = Nx.put_slice(grh, [0, t, 0], Nx.new_axis(grh_t, 1))
+
+          # dh_acc through R^T using d_rh_n for n column
+          dgate_rh = Nx.concatenate([dr_pre, dz_pre, d_rh_n], axis: 1)
+          dh_from_r = Nx.dot(dgate_rh, [1], Nx.transpose(recurrent_weight), [0])
+          dh_next = Nx.add(Nx.multiply(dh, z_t), dh_from_r)
+
+          {nil, gwx, grh, dh_next}
+        end
+      )
 
     {gwx, grh, dh_acc}
   end
@@ -1218,13 +1311,19 @@ defmodule Edifice.CUDA.FusedScan do
     dh_acc = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})
 
     {_, gtau, gact, dh} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_tau, grad_act, dh_acc}, fn t, {_, gtau, gact, dh_prev} ->
+      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_tau, grad_act, dh_acc}, fn t,
+                                                                              {_, gtau, gact,
+                                                                               dh_prev} ->
         grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         dh = Nx.add(grad_t, dh_prev)
 
         tau_t = Nx.slice_along_axis(tau, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         act_t = Nx.slice_along_axis(activation, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        h_prev = if t == 0, do: h0, else: Nx.slice_along_axis(forward_out, t - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+        h_prev =
+          if t == 0,
+            do: h0,
+            else: Nx.slice_along_axis(forward_out, t - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
         # h_t = act + (h_prev - act) * exp(-1/tau)
         decay = Nx.exp(Nx.negate(Nx.divide(1.0, tau_t)))
@@ -1234,7 +1333,11 @@ defmodule Edifice.CUDA.FusedScan do
         gact_t = Nx.multiply(dh, Nx.subtract(1.0, decay))
 
         # d_tau = dh * diff * decay * (1/tau^2)
-        gtau_t = Nx.multiply(dh, Nx.multiply(Nx.multiply(diff, decay), Nx.divide(1.0, Nx.multiply(tau_t, tau_t))))
+        gtau_t =
+          Nx.multiply(
+            dh,
+            Nx.multiply(Nx.multiply(diff, decay), Nx.divide(1.0, Nx.multiply(tau_t, tau_t)))
+          )
 
         # dh_prev = dh * decay
         dh_next = Nx.multiply(dh, decay)
@@ -1272,7 +1375,9 @@ defmodule Edifice.CUDA.FusedScan do
     grad_q = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
     grad_k = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
     grad_v = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
-    grad_beta = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
+
+    grad_beta =
+      Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
 
     # Forward pass to recompute states
     {_, s_list} =
@@ -1281,7 +1386,9 @@ defmodule Edifice.CUDA.FusedScan do
         v_t = Nx.slice_along_axis(v, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        retr = Nx.dot(s_prev, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
+        retr =
+          Nx.dot(s_prev, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
+
         error = Nx.subtract(v_t, retr)
         scaled_err = Nx.multiply(beta_t, error)
         s_new = Nx.add(s_prev, Nx.multiply(Nx.new_axis(scaled_err, 3), Nx.new_axis(k_t, 2)))
@@ -1294,7 +1401,13 @@ defmodule Edifice.CUDA.FusedScan do
     ds_acc = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, num_heads, head_dim, head_dim})
 
     {_, gq, gk, gv, gbeta, _ds} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_q, grad_k, grad_v, grad_beta, ds_acc}, fn t, {_, gq, gk, gv, gbeta, ds} ->
+      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_q, grad_k, grad_v, grad_beta, ds_acc}, fn t,
+                                                                                             {_,
+                                                                                              gq,
+                                                                                              gk,
+                                                                                              gv,
+                                                                                              gbeta,
+                                                                                              ds} ->
         q_t = Nx.slice_along_axis(q, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         k_t = Nx.slice_along_axis(k, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         v_t = Nx.slice_along_axis(v, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
@@ -1303,27 +1416,73 @@ defmodule Edifice.CUDA.FusedScan do
 
         s_prev = Enum.at(s_fwd, t)
 
-        retr = Nx.dot(s_prev, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
+        retr =
+          Nx.dot(s_prev, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
+
         error = Nx.subtract(v_t, retr)
-        s_new = Nx.add(s_prev, Nx.multiply(Nx.new_axis(Nx.multiply(beta_t, error), 3), Nx.new_axis(k_t, 2)))
+
+        s_new =
+          Nx.add(
+            s_prev,
+            Nx.multiply(Nx.new_axis(Nx.multiply(beta_t, error), 3), Nx.new_axis(k_t, 2))
+          )
 
         # dS from output: dS += outer(do, q)
         ds_from_out = Nx.multiply(Nx.new_axis(do_t, 3), Nx.new_axis(q_t, 2))
         ds_total = Nx.add(ds, ds_from_out)
 
         # dq = S_new^T @ do
-        gq_t = Nx.dot(Nx.transpose(s_new, axes: [0, 1, 3, 2]), [3], [0, 1], Nx.new_axis(do_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
+        gq_t =
+          Nx.dot(
+            Nx.transpose(s_new, axes: [0, 1, 3, 2]),
+            [3],
+            [0, 1],
+            Nx.new_axis(do_t, 3),
+            [2],
+            [0, 1]
+          )
+          |> Nx.squeeze(axes: [3])
 
         # Through state update
-        ds_k = Nx.dot(ds_total, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
-        ds_prev = Nx.subtract(ds_total, Nx.multiply(Nx.new_axis(Nx.multiply(beta_t, ds_k), 3), Nx.new_axis(k_t, 2)))
+        ds_k =
+          Nx.dot(ds_total, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
+
+        ds_prev =
+          Nx.subtract(
+            ds_total,
+            Nx.multiply(Nx.new_axis(Nx.multiply(beta_t, ds_k), 3), Nx.new_axis(k_t, 2))
+          )
 
         gv_t = Nx.multiply(beta_t, ds_k)
         gbeta_t = Nx.multiply(error, ds_k)
 
         scaled_err = Nx.multiply(beta_t, error)
-        gk_direct = Nx.dot(Nx.transpose(ds_total, axes: [0, 1, 3, 2]), [3], [0, 1], Nx.new_axis(scaled_err, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
-        gk_through_err = Nx.multiply(beta_t, Nx.dot(Nx.transpose(s_prev, axes: [0, 1, 3, 2]), [3], [0, 1], Nx.new_axis(ds_k, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3]))
+
+        gk_direct =
+          Nx.dot(
+            Nx.transpose(ds_total, axes: [0, 1, 3, 2]),
+            [3],
+            [0, 1],
+            Nx.new_axis(scaled_err, 3),
+            [2],
+            [0, 1]
+          )
+          |> Nx.squeeze(axes: [3])
+
+        gk_through_err =
+          Nx.multiply(
+            beta_t,
+            Nx.dot(
+              Nx.transpose(s_prev, axes: [0, 1, 3, 2]),
+              [3],
+              [0, 1],
+              Nx.new_axis(ds_k, 3),
+              [2],
+              [0, 1]
+            )
+            |> Nx.squeeze(axes: [3])
+          )
+
         gk_t = Nx.subtract(gk_direct, gk_through_err)
 
         gq = Nx.put_slice(gq, [0, t, 0, 0], Nx.new_axis(gq_t, 1))
@@ -1362,7 +1521,10 @@ defmodule Edifice.CUDA.FusedScan do
     grad_q = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
     grad_k = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
     grad_v = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
-    grad_beta_out = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
+
+    grad_beta_out =
+      Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
+
     grad_alpha_out = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads})
 
     # Forward pass to recompute states
@@ -1376,9 +1538,18 @@ defmodule Edifice.CUDA.FusedScan do
         alpha_broad = alpha_t |> Nx.new_axis(-1) |> Nx.new_axis(-1)
         s_decayed = Nx.multiply(alpha_broad, s_prev)
 
-        sk = Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+        sk =
+          Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1])
+          |> Nx.squeeze(axes: [-1])
+
         diff = Nx.subtract(v_t, sk)
-        delta = Nx.multiply(Nx.new_axis(beta_t, -1), Nx.multiply(Nx.new_axis(diff, -1), Nx.new_axis(k_t, -2)))
+
+        delta =
+          Nx.multiply(
+            Nx.new_axis(beta_t, -1),
+            Nx.multiply(Nx.new_axis(diff, -1), Nx.new_axis(k_t, -2))
+          )
+
         s_new = Nx.add(s_decayed, delta)
         {s_new, [s_prev | acc]}
       end)
@@ -1389,53 +1560,106 @@ defmodule Edifice.CUDA.FusedScan do
     ds_acc = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, num_heads, head_dim, head_dim})
 
     {_, gq, gk, gv, gbeta, galpha, _ds} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_q, grad_k, grad_v, grad_beta_out, grad_alpha_out, ds_acc}, fn t, {_, gq, gk, gv, gbeta, galpha, ds} ->
-        q_t = Nx.slice_along_axis(q, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        k_t = Nx.slice_along_axis(k, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        v_t = Nx.slice_along_axis(v, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        alpha_t = Nx.slice_along_axis(alpha, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        do_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+      Enum.reduce(
+        (seq_len - 1)..0//-1,
+        {nil, grad_q, grad_k, grad_v, grad_beta_out, grad_alpha_out, ds_acc},
+        fn t, {_, gq, gk, gv, gbeta, galpha, ds} ->
+          q_t = Nx.slice_along_axis(q, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          k_t = Nx.slice_along_axis(k, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          v_t = Nx.slice_along_axis(v, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          alpha_t = Nx.slice_along_axis(alpha, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          do_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        s_prev = Enum.at(s_fwd, t)
+          s_prev = Enum.at(s_fwd, t)
 
-        # Recompute
-        alpha_broad = alpha_t |> Nx.new_axis(-1) |> Nx.new_axis(-1)
-        s_decayed = Nx.multiply(alpha_broad, s_prev)
-        sk = Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
-        error = Nx.subtract(v_t, sk)
-        s_new = Nx.add(s_decayed, Nx.multiply(Nx.new_axis(Nx.multiply(beta_t, error), 3), Nx.new_axis(k_t, 2)))
+          # Recompute
+          alpha_broad = alpha_t |> Nx.new_axis(-1) |> Nx.new_axis(-1)
+          s_decayed = Nx.multiply(alpha_broad, s_prev)
 
-        # dS from output
-        ds_from_out = Nx.multiply(Nx.new_axis(do_t, 3), Nx.new_axis(q_t, 2))
-        ds_total = Nx.add(ds, ds_from_out)
+          sk =
+            Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1])
+            |> Nx.squeeze(axes: [-1])
 
-        gq_t = Nx.dot(Nx.transpose(s_new, axes: [0, 1, 3, 2]), [3], [0, 1], Nx.new_axis(do_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
+          error = Nx.subtract(v_t, sk)
 
-        # Through delta update
-        ds_k = Nx.dot(ds_total, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
-        ds_to_decayed = Nx.subtract(ds_total, Nx.multiply(Nx.new_axis(Nx.multiply(beta_t, ds_k), 3), Nx.new_axis(k_t, 2)))
+          s_new =
+            Nx.add(
+              s_decayed,
+              Nx.multiply(Nx.new_axis(Nx.multiply(beta_t, error), 3), Nx.new_axis(k_t, 2))
+            )
 
-        gv_t = Nx.multiply(beta_t, ds_k)
-        gbeta_t = Nx.multiply(error, ds_k)
+          # dS from output
+          ds_from_out = Nx.multiply(Nx.new_axis(do_t, 3), Nx.new_axis(q_t, 2))
+          ds_total = Nx.add(ds, ds_from_out)
 
-        scaled_err = Nx.multiply(beta_t, error)
-        gk_direct = Nx.dot(Nx.transpose(ds_total, axes: [0, 1, 3, 2]), [3], [0, 1], Nx.new_axis(scaled_err, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
-        gk_through_err = Nx.multiply(beta_t, Nx.dot(Nx.transpose(s_decayed, axes: [0, 1, 3, 2]), [3], [0, 1], Nx.new_axis(ds_k, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3]))
-        gk_t = Nx.subtract(gk_direct, gk_through_err)
+          gq_t =
+            Nx.dot(
+              Nx.transpose(s_new, axes: [0, 1, 3, 2]),
+              [3],
+              [0, 1],
+              Nx.new_axis(do_t, 3),
+              [2],
+              [0, 1]
+            )
+            |> Nx.squeeze(axes: [3])
 
-        # Gradient through alpha decay
-        galpha_t = Nx.sum(Nx.multiply(ds_to_decayed, s_prev), axes: [2, 3])
-        ds_prev = Nx.multiply(alpha_broad, ds_to_decayed)
+          # Through delta update
+          ds_k =
+            Nx.dot(ds_total, [3], [0, 1], Nx.new_axis(k_t, 3), [2], [0, 1])
+            |> Nx.squeeze(axes: [3])
 
-        gq = Nx.put_slice(gq, [0, t, 0, 0], Nx.new_axis(gq_t, 1))
-        gk = Nx.put_slice(gk, [0, t, 0, 0], Nx.new_axis(gk_t, 1))
-        gv = Nx.put_slice(gv, [0, t, 0, 0], Nx.new_axis(gv_t, 1))
-        gbeta = Nx.put_slice(gbeta, [0, t, 0, 0], Nx.new_axis(gbeta_t, 1))
-        galpha = Nx.put_slice(galpha, [0, t, 0], Nx.new_axis(galpha_t, 1))
+          ds_to_decayed =
+            Nx.subtract(
+              ds_total,
+              Nx.multiply(Nx.new_axis(Nx.multiply(beta_t, ds_k), 3), Nx.new_axis(k_t, 2))
+            )
 
-        {nil, gq, gk, gv, gbeta, galpha, ds_prev}
-      end)
+          gv_t = Nx.multiply(beta_t, ds_k)
+          gbeta_t = Nx.multiply(error, ds_k)
+
+          scaled_err = Nx.multiply(beta_t, error)
+
+          gk_direct =
+            Nx.dot(
+              Nx.transpose(ds_total, axes: [0, 1, 3, 2]),
+              [3],
+              [0, 1],
+              Nx.new_axis(scaled_err, 3),
+              [2],
+              [0, 1]
+            )
+            |> Nx.squeeze(axes: [3])
+
+          gk_through_err =
+            Nx.multiply(
+              beta_t,
+              Nx.dot(
+                Nx.transpose(s_decayed, axes: [0, 1, 3, 2]),
+                [3],
+                [0, 1],
+                Nx.new_axis(ds_k, 3),
+                [2],
+                [0, 1]
+              )
+              |> Nx.squeeze(axes: [3])
+            )
+
+          gk_t = Nx.subtract(gk_direct, gk_through_err)
+
+          # Gradient through alpha decay
+          galpha_t = Nx.sum(Nx.multiply(ds_to_decayed, s_prev), axes: [2, 3])
+          ds_prev = Nx.multiply(alpha_broad, ds_to_decayed)
+
+          gq = Nx.put_slice(gq, [0, t, 0, 0], Nx.new_axis(gq_t, 1))
+          gk = Nx.put_slice(gk, [0, t, 0, 0], Nx.new_axis(gk_t, 1))
+          gv = Nx.put_slice(gv, [0, t, 0, 0], Nx.new_axis(gv_t, 1))
+          gbeta = Nx.put_slice(gbeta, [0, t, 0, 0], Nx.new_axis(gbeta_t, 1))
+          galpha = Nx.put_slice(galpha, [0, t, 0], Nx.new_axis(galpha_t, 1))
+
+          {nil, gq, gk, gv, gbeta, galpha, ds_prev}
+        end
+      )
 
     {gq, gk, gv, gbeta, galpha}
   end
@@ -1493,51 +1717,82 @@ defmodule Edifice.CUDA.FusedScan do
     dh_state = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden, state_size})
 
     {_, gx, gdt, gb, gc, _dh} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_x_out, grad_dt_out, grad_b_out, grad_c_out, dh_state}, fn t, {_, gx, gdt, gb, gc, dh_s} ->
-        dy = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        x_t = Nx.slice_along_axis(x, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        dt_raw = Nx.slice_along_axis(dt, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        dt_t = Nx.clip(dt_raw, 0.001, 0.1)
-        b_t = Nx.slice_along_axis(b, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        c_t = Nx.slice_along_axis(c, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        h_prev = Enum.at(h_prevs, t)
+      Enum.reduce(
+        (seq_len - 1)..0//-1,
+        {nil, grad_x_out, grad_dt_out, grad_b_out, grad_c_out, dh_state},
+        fn t, {_, gx, gdt, gb, gc, dh_s} ->
+          dy = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          x_t = Nx.slice_along_axis(x, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          dt_raw = Nx.slice_along_axis(dt, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          dt_t = Nx.clip(dt_raw, 0.001, 0.1)
+          b_t = Nx.slice_along_axis(b, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          c_t = Nx.slice_along_axis(c, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          h_prev = Enum.at(h_prevs, t)
 
-        dt_exp = Nx.new_axis(dt_t, 2)
-        a_reshaped = Nx.reshape(a, {1, hidden, state_size})
-        a_bar = Nx.exp(Nx.multiply(dt_exp, a_reshaped))
-        h_cur = Nx.add(Nx.multiply(a_bar, h_prev), Nx.multiply(Nx.multiply(dt_exp, Nx.reshape(b_t, {batch, 1, state_size})), Nx.new_axis(x_t, 2)))
+          dt_exp = Nx.new_axis(dt_t, 2)
+          a_reshaped = Nx.reshape(a, {1, hidden, state_size})
+          a_bar = Nx.exp(Nx.multiply(dt_exp, a_reshaped))
 
-        # dh_state += dy * C
-        dh_from_output = Nx.multiply(Nx.new_axis(dy, 2), Nx.reshape(c_t, {batch, 1, state_size}))
-        dh_total = Nx.add(dh_s, dh_from_output)
+          h_cur =
+            Nx.add(
+              Nx.multiply(a_bar, h_prev),
+              Nx.multiply(
+                Nx.multiply(dt_exp, Nx.reshape(b_t, {batch, 1, state_size})),
+                Nx.new_axis(x_t, 2)
+              )
+            )
 
-        # dC = sum_h(dy * h_cur)
-        gc_t = Nx.sum(Nx.multiply(Nx.new_axis(dy, 2), h_cur), axes: [1])
+          # dh_state += dy * C
+          dh_from_output =
+            Nx.multiply(Nx.new_axis(dy, 2), Nx.reshape(c_t, {batch, 1, state_size}))
 
-        # dx = sum_s(dh * dt * B)
-        gx_t = Nx.sum(Nx.multiply(dh_total, Nx.multiply(dt_exp, Nx.reshape(b_t, {batch, 1, state_size}))), axes: [2])
+          dh_total = Nx.add(dh_s, dh_from_output)
 
-        # ddt
-        gdt_from_a = Nx.sum(Nx.multiply(Nx.multiply(dh_total, h_prev), Nx.multiply(a_bar, a_reshaped)), axes: [2])
-        gdt_from_b = Nx.sum(Nx.multiply(dh_total, Nx.multiply(Nx.reshape(b_t, {batch, 1, state_size}), Nx.new_axis(x_t, 2))), axes: [2])
-        gdt_t = Nx.add(gdt_from_a, gdt_from_b)
+          # dC = sum_h(dy * h_cur)
+          gc_t = Nx.sum(Nx.multiply(Nx.new_axis(dy, 2), h_cur), axes: [1])
 
-        in_range = Nx.logical_and(Nx.greater_equal(dt_raw, 0.001), Nx.less_equal(dt_raw, 0.1))
-        gdt_t = Nx.select(in_range, gdt_t, Nx.tensor(0.0, type: {:f, 32}))
+          # dx = sum_s(dh * dt * B)
+          gx_t =
+            Nx.sum(
+              Nx.multiply(dh_total, Nx.multiply(dt_exp, Nx.reshape(b_t, {batch, 1, state_size}))),
+              axes: [2]
+            )
 
-        # dB = sum_h(dh * x * dt)
-        gb_t = Nx.sum(Nx.multiply(dh_total, Nx.multiply(Nx.new_axis(x_t, 2), dt_exp)), axes: [1])
+          # ddt
+          gdt_from_a =
+            Nx.sum(Nx.multiply(Nx.multiply(dh_total, h_prev), Nx.multiply(a_bar, a_reshaped)),
+              axes: [2]
+            )
 
-        # Carry dh backward
-        dh_next = Nx.multiply(dh_total, a_bar)
+          gdt_from_b =
+            Nx.sum(
+              Nx.multiply(
+                dh_total,
+                Nx.multiply(Nx.reshape(b_t, {batch, 1, state_size}), Nx.new_axis(x_t, 2))
+              ),
+              axes: [2]
+            )
 
-        gx = Nx.put_slice(gx, [0, t, 0], Nx.new_axis(gx_t, 1))
-        gdt = Nx.put_slice(gdt, [0, t, 0], Nx.new_axis(gdt_t, 1))
-        gb = Nx.put_slice(gb, [0, t, 0], Nx.new_axis(gb_t, 1))
-        gc = Nx.put_slice(gc, [0, t, 0], Nx.new_axis(gc_t, 1))
+          gdt_t = Nx.add(gdt_from_a, gdt_from_b)
 
-        {nil, gx, gdt, gb, gc, dh_next}
-      end)
+          in_range = Nx.logical_and(Nx.greater_equal(dt_raw, 0.001), Nx.less_equal(dt_raw, 0.1))
+          gdt_t = Nx.select(in_range, gdt_t, Nx.tensor(0.0, type: {:f, 32}))
+
+          # dB = sum_h(dh * x * dt)
+          gb_t =
+            Nx.sum(Nx.multiply(dh_total, Nx.multiply(Nx.new_axis(x_t, 2), dt_exp)), axes: [1])
+
+          # Carry dh backward
+          dh_next = Nx.multiply(dh_total, a_bar)
+
+          gx = Nx.put_slice(gx, [0, t, 0], Nx.new_axis(gx_t, 1))
+          gdt = Nx.put_slice(gdt, [0, t, 0], Nx.new_axis(gdt_t, 1))
+          gb = Nx.put_slice(gb, [0, t, 0], Nx.new_axis(gb_t, 1))
+          gc = Nx.put_slice(gc, [0, t, 0], Nx.new_axis(gc_t, 1))
+
+          {nil, gx, gdt, gb, gc, dh_next}
+        end
+      )
 
     {gx, gdt, gb, gc}
   end
@@ -1568,7 +1823,10 @@ defmodule Edifice.CUDA.FusedScan do
     grad_q = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
     grad_k = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
     grad_v = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
-    grad_alpha = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
+
+    grad_alpha =
+      Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
+
     grad_beta = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads})
 
     # Forward pass to recompute states
@@ -1582,8 +1840,10 @@ defmodule Edifice.CUDA.FusedScan do
         decay = Nx.exp(alpha_t) |> Nx.new_axis(3)
         s_decayed = Nx.multiply(decay, s_prev)
 
-        sk = Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1])
-             |> Nx.squeeze(axes: [-1])
+        sk =
+          Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1])
+          |> Nx.squeeze(axes: [-1])
+
         error = Nx.subtract(v_t, sk)
         beta_bc = beta_t |> Nx.new_axis(-1) |> Nx.new_axis(-1)
         delta = Nx.multiply(beta_bc, Nx.multiply(Nx.new_axis(error, -1), Nx.new_axis(k_t, -2)))
@@ -1598,72 +1858,131 @@ defmodule Edifice.CUDA.FusedScan do
     ds = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, num_heads, head_dim, head_dim})
 
     {_, gq, gk, gv, galpha, gbeta, _ds} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_q, grad_k, grad_v, grad_alpha, grad_beta, ds}, fn t, {_, gq, gk, gv, galpha, gbeta, ds_acc} ->
-        q_t = Nx.slice_along_axis(q, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        k_t = Nx.slice_along_axis(k, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        v_t = Nx.slice_along_axis(v, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        alpha_t = Nx.slice_along_axis(alpha, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        do_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+      Enum.reduce(
+        (seq_len - 1)..0//-1,
+        {nil, grad_q, grad_k, grad_v, grad_alpha, grad_beta, ds},
+        fn t, {_, gq, gk, gv, galpha, gbeta, ds_acc} ->
+          q_t = Nx.slice_along_axis(q, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          k_t = Nx.slice_along_axis(k, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          v_t = Nx.slice_along_axis(v, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          alpha_t = Nx.slice_along_axis(alpha, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          do_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        s_prev = Enum.at(s_prevs, t)
-        decay = Nx.exp(alpha_t) |> Nx.new_axis(3)
-        s_decayed = Nx.multiply(decay, s_prev)
-        beta_bc = beta_t |> Nx.new_axis(-1) |> Nx.new_axis(-1)
+          s_prev = Enum.at(s_prevs, t)
+          decay = Nx.exp(alpha_t) |> Nx.new_axis(3)
+          s_decayed = Nx.multiply(decay, s_prev)
+          beta_bc = beta_t |> Nx.new_axis(-1) |> Nx.new_axis(-1)
 
-        sk = Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1])
-             |> Nx.squeeze(axes: [-1])
-        error = Nx.subtract(v_t, sk)
-        delta = Nx.multiply(beta_bc, Nx.multiply(Nx.new_axis(error, -1), Nx.new_axis(k_t, -2)))
-        s_t = Nx.add(s_decayed, delta)
+          sk =
+            Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1])
+            |> Nx.squeeze(axes: [-1])
 
-        # ds_acc += outer(do, q) from output
-        ds_total = Nx.add(ds_acc, Nx.multiply(Nx.new_axis(do_t, -1), Nx.new_axis(q_t, -2)))
+          error = Nx.subtract(v_t, sk)
+          delta = Nx.multiply(beta_bc, Nx.multiply(Nx.new_axis(error, -1), Nx.new_axis(k_t, -2)))
+          s_t = Nx.add(s_decayed, delta)
 
-        # dq from output: S^T @ do
-        gq_t = Nx.dot(Nx.transpose(s_t, axes: [0, 1, 3, 2]), [3], [0, 1], Nx.new_axis(do_t, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
+          # ds_acc += outer(do, q) from output
+          ds_total = Nx.add(ds_acc, Nx.multiply(Nx.new_axis(do_t, -1), Nx.new_axis(q_t, -2)))
 
-        # ds_k = ds_total @ k (per-row dot product for gradient chain)
-        ds_k = Nx.dot(ds_total, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+          # dq from output: S^T @ do
+          gq_t =
+            Nx.dot(
+              Nx.transpose(s_t, axes: [0, 1, 3, 2]),
+              [3],
+              [0, 1],
+              Nx.new_axis(do_t, 3),
+              [2],
+              [0, 1]
+            )
+            |> Nx.squeeze(axes: [3])
 
-        # d_error = beta * ds_k; dv = d_error; d_retrieval = -d_error
-        d_error = Nx.multiply(beta_t |> Nx.new_axis(-1), ds_k)
-        gv_t = d_error
-        d_retrieval = Nx.negate(d_error)
+          # ds_k = ds_total @ k (per-row dot product for gradient chain)
+          ds_k =
+            Nx.dot(ds_total, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1])
+            |> Nx.squeeze(axes: [-1])
 
-        # Through retrieval: dS_decayed += outer(d_retrieval, k)
-        ds_to_decayed = Nx.add(ds_total, Nx.multiply(Nx.new_axis(d_retrieval, -1), Nx.new_axis(k_t, -2)))
+          # d_error = beta * ds_k; dv = d_error; d_retrieval = -d_error
+          d_error = Nx.multiply(beta_t |> Nx.new_axis(-1), ds_k)
+          gv_t = d_error
+          d_retrieval = Nx.negate(d_error)
 
-        # dk from update: ds^T @ (beta * error)
-        scaled_err = Nx.multiply(beta_bc, Nx.new_axis(error, -1))
-        _gk_from_update = Nx.dot(Nx.transpose(ds_total, axes: [0, 1, 3, 2]), [3], [0, 1], Nx.squeeze(scaled_err, axes: []), [2], [0, 1])
-        # dk from retrieval: S_decayed^T @ d_retrieval
-        gk_from_retr = Nx.dot(Nx.transpose(s_decayed, axes: [0, 1, 3, 2]), [3], [0, 1], Nx.new_axis(d_retrieval, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
-        gk_t = Nx.add(gk_from_retr, Nx.sum(Nx.multiply(Nx.transpose(ds_total, axes: [0, 1, 3, 2]), Nx.multiply(beta_bc, Nx.new_axis(error, -2))), axes: [3]))
+          # Through retrieval: dS_decayed += outer(d_retrieval, k)
+          ds_to_decayed =
+            Nx.add(ds_total, Nx.multiply(Nx.new_axis(d_retrieval, -1), Nx.new_axis(k_t, -2)))
 
-        # dbeta: sum over d,d
-        gbeta_t = Nx.sum(Nx.multiply(error, ds_k), axes: [-1])
+          # dk from update: ds^T @ (beta * error)
+          scaled_err = Nx.multiply(beta_bc, Nx.new_axis(error, -1))
 
-        # d_alpha: sum over second D dimension (broadcast dim of decay)
-        galpha_t = Nx.sum(Nx.multiply(ds_to_decayed, s_prev), axes: [3])
+          _gk_from_update =
+            Nx.dot(
+              Nx.transpose(ds_total, axes: [0, 1, 3, 2]),
+              [3],
+              [0, 1],
+              Nx.squeeze(scaled_err, axes: []),
+              [2],
+              [0, 1]
+            )
 
-        # Propagate ds through decay
-        ds_prev = Nx.multiply(decay, ds_to_decayed)
+          # dk from retrieval: S_decayed^T @ d_retrieval
+          gk_from_retr =
+            Nx.dot(
+              Nx.transpose(s_decayed, axes: [0, 1, 3, 2]),
+              [3],
+              [0, 1],
+              Nx.new_axis(d_retrieval, 3),
+              [2],
+              [0, 1]
+            )
+            |> Nx.squeeze(axes: [3])
 
-        gq = Nx.put_slice(gq, [0, t, 0, 0], Nx.new_axis(gq_t, 1))
-        gk = Nx.put_slice(gk, [0, t, 0, 0], Nx.new_axis(gk_t, 1))
-        gv = Nx.put_slice(gv, [0, t, 0, 0], Nx.new_axis(gv_t, 1))
-        galpha = Nx.put_slice(galpha, [0, t, 0, 0], Nx.new_axis(galpha_t, 1))
-        gbeta = Nx.put_slice(gbeta, [0, t, 0], Nx.new_axis(gbeta_t, 1))
+          gk_t =
+            Nx.add(
+              gk_from_retr,
+              Nx.sum(
+                Nx.multiply(
+                  Nx.transpose(ds_total, axes: [0, 1, 3, 2]),
+                  Nx.multiply(beta_bc, Nx.new_axis(error, -2))
+                ),
+                axes: [3]
+              )
+            )
 
-        {nil, gq, gk, gv, galpha, gbeta, ds_prev}
-      end)
+          # dbeta: sum over d,d
+          gbeta_t = Nx.sum(Nx.multiply(error, ds_k), axes: [-1])
+
+          # d_alpha: sum over second D dimension (broadcast dim of decay)
+          galpha_t = Nx.sum(Nx.multiply(ds_to_decayed, s_prev), axes: [3])
+
+          # Propagate ds through decay
+          ds_prev = Nx.multiply(decay, ds_to_decayed)
+
+          gq = Nx.put_slice(gq, [0, t, 0, 0], Nx.new_axis(gq_t, 1))
+          gk = Nx.put_slice(gk, [0, t, 0, 0], Nx.new_axis(gk_t, 1))
+          gv = Nx.put_slice(gv, [0, t, 0, 0], Nx.new_axis(gv_t, 1))
+          galpha = Nx.put_slice(galpha, [0, t, 0, 0], Nx.new_axis(galpha_t, 1))
+          gbeta = Nx.put_slice(gbeta, [0, t, 0], Nx.new_axis(gbeta_t, 1))
+
+          {nil, gq, gk, gv, galpha, gbeta, ds_prev}
+        end
+      )
 
     {gq, gk, gv, galpha, gbeta}
   end
 
   # RLA backward dispatch
-  defp rla_backward_dispatch(q, k, v, alpha, beta, gamma, forward_out, grad_output, variant, clip_threshold) do
+  defp rla_backward_dispatch(
+         q,
+         k,
+         v,
+         alpha,
+         beta,
+         gamma,
+         forward_out,
+         grad_output,
+         variant,
+         clip_threshold
+       ) do
     {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
     ttype = Nx.type(q)
     grad_4d = Nx.template({batch, seq_len, num_heads, head_dim}, ttype)
@@ -1756,68 +2075,109 @@ defmodule Edifice.CUDA.FusedScan do
     dw = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, inner_size, inner_size})
 
     {_, gq, gk, gv, geta, gw0, glng, glnb, _dw} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_q_out, grad_k_out, grad_v_out, grad_eta_out, grad_w0_out, grad_lng, grad_lnb, dw}, fn t, {_, gq, gk, gv, geta, gw0, glng, glnb, dw_acc} ->
-        do_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        q_t = Nx.slice_along_axis(q, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        k_t = Nx.slice_along_axis(k, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        v_t = Nx.slice_along_axis(v, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        eta_t = Nx.slice_along_axis(eta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+      Enum.reduce(
+        (seq_len - 1)..0//-1,
+        {nil, grad_q_out, grad_k_out, grad_v_out, grad_eta_out, grad_w0_out, grad_lng, grad_lnb,
+         dw},
+        fn t, {_, gq, gk, gv, geta, gw0, glng, glnb, dw_acc} ->
+          do_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          q_t = Nx.slice_along_axis(q, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          k_t = Nx.slice_along_axis(k, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          v_t = Nx.slice_along_axis(v, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          eta_t = Nx.slice_along_axis(eta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
-        {pred, mean, var, w_prev} = Enum.at(fwd_data, t)
-        inv_std = Nx.rsqrt(Nx.add(var, ln_eps))
-        x_hat = Nx.multiply(Nx.subtract(pred, mean), inv_std)
-        pred_normed = Nx.add(Nx.multiply(x_hat, ln_gamma), ln_beta)
-        error = Nx.subtract(pred_normed, v_t)
-        scaled_error = Nx.multiply(eta_t, error)
+          {pred, mean, var, w_prev} = Enum.at(fwd_data, t)
+          inv_std = Nx.rsqrt(Nx.add(var, ln_eps))
+          x_hat = Nx.multiply(Nx.subtract(pred, mean), inv_std)
+          pred_normed = Nx.add(Nx.multiply(x_hat, ln_gamma), ln_beta)
+          error = Nx.subtract(pred_normed, v_t)
+          scaled_error = Nx.multiply(eta_t, error)
 
-        # W_updated = W_prev - outer(scaled_error, k)
-        w_updated = Nx.subtract(w_prev, Nx.dot(Nx.new_axis(scaled_error, 2), [2], [0], Nx.new_axis(k_t, 1), [1], [0]))
+          # W_updated = W_prev - outer(scaled_error, k)
+          w_updated =
+            Nx.subtract(
+              w_prev,
+              Nx.dot(Nx.new_axis(scaled_error, 2), [2], [0], Nx.new_axis(k_t, 1), [1], [0])
+            )
 
-        # Step 6: o = W_updated @ q
-        # dW += outer(do, q)
-        dw_new = Nx.add(dw_acc, Nx.dot(Nx.new_axis(do_t, 2), [2], [0], Nx.new_axis(q_t, 1), [1], [0]))
+          # Step 6: o = W_updated @ q
+          # dW += outer(do, q)
+          dw_new =
+            Nx.add(dw_acc, Nx.dot(Nx.new_axis(do_t, 2), [2], [0], Nx.new_axis(q_t, 1), [1], [0]))
 
-        # dq = W_updated^T @ do
-        gq_t = Nx.dot(Nx.transpose(w_updated, axes: [0, 2, 1]), [2], [0], Nx.new_axis(do_t, 2), [1], [0]) |> Nx.squeeze(axes: [2])
+          # dq = W_updated^T @ do
+          gq_t =
+            Nx.dot(
+              Nx.transpose(w_updated, axes: [0, 2, 1]),
+              [2],
+              [0],
+              Nx.new_axis(do_t, 2),
+              [1],
+              [0]
+            )
+            |> Nx.squeeze(axes: [2])
 
-        # Step 5: d_scaled_error = -dW @ k
-        d_scaled_error = Nx.negate(Nx.dot(dw_new, [2], [0], Nx.new_axis(k_t, 2), [1], [0]) |> Nx.squeeze(axes: [2]))
+          # Step 5: d_scaled_error = -dW @ k
+          d_scaled_error =
+            Nx.negate(
+              Nx.dot(dw_new, [2], [0], Nx.new_axis(k_t, 2), [1], [0])
+              |> Nx.squeeze(axes: [2])
+            )
 
-        # dk_update = -scaled_error^T @ dW (cross-batch dot)
-        dk_update = Nx.negate(Nx.dot(Nx.new_axis(scaled_error, 1), [2], [0], dw_new, [1], [0]) |> Nx.squeeze(axes: [1]))
+          # dk_update = -scaled_error^T @ dW (cross-batch dot)
+          dk_update =
+            Nx.negate(
+              Nx.dot(Nx.new_axis(scaled_error, 1), [2], [0], dw_new, [1], [0])
+              |> Nx.squeeze(axes: [1])
+            )
 
-        # Step 4: d_eta = d_scaled_error * error, d_error = d_scaled_error * eta
-        geta_t = Nx.multiply(d_scaled_error, error)
-        d_error = Nx.multiply(d_scaled_error, eta_t)
+          # Step 4: d_eta = d_scaled_error * error, d_error = d_scaled_error * eta
+          geta_t = Nx.multiply(d_scaled_error, error)
+          d_error = Nx.multiply(d_scaled_error, eta_t)
 
-        # Step 3: dv = -d_error
-        gv_t = Nx.negate(d_error)
-        d_pred_normed = d_error
+          # Step 3: dv = -d_error
+          gv_t = Nx.negate(d_error)
+          d_pred_normed = d_error
 
-        # Step 2: LayerNorm backward
-        glng = Nx.add(glng, Nx.sum(Nx.multiply(x_hat, d_pred_normed), axes: [0]))
-        glnb = Nx.add(glnb, Nx.sum(d_pred_normed, axes: [0]))
+          # Step 2: LayerNorm backward
+          glng = Nx.add(glng, Nx.sum(Nx.multiply(x_hat, d_pred_normed), axes: [0]))
+          glnb = Nx.add(glnb, Nx.sum(d_pred_normed, axes: [0]))
 
-        d_xhat = Nx.multiply(ln_gamma, d_pred_normed)
-        mean_d_xhat = Nx.mean(d_xhat, axes: [-1], keep_axes: true)
-        mean_d_xhat_xhat = Nx.mean(Nx.multiply(d_xhat, x_hat), axes: [-1], keep_axes: true)
-        d_pred = Nx.multiply(inv_std, Nx.subtract(d_xhat, Nx.add(mean_d_xhat, Nx.multiply(x_hat, mean_d_xhat_xhat))))
+          d_xhat = Nx.multiply(ln_gamma, d_pred_normed)
+          mean_d_xhat = Nx.mean(d_xhat, axes: [-1], keep_axes: true)
+          mean_d_xhat_xhat = Nx.mean(Nx.multiply(d_xhat, x_hat), axes: [-1], keep_axes: true)
 
-        # Step 1: pred = W_prev @ k
-        # dk_pred = W_prev^T @ d_pred
-        dk_pred = Nx.dot(Nx.transpose(w_prev, axes: [0, 2, 1]), [2], [0], Nx.new_axis(d_pred, 2), [1], [0]) |> Nx.squeeze(axes: [2])
-        # dW += outer(d_pred, k)
-        dw_new = Nx.add(dw_new, Nx.dot(Nx.new_axis(d_pred, 2), [2], [0], Nx.new_axis(k_t, 1), [1], [0]))
+          d_pred =
+            Nx.multiply(
+              inv_std,
+              Nx.subtract(d_xhat, Nx.add(mean_d_xhat, Nx.multiply(x_hat, mean_d_xhat_xhat)))
+            )
 
-        gk_t = Nx.add(dk_update, dk_pred)
+          # Step 1: pred = W_prev @ k
+          # dk_pred = W_prev^T @ d_pred
+          dk_pred =
+            Nx.dot(Nx.transpose(w_prev, axes: [0, 2, 1]), [2], [0], Nx.new_axis(d_pred, 2), [1], [
+              0
+            ])
+            |> Nx.squeeze(axes: [2])
 
-        gq = Nx.put_slice(gq, [0, t, 0], Nx.new_axis(gq_t, 1))
-        gk = Nx.put_slice(gk, [0, t, 0], Nx.new_axis(gk_t, 1))
-        gv = Nx.put_slice(gv, [0, t, 0], Nx.new_axis(gv_t, 1))
-        geta = Nx.put_slice(geta, [0, t, 0], Nx.new_axis(geta_t, 1))
+          # dW += outer(d_pred, k)
+          dw_new =
+            Nx.add(
+              dw_new,
+              Nx.dot(Nx.new_axis(d_pred, 2), [2], [0], Nx.new_axis(k_t, 1), [1], [0])
+            )
 
-        {nil, gq, gk, gv, geta, gw0, glng, glnb, dw_new}
-      end)
+          gk_t = Nx.add(dk_update, dk_pred)
+
+          gq = Nx.put_slice(gq, [0, t, 0], Nx.new_axis(gq_t, 1))
+          gk = Nx.put_slice(gk, [0, t, 0], Nx.new_axis(gk_t, 1))
+          gv = Nx.put_slice(gv, [0, t, 0], Nx.new_axis(gv_t, 1))
+          geta = Nx.put_slice(geta, [0, t, 0], Nx.new_axis(geta_t, 1))
+
+          {nil, gq, gk, gv, geta, gw0, glng, glnb, dw_new}
+        end
+      )
 
     {gq, gk, gv, geta, Nx.add(gw0, dw), glng, glnb}
   end
@@ -1830,9 +2190,21 @@ defmodule Edifice.CUDA.FusedScan do
 
     s0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, num_heads, head_dim, head_dim})
     grad_q = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_heads, head_dim})
-    grad_k = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_householder, num_heads, head_dim})
-    grad_v = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_householder, num_heads, head_dim})
-    grad_beta = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_householder, num_heads})
+
+    grad_k =
+      Nx.broadcast(
+        Nx.tensor(0.0, type: {:f, 32}),
+        {batch, seq_len, num_householder, num_heads, head_dim}
+      )
+
+    grad_v =
+      Nx.broadcast(
+        Nx.tensor(0.0, type: {:f, 32}),
+        {batch, seq_len, num_householder, num_heads, head_dim}
+      )
+
+    grad_beta =
+      Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, seq_len, num_householder, num_heads})
 
     # Forward pass: recompute states and raw outputs
     {_, s_list, raw_out_list} =
@@ -1841,27 +2213,45 @@ defmodule Edifice.CUDA.FusedScan do
 
         s_updated =
           Enum.reduce(0..(num_householder - 1), s_prev, fn j, s_acc_inner ->
-            k_tj = Nx.slice_along_axis(Nx.slice_along_axis(k, t, 1, axis: 1), j, 1, axis: 2)
-                   |> Nx.squeeze(axes: [1, 2])
-            v_tj = Nx.slice_along_axis(Nx.slice_along_axis(v, t, 1, axis: 1), j, 1, axis: 2)
-                   |> Nx.squeeze(axes: [1, 2])
-            beta_tj = Nx.slice_along_axis(Nx.slice_along_axis(beta, t, 1, axis: 1), j, 1, axis: 2)
-                      |> Nx.squeeze(axes: [1, 2])
+            k_tj =
+              Nx.slice_along_axis(Nx.slice_along_axis(k, t, 1, axis: 1), j, 1, axis: 2)
+              |> Nx.squeeze(axes: [1, 2])
 
-            k_norm = Nx.sqrt(Nx.add(Nx.sum(Nx.multiply(k_tj, k_tj), axes: [-1], keep_axes: true), norm_eps))
+            v_tj =
+              Nx.slice_along_axis(Nx.slice_along_axis(v, t, 1, axis: 1), j, 1, axis: 2)
+              |> Nx.squeeze(axes: [1, 2])
+
+            beta_tj =
+              Nx.slice_along_axis(Nx.slice_along_axis(beta, t, 1, axis: 1), j, 1, axis: 2)
+              |> Nx.squeeze(axes: [1, 2])
+
+            k_norm =
+              Nx.sqrt(
+                Nx.add(Nx.sum(Nx.multiply(k_tj, k_tj), axes: [-1], keep_axes: true), norm_eps)
+              )
+
             k_normalized = Nx.divide(k_tj, k_norm)
 
-            st_k = Nx.dot(s_acc_inner, [2], [0, 1], Nx.new_axis(k_normalized, -1), [2], [0, 1])
-                   |> Nx.squeeze(axes: [-1])
+            st_k =
+              Nx.dot(s_acc_inner, [2], [0, 1], Nx.new_axis(k_normalized, -1), [2], [0, 1])
+              |> Nx.squeeze(axes: [-1])
+
             error = Nx.subtract(v_tj, st_k)
 
             beta_broad = beta_tj |> Nx.new_axis(-1) |> Nx.new_axis(-1)
-            update = Nx.multiply(beta_broad, Nx.multiply(Nx.new_axis(k_normalized, -1), Nx.new_axis(error, -2)))
+
+            update =
+              Nx.multiply(
+                beta_broad,
+                Nx.multiply(Nx.new_axis(k_normalized, -1), Nx.new_axis(error, -2))
+              )
+
             Nx.add(s_acc_inner, update)
           end)
 
-        o_raw = Nx.dot(s_updated, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1])
-                |> Nx.squeeze(axes: [-1])
+        o_raw =
+          Nx.dot(s_updated, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1])
+          |> Nx.squeeze(axes: [-1])
 
         {s_updated, [s_prev | s_acc], [o_raw | raw_acc]}
       end)
@@ -1873,39 +2263,68 @@ defmodule Edifice.CUDA.FusedScan do
     ds_acc = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, num_heads, head_dim, head_dim})
 
     {_, gq, gk, gv, gbeta, _ds} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_q, grad_k, grad_v, grad_beta, ds_acc}, fn t, {_, gq, gk, gv, gbeta, ds} ->
+      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_q, grad_k, grad_v, grad_beta, ds_acc}, fn t,
+                                                                                             {_,
+                                                                                              gq,
+                                                                                              gk,
+                                                                                              gv,
+                                                                                              gbeta,
+                                                                                              ds} ->
         q_t = Nx.slice_along_axis(q, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         do_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         o_raw = Enum.at(raw_out_fwd, t)
         s_prev_t = Enum.at(s_fwd, t)
 
         # RMS norm backward
-        rms = Nx.sqrt(Nx.add(Nx.mean(Nx.multiply(o_raw, o_raw), axes: [-1], keep_axes: true), norm_eps))
-        d_o_raw = Nx.subtract(
-          Nx.divide(do_t, rms),
-          Nx.multiply(
-            Nx.divide(o_raw, Nx.multiply(rms, rms)),
-            Nx.mean(Nx.multiply(do_t, o_raw), axes: [-1], keep_axes: true)
+        rms =
+          Nx.sqrt(
+            Nx.add(Nx.mean(Nx.multiply(o_raw, o_raw), axes: [-1], keep_axes: true), norm_eps)
           )
-        )
+
+        d_o_raw =
+          Nx.subtract(
+            Nx.divide(do_t, rms),
+            Nx.multiply(
+              Nx.divide(o_raw, Nx.multiply(rms, rms)),
+              Nx.mean(Nx.multiply(do_t, o_raw), axes: [-1], keep_axes: true)
+            )
+          )
 
         # Recompute s_updated
         s_updated =
           Enum.reduce(0..(num_householder - 1), s_prev_t, fn j, s_acc_inner ->
-            k_tj = Nx.slice_along_axis(Nx.slice_along_axis(k, t, 1, axis: 1), j, 1, axis: 2)
-                   |> Nx.squeeze(axes: [1, 2])
-            v_tj = Nx.slice_along_axis(Nx.slice_along_axis(v, t, 1, axis: 1), j, 1, axis: 2)
-                   |> Nx.squeeze(axes: [1, 2])
-            beta_tj = Nx.slice_along_axis(Nx.slice_along_axis(beta, t, 1, axis: 1), j, 1, axis: 2)
-                      |> Nx.squeeze(axes: [1, 2])
+            k_tj =
+              Nx.slice_along_axis(Nx.slice_along_axis(k, t, 1, axis: 1), j, 1, axis: 2)
+              |> Nx.squeeze(axes: [1, 2])
 
-            k_norm = Nx.sqrt(Nx.add(Nx.sum(Nx.multiply(k_tj, k_tj), axes: [-1], keep_axes: true), norm_eps))
+            v_tj =
+              Nx.slice_along_axis(Nx.slice_along_axis(v, t, 1, axis: 1), j, 1, axis: 2)
+              |> Nx.squeeze(axes: [1, 2])
+
+            beta_tj =
+              Nx.slice_along_axis(Nx.slice_along_axis(beta, t, 1, axis: 1), j, 1, axis: 2)
+              |> Nx.squeeze(axes: [1, 2])
+
+            k_norm =
+              Nx.sqrt(
+                Nx.add(Nx.sum(Nx.multiply(k_tj, k_tj), axes: [-1], keep_axes: true), norm_eps)
+              )
+
             k_normalized = Nx.divide(k_tj, k_norm)
-            st_k = Nx.dot(s_acc_inner, [2], [0, 1], Nx.new_axis(k_normalized, -1), [2], [0, 1])
-                   |> Nx.squeeze(axes: [-1])
+
+            st_k =
+              Nx.dot(s_acc_inner, [2], [0, 1], Nx.new_axis(k_normalized, -1), [2], [0, 1])
+              |> Nx.squeeze(axes: [-1])
+
             error = Nx.subtract(v_tj, st_k)
             beta_broad = beta_tj |> Nx.new_axis(-1) |> Nx.new_axis(-1)
-            update = Nx.multiply(beta_broad, Nx.multiply(Nx.new_axis(k_normalized, -1), Nx.new_axis(error, -2)))
+
+            update =
+              Nx.multiply(
+                beta_broad,
+                Nx.multiply(Nx.new_axis(k_normalized, -1), Nx.new_axis(error, -2))
+              )
+
             Nx.add(s_acc_inner, update)
           end)
 
@@ -1914,59 +2333,159 @@ defmodule Edifice.CUDA.FusedScan do
         ds_total = Nx.add(ds, ds_from_out)
 
         # dq
-        gq_t = Nx.dot(Nx.transpose(s_updated, axes: [0, 1, 3, 2]), [3], [0, 1], Nx.new_axis(d_o_raw, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
+        gq_t =
+          Nx.dot(
+            Nx.transpose(s_updated, axes: [0, 1, 3, 2]),
+            [3],
+            [0, 1],
+            Nx.new_axis(d_o_raw, 3),
+            [2],
+            [0, 1]
+          )
+          |> Nx.squeeze(axes: [3])
 
         # Reverse through Householder steps
         {ds_after_steps, gk_step, gv_step, gbeta_step} =
-          Enum.reduce((num_householder - 1)..0//-1, {ds_total, gk, gv, gbeta}, fn j, {ds_cur, gk_acc, gv_acc, gbeta_acc} ->
-            k_tj = Nx.slice_along_axis(Nx.slice_along_axis(k, t, 1, axis: 1), j, 1, axis: 2)
-                   |> Nx.squeeze(axes: [1, 2])
-            v_tj = Nx.slice_along_axis(Nx.slice_along_axis(v, t, 1, axis: 1), j, 1, axis: 2)
-                   |> Nx.squeeze(axes: [1, 2])
-            beta_tj = Nx.slice_along_axis(Nx.slice_along_axis(beta, t, 1, axis: 1), j, 1, axis: 2)
-                      |> Nx.squeeze(axes: [1, 2])
+          Enum.reduce((num_householder - 1)..0//-1, {ds_total, gk, gv, gbeta}, fn j,
+                                                                                  {ds_cur, gk_acc,
+                                                                                   gv_acc,
+                                                                                   gbeta_acc} ->
+            k_tj =
+              Nx.slice_along_axis(Nx.slice_along_axis(k, t, 1, axis: 1), j, 1, axis: 2)
+              |> Nx.squeeze(axes: [1, 2])
 
-            k_norm = Nx.sqrt(Nx.add(Nx.sum(Nx.multiply(k_tj, k_tj), axes: [-1], keep_axes: true), norm_eps))
+            v_tj =
+              Nx.slice_along_axis(Nx.slice_along_axis(v, t, 1, axis: 1), j, 1, axis: 2)
+              |> Nx.squeeze(axes: [1, 2])
+
+            beta_tj =
+              Nx.slice_along_axis(Nx.slice_along_axis(beta, t, 1, axis: 1), j, 1, axis: 2)
+              |> Nx.squeeze(axes: [1, 2])
+
+            k_norm =
+              Nx.sqrt(
+                Nx.add(Nx.sum(Nx.multiply(k_tj, k_tj), axes: [-1], keep_axes: true), norm_eps)
+              )
+
             k_normalized = Nx.divide(k_tj, k_norm)
 
-            ds_kn = Nx.dot(ds_cur, [3], [0, 1], Nx.new_axis(k_normalized, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
+            ds_kn =
+              Nx.dot(ds_cur, [3], [0, 1], Nx.new_axis(k_normalized, 3), [2], [0, 1])
+              |> Nx.squeeze(axes: [3])
 
             gv_tj = Nx.multiply(beta_tj, ds_kn)
 
             # Recompute state before step j
             s_before_j =
               Enum.reduce(0..(j - 1)//1, s_prev_t, fn jj, s_inner ->
-                k_jj = Nx.slice_along_axis(Nx.slice_along_axis(k, t, 1, axis: 1), jj, 1, axis: 2)
-                       |> Nx.squeeze(axes: [1, 2])
-                v_jj = Nx.slice_along_axis(Nx.slice_along_axis(v, t, 1, axis: 1), jj, 1, axis: 2)
-                       |> Nx.squeeze(axes: [1, 2])
-                beta_jj = Nx.slice_along_axis(Nx.slice_along_axis(beta, t, 1, axis: 1), jj, 1, axis: 2)
-                          |> Nx.squeeze(axes: [1, 2])
-                kn_jj = Nx.divide(k_jj, Nx.sqrt(Nx.add(Nx.sum(Nx.multiply(k_jj, k_jj), axes: [-1], keep_axes: true), norm_eps)))
-                stk_jj = Nx.dot(s_inner, [2], [0, 1], Nx.new_axis(kn_jj, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+                k_jj =
+                  Nx.slice_along_axis(Nx.slice_along_axis(k, t, 1, axis: 1), jj, 1, axis: 2)
+                  |> Nx.squeeze(axes: [1, 2])
+
+                v_jj =
+                  Nx.slice_along_axis(Nx.slice_along_axis(v, t, 1, axis: 1), jj, 1, axis: 2)
+                  |> Nx.squeeze(axes: [1, 2])
+
+                beta_jj =
+                  Nx.slice_along_axis(Nx.slice_along_axis(beta, t, 1, axis: 1), jj, 1, axis: 2)
+                  |> Nx.squeeze(axes: [1, 2])
+
+                kn_jj =
+                  Nx.divide(
+                    k_jj,
+                    Nx.sqrt(
+                      Nx.add(
+                        Nx.sum(Nx.multiply(k_jj, k_jj), axes: [-1], keep_axes: true),
+                        norm_eps
+                      )
+                    )
+                  )
+
+                stk_jj =
+                  Nx.dot(s_inner, [2], [0, 1], Nx.new_axis(kn_jj, -1), [2], [0, 1])
+                  |> Nx.squeeze(axes: [-1])
+
                 err_jj = Nx.subtract(v_jj, stk_jj)
                 beta_b = beta_jj |> Nx.new_axis(-1) |> Nx.new_axis(-1)
-                Nx.add(s_inner, Nx.multiply(beta_b, Nx.multiply(Nx.new_axis(kn_jj, -1), Nx.new_axis(err_jj, -2))))
+
+                Nx.add(
+                  s_inner,
+                  Nx.multiply(
+                    beta_b,
+                    Nx.multiply(Nx.new_axis(kn_jj, -1), Nx.new_axis(err_jj, -2))
+                  )
+                )
               end)
 
-            st_k = Nx.dot(s_before_j, [2], [0, 1], Nx.new_axis(k_normalized, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+            st_k =
+              Nx.dot(s_before_j, [2], [0, 1], Nx.new_axis(k_normalized, -1), [2], [0, 1])
+              |> Nx.squeeze(axes: [-1])
+
             error = Nx.subtract(v_tj, st_k)
             gbeta_tj = Nx.sum(Nx.multiply(error, ds_kn), axes: [-1])
 
             scaled_err = Nx.multiply(beta_tj, error)
-            gkn_direct = Nx.dot(Nx.transpose(ds_cur, axes: [0, 1, 3, 2]), [3], [0, 1], Nx.new_axis(scaled_err, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3])
-            gkn_through_err = Nx.multiply(beta_tj, Nx.dot(Nx.transpose(s_before_j, axes: [0, 1, 3, 2]), [3], [0, 1], Nx.new_axis(ds_kn, 3), [2], [0, 1]) |> Nx.squeeze(axes: [3]))
+
+            gkn_direct =
+              Nx.dot(
+                Nx.transpose(ds_cur, axes: [0, 1, 3, 2]),
+                [3],
+                [0, 1],
+                Nx.new_axis(scaled_err, 3),
+                [2],
+                [0, 1]
+              )
+              |> Nx.squeeze(axes: [3])
+
+            gkn_through_err =
+              Nx.multiply(
+                beta_tj,
+                Nx.dot(
+                  Nx.transpose(s_before_j, axes: [0, 1, 3, 2]),
+                  [3],
+                  [0, 1],
+                  Nx.new_axis(ds_kn, 3),
+                  [2],
+                  [0, 1]
+                )
+                |> Nx.squeeze(axes: [3])
+              )
+
             gkn_t = Nx.subtract(gkn_direct, gkn_through_err)
 
             # Chain through L2 normalization
             dot_gkn_kn = Nx.sum(Nx.multiply(gkn_t, k_normalized), axes: [-1], keep_axes: true)
             gk_tj = Nx.divide(Nx.subtract(gkn_t, Nx.multiply(k_normalized, dot_gkn_kn)), k_norm)
 
-            ds_prev_step = Nx.subtract(ds_cur, Nx.multiply(beta_tj |> Nx.new_axis(-1) |> Nx.new_axis(-1), Nx.multiply(Nx.new_axis(ds_kn, 3), Nx.new_axis(k_normalized, 2))))
+            ds_prev_step =
+              Nx.subtract(
+                ds_cur,
+                Nx.multiply(
+                  beta_tj |> Nx.new_axis(-1) |> Nx.new_axis(-1),
+                  Nx.multiply(Nx.new_axis(ds_kn, 3), Nx.new_axis(k_normalized, 2))
+                )
+              )
 
-            gk_acc = Nx.put_slice(gk_acc, [0, t, j, 0, 0], Nx.reshape(gk_tj, {batch, 1, 1, num_heads, head_dim}))
-            gv_acc = Nx.put_slice(gv_acc, [0, t, j, 0, 0], Nx.reshape(gv_tj, {batch, 1, 1, num_heads, head_dim}))
-            gbeta_acc = Nx.put_slice(gbeta_acc, [0, t, j, 0], Nx.reshape(gbeta_tj, {batch, 1, 1, num_heads}))
+            gk_acc =
+              Nx.put_slice(
+                gk_acc,
+                [0, t, j, 0, 0],
+                Nx.reshape(gk_tj, {batch, 1, 1, num_heads, head_dim})
+              )
+
+            gv_acc =
+              Nx.put_slice(
+                gv_acc,
+                [0, t, j, 0, 0],
+                Nx.reshape(gv_tj, {batch, 1, 1, num_heads, head_dim})
+              )
+
+            gbeta_acc =
+              Nx.put_slice(
+                gbeta_acc,
+                [0, t, j, 0],
+                Nx.reshape(gbeta_tj, {batch, 1, 1, num_heads})
+              )
 
             {ds_prev_step, gk_acc, gv_acc, gbeta_acc}
           end)
@@ -1991,7 +2510,9 @@ defmodule Edifice.CUDA.FusedScan do
 
     # Forward pass to recompute gate activations
     {_, gate_list, cell_list, norm_list} =
-      Enum.reduce(0..(seq_len - 1), {{h0, c0, n0, m0}, [], [], []}, fn t, {{h_p, c_p, n_p, m_p}, g_acc, c_acc, n_acc} ->
+      Enum.reduce(0..(seq_len - 1), {{h0, c0, n0, m0}, [], [], []}, fn t,
+                                                                       {{h_p, c_p, n_p, m_p},
+                                                                        g_acc, c_acc, n_acc} ->
         wx_t = Nx.slice_along_axis(wx, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
         rh_t = Nx.dot(h_p, [1], recurrent_weight, [0])
         gates_t = Nx.add(wx_t, rh_t)
@@ -2019,53 +2540,74 @@ defmodule Edifice.CUDA.FusedScan do
 
     # Backward pass
     {_, gwx, dh_acc, dc_acc} =
-      Enum.reduce((seq_len - 1)..0//-1, {nil, grad_wx,
-        Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden}),
-        Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})}, fn t, {_, gwx, dh_prev, dc_prev} ->
-        grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
-        dh = Nx.add(grad_t, dh_prev)
+      Enum.reduce(
+        (seq_len - 1)..0//-1,
+        {nil, grad_wx, Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden}),
+         Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, hidden})},
+        fn t, {_, gwx, dh_prev, dc_prev} ->
+          grad_t = Nx.slice_along_axis(grad_output, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
+          dh = Nx.add(grad_t, dh_prev)
 
-        {i_t, f_t, z_t, o_t} = Enum.at(gates_fwd, t)
-        c_t = Enum.at(cells_fwd, t)
-        n_t = Enum.at(norms_fwd, t)
-        c_prev = if t == 0, do: c0, else: Enum.at(cells_fwd, t - 1)
-        n_prev = if t == 0, do: n0, else: Enum.at(norms_fwd, t - 1)
+          {i_t, f_t, z_t, o_t} = Enum.at(gates_fwd, t)
+          c_t = Enum.at(cells_fwd, t)
+          n_t = Enum.at(norms_fwd, t)
+          c_prev = if t == 0, do: c0, else: Enum.at(cells_fwd, t - 1)
+          n_prev = if t == 0, do: n0, else: Enum.at(norms_fwd, t - 1)
 
-        safe_denom = Nx.max(Nx.abs(n_t), 1.0)
+          safe_denom = Nx.max(Nx.abs(n_t), 1.0)
 
-        # h = o * c / max(|n|, 1)
-        do_pre = Nx.multiply(
-          Nx.multiply(dh, Nx.divide(c_t, safe_denom)),
-          Nx.multiply(o_t, Nx.subtract(1.0, o_t))
-        )
+          # h = o * c / max(|n|, 1)
+          do_pre =
+            Nx.multiply(
+              Nx.multiply(dh, Nx.divide(c_t, safe_denom)),
+              Nx.multiply(o_t, Nx.subtract(1.0, o_t))
+            )
 
-        dc = Nx.add(Nx.multiply(dh, Nx.divide(o_t, safe_denom)), dc_prev)
+          dc = Nx.add(Nx.multiply(dh, Nx.divide(o_t, safe_denom)), dc_prev)
 
-        # dn: only active when |n| >= 1
-        n_active = Nx.greater_equal(Nx.abs(n_t), 1.0)
-        dn = Nx.multiply(
-          Nx.multiply(Nx.select(n_active, Nx.tensor(1.0, type: {:f, 32}), Nx.tensor(0.0, type: {:f, 32})),
-            Nx.negate(Nx.multiply(dh, Nx.divide(Nx.multiply(o_t, c_t), Nx.multiply(safe_denom, safe_denom))))),
-          Nx.select(Nx.greater_equal(n_t, 0.0), Nx.tensor(1.0, type: {:f, 32}), Nx.tensor(-1.0, type: {:f, 32}))
-        )
+          # dn: only active when |n| >= 1
+          n_active = Nx.greater_equal(Nx.abs(n_t), 1.0)
 
-        # Through exp gates
-        di = Nx.add(Nx.multiply(dc, z_t), dn)
-        df = Nx.add(Nx.multiply(dc, c_prev), Nx.multiply(dn, n_prev))
+          dn =
+            Nx.multiply(
+              Nx.multiply(
+                Nx.select(
+                  n_active,
+                  Nx.tensor(1.0, type: {:f, 32}),
+                  Nx.tensor(0.0, type: {:f, 32})
+                ),
+                Nx.negate(
+                  Nx.multiply(
+                    dh,
+                    Nx.divide(Nx.multiply(o_t, c_t), Nx.multiply(safe_denom, safe_denom))
+                  )
+                )
+              ),
+              Nx.select(
+                Nx.greater_equal(n_t, 0.0),
+                Nx.tensor(1.0, type: {:f, 32}),
+                Nx.tensor(-1.0, type: {:f, 32})
+              )
+            )
 
-        d_log_i = Nx.multiply(di, i_t)
-        d_log_f = Nx.multiply(df, f_t)
+          # Through exp gates
+          di = Nx.add(Nx.multiply(dc, z_t), dn)
+          df = Nx.add(Nx.multiply(dc, c_prev), Nx.multiply(dn, n_prev))
 
-        dz_pre = Nx.multiply(Nx.multiply(dc, i_t), Nx.subtract(1.0, Nx.multiply(z_t, z_t)))
+          d_log_i = Nx.multiply(di, i_t)
+          d_log_f = Nx.multiply(df, f_t)
 
-        gwx_t = Nx.concatenate([d_log_i, d_log_f, dz_pre, do_pre], axis: 1)
-        gwx = Nx.put_slice(gwx, [0, t, 0], Nx.new_axis(gwx_t, 1))
+          dz_pre = Nx.multiply(Nx.multiply(dc, i_t), Nx.subtract(1.0, Nx.multiply(z_t, z_t)))
 
-        dh_next = Nx.dot(gwx_t, [1], Nx.transpose(recurrent_weight), [0])
-        dc_next = Nx.multiply(dc, f_t)
+          gwx_t = Nx.concatenate([d_log_i, d_log_f, dz_pre, do_pre], axis: 1)
+          gwx = Nx.put_slice(gwx, [0, t, 0], Nx.new_axis(gwx_t, 1))
 
-        {nil, gwx, dh_next, dc_next}
-      end)
+          dh_next = Nx.dot(gwx_t, [1], Nx.transpose(recurrent_weight), [0])
+          dc_next = Nx.multiply(dc, f_t)
+
+          {nil, gwx, dh_next, dc_next}
+        end
+      )
 
     {gwx, dh_acc, dc_acc}
   end
@@ -2084,6 +2626,7 @@ defmodule Edifice.CUDA.FusedScan do
     Nx.Defn.Kernel.custom_grad(forward_output, [q, k, v, beta], fn grad_output ->
       {grad_q, grad_k, grad_v, grad_beta} =
         delta_rule_backward_dispatch(q, k, v, beta, forward_output, grad_output)
+
       [grad_q, grad_k, grad_v, grad_beta]
     end)
   end
@@ -2101,13 +2644,23 @@ defmodule Edifice.CUDA.FusedScan do
         beta_t = Nx.slice_along_axis(beta, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
         # S@k: [B,H,D,D] x [B,H,D] -> [B,H,D]
-        sk = Nx.dot(s_prev, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+        sk =
+          Nx.dot(s_prev, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+
         # delta = beta * outer(v - S@k, k)
         diff = Nx.subtract(v_t, sk)
-        delta = Nx.multiply(Nx.new_axis(beta_t, -1), Nx.multiply(Nx.new_axis(diff, -1), Nx.new_axis(k_t, -2)))
+
+        delta =
+          Nx.multiply(
+            Nx.new_axis(beta_t, -1),
+            Nx.multiply(Nx.new_axis(diff, -1), Nx.new_axis(k_t, -2))
+          )
+
         s_t = Nx.add(s_prev, delta)
         # o = S@q
-        o_t = Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+        o_t =
+          Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+
         {s_t, [o_t | acc]}
       end)
 
@@ -2121,13 +2674,18 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, num_heads, head_dim}, tensor_type)
 
     forward_output =
-      Edifice.Block.run(:fused_gated_delta_net_scan, [q, k, v, beta, alpha], output, fn q, k, v, beta, alpha ->
+      Edifice.Block.run(:fused_gated_delta_net_scan, [q, k, v, beta, alpha], output, fn q,
+                                                                                        k,
+                                                                                        v,
+                                                                                        beta,
+                                                                                        alpha ->
         gated_delta_net_scan_fallback(q, k, v, beta, alpha)
       end)
 
     Nx.Defn.Kernel.custom_grad(forward_output, [q, k, v, beta, alpha], fn grad_output ->
       {grad_q, grad_k, grad_v, grad_beta, grad_alpha} =
         gated_delta_net_backward_dispatch(q, k, v, beta, alpha, forward_output, grad_output)
+
       [grad_q, grad_k, grad_v, grad_beta, grad_alpha]
     end)
   end
@@ -2150,11 +2708,23 @@ defmodule Edifice.CUDA.FusedScan do
         s_decayed = Nx.multiply(alpha_broad, s_prev)
 
         # Delta update (same as DeltaNet)
-        sk = Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+        sk =
+          Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1])
+          |> Nx.squeeze(axes: [-1])
+
         diff = Nx.subtract(v_t, sk)
-        delta = Nx.multiply(Nx.new_axis(beta_t, -1), Nx.multiply(Nx.new_axis(diff, -1), Nx.new_axis(k_t, -2)))
+
+        delta =
+          Nx.multiply(
+            Nx.new_axis(beta_t, -1),
+            Nx.multiply(Nx.new_axis(diff, -1), Nx.new_axis(k_t, -2))
+          )
+
         s_t = Nx.add(s_decayed, delta)
-        o_t = Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+
+        o_t =
+          Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1]) |> Nx.squeeze(axes: [-1])
+
         {s_t, [o_t | acc]}
       end)
 
@@ -2189,23 +2759,33 @@ defmodule Edifice.CUDA.FusedScan do
         s_updated =
           Enum.reduce(0..(num_householder - 1), s_prev, fn j, s_acc ->
             # k_{t,j}: [B, n_h, H, d] -> slice j -> [B, H, d]
-            k_tj = Nx.slice_along_axis(Nx.slice_along_axis(k, t, 1, axis: 1), j, 1, axis: 2)
-                   |> Nx.squeeze(axes: [1, 2])
-            v_tj = Nx.slice_along_axis(Nx.slice_along_axis(v, t, 1, axis: 1), j, 1, axis: 2)
-                   |> Nx.squeeze(axes: [1, 2])
-            beta_tj = Nx.slice_along_axis(Nx.slice_along_axis(beta, t, 1, axis: 1), j, 1, axis: 2)
-                      |> Nx.squeeze(axes: [1, 2])
+            k_tj =
+              Nx.slice_along_axis(Nx.slice_along_axis(k, t, 1, axis: 1), j, 1, axis: 2)
+              |> Nx.squeeze(axes: [1, 2])
+
+            v_tj =
+              Nx.slice_along_axis(Nx.slice_along_axis(v, t, 1, axis: 1), j, 1, axis: 2)
+              |> Nx.squeeze(axes: [1, 2])
+
+            beta_tj =
+              Nx.slice_along_axis(Nx.slice_along_axis(beta, t, 1, axis: 1), j, 1, axis: 2)
+              |> Nx.squeeze(axes: [1, 2])
 
             # L2 normalize key
-            k_norm = Nx.sqrt(Nx.add(Nx.sum(Nx.multiply(k_tj, k_tj), axes: [-1], keep_axes: true), norm_eps))
+            k_norm =
+              Nx.sqrt(
+                Nx.add(Nx.sum(Nx.multiply(k_tj, k_tj), axes: [-1], keep_axes: true), norm_eps)
+              )
+
             k_normalized = Nx.divide(k_tj, k_norm)
 
             # S^T @ k: need cross-row product
             # Use the reformulation: S_new = S + beta * k @ (v - S^T @ k)^T
             # S^T @ k: [B,H,D,D]^T @ [B,H,D] = [B,H,D]
             # s_acc is [B,H,D,D], k_normalized is [B,H,D]
-            st_k = Nx.dot(s_acc, [2], [0, 1], Nx.new_axis(k_normalized, -1), [2], [0, 1])
-                   |> Nx.squeeze(axes: [-1])
+            st_k =
+              Nx.dot(s_acc, [2], [0, 1], Nx.new_axis(k_normalized, -1), [2], [0, 1])
+              |> Nx.squeeze(axes: [-1])
 
             # error = v - S^T@k
             error = Nx.subtract(v_tj, st_k)
@@ -2219,10 +2799,13 @@ defmodule Edifice.CUDA.FusedScan do
           end)
 
         # Output: o_t = S @ q_t with RMS norm
-        o_t = Nx.dot(s_updated, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1])
-              |> Nx.squeeze(axes: [-1])
+        o_t =
+          Nx.dot(s_updated, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1])
+          |> Nx.squeeze(axes: [-1])
 
-        rms = Nx.sqrt(Nx.add(Nx.mean(Nx.multiply(o_t, o_t), axes: [-1], keep_axes: true), norm_eps))
+        rms =
+          Nx.sqrt(Nx.add(Nx.mean(Nx.multiply(o_t, o_t), axes: [-1], keep_axes: true), norm_eps))
+
         o_t_normed = Nx.divide(o_t, rms)
 
         {s_updated, [o_t_normed | acc]}
@@ -2241,10 +2824,12 @@ defmodule Edifice.CUDA.FusedScan do
     c0 = Nx.broadcast(Nx.tensor(0.0, type: tensor_type), {batch, hidden})
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
-    Edifice.Block.run(:fused_slstm_scan, [wx, recurrent_weight, h0, c0], output,
-      fn wx, r, h0, c0 ->
-        slstm_scan_fallback(wx, r, h0, c0)
-      end)
+    Edifice.Block.run(:fused_slstm_scan, [wx, recurrent_weight, h0, c0], output, fn wx,
+                                                                                    r,
+                                                                                    h0,
+                                                                                    c0 ->
+      slstm_scan_fallback(wx, r, h0, c0)
+    end)
   end
 
   defp slstm_scan_fallback(wx, recurrent_weight, h0, c0) do
@@ -2291,10 +2876,12 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
     forward_output =
-      Edifice.Block.run(:fused_lstm_scan, [wx, recurrent_weight, h0, c0], output,
-        fn wx, r, h0, c0 ->
-          lstm_scan_fallback(wx, r, h0, c0)
-        end)
+      Edifice.Block.run(:fused_lstm_scan, [wx, recurrent_weight, h0, c0], output, fn wx,
+                                                                                     r,
+                                                                                     h0,
+                                                                                     c0 ->
+        lstm_scan_fallback(wx, r, h0, c0)
+      end)
 
     # Attach backward custom call via custom_grad
     Nx.Defn.Kernel.custom_grad(forward_output, [wx, recurrent_weight], fn grad_output ->
@@ -2303,11 +2890,22 @@ defmodule Edifice.CUDA.FusedScan do
 
       # grad_R = sum over batch and time of h_prev^T @ grad_wx_t
       # h_prev: shift forward_output right by 1, prepend h0
-      h_prev = Nx.concatenate([Nx.reshape(h0, {batch, 1, hidden}), Nx.slice_along_axis(forward_output, 0, seq_len - 1, axis: 1)], axis: 1)
+      h_prev =
+        Nx.concatenate(
+          [
+            Nx.reshape(h0, {batch, 1, hidden}),
+            Nx.slice_along_axis(forward_output, 0, seq_len - 1, axis: 1)
+          ],
+          axis: 1
+        )
+
       # h_prev: [B, T, H], grad_wx: [B, T, 4H]
       # grad_R = sum_b( h_prev^T @ grad_wx ) = sum_b,t( h_prev[b,t,:] outer grad_wx[b,t,:] )
-      grad_r = Nx.dot(Nx.reshape(h_prev, {batch * seq_len, hidden}) |> Nx.transpose(),
-                       Nx.reshape(grad_wx, {batch * seq_len, hidden4}))
+      grad_r =
+        Nx.dot(
+          Nx.reshape(h_prev, {batch * seq_len, hidden}) |> Nx.transpose(),
+          Nx.reshape(grad_wx, {batch * seq_len, hidden4})
+        )
 
       [grad_wx, grad_r]
     end)
@@ -2352,10 +2950,12 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
     forward_output =
-      Edifice.Block.run(:fused_gru_scan, [wx, recurrent_weight, h0, bhn], output,
-        fn wx, r, h0, bhn ->
-          gru_scan_fallback(wx, r, h0, bhn)
-        end)
+      Edifice.Block.run(:fused_gru_scan, [wx, recurrent_weight, h0, bhn], output, fn wx,
+                                                                                     r,
+                                                                                     h0,
+                                                                                     bhn ->
+        gru_scan_fallback(wx, r, h0, bhn)
+      end)
 
     # h0 is deliberately NOT a differentiated input: the BPTT carry
     # enters as a constant and gradients truncate at the chunk edge.
@@ -2364,9 +2964,20 @@ defmodule Edifice.CUDA.FusedScan do
         gru_backward_dispatch(wx, recurrent_weight, h0, bhn, forward_output, grad_output)
 
       # grad_R = sum(h_prev^T @ grad_rh) — grad_rh has correct R@h-specific gradients
-      h_prev = Nx.concatenate([Nx.reshape(h0, {batch, 1, hidden}), Nx.slice_along_axis(forward_output, 0, seq_len - 1, axis: 1)], axis: 1)
-      grad_r = Nx.dot(Nx.reshape(h_prev, {batch * seq_len, hidden}) |> Nx.transpose(),
-                       Nx.reshape(grad_rh, {batch * seq_len, hidden3}))
+      h_prev =
+        Nx.concatenate(
+          [
+            Nx.reshape(h0, {batch, 1, hidden}),
+            Nx.slice_along_axis(forward_output, 0, seq_len - 1, axis: 1)
+          ],
+          axis: 1
+        )
+
+      grad_r =
+        Nx.dot(
+          Nx.reshape(h_prev, {batch * seq_len, hidden}) |> Nx.transpose(),
+          Nx.reshape(grad_rh, {batch * seq_len, hidden3})
+        )
 
       # grad_bhn: the n-column of grad_rh is d(rh_n + bhn) per (b,t) —
       # bhn's gradient is its sum over batch and time.
@@ -2392,27 +3003,34 @@ defmodule Edifice.CUDA.FusedScan do
         rh_t = Nx.dot(h_p, [1], recurrent_weight, [0])
 
         # Reset and update gates use full wx + rh
-        r_t = Nx.add(
-          Nx.slice_along_axis(wx_t, 0, hidden, axis: 1),
-          Nx.slice_along_axis(rh_t, 0, hidden, axis: 1)
-        ) |> Nx.sigmoid()
+        r_t =
+          Nx.add(
+            Nx.slice_along_axis(wx_t, 0, hidden, axis: 1),
+            Nx.slice_along_axis(rh_t, 0, hidden, axis: 1)
+          )
+          |> Nx.sigmoid()
 
-        z_t = Nx.add(
-          Nx.slice_along_axis(wx_t, hidden, hidden, axis: 1),
-          Nx.slice_along_axis(rh_t, hidden, hidden, axis: 1)
-        ) |> Nx.sigmoid()
+        z_t =
+          Nx.add(
+            Nx.slice_along_axis(wx_t, hidden, hidden, axis: 1),
+            Nx.slice_along_axis(rh_t, hidden, hidden, axis: 1)
+          )
+          |> Nx.sigmoid()
 
         # Candidate: reset applied only to recurrent contribution (+ bhn)
-        n_t = Nx.add(
-          Nx.slice_along_axis(wx_t, hidden * 2, hidden, axis: 1),
-          Nx.multiply(r_t, Nx.add(Nx.slice_along_axis(rh_t, hidden * 2, hidden, axis: 1), bhn))
-        ) |> Nx.tanh()
+        n_t =
+          Nx.add(
+            Nx.slice_along_axis(wx_t, hidden * 2, hidden, axis: 1),
+            Nx.multiply(r_t, Nx.add(Nx.slice_along_axis(rh_t, hidden * 2, hidden, axis: 1), bhn))
+          )
+          |> Nx.tanh()
 
         # Blend: h = (1-z)*n + z*h_prev
-        h_t = Nx.add(
-          Nx.multiply(Nx.subtract(1.0, z_t), n_t),
-          Nx.multiply(z_t, h_p)
-        )
+        h_t =
+          Nx.add(
+            Nx.multiply(Nx.subtract(1.0, z_t), n_t),
+            Nx.multiply(z_t, h_p)
+          )
 
         {h_t, [h_t | acc]}
       end)
@@ -2430,16 +3048,35 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, inner_size}, tensor_type)
 
     forward_output =
-      Edifice.Block.run(:fused_ttt_scan, [q, k, v, eta, w0_batched, ln_gamma, ln_beta], output,
+      Edifice.Block.run(
+        :fused_ttt_scan,
+        [q, k, v, eta, w0_batched, ln_gamma, ln_beta],
+        output,
         fn q, k, v, eta, w0_b, ln_g, ln_b ->
           ttt_scan_fallback(q, k, v, eta, w0_b, ln_g, ln_b)
-        end)
+        end
+      )
 
-    Nx.Defn.Kernel.custom_grad(forward_output, [q, k, v, eta, w0_batched, ln_gamma, ln_beta], fn grad_output ->
-      {grad_q, grad_k, grad_v, grad_eta, grad_w0, grad_lng, grad_lnb} =
-        ttt_backward_dispatch(q, k, v, eta, w0_batched, ln_gamma, ln_beta, forward_output, grad_output)
-      [grad_q, grad_k, grad_v, grad_eta, grad_w0, grad_lng, grad_lnb]
-    end)
+    Nx.Defn.Kernel.custom_grad(
+      forward_output,
+      [q, k, v, eta, w0_batched, ln_gamma, ln_beta],
+      fn grad_output ->
+        {grad_q, grad_k, grad_v, grad_eta, grad_w0, grad_lng, grad_lnb} =
+          ttt_backward_dispatch(
+            q,
+            k,
+            v,
+            eta,
+            w0_batched,
+            ln_gamma,
+            ln_beta,
+            forward_output,
+            grad_output
+          )
+
+        [grad_q, grad_k, grad_v, grad_eta, grad_w0, grad_lng, grad_lnb]
+      end
+    )
   end
 
   defp ttt_scan_fallback(q, k, v, eta, w0, ln_gamma, ln_beta) do
@@ -2470,7 +3107,12 @@ defmodule Edifice.CUDA.FusedScan do
 
         # Update
         error = Nx.subtract(pred_normed, v_t)
-        grad = Nx.dot(Nx.new_axis(Nx.multiply(eta_t, error), 2), [2], [0], Nx.new_axis(k_t, 1), [1], [0])
+
+        grad =
+          Nx.dot(Nx.new_axis(Nx.multiply(eta_t, error), 2), [2], [0], Nx.new_axis(k_t, 1), [1], [
+            0
+          ])
+
         w_new = Nx.subtract(w_prev, grad)
 
         # Output
@@ -2488,14 +3130,14 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, hidden}, tensor_type)
 
     forward_output =
-      Edifice.Block.run(:fused_selective_scan, [x, dt, a, b, c], output,
-        fn x, dt, a, b, c ->
-          Edifice.SSM.Common.selective_scan_fallback(x, dt, a, b, c)
-        end)
+      Edifice.Block.run(:fused_selective_scan, [x, dt, a, b, c], output, fn x, dt, a, b, c ->
+        Edifice.SSM.Common.selective_scan_fallback(x, dt, a, b, c)
+      end)
 
     Nx.Defn.Kernel.custom_grad(forward_output, [x, dt, b, c], fn grad_output ->
       {grad_x, grad_dt, grad_b, grad_c} =
         selective_scan_backward_dispatch(x, dt, a, b, c, forward_output, grad_output)
+
       [grad_x, grad_dt, grad_b, grad_c]
     end)
   end
@@ -2507,14 +3149,18 @@ defmodule Edifice.CUDA.FusedScan do
     output = Nx.template({batch, seq_len, num_heads, head_dim}, tensor_type)
 
     forward_output =
-      Edifice.Block.run(:fused_kda_scan, [q, k, v, alpha, beta], output,
-        fn q, k, v, alpha, beta ->
-          kda_scan_fallback(q, k, v, alpha, beta)
-        end)
+      Edifice.Block.run(:fused_kda_scan, [q, k, v, alpha, beta], output, fn q,
+                                                                            k,
+                                                                            v,
+                                                                            alpha,
+                                                                            beta ->
+        kda_scan_fallback(q, k, v, alpha, beta)
+      end)
 
     Nx.Defn.Kernel.custom_grad(forward_output, [q, k, v, alpha, beta], fn grad_output ->
       {grad_q, grad_k, grad_v, grad_alpha, grad_beta} =
         kda_backward_dispatch(q, k, v, alpha, beta, forward_output, grad_output)
+
       [grad_q, grad_k, grad_v, grad_alpha, grad_beta]
     end)
   end
@@ -2538,8 +3184,9 @@ defmodule Edifice.CUDA.FusedScan do
         s_decayed = Nx.multiply(decay, s_prev)
 
         # Retrieval: S @ k -> [B, H, d]
-        sk = Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1])
-             |> Nx.squeeze(axes: [-1])
+        sk =
+          Nx.dot(s_decayed, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1])
+          |> Nx.squeeze(axes: [-1])
 
         # Delta rule: S += beta * outer(v - S@k, k)
         # beta_t: [B, H] -> [B, H, 1, 1]
@@ -2549,8 +3196,10 @@ defmodule Edifice.CUDA.FusedScan do
         s_t = Nx.add(s_decayed, delta)
 
         # Output: S @ q
-        o_t = Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1])
-              |> Nx.squeeze(axes: [-1])
+        o_t =
+          Nx.dot(s_t, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1])
+          |> Nx.squeeze(axes: [-1])
+
         {s_t, [o_t | acc]}
       end)
 
@@ -2567,14 +3216,30 @@ defmodule Edifice.CUDA.FusedScan do
     clip_t = Nx.tensor(clip_threshold, type: {:f, 32})
 
     forward_output =
-      Edifice.Block.run(:fused_rla_scan, [q, k, v, alpha, beta, gamma, variant_t, clip_t], output,
+      Edifice.Block.run(
+        :fused_rla_scan,
+        [q, k, v, alpha, beta, gamma, variant_t, clip_t],
+        output,
         fn q, k, v, alpha, beta, gamma, _variant, _clip ->
           rla_scan_fallback(q, k, v, alpha, beta, gamma, variant, clip_threshold)
-        end)
+        end
+      )
 
     Nx.Defn.Kernel.custom_grad(forward_output, [q, k, v, alpha, beta, gamma], fn grad_output ->
       {grad_q, grad_k, grad_v, grad_alpha, grad_beta, grad_gamma} =
-        rla_backward_dispatch(q, k, v, alpha, beta, gamma, forward_output, grad_output, variant, clip_threshold)
+        rla_backward_dispatch(
+          q,
+          k,
+          v,
+          alpha,
+          beta,
+          gamma,
+          forward_output,
+          grad_output,
+          variant,
+          clip_threshold
+        )
+
       [grad_q, grad_k, grad_v, grad_alpha, grad_beta, grad_gamma]
     end)
   end
@@ -2635,6 +3300,7 @@ defmodule Edifice.CUDA.FusedScan do
               retrieval_r =
                 Nx.dot(r_prev, [3], [0, 1], Nx.new_axis(k_t, -1), [2], [0, 1])
                 |> Nx.squeeze(axes: [-1])
+
               r_decayed = Nx.multiply(alpha_t, r_prev)
               delta_r = Nx.subtract(r_error, retrieval_r)
               r_outer = Nx.multiply(Nx.new_axis(delta_r, -1), Nx.new_axis(k_t, -2))
@@ -2645,8 +3311,11 @@ defmodule Edifice.CUDA.FusedScan do
 
         # Output: (S + R) @ q
         sr = Nx.add(s_t, r_t)
-        o_t = Nx.dot(sr, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1])
-              |> Nx.squeeze(axes: [-1])
+
+        o_t =
+          Nx.dot(sr, [3], [0, 1], Nx.new_axis(q_t, -1), [2], [0, 1])
+          |> Nx.squeeze(axes: [-1])
+
         {s_t, r_t, [o_t | acc]}
       end)
 
@@ -2675,8 +3344,13 @@ defmodule Edifice.CUDA.FusedScan do
     h0_ptr = Nx.to_pointer(h0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_mingru_scan(
-           z_ptr.address, c_ptr.address, h0_ptr.address,
-           batch, seq_len, hidden, dtype
+           z_ptr.address,
+           c_ptr.address,
+           h0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         # Hold gc_ref to prevent cudaFree until we're done with the tensor
@@ -2707,7 +3381,11 @@ defmodule Edifice.CUDA.FusedScan do
     i = Nx.sigmoid(input_gates)
 
     # Zero initial cell state
-    h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(forget_gates)), {batch, hidden})
+    h0 =
+      Nx.broadcast(
+        Nx.tensor(0.0, type: ttype, backend: backend_for(forget_gates)),
+        {batch, hidden}
+      )
 
     # Extract device pointers
     f_ptr = Nx.to_pointer(f, mode: :local)
@@ -2716,8 +3394,14 @@ defmodule Edifice.CUDA.FusedScan do
     h0_ptr = Nx.to_pointer(h0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_minlstm_scan(
-           f_ptr.address, i_ptr.address, c_ptr.address, h0_ptr.address,
-           batch, seq_len, hidden, dtype
+           f_ptr.address,
+           i_ptr.address,
+           c_ptr.address,
+           h0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -2754,8 +3438,13 @@ defmodule Edifice.CUDA.FusedScan do
     h0_ptr = Nx.to_pointer(h0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_elu_gru_scan(
-           g_ptr.address, c_ptr.address, h0_ptr.address,
-           batch, seq_len, hidden, dtype
+           g_ptr.address,
+           c_ptr.address,
+           h0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -2786,8 +3475,13 @@ defmodule Edifice.CUDA.FusedScan do
     h0_ptr = Nx.to_pointer(h0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_real_gru_scan(
-           g_ptr.address, c_ptr.address, h0_ptr.address,
-           batch, seq_len, hidden, dtype
+           g_ptr.address,
+           c_ptr.address,
+           h0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -2818,8 +3512,13 @@ defmodule Edifice.CUDA.FusedScan do
     h0_ptr = Nx.to_pointer(h0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_diag_linear_scan(
-           a_ptr.address, b_ptr.address, h0_ptr.address,
-           batch, seq_len, hidden, dtype
+           a_ptr.address,
+           b_ptr.address,
+           h0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -2850,8 +3549,13 @@ defmodule Edifice.CUDA.FusedScan do
     h0_ptr = Nx.to_pointer(h0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_linear_scan(
-           a_ptr.address, b_ptr.address, h0_ptr.address,
-           batch, seq_len, hidden, dtype
+           a_ptr.address,
+           b_ptr.address,
+           h0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -2882,8 +3586,13 @@ defmodule Edifice.CUDA.FusedScan do
     h0_ptr = Nx.to_pointer(h0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_liquid_scan(
-           tau_ptr.address, act_ptr.address, h0_ptr.address,
-           batch, seq_len, hidden, dtype
+           tau_ptr.address,
+           act_ptr.address,
+           h0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -2917,8 +3626,15 @@ defmodule Edifice.CUDA.FusedScan do
     beta_ptr = Nx.to_pointer(beta, mode: :local)
 
     case Edifice.CUDA.NIF.fused_delta_net_scan(
-           q_ptr.address, k_ptr.address, v_ptr.address, beta_ptr.address,
-           batch, seq_len, num_heads, head_dim, dtype
+           q_ptr.address,
+           k_ptr.address,
+           v_ptr.address,
+           beta_ptr.address,
+           batch,
+           seq_len,
+           num_heads,
+           head_dim,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -2949,9 +3665,16 @@ defmodule Edifice.CUDA.FusedScan do
     alpha_ptr = Nx.to_pointer(alpha, mode: :local)
 
     case Edifice.CUDA.NIF.fused_gated_delta_net_scan(
-           q_ptr.address, k_ptr.address, v_ptr.address,
-           beta_ptr.address, alpha_ptr.address,
-           batch, seq_len, num_heads, head_dim, dtype
+           q_ptr.address,
+           k_ptr.address,
+           v_ptr.address,
+           beta_ptr.address,
+           alpha_ptr.address,
+           batch,
+           seq_len,
+           num_heads,
+           head_dim,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -2982,8 +3705,16 @@ defmodule Edifice.CUDA.FusedScan do
     beta_ptr = Nx.to_pointer(beta, mode: :local)
 
     case Edifice.CUDA.NIF.fused_delta_product_scan(
-           q_ptr.address, k_ptr.address, v_ptr.address, beta_ptr.address,
-           batch, seq_len, num_householder, num_heads, head_dim, dtype
+           q_ptr.address,
+           k_ptr.address,
+           v_ptr.address,
+           beta_ptr.address,
+           batch,
+           seq_len,
+           num_householder,
+           num_heads,
+           head_dim,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -3021,8 +3752,14 @@ defmodule Edifice.CUDA.FusedScan do
     c0_ptr = Nx.to_pointer(c0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_slstm_scan(
-           wx_ptr.address, r_ptr.address, h0_ptr.address, c0_ptr.address,
-           batch, seq_len, hidden, dtype
+           wx_ptr.address,
+           r_ptr.address,
+           h0_ptr.address,
+           c0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -3056,8 +3793,14 @@ defmodule Edifice.CUDA.FusedScan do
     c0_ptr = Nx.to_pointer(c0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_lstm_scan(
-           wx_ptr.address, r_ptr.address, h0_ptr.address, c0_ptr.address,
-           batch, seq_len, hidden, dtype
+           wx_ptr.address,
+           r_ptr.address,
+           h0_ptr.address,
+           c0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -3082,7 +3825,9 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(wx)
     ttype = tensor_type(wx)
 
-    h0 = h0 || Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
+    h0 =
+      h0 || Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
+
     bhn = bhn || Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {hidden})
 
     wx_ptr = Nx.to_pointer(wx, mode: :local)
@@ -3091,8 +3836,14 @@ defmodule Edifice.CUDA.FusedScan do
     bhn_ptr = Nx.to_pointer(bhn, mode: :local)
 
     case Edifice.CUDA.NIF.fused_gru_scan(
-           wx_ptr.address, r_ptr.address, h0_ptr.address, bhn_ptr.address,
-           batch, seq_len, hidden, dtype
+           wx_ptr.address,
+           r_ptr.address,
+           h0_ptr.address,
+           bhn_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -3133,9 +3884,17 @@ defmodule Edifice.CUDA.FusedScan do
     lnb_ptr = Nx.to_pointer(ln_beta, mode: :local)
 
     case Edifice.CUDA.NIF.fused_ttt_scan(
-           q_ptr.address, k_ptr.address, v_ptr.address, eta_ptr.address,
-           w0_ptr.address, lng_ptr.address, lnb_ptr.address,
-           batch, seq_len, inner_size, dtype
+           q_ptr.address,
+           k_ptr.address,
+           v_ptr.address,
+           eta_ptr.address,
+           w0_ptr.address,
+           lng_ptr.address,
+           lnb_ptr.address,
+           batch,
+           seq_len,
+           inner_size,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -3167,9 +3926,16 @@ defmodule Edifice.CUDA.FusedScan do
     c_ptr = Nx.to_pointer(c, mode: :local)
 
     case Edifice.CUDA.NIF.fused_selective_scan(
-           x_ptr.address, dt_ptr.address, a_ptr.address,
-           b_ptr.address, c_ptr.address,
-           batch, seq_len, hidden, state, dtype
+           x_ptr.address,
+           dt_ptr.address,
+           a_ptr.address,
+           b_ptr.address,
+           c_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           state,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -3204,9 +3970,16 @@ defmodule Edifice.CUDA.FusedScan do
     beta_ptr = Nx.to_pointer(beta, mode: :local)
 
     case Edifice.CUDA.NIF.fused_kda_scan(
-           q_ptr.address, k_ptr.address, v_ptr.address,
-           alpha_ptr.address, beta_ptr.address,
-           batch, seq_len, num_heads, head_dim, dtype
+           q_ptr.address,
+           k_ptr.address,
+           v_ptr.address,
+           alpha_ptr.address,
+           beta_ptr.address,
+           batch,
+           seq_len,
+           num_heads,
+           head_dim,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -3244,10 +4017,19 @@ defmodule Edifice.CUDA.FusedScan do
     gamma_ptr = Nx.to_pointer(gamma, mode: :local)
 
     case Edifice.CUDA.NIF.fused_rla_scan(
-           q_ptr.address, k_ptr.address, v_ptr.address,
-           alpha_ptr.address, beta_ptr.address, gamma_ptr.address,
-           batch, seq_len, num_heads, head_dim,
-           variant_int, clip_threshold * 1.0, dtype
+           q_ptr.address,
+           k_ptr.address,
+           v_ptr.address,
+           alpha_ptr.address,
+           beta_ptr.address,
+           gamma_ptr.address,
+           batch,
+           seq_len,
+           num_heads,
+           head_dim,
+           variant_int,
+           clip_threshold * 1.0,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -3323,13 +4105,17 @@ defmodule Edifice.CUDA.FusedScan do
     causal_packed = Nx.tensor([causal], type: tensor_type)
 
     forward_output =
-      Edifice.Block.run(:fused_flash_attention, [q, k, v, causal_packed], output, fn q, k, v, _causal ->
+      Edifice.Block.run(:fused_flash_attention, [q, k, v, causal_packed], output, fn q,
+                                                                                     k,
+                                                                                     v,
+                                                                                     _causal ->
         flash_attention_fallback(q, k, v, causal)
       end)
 
     Nx.Defn.Kernel.custom_grad(forward_output, [q, k, v], fn grad_output ->
       {grad_q, grad_k, grad_v} =
         flash_attention_backward_dispatch(q, k, v, causal, forward_output, grad_output)
+
       [grad_q, grad_k, grad_v]
     end)
   end
@@ -3345,8 +4131,15 @@ defmodule Edifice.CUDA.FusedScan do
     v_ptr = Nx.to_pointer(v, mode: :local)
 
     case Edifice.CUDA.NIF.fused_flash_attention(
-           q_ptr.address, k_ptr.address, v_ptr.address,
-           batch, num_heads, seq_len, head_dim, causal, dtype
+           q_ptr.address,
+           k_ptr.address,
+           v_ptr.address,
+           batch,
+           num_heads,
+           seq_len,
+           head_dim,
+           causal,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -3429,7 +4222,12 @@ defmodule Edifice.CUDA.FusedScan do
         rows = Nx.iota({seq_len, seq_len}, axis: 0)
         cols = Nx.iota({seq_len, seq_len}, axis: 1)
         mask = Nx.greater_equal(rows, cols)
-        mask = mask |> Nx.reshape({1, 1, seq_len, seq_len}) |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
+
+        mask =
+          mask
+          |> Nx.reshape({1, 1, seq_len, seq_len})
+          |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
+
         neg_inf = Nx.Constants.neg_infinity(ttype)
         Nx.select(mask, scores, neg_inf)
       else
@@ -3447,7 +4245,14 @@ defmodule Edifice.CUDA.FusedScan do
     d_weights = Nx.dot(grad_output, [3], [0, 1], v, [3], [0, 1])
 
     # dScores = weights * (dWeights - sum(dWeights * weights, axis=-1, keepdims=True))
-    d_scores = Nx.multiply(weights, Nx.subtract(d_weights, Nx.sum(Nx.multiply(d_weights, weights), axes: [-1], keep_axes: true)))
+    d_scores =
+      Nx.multiply(
+        weights,
+        Nx.subtract(
+          d_weights,
+          Nx.sum(Nx.multiply(d_weights, weights), axes: [-1], keep_axes: true)
+        )
+      )
 
     # Scale dScores
     d_scores = Nx.divide(d_scores, scale)
@@ -3512,7 +4317,11 @@ defmodule Edifice.CUDA.FusedScan do
     causal_packed = Nx.tensor([causal], type: tensor_type)
 
     forward_output =
-      Edifice.Block.run(:fused_laser_attention, [q, k, v, v_max, causal_packed], output, fn q, k, v, v_max, _causal ->
+      Edifice.Block.run(:fused_laser_attention, [q, k, v, v_max, causal_packed], output, fn q,
+                                                                                            k,
+                                                                                            v,
+                                                                                            v_max,
+                                                                                            _causal ->
         laser_attention_fallback(q, k, v, v_max, causal)
       end)
 
@@ -3520,6 +4329,7 @@ defmodule Edifice.CUDA.FusedScan do
     Nx.Defn.Kernel.custom_grad(forward_output, [q, k, v], fn grad_output ->
       {grad_q, grad_k, grad_v} =
         laser_attention_backward_dispatch(q, k, v, v_max, causal, forward_output, grad_output)
+
       [grad_q, grad_k, grad_v]
     end)
   end
@@ -3536,8 +4346,16 @@ defmodule Edifice.CUDA.FusedScan do
     vmax_ptr = Nx.to_pointer(v_max, mode: :local)
 
     case Edifice.CUDA.NIF.fused_laser_attention(
-           q_ptr.address, k_ptr.address, v_ptr.address, vmax_ptr.address,
-           batch, num_heads, seq_len, head_dim, causal, dtype
+           q_ptr.address,
+           k_ptr.address,
+           v_ptr.address,
+           vmax_ptr.address,
+           batch,
+           num_heads,
+           seq_len,
+           head_dim,
+           causal,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -3626,7 +4444,12 @@ defmodule Edifice.CUDA.FusedScan do
         rows = Nx.iota({seq_len, seq_len}, axis: 0)
         cols = Nx.iota({seq_len, seq_len}, axis: 1)
         mask = Nx.greater_equal(rows, cols)
-        mask = mask |> Nx.reshape({1, 1, seq_len, seq_len}) |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
+
+        mask =
+          mask
+          |> Nx.reshape({1, 1, seq_len, seq_len})
+          |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
+
         neg_inf = Nx.Constants.neg_infinity(ttype)
         Nx.select(mask, scores, neg_inf)
       else
@@ -3653,7 +4476,15 @@ defmodule Edifice.CUDA.FusedScan do
     d_weights = Nx.dot(d_r, [3], [0, 1], exp_v, [3], [0, 1])
 
     # dScores = weights * (dWeights - sum(dWeights * weights, keepdims))
-    d_scores = Nx.multiply(weights, Nx.subtract(d_weights, Nx.sum(Nx.multiply(d_weights, weights), axes: [-1], keep_axes: true)))
+    d_scores =
+      Nx.multiply(
+        weights,
+        Nx.subtract(
+          d_weights,
+          Nx.sum(Nx.multiply(d_weights, weights), axes: [-1], keep_axes: true)
+        )
+      )
+
     d_scores = Nx.divide(d_scores, scale)
 
     grad_q = Nx.dot(d_scores, [3], [0, 1], k, [2], [0, 1])
@@ -3716,6 +4547,7 @@ defmodule Edifice.CUDA.FusedScan do
     Nx.Defn.Kernel.custom_grad(forward_output, [q, k, v, cs], fn grad_output ->
       {grad_q, grad_k, grad_v, grad_cs} =
         fox_attention_backward_dispatch(q, k, v, cs, forward_output, grad_output)
+
       [grad_q, grad_k, grad_v, grad_cs]
     end)
   end
@@ -3732,8 +4564,15 @@ defmodule Edifice.CUDA.FusedScan do
     cs_ptr = Nx.to_pointer(cs, mode: :local)
 
     case Edifice.CUDA.NIF.fused_fox_attention(
-           q_ptr.address, k_ptr.address, v_ptr.address, cs_ptr.address,
-           batch, num_heads, seq_len, head_dim, dtype
+           q_ptr.address,
+           k_ptr.address,
+           v_ptr.address,
+           cs_ptr.address,
+           batch,
+           num_heads,
+           seq_len,
+           head_dim,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -3761,8 +4600,10 @@ defmodule Edifice.CUDA.FusedScan do
     scores = Nx.divide(Nx.dot(q, [3], [0, 1], k, [3], [0, 1]), scale)
 
     # Add forget bias: F[i,j] = cs[i] - cs[j]
-    cs_i = Nx.new_axis(cs, -1)    # [B, H, T, 1]
-    cs_j = Nx.new_axis(cs, -2)    # [B, H, 1, T]
+    # [B, H, T, 1]
+    cs_i = Nx.new_axis(cs, -1)
+    # [B, H, 1, T]
+    cs_j = Nx.new_axis(cs, -2)
     forget_bias = Nx.subtract(cs_i, cs_j)
 
     # Zero out diagonal (no forgetting for self-attention)
@@ -3842,7 +4683,12 @@ defmodule Edifice.CUDA.FusedScan do
     rows = Nx.iota({seq_len, seq_len}, axis: 0)
     cols = Nx.iota({seq_len, seq_len}, axis: 1)
     causal_mask = Nx.greater_equal(rows, cols)
-    causal_mask = causal_mask |> Nx.reshape({1, 1, seq_len, seq_len}) |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
+
+    causal_mask =
+      causal_mask
+      |> Nx.reshape({1, 1, seq_len, seq_len})
+      |> Nx.broadcast({batch, num_heads, seq_len, seq_len})
+
     neg_inf = Nx.Constants.neg_infinity(ttype)
     scores = Nx.select(causal_mask, scores, neg_inf)
 
@@ -3856,7 +4702,14 @@ defmodule Edifice.CUDA.FusedScan do
     d_weights = Nx.dot(grad_output, [3], [0, 1], v, [3], [0, 1])
 
     # dScores through softmax
-    d_scores = Nx.multiply(weights, Nx.subtract(d_weights, Nx.sum(Nx.multiply(d_weights, weights), axes: [-1], keep_axes: true)))
+    d_scores =
+      Nx.multiply(
+        weights,
+        Nx.subtract(
+          d_weights,
+          Nx.sum(Nx.multiply(d_weights, weights), axes: [-1], keep_axes: true)
+        )
+      )
 
     # Zero diagonal in dScores for forget bias gradient
     d_scores_no_diag = Nx.select(diag_mask, Nx.tensor(0.0, type: ttype), d_scores)
@@ -3919,7 +4772,9 @@ defmodule Edifice.CUDA.FusedScan do
     leak_col = Nx.broadcast(Nx.tensor(leak_rate, type: tensor_type), {batch, 1})
     h0_packed = Nx.concatenate([h0, leak_col], axis: 1)
 
-    Edifice.Block.run(:fused_reservoir_scan, [wx, w_res, h0_packed], output, fn wx, w_res, _h0_packed ->
+    Edifice.Block.run(:fused_reservoir_scan, [wx, w_res, h0_packed], output, fn wx,
+                                                                                w_res,
+                                                                                _h0_packed ->
       reservoir_scan_fallback(wx, w_res, leak_rate)
     end)
   end
@@ -3936,8 +4791,14 @@ defmodule Edifice.CUDA.FusedScan do
     h0_ptr = Nx.to_pointer(h0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_reservoir_scan(
-           wx_ptr.address, wres_ptr.address, h0_ptr.address,
-           batch, seq_len, hidden, leak_rate / 1, dtype
+           wx_ptr.address,
+           wres_ptr.address,
+           h0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           leak_rate / 1,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -4030,7 +4891,12 @@ defmodule Edifice.CUDA.FusedScan do
     combined_ptr = Nx.to_pointer(combined, mode: :local)
 
     case Edifice.CUDA.NIF.fused_titans_scan(
-           combined_ptr.address, batch, seq_len, memory_size, momentum / 1, dtype
+           combined_ptr.address,
+           batch,
+           seq_len,
+           memory_size,
+           momentum / 1,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -4140,7 +5006,12 @@ defmodule Edifice.CUDA.FusedScan do
     combined_ptr = Nx.to_pointer(combined, mode: :local)
 
     case Edifice.CUDA.NIF.fused_miras_scan(
-           combined_ptr.address, batch, seq_len, memory_size, momentum / 1, dtype
+           combined_ptr.address,
+           batch,
+           seq_len,
+           memory_size,
+           momentum / 1,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -4259,8 +5130,16 @@ defmodule Edifice.CUDA.FusedScan do
     alpha_ptr = Nx.to_pointer(alpha, mode: :local)
 
     case Edifice.CUDA.NIF.fused_gsa_scan(
-           q_ptr.address, ks_ptr.address, v_ptr.address, alpha_ptr.address,
-           batch, seq_len, num_heads, num_slots, head_dim, dtype
+           q_ptr.address,
+           ks_ptr.address,
+           v_ptr.address,
+           alpha_ptr.address,
+           batch,
+           seq_len,
+           num_heads,
+           num_slots,
+           head_dim,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -4293,10 +5172,12 @@ defmodule Edifice.CUDA.FusedScan do
 
         alpha_broadcast = alpha_t |> Nx.new_axis(2) |> Nx.new_axis(3)
         kv_outer = Nx.multiply(Nx.new_axis(ks_t, 3), Nx.new_axis(v_t, 2))
-        mem_new = Nx.add(
-          Nx.multiply(alpha_broadcast, mem),
-          Nx.multiply(Nx.subtract(1.0, alpha_broadcast), kv_outer)
-        )
+
+        mem_new =
+          Nx.add(
+            Nx.multiply(alpha_broadcast, mem),
+            Nx.multiply(Nx.subtract(1.0, alpha_broadcast), kv_outer)
+          )
 
         q_t_exp = Nx.new_axis(q_t, 3)
         scores = Nx.dot(mem_new, [3], [0, 1], q_t_exp, [2], [0, 1]) |> Nx.squeeze(axes: [3])
@@ -4391,8 +5272,14 @@ defmodule Edifice.CUDA.FusedScan do
     h0_ptr = Nx.to_pointer(h0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_mingru_block_scan(
-           input_ptr.address, weights_ptr.address, h0_ptr.address,
-           batch, seq_len, hidden, num_layers, dtype
+           input_ptr.address,
+           weights_ptr.address,
+           h0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           num_layers,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -4433,7 +5320,10 @@ defmodule Edifice.CUDA.FusedScan do
       # LayerNorm
       mean = Nx.mean(x, axes: [-1], keep_axes: true)
       var = Nx.variance(x, axes: [-1], keep_axes: true)
-      normed = Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
+      normed =
+        Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
       normed = Nx.add(normed, beta)
 
       # Dense projections: [B,T,H] @ [H,H]^T -> [B,T,H]
@@ -4448,6 +5338,7 @@ defmodule Edifice.CUDA.FusedScan do
       h_layer_init = Nx.slice_along_axis(h0, layer, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
       {_batch_size, seq_len, _hidden} = Nx.shape(z)
+
       {_, h_list} =
         Enum.reduce(0..(seq_len - 1), {h_layer_init, []}, fn t, {h_prev, acc} ->
           z_t = Nx.slice_along_axis(z, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
@@ -4455,6 +5346,7 @@ defmodule Edifice.CUDA.FusedScan do
           h_t = Nx.add(Nx.multiply(Nx.subtract(1.0, z_t), h_prev), Nx.multiply(z_t, c_t))
           {h_t, [h_t | acc]}
         end)
+
       scan_out = h_list |> Enum.reverse() |> Nx.stack(axis: 1)
 
       # Residual
@@ -4517,8 +5409,14 @@ defmodule Edifice.CUDA.FusedScan do
     h0_ptr = Nx.to_pointer(h0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_minlstm_block_scan(
-           input_ptr.address, weights_ptr.address, h0_ptr.address,
-           batch, seq_len, hidden, num_layers, dtype
+           input_ptr.address,
+           weights_ptr.address,
+           h0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           num_layers,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -4564,7 +5462,10 @@ defmodule Edifice.CUDA.FusedScan do
       # LayerNorm
       mean = Nx.mean(x, axes: [-1], keep_axes: true)
       var = Nx.variance(x, axes: [-1], keep_axes: true)
-      normed = Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
+      normed =
+        Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
       normed = Nx.add(normed, beta)
 
       # Dense projections
@@ -4583,6 +5484,7 @@ defmodule Edifice.CUDA.FusedScan do
       h_layer_init = Nx.slice_along_axis(h0, layer, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
       {_batch_size, seq_len, _hidden} = Nx.shape(f_norm)
+
       {_, h_list} =
         Enum.reduce(0..(seq_len - 1), {h_layer_init, []}, fn t, {h_prev, acc} ->
           f_t = Nx.slice_along_axis(f_norm, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
@@ -4591,6 +5493,7 @@ defmodule Edifice.CUDA.FusedScan do
           h_t = Nx.add(Nx.multiply(f_t, h_prev), Nx.multiply(i_t, c_t))
           {h_t, [h_t | acc]}
         end)
+
       scan_out = h_list |> Enum.reverse() |> Nx.stack(axis: 1)
 
       # Residual
@@ -4655,8 +5558,14 @@ defmodule Edifice.CUDA.FusedScan do
     h0_ptr = Nx.to_pointer(h0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_linear_block_scan(
-           input_ptr.address, weights_ptr.address, h0_ptr.address,
-           batch, seq_len, hidden, num_layers, dtype
+           input_ptr.address,
+           weights_ptr.address,
+           h0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           num_layers,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -4697,7 +5606,10 @@ defmodule Edifice.CUDA.FusedScan do
       # LayerNorm
       mean = Nx.mean(x, axes: [-1], keep_axes: true)
       var = Nx.variance(x, axes: [-1], keep_axes: true)
-      normed = Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
+      normed =
+        Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
       normed = Nx.add(normed, beta)
 
       # Dense projections: [B,T,H] @ [H,H]^T -> [B,T,H]
@@ -4708,6 +5620,7 @@ defmodule Edifice.CUDA.FusedScan do
       h_layer_init = Nx.slice_along_axis(h0, layer, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
       {_batch_size, seq_len, _hidden} = Nx.shape(a_pre)
+
       {_, h_list} =
         Enum.reduce(0..(seq_len - 1), {h_layer_init, []}, fn t, {h_prev, acc} ->
           a_t = Nx.slice_along_axis(a_pre, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
@@ -4715,6 +5628,7 @@ defmodule Edifice.CUDA.FusedScan do
           h_t = Nx.add(Nx.multiply(a_t, h_prev), b_t)
           {h_t, [h_t | acc]}
         end)
+
       scan_out = h_list |> Enum.reverse() |> Nx.stack(axis: 1)
 
       # Residual
@@ -4781,8 +5695,15 @@ defmodule Edifice.CUDA.FusedScan do
     c0_ptr = Nx.to_pointer(c0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_lstm_block_scan(
-           input_ptr.address, weights_ptr.address, h0_ptr.address, c0_ptr.address,
-           batch, seq_len, hidden, num_layers, dtype
+           input_ptr.address,
+           weights_ptr.address,
+           h0_ptr.address,
+           c0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           num_layers,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -4821,7 +5742,10 @@ defmodule Edifice.CUDA.FusedScan do
       # LayerNorm
       mean = Nx.mean(x, axes: [-1], keep_axes: true)
       var = Nx.variance(x, axes: [-1], keep_axes: true)
-      normed = Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
+      normed =
+        Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
       normed = Nx.add(normed, beta)
 
       # Input projection: [B,T,H] @ [H,4H]^T -> [B,T,4H]
@@ -4838,6 +5762,7 @@ defmodule Edifice.CUDA.FusedScan do
       c_init = Nx.slice_along_axis(c0, layer, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
       {_batch_size, seq_len, _hidden} = Nx.shape(wx_i)
+
       {_, h_list} =
         Enum.reduce(0..(seq_len - 1), {{h_init, c_init}, []}, fn t, {{h_prev, c_prev}, acc} ->
           # R @ h_prev: [B,H] @ [H,4H]^T -> [B,4H]
@@ -4861,6 +5786,7 @@ defmodule Edifice.CUDA.FusedScan do
           h_t = Nx.multiply(o_gate, Nx.tanh(c_t))
           {{h_t, c_t}, [h_t | acc]}
         end)
+
       scan_out = h_list |> Enum.reverse() |> Nx.stack(axis: 1)
 
       # Residual
@@ -4925,8 +5851,14 @@ defmodule Edifice.CUDA.FusedScan do
     h0_ptr = Nx.to_pointer(h0, mode: :local)
 
     case Edifice.CUDA.NIF.fused_gru_block_scan(
-           input_ptr.address, weights_ptr.address, h0_ptr.address,
-           batch, seq_len, hidden, num_layers, dtype
+           input_ptr.address,
+           weights_ptr.address,
+           h0_ptr.address,
+           batch,
+           seq_len,
+           hidden,
+           num_layers,
+           dtype
          ) do
       {:ok, out_addr, gc_ref} ->
         hold_gc_ref(out_addr, gc_ref)
@@ -4965,7 +5897,10 @@ defmodule Edifice.CUDA.FusedScan do
       # LayerNorm
       mean = Nx.mean(x, axes: [-1], keep_axes: true)
       var = Nx.variance(x, axes: [-1], keep_axes: true)
-      normed = Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
+      normed =
+        Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
       normed = Nx.add(normed, beta)
 
       # Input projection: [B,T,H] @ [H,3H]^T -> [B,T,3H]
@@ -4980,6 +5915,7 @@ defmodule Edifice.CUDA.FusedScan do
       h_init = Nx.slice_along_axis(h0, layer, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
       {_batch_size, seq_len, _hidden} = Nx.shape(wx_r)
+
       {_, h_list} =
         Enum.reduce(0..(seq_len - 1), {h_init, []}, fn t, {h_prev, acc} ->
           # R @ h_prev: [B,H] @ [H,3H]^T -> [B,3H]
@@ -4999,6 +5935,7 @@ defmodule Edifice.CUDA.FusedScan do
           h_t = Nx.add(Nx.multiply(Nx.subtract(1.0, z_gate), h_prev), Nx.multiply(z_gate, n_gate))
           {h_t, [h_t | acc]}
         end)
+
       scan_out = h_list |> Enum.reverse() |> Nx.stack(axis: 1)
 
       # Residual

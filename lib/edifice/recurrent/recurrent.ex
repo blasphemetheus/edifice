@@ -173,9 +173,10 @@ defmodule Edifice.Recurrent do
     fused_block = Keyword.get(opts, :fused_block, false)
 
     recurrent_state = Keyword.get(opts, :recurrent_state, :legacy_random)
+
     unless recurrent_state == :legacy_random or
              (recurrent_state == :zeros and cell_type == :gru and not fused_block),
-      do: raise(ArgumentError, "explicit zero state requires the standard GRU path")
+           do: raise(ArgumentError, "explicit zero state requires the standard GRU path")
 
     if fused_block and cell_type in [:lstm, :gru] do
       # Fused block path: kernel handles prenorm internally via packed weights.
@@ -323,31 +324,35 @@ defmodule Edifice.Recurrent do
     name = Keyword.get(opts, :name, "recurrent")
     recurrent_init = Keyword.get(opts, :recurrent_initializer, :glorot_uniform)
 
-    num_gates = case cell_type do
-      :lstm -> 4
-      :gru -> 3
-    end
+    num_gates =
+      case cell_type do
+        :lstm -> 4
+        :gru -> 3
+      end
 
     gate_size = num_gates * hidden_size
 
     # Input projection: W@x + bias → [B, T, G*H]
-    wx = Axon.dense(input, gate_size,
-      name: "#{name}_input_proj",
-      kernel_initializer: :glorot_uniform,
-      use_bias: true
-    )
+    wx =
+      Axon.dense(input, gate_size,
+        name: "#{name}_input_proj",
+        kernel_initializer: :glorot_uniform,
+        use_bias: true
+      )
 
     # Recurrent weight R: [H, G*H] — passed directly to kernel
-    r_param = Axon.param("#{name}_recurrent_kernel", {hidden_size, gate_size},
-      initializer: recurrent_init
-    )
+    r_param =
+      Axon.param("#{name}_recurrent_kernel", {hidden_size, gate_size},
+        initializer: recurrent_init
+      )
 
     # Fused scan layer: kernel computes R@h internally
     # Axon.layer always appends an opts map as the last argument
-    scan_fn = case cell_type do
-      :lstm -> fn wx, r, _opts -> Edifice.CUDA.FusedScan.lstm_scan(wx, r) end
-      :gru -> fn wx, r, _opts -> Edifice.CUDA.FusedScan.gru_scan(wx, r) end
-    end
+    scan_fn =
+      case cell_type do
+        :lstm -> fn wx, r, _opts -> Edifice.CUDA.FusedScan.lstm_scan(wx, r) end
+        :gru -> fn wx, r, _opts -> Edifice.CUDA.FusedScan.gru_scan(wx, r) end
+      end
 
     Axon.layer(scan_fn, [wx, r_param],
       name: "#{name}_fused_scan",
@@ -373,14 +378,34 @@ defmodule Edifice.Recurrent do
 
     {output_seq, _hidden} =
       case {cell_type, Keyword.get(opts, :recurrent_state, :legacy_random)} do
-        {:lstm, :legacy_random} -> Axon.lstm(input, hidden_size, recurrent_opts)
-        {:gru, :legacy_random} -> Axon.gru(input, hidden_size, recurrent_opts)
+        {:lstm, :legacy_random} ->
+          Axon.lstm(input, hidden_size, recurrent_opts)
+
+        {:gru, :legacy_random} ->
+          Axon.gru(input, hidden_size, recurrent_opts)
+
         {:gru, :zeros} ->
-          hidden = Axon.nx(input, fn tensor ->
-            Nx.broadcast(Nx.tensor(0.0, type: Nx.type(tensor)), {Nx.axis_size(tensor, 0), hidden_size})
-          end, name: "#{name}_zero_hidden_state")
-          Axon.gru(input, {hidden}, hidden_size, Keyword.delete(recurrent_opts, :recurrent_initializer))
-        other -> raise ArgumentError, "unsupported recurrent cell/state: #{inspect(other)}"
+          hidden =
+            Axon.nx(
+              input,
+              fn tensor ->
+                Nx.broadcast(
+                  Nx.tensor(0.0, type: Nx.type(tensor)),
+                  {Nx.axis_size(tensor, 0), hidden_size}
+                )
+              end,
+              name: "#{name}_zero_hidden_state"
+            )
+
+          Axon.gru(
+            input,
+            {hidden},
+            hidden_size,
+            Keyword.delete(recurrent_opts, :recurrent_initializer)
+          )
+
+        other ->
+          raise ArgumentError, "unsupported recurrent cell/state: #{inspect(other)}"
       end
 
     output_seq
@@ -468,6 +493,7 @@ defmodule Edifice.Recurrent do
         seq =
           if dropout > 0 and layer_idx < num_layers do
             dropout_opts = [rate: dropout, name: "recurrent_dropout_#{layer_idx}"]
+
             dropout_opts =
               if is_integer(opts[:seed]),
                 do: Keyword.put(dropout_opts, :seed, opts[:seed] + layer_idx),
@@ -509,10 +535,11 @@ defmodule Edifice.Recurrent do
 
   # Fused block path: passthrough on CPU, actual dispatch via pack_block_weights + fused_block_inference
   defp build_fused_block(input, hidden_size, num_layers, cell_type, return_sequences) do
-    num_gates = case cell_type do
-      :lstm -> 4
-      :gru -> 3
-    end
+    num_gates =
+      case cell_type do
+        :lstm -> 4
+        :gru -> 3
+      end
 
     # Create per-layer parameter nodes (disconnected — ensures Axon tracks param shapes)
     for layer_idx <- 1..num_layers do
@@ -522,12 +549,13 @@ defmodule Edifice.Recurrent do
     end
 
     # Passthrough layer — fused execution uses pack_block_weights/4 + fused_*_block_inference
-    block_output = Axon.layer(
-      fn input_tensor, _opts -> input_tensor end,
-      [input],
-      name: "#{cell_type}_fused_block",
-      op_name: :"#{cell_type}_fused_block"
-    )
+    block_output =
+      Axon.layer(
+        fn input_tensor, _opts -> input_tensor end,
+        [input],
+        name: "#{cell_type}_fused_block",
+        op_name: :"#{cell_type}_fused_block"
+      )
 
     # Final post-norm (corresponds to the last layer's layer norm in sequential path)
     normed = Axon.layer_norm(block_output, name: "#{cell_type}_#{num_layers}_ln", epsilon: 1.0e-6)
@@ -535,10 +563,14 @@ defmodule Edifice.Recurrent do
     if return_sequences do
       normed
     else
-      Axon.nx(normed, fn tensor ->
-        seq = Nx.axis_size(tensor, 1)
-        Nx.slice_along_axis(tensor, seq - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
-      end, name: "#{cell_type}_fused_last")
+      Axon.nx(
+        normed,
+        fn tensor ->
+          seq = Nx.axis_size(tensor, 1)
+          Nx.slice_along_axis(tensor, seq - 1, 1, axis: 1) |> Nx.squeeze(axes: [1])
+        end,
+        name: "#{cell_type}_fused_last"
+      )
     end
   end
 
@@ -1067,13 +1099,19 @@ defmodule Edifice.Recurrent do
 
             {:fused, :gru} ->
               wx = Ops.dense(acc, Ops.layer_params!(params, "#{name}_input_proj"))
-              r_kernel = Ops.layer_params!(params, "#{name}_fused_scan")["#{name}_recurrent_kernel"]
+
+              r_kernel =
+                Ops.layer_params!(params, "#{name}_fused_scan")["#{name}_recurrent_kernel"]
+
               h_new = fused_gru_cell_step(wx, r_kernel, h_i)
               {h_new, h_new, nil}
 
             {:fused, :lstm} ->
               wx = Ops.dense(acc, Ops.layer_params!(params, "#{name}_input_proj"))
-              r_kernel = Ops.layer_params!(params, "#{name}_fused_scan")["#{name}_recurrent_kernel"]
+
+              r_kernel =
+                Ops.layer_params!(params, "#{name}_fused_scan")["#{name}_recurrent_kernel"]
+
               c_i = slice.(state.c, i)
               {h_new, c_new} = fused_lstm_cell_step(wx, r_kernel, h_i, c_i)
               {h_new, h_new, c_new}
@@ -1154,8 +1192,12 @@ defmodule Edifice.Recurrent do
 
   defp rnn_layout(params, cell_type) do
     cond do
-      Map.has_key?(params, "#{cell_type}_1") -> :axon
-      Map.has_key?(params, "#{cell_type}_1_fused_scan") -> :fused
+      Map.has_key?(params, "#{cell_type}_1") ->
+        :axon
+
+      Map.has_key?(params, "#{cell_type}_1_fused_scan") ->
+        :fused
+
       true ->
         raise ArgumentError,
               "params contain neither #{inspect("#{cell_type}_1")} (Axon layout) nor " <>

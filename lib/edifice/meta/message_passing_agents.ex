@@ -160,14 +160,19 @@ defmodule Edifice.Meta.MessagePassingAgents do
     # Then mean-pool over seq to get [batch, agent_hidden] per agent
     agent_features =
       for i <- 0..(num_agents - 1) do
-        agent_seq = build_agent_stack(projected, agent_hidden, agent_layers, num_heads, dropout,
-          name: "agent_#{i}"
-        )
+        agent_seq =
+          build_agent_stack(projected, agent_hidden, agent_layers, num_heads, dropout,
+            name: "agent_#{i}"
+          )
 
         # Mean-pool over sequence: [batch, seq, H] -> [batch, H]
-        Axon.nx(agent_seq, fn tensor ->
-          Nx.mean(tensor, axes: [1])
-        end, name: "agent_#{i}_pool")
+        Axon.nx(
+          agent_seq,
+          fn tensor ->
+            Nx.mean(tensor, axes: [1])
+          end,
+          name: "agent_#{i}_pool"
+        )
       end
 
     # Stack agent features: list of [batch, H] -> [batch, num_agents, H]
@@ -306,8 +311,11 @@ defmodule Edifice.Meta.MessagePassingAgents do
     concat_for_gates =
       Axon.concatenate([aggregated, node_features], axis: 2, name: "#{name}_gru_concat")
 
-    z_gate = Axon.dense(concat_for_gates, hidden_size, name: "#{name}_gru_z", activation: :sigmoid)
-    r_gate = Axon.dense(concat_for_gates, hidden_size, name: "#{name}_gru_r", activation: :sigmoid)
+    z_gate =
+      Axon.dense(concat_for_gates, hidden_size, name: "#{name}_gru_z", activation: :sigmoid)
+
+    r_gate =
+      Axon.dense(concat_for_gates, hidden_size, name: "#{name}_gru_r", activation: :sigmoid)
 
     # Reset-gated state
     reset_state =
@@ -321,7 +329,8 @@ defmodule Edifice.Meta.MessagePassingAgents do
     candidate_input =
       Axon.concatenate([aggregated, reset_state], axis: 2, name: "#{name}_gru_cand_concat")
 
-    candidate = Axon.dense(candidate_input, hidden_size, name: "#{name}_gru_candidate", activation: :tanh)
+    candidate =
+      Axon.dense(candidate_input, hidden_size, name: "#{name}_gru_candidate", activation: :tanh)
 
     # Final GRU update
     Axon.layer(

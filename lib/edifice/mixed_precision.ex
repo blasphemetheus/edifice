@@ -278,7 +278,8 @@ defmodule Edifice.MixedPrecision do
   def summary(%Axon{nodes: nodes}) do
     default_policy = Axon.MixedPrecision.create_policy()
 
-    Enum.reduce(nodes, %{total: 0, with_policy: 0, without_policy: 0, by_op: %{}}, fn {_id, node}, acc ->
+    Enum.reduce(nodes, %{total: 0, with_policy: 0, without_policy: 0, by_op: %{}}, fn {_id, node},
+                                                                                      acc ->
       op = node.op_name || node.op
       has_policy = node.policy != nil and node.policy != default_policy
 

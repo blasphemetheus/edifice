@@ -169,28 +169,41 @@ defmodule Edifice.Meta.StatefulAgent do
     # Extract output: last timestep of the original sequence positions
     # (skip the prepended state token)
     output =
-      Axon.nx(backbone_out, fn tensor ->
-        seq_size = Nx.axis_size(tensor, 1)
-        # Last token of original sequence (index seq_size - 1)
-        Nx.slice_along_axis(tensor, seq_size - 1, 1, axis: 1)
-        |> Nx.squeeze(axes: [1])
-      end, name: "extract_output")
+      Axon.nx(
+        backbone_out,
+        fn tensor ->
+          seq_size = Nx.axis_size(tensor, 1)
+          # Last token of original sequence (index seq_size - 1)
+          Nx.slice_along_axis(tensor, seq_size - 1, 1, axis: 1)
+          |> Nx.squeeze(axes: [1])
+        end,
+        name: "extract_output"
+      )
 
     # Extract backbone summary for state update: mean-pool over original sequence
     backbone_summary =
-      Axon.nx(backbone_out, fn tensor ->
-        # Skip state token (index 0), pool over rest
-        seq_size = Nx.axis_size(tensor, 1)
-        seq_tokens = Nx.slice_along_axis(tensor, 1, seq_size - 1, axis: 1)
-        Nx.mean(seq_tokens, axes: [1])
-      end, name: "backbone_summary")
+      Axon.nx(
+        backbone_out,
+        fn tensor ->
+          # Skip state token (index 0), pool over rest
+          seq_size = Nx.axis_size(tensor, 1)
+          seq_tokens = Nx.slice_along_axis(tensor, 1, seq_size - 1, axis: 1)
+          Nx.mean(seq_tokens, axes: [1])
+        end,
+        name: "backbone_summary"
+      )
 
     # State update based on mode
     new_state =
       case state_mode do
-        :compressive -> build_compressive_update(backbone_summary, prev_state, hidden_size, state_size)
-        :ema -> build_ema_update(backbone_summary, prev_state, hidden_size, state_size)
-        :gru -> build_gru_update(backbone_summary, prev_state, hidden_size, state_size)
+        :compressive ->
+          build_compressive_update(backbone_summary, prev_state, hidden_size, state_size)
+
+        :ema ->
+          build_ema_update(backbone_summary, prev_state, hidden_size, state_size)
+
+        :gru ->
+          build_gru_update(backbone_summary, prev_state, hidden_size, state_size)
       end
 
     # Return tuple: {output, new_state}

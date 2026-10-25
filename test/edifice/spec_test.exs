@@ -68,9 +68,7 @@ defmodule Edifice.SpecTest do
       created_at = ~U[2026-07-15 12:34:56.789Z]
 
       spec =
-        Spec.new(:mamba, [embed_dim: 8, state_size: 4, num_layers: 1],
-          created_at: created_at
-        )
+        Spec.new(:mamba, [embed_dim: 8, state_size: 4, num_layers: 1], created_at: created_at)
 
       map = Spec.to_map(spec)
 

@@ -56,7 +56,9 @@ defmodule Edifice.NumericalFixtureHelper do
 
   defp apply_transform(tensor, :identity, _fixture), do: tensor
   defp apply_transform(tensor, :transpose_2d, _fixture), do: Nx.transpose(tensor)
-  defp apply_transform(tensor, :transpose_conv, _fixture), do: Nx.transpose(tensor, axes: [2, 1, 0])
+
+  defp apply_transform(tensor, :transpose_conv, _fixture),
+    do: Nx.transpose(tensor, axes: [2, 1, 0])
 
   defp apply_transform(tensor, {:sum, key2}, fixture) do
     tensor2 = Map.fetch!(fixture, "weight.#{key2}")
@@ -100,6 +102,7 @@ defmodule Edifice.NumericalFixtureHelper do
   end
 
   defp flatten_params(%Axon.ModelState{data: data}), do: flatten_params(data, [])
+
   defp flatten_params(map, prefix) when is_map(map) do
     Enum.flat_map(map, fn
       {key, %Nx.Tensor{} = tensor} ->

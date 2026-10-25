@@ -466,10 +466,14 @@ defmodule Edifice.Profile do
 
   defp flatten_params(map) when is_map(map) do
     Enum.flat_map(map, fn
-      {key, %Nx.Tensor{} = tensor} -> [{key, tensor}]
+      {key, %Nx.Tensor{} = tensor} ->
+        [{key, tensor}]
+
       {key, inner} when is_map(inner) ->
         flatten_params(inner) |> Enum.map(fn {k, v} -> {"#{key}.#{k}", v} end)
-      _ -> []
+
+      _ ->
+        []
     end)
   end
 

@@ -194,8 +194,7 @@ defmodule Edifice.Interpretability.SAETrainer do
 
     {data, _m, _ema, history_rev, thresholds_rev} =
       Enum.reduce(1..steps, {data0, zero_momentum, alive0, [], []}, fn _i,
-                                                                       {data, m, ema, hist,
-                                                                        thrs} ->
+                                                                       {data, m, ema, hist, thrs} ->
         dead_mask = Nx.as_type(Nx.less(ema, dead_eps), :f32)
 
         {x_step, y_step} =
@@ -230,7 +229,14 @@ defmodule Edifice.Interpretability.SAETrainer do
       end
 
     final_out = predict_fn.(%{model_state | data: data}, %{input_key => x})
-    dead_count = final_out.hidden |> Nx.greater(0.0) |> Nx.any(axes: [0]) |> Nx.logical_not() |> Nx.sum() |> Nx.to_number()
+
+    dead_count =
+      final_out.hidden
+      |> Nx.greater(0.0)
+      |> Nx.any(axes: [0])
+      |> Nx.logical_not()
+      |> Nx.sum()
+      |> Nx.to_number()
 
     %{
       params: %{model_state | data: data},

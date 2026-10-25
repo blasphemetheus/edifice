@@ -15,7 +15,8 @@ defmodule Edifice.Interpretability.ContainerOutputTest do
     {Edifice.Interpretability.GatedSAE, [input_size: 12, dict_size: 24, top_k: 4], 12},
     {Edifice.Interpretability.JumpReluSAE, [input_size: 12, dict_size: 24], 12},
     {Edifice.Interpretability.MatryoshkaSAE, [input_size: 12, dict_size: 24, top_k: 4], 12},
-    {Edifice.Interpretability.Transcoder, [input_size: 12, output_size: 10, dict_size: 24, top_k: 4], 10}
+    {Edifice.Interpretability.Transcoder,
+     [input_size: 12, output_size: 10, dict_size: 24, top_k: 4], 10}
   ]
 
   defp input_key(module) do

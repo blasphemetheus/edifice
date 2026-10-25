@@ -159,7 +159,8 @@ defmodule Edifice.Quantization.FP8 do
     {original_bytes, quantized_bytes, tensor_count} =
       count_bytes(params, format)
 
-    ratio = if quantized_bytes > 0, do: Float.round(original_bytes / quantized_bytes, 1), else: 0.0
+    ratio =
+      if quantized_bytes > 0, do: Float.round(original_bytes / quantized_bytes, 1), else: 0.0
 
     result = %{
       original_bytes: original_bytes,
@@ -188,7 +189,9 @@ defmodule Edifice.Quantization.FP8 do
   def estimate_savings(params, opts \\ []) do
     format = Keyword.get(opts, :format, :e4m3fn)
     {original_bytes, quantized_bytes, tensor_count} = count_bytes(params, format)
-    ratio = if quantized_bytes > 0, do: Float.round(original_bytes / quantized_bytes, 1), else: 0.0
+
+    ratio =
+      if quantized_bytes > 0, do: Float.round(original_bytes / quantized_bytes, 1), else: 0.0
 
     %{
       original_bytes: original_bytes,

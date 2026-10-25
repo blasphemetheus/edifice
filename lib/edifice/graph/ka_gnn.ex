@@ -158,7 +158,9 @@ defmodule Edifice.Graph.KAGNN do
             end)
 
           Nx.concatenate(feats, axis: -1)
-        end, name: "#{name}_fourier_feats")
+        end,
+        name: "#{name}_fourier_feats"
+      )
 
     # Project fourier features to output_dim via learned weights
     fourier_proj = Axon.dense(fourier_feats, output_dim, name: "#{name}_fourier_proj")

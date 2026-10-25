@@ -115,7 +115,8 @@ defmodule Edifice.Interpretability.SAETrainerTest do
     test "plain SparseAutoencoder fits through the same trainer" do
       {x, _dict, _codes} = planted_data(150, 12, 6, 2, 7)
 
-      result = SAETrainer.fit(:sparse_autoencoder, x, dict_size: 12, top_k: 2, steps: 80, lr: 5.0e-2)
+      result =
+        SAETrainer.fit(:sparse_autoencoder, x, dict_size: 12, top_k: 2, steps: 80, lr: 5.0e-2)
 
       assert result.module == SparseAutoencoder
       assert List.last(result.history) < hd(result.history) * 0.7
@@ -160,7 +161,9 @@ defmodule Edifice.Interpretability.SAETrainerTest do
       # And WITHOUT the fixed threshold, batch top-k firing genuinely
       # depends on batch composition (the failure mode being fixed) —
       # verified by the k-th value differing between the two runs
-      topk_model = BatchTopKSAE.build(input_size: 16, dict_size: 16, batch_k: 4, output: :container)
+      topk_model =
+        BatchTopKSAE.build(input_size: 16, dict_size: 16, batch_k: 4, output: :container)
+
       {_, topk_predict} = Axon.build(topk_model, mode: :inference)
 
       solo_tk = topk_predict.(result.params, %{"batch_topk_sae_input" => sample})

@@ -309,8 +309,15 @@ defmodule Edifice.Display.Heatmap do
         # For 3D+, show just the first 2D slice
         display =
           case tuple_size(shape) do
-            2 -> tensor
-            _ -> tensor |> Nx.reshape({Nx.size(tensor) |> div(elem(shape, tuple_size(shape) - 1)), elem(shape, tuple_size(shape) - 1)})
+            2 ->
+              tensor
+
+            _ ->
+              tensor
+              |> Nx.reshape(
+                {Nx.size(tensor) |> div(elem(shape, tuple_size(shape) - 1)),
+                 elem(shape, tuple_size(shape) - 1)}
+              )
           end
 
         IO.inspect(Nx.to_heatmap(display))

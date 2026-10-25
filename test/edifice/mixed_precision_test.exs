@@ -230,14 +230,15 @@ defmodule Edifice.MixedPrecisionTest do
 
   describe "integration with Edifice.build" do
     test "works with decoder_only architecture" do
-      model = Edifice.build(:decoder_only,
-        embed_dim: @embed_dim,
-        hidden_size: @embed_dim,
-        seq_len: @seq_len,
-        num_layers: 1,
-        num_heads: 2,
-        num_kv_heads: 2
-      )
+      model =
+        Edifice.build(:decoder_only,
+          embed_dim: @embed_dim,
+          hidden_size: @embed_dim,
+          seq_len: @seq_len,
+          num_layers: 1,
+          num_heads: 2,
+          num_kv_heads: 2
+        )
 
       model_mp = MixedPrecision.apply(model, :bf16)
       assert %Axon{} = model_mp

@@ -87,7 +87,8 @@ defmodule Edifice.Pretrained do
       {encoder, decoder, model_state} = Edifice.Pretrained.from_hub("openai/whisper-base")
 
   """
-  @spec from_hub(String.t(), [hub_opt()]) :: {Axon.t(), Axon.ModelState.t()} | {Axon.t(), Axon.t(), Axon.ModelState.t()}
+  @spec from_hub(String.t(), [hub_opt()]) ::
+          {Axon.t(), Axon.ModelState.t()} | {Axon.t(), Axon.t(), Axon.ModelState.t()}
   def from_hub(repo_id, opts \\ []) do
     # 1. Fetch and parse config.json
     hub_opts = Keyword.take(opts, [:revision, :token])
@@ -175,7 +176,7 @@ defmodule Edifice.Pretrained do
 
     {mapped, unmapped, concat_acc} =
       Enum.reduce(checkpoint, {%{}, [], %{}}, fn {ext_key, tensor},
-                                                  {mapped_acc, unmapped_acc, concat_acc} ->
+                                                 {mapped_acc, unmapped_acc, concat_acc} ->
         case key_map.map_key(ext_key) do
           :skip ->
             {mapped_acc, unmapped_acc, concat_acc}

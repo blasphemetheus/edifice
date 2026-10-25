@@ -12,17 +12,17 @@ defmodule Edifice.Pretrained.ConfigTest do
 
   describe "parse/1 with ViT config" do
     @vit_config Jason.encode!(%{
-      "model_type" => "vit",
-      "image_size" => 224,
-      "patch_size" => 16,
-      "num_channels" => 3,
-      "hidden_size" => 768,
-      "num_hidden_layers" => 12,
-      "num_attention_heads" => 12,
-      "intermediate_size" => 3072,
-      "hidden_dropout_prob" => 0.0,
-      "num_labels" => 1000
-    })
+                  "model_type" => "vit",
+                  "image_size" => 224,
+                  "patch_size" => 16,
+                  "num_channels" => 3,
+                  "hidden_size" => 768,
+                  "num_hidden_layers" => 12,
+                  "num_attention_heads" => 12,
+                  "intermediate_size" => 3072,
+                  "hidden_dropout_prob" => 0.0,
+                  "num_labels" => 1000
+                })
 
     test "parses ViT config correctly" do
       assert {:ok, parsed} = Config.parse(@vit_config)
@@ -43,13 +43,14 @@ defmodule Edifice.Pretrained.ConfigTest do
     end
 
     test "computes mlp_ratio from intermediate_size / hidden_size" do
-      config = Jason.encode!(%{
-        "model_type" => "vit",
-        "hidden_size" => 1024,
-        "num_hidden_layers" => 24,
-        "num_attention_heads" => 16,
-        "intermediate_size" => 4096
-      })
+      config =
+        Jason.encode!(%{
+          "model_type" => "vit",
+          "hidden_size" => 1024,
+          "num_hidden_layers" => 24,
+          "num_attention_heads" => 16,
+          "intermediate_size" => 4096
+        })
 
       assert {:ok, parsed} = Config.parse(config)
       assert parsed.build_opts[:mlp_ratio] == 4.0
@@ -59,24 +60,26 @@ defmodule Edifice.Pretrained.ConfigTest do
     end
 
     test "num_classes is nil when num_labels absent" do
-      config = Jason.encode!(%{
-        "model_type" => "vit",
-        "hidden_size" => 768,
-        "num_hidden_layers" => 12,
-        "num_attention_heads" => 12
-      })
+      config =
+        Jason.encode!(%{
+          "model_type" => "vit",
+          "hidden_size" => 768,
+          "num_hidden_layers" => 12,
+          "num_attention_heads" => 12
+        })
 
       assert {:ok, parsed} = Config.parse(config)
       refute Keyword.has_key?(parsed.build_opts, :num_classes)
     end
 
     test "uses defaults for optional fields" do
-      config = Jason.encode!(%{
-        "model_type" => "vit",
-        "hidden_size" => 768,
-        "num_hidden_layers" => 12,
-        "num_attention_heads" => 12
-      })
+      config =
+        Jason.encode!(%{
+          "model_type" => "vit",
+          "hidden_size" => 768,
+          "num_hidden_layers" => 12,
+          "num_attention_heads" => 12
+        })
 
       assert {:ok, parsed} = Config.parse(config)
       assert parsed.build_opts[:image_size] == 224
@@ -86,22 +89,24 @@ defmodule Edifice.Pretrained.ConfigTest do
     end
 
     test "returns error when hidden_size is missing" do
-      config = Jason.encode!(%{
-        "model_type" => "vit",
-        "num_hidden_layers" => 12,
-        "num_attention_heads" => 12
-      })
+      config =
+        Jason.encode!(%{
+          "model_type" => "vit",
+          "num_hidden_layers" => 12,
+          "num_attention_heads" => 12
+        })
 
       assert {:error, msg} = Config.parse(config)
       assert msg =~ "hidden_size"
     end
 
     test "returns error when num_hidden_layers is missing" do
-      config = Jason.encode!(%{
-        "model_type" => "vit",
-        "hidden_size" => 768,
-        "num_attention_heads" => 12
-      })
+      config =
+        Jason.encode!(%{
+          "model_type" => "vit",
+          "hidden_size" => 768,
+          "num_attention_heads" => 12
+        })
 
       assert {:error, msg} = Config.parse(config)
       assert msg =~ "num_hidden_layers"
@@ -110,19 +115,19 @@ defmodule Edifice.Pretrained.ConfigTest do
 
   describe "parse/1 with Whisper config" do
     @whisper_config Jason.encode!(%{
-      "model_type" => "whisper",
-      "num_mel_bins" => 80,
-      "max_source_positions" => 1500,
-      "d_model" => 512,
-      "encoder_layers" => 6,
-      "decoder_layers" => 6,
-      "encoder_attention_heads" => 8,
-      "decoder_attention_heads" => 8,
-      "encoder_ffn_dim" => 2048,
-      "vocab_size" => 51865,
-      "max_target_positions" => 448,
-      "dropout" => 0.0
-    })
+                      "model_type" => "whisper",
+                      "num_mel_bins" => 80,
+                      "max_source_positions" => 1500,
+                      "d_model" => 512,
+                      "encoder_layers" => 6,
+                      "decoder_layers" => 6,
+                      "encoder_attention_heads" => 8,
+                      "decoder_attention_heads" => 8,
+                      "encoder_ffn_dim" => 2048,
+                      "vocab_size" => 51865,
+                      "max_target_positions" => 448,
+                      "dropout" => 0.0
+                    })
 
     test "parses Whisper config correctly" do
       assert {:ok, parsed} = Config.parse(@whisper_config)
@@ -144,24 +149,26 @@ defmodule Edifice.Pretrained.ConfigTest do
     end
 
     test "returns error when d_model is missing" do
-      config = Jason.encode!(%{
-        "model_type" => "whisper",
-        "encoder_layers" => 6,
-        "decoder_layers" => 6,
-        "vocab_size" => 51865
-      })
+      config =
+        Jason.encode!(%{
+          "model_type" => "whisper",
+          "encoder_layers" => 6,
+          "decoder_layers" => 6,
+          "vocab_size" => 51865
+        })
 
       assert {:error, msg} = Config.parse(config)
       assert msg =~ "d_model"
     end
 
     test "returns error when vocab_size is missing" do
-      config = Jason.encode!(%{
-        "model_type" => "whisper",
-        "d_model" => 512,
-        "encoder_layers" => 6,
-        "decoder_layers" => 6
-      })
+      config =
+        Jason.encode!(%{
+          "model_type" => "whisper",
+          "d_model" => 512,
+          "encoder_layers" => 6,
+          "decoder_layers" => 6
+        })
 
       assert {:error, msg} = Config.parse(config)
       assert msg =~ "vocab_size"
@@ -170,15 +177,15 @@ defmodule Edifice.Pretrained.ConfigTest do
 
   describe "parse/1 with ConvNeXt config" do
     @convnext_config Jason.encode!(%{
-      "model_type" => "convnext",
-      "image_size" => 224,
-      "patch_size" => 4,
-      "num_channels" => 3,
-      "depths" => [3, 3, 9, 3],
-      "hidden_sizes" => [96, 192, 384, 768],
-      "num_labels" => 1000,
-      "drop_path_rate" => 0.1
-    })
+                       "model_type" => "convnext",
+                       "image_size" => 224,
+                       "patch_size" => 4,
+                       "num_channels" => 3,
+                       "depths" => [3, 3, 9, 3],
+                       "hidden_sizes" => [96, 192, 384, 768],
+                       "num_labels" => 1000,
+                       "drop_path_rate" => 0.1
+                     })
 
     test "parses ConvNeXt config correctly" do
       assert {:ok, parsed} = Config.parse(@convnext_config)
@@ -197,31 +204,34 @@ defmodule Edifice.Pretrained.ConfigTest do
     end
 
     test "returns error when depths is missing" do
-      config = Jason.encode!(%{
-        "model_type" => "convnext",
-        "hidden_sizes" => [96, 192, 384, 768]
-      })
+      config =
+        Jason.encode!(%{
+          "model_type" => "convnext",
+          "hidden_sizes" => [96, 192, 384, 768]
+        })
 
       assert {:error, msg} = Config.parse(config)
       assert msg =~ "depths"
     end
 
     test "returns error when hidden_sizes is missing" do
-      config = Jason.encode!(%{
-        "model_type" => "convnext",
-        "depths" => [3, 3, 9, 3]
-      })
+      config =
+        Jason.encode!(%{
+          "model_type" => "convnext",
+          "depths" => [3, 3, 9, 3]
+        })
 
       assert {:error, msg} = Config.parse(config)
       assert msg =~ "hidden_sizes"
     end
 
     test "num_classes is nil when num_labels absent" do
-      config = Jason.encode!(%{
-        "model_type" => "convnext",
-        "depths" => [3, 3, 9, 3],
-        "hidden_sizes" => [96, 192, 384, 768]
-      })
+      config =
+        Jason.encode!(%{
+          "model_type" => "convnext",
+          "depths" => [3, 3, 9, 3],
+          "hidden_sizes" => [96, 192, 384, 768]
+        })
 
       assert {:ok, parsed} = Config.parse(config)
       refute Keyword.has_key?(parsed.build_opts, :num_classes)
@@ -250,12 +260,13 @@ defmodule Edifice.Pretrained.ConfigTest do
 
   describe "parse!/1" do
     test "returns parsed config on success" do
-      config = Jason.encode!(%{
-        "model_type" => "vit",
-        "hidden_size" => 768,
-        "num_hidden_layers" => 12,
-        "num_attention_heads" => 12
-      })
+      config =
+        Jason.encode!(%{
+          "model_type" => "vit",
+          "hidden_size" => 768,
+          "num_hidden_layers" => 12,
+          "num_attention_heads" => 12
+        })
 
       parsed = Config.parse!(config)
       assert parsed.model_type == "vit"

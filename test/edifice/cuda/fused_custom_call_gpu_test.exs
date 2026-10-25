@@ -53,7 +53,10 @@ defmodule Edifice.CUDA.FusedCustomCallGpuTest do
 
   defp gru_inputs do
     key = Nx.Random.key(1234)
-    {wx, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {@batch, @seq, 3 * @hidden}, type: {:f, 32})
+
+    {wx, key} =
+      Nx.Random.uniform(key, -0.5, 0.5, shape: {@batch, @seq, 3 * @hidden}, type: {:f, 32})
+
     {r, key} = Nx.Random.uniform(key, -0.2, 0.2, shape: {@hidden, 3 * @hidden}, type: {:f, 32})
     {h0, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {@batch, @hidden}, type: {:f, 32})
     {bhn, _} = Nx.Random.uniform(key, -0.3, 0.3, shape: {@hidden}, type: {:f, 32})
@@ -101,16 +104,28 @@ defmodule Edifice.CUDA.FusedCustomCallGpuTest do
         rh = Nx.dot(h_p, [1], r, [0])
 
         r_g =
-          Nx.sigmoid(Nx.add(Nx.slice_along_axis(wx_t, 0, hidden, axis: 1),
-            Nx.slice_along_axis(rh, 0, hidden, axis: 1)))
+          Nx.sigmoid(
+            Nx.add(
+              Nx.slice_along_axis(wx_t, 0, hidden, axis: 1),
+              Nx.slice_along_axis(rh, 0, hidden, axis: 1)
+            )
+          )
 
         z_g =
-          Nx.sigmoid(Nx.add(Nx.slice_along_axis(wx_t, hidden, hidden, axis: 1),
-            Nx.slice_along_axis(rh, hidden, hidden, axis: 1)))
+          Nx.sigmoid(
+            Nx.add(
+              Nx.slice_along_axis(wx_t, hidden, hidden, axis: 1),
+              Nx.slice_along_axis(rh, hidden, hidden, axis: 1)
+            )
+          )
 
         n_g =
-          Nx.tanh(Nx.add(Nx.slice_along_axis(wx_t, 2 * hidden, hidden, axis: 1),
-            Nx.multiply(r_g, Nx.add(Nx.slice_along_axis(rh, 2 * hidden, hidden, axis: 1), bhn))))
+          Nx.tanh(
+            Nx.add(
+              Nx.slice_along_axis(wx_t, 2 * hidden, hidden, axis: 1),
+              Nx.multiply(r_g, Nx.add(Nx.slice_along_axis(rh, 2 * hidden, hidden, axis: 1), bhn))
+            )
+          )
 
         h_t = Nx.add(Nx.multiply(Nx.subtract(1.0, z_g), n_g), Nx.multiply(z_g, h_p))
         {h_t, [h_t | acc]}
@@ -168,8 +183,15 @@ defmodule Edifice.CUDA.FusedCustomCallGpuTest do
     a = Nx.broadcast(Nx.reshape(a_diag, {1, state}), {@hidden, state})
 
     # Distinct definition sites per tier — see the jit-cache note above.
-    fwd_fused = Nx.Defn.jit(fn x, dt, a, b, c -> FusedScan.selective_scan(x, dt, a, b, c) end, compiler: EXLA)
-    fwd_ref = Nx.Defn.jit(fn x, dt, a, b, c -> FusedScan.selective_scan(x, dt, a, b, c) end, compiler: EXLA)
+    fwd_fused =
+      Nx.Defn.jit(fn x, dt, a, b, c -> FusedScan.selective_scan(x, dt, a, b, c) end,
+        compiler: EXLA
+      )
+
+    fwd_ref =
+      Nx.Defn.jit(fn x, dt, a, b, c -> FusedScan.selective_scan(x, dt, a, b, c) end,
+        compiler: EXLA
+      )
 
     fused = fwd_fused.(x, dt, a, b, c)
     ref = forced_fallback(fn -> fwd_ref.(x, dt, a, b, c) end)
@@ -209,6 +231,7 @@ defmodule Edifice.CUDA.FusedCustomCallGpuTest do
 
   defp selective_f64_truth(x, dt, a, b, c) do
     previous_backend = Nx.default_backend(Nx.BinaryBackend)
+
     try do
       selective_f64_truth_impl(x, dt, a, b, c)
     after

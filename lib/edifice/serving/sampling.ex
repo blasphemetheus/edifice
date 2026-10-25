@@ -122,7 +122,9 @@ defmodule Edifice.Serving.Sampling do
   Returns `{token_ids, new_key}`.
   """
   defn categorical_sample(logits, key) do
-    {gumbel_noise, new_key} = Nx.Random.uniform(key, shape: Nx.shape(logits), type: Nx.type(logits))
+    {gumbel_noise, new_key} =
+      Nx.Random.uniform(key, shape: Nx.shape(logits), type: Nx.type(logits))
+
     # Gumbel-max trick: argmax(logits - log(-log(U))) = sample from softmax(logits)
     gumbel = -Nx.log(-Nx.log(Nx.max(gumbel_noise, 1.0e-8)))
     token_ids = Nx.argmax(Nx.add(logits, gumbel), axis: -1)

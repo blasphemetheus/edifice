@@ -173,12 +173,16 @@ defmodule Edifice.Recurrent.MultiTimescaleRecurrence do
       if stride == 1 do
         input
       else
-        Axon.nx(input, fn x ->
-          {_b, seq_len, _d} = Nx.shape(x)
-          num_samples = div(seq_len, stride)
-          indices = Nx.iota({num_samples}) |> Nx.multiply(stride)
-          Nx.take(x, indices, axis: 1)
-        end, name: "#{name}_subsample")
+        Axon.nx(
+          input,
+          fn x ->
+            {_b, seq_len, _d} = Nx.shape(x)
+            num_samples = div(seq_len, stride)
+            indices = Nx.iota({num_samples}) |> Nx.multiply(stride)
+            Nx.take(x, indices, axis: 1)
+          end,
+          name: "#{name}_subsample"
+        )
       end
 
     # Project to core hidden size if needed
@@ -207,9 +211,13 @@ defmodule Edifice.Recurrent.MultiTimescaleRecurrence do
       end)
 
     # Take last timestep → [batch, hidden_size]
-    Axon.nx(processed, fn x ->
-      seq_len = Nx.axis_size(x, 1)
-      Nx.squeeze(Nx.slice_along_axis(x, seq_len - 1, 1, axis: 1), axes: [1])
-    end, name: "#{name}_last")
+    Axon.nx(
+      processed,
+      fn x ->
+        seq_len = Nx.axis_size(x, 1)
+        Nx.squeeze(Nx.slice_along_axis(x, seq_len - 1, 1, axis: 1), axes: [1])
+      end,
+      name: "#{name}_last"
+    )
   end
 end

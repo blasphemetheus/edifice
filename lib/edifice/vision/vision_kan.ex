@@ -148,9 +148,7 @@ defmodule Edifice.Vision.VisionKAN do
 
     # Transpose to NHWC for Axon conv
     x =
-      Axon.nx(input, fn t -> Nx.transpose(t, axes: [0, 2, 3, 1]) end,
-        name: "nchw_to_nhwc"
-      )
+      Axon.nx(input, fn t -> Nx.transpose(t, axes: [0, 2, 3, 1]) end, name: "nchw_to_nhwc")
 
     # Stem: patch embedding via strided conv
     x =
@@ -197,9 +195,7 @@ defmodule Edifice.Vision.VisionKAN do
 
     # Global average pool: [batch, H, W, C] -> [batch, C]
     x =
-      Axon.nx(x, fn tensor -> Nx.mean(tensor, axes: [1, 2]) end,
-        name: "global_pool"
-      )
+      Axon.nx(x, fn tensor -> Nx.mean(tensor, axes: [1, 2]) end, name: "global_pool")
 
     x = Axon.layer_norm(x, name: "final_norm")
 
@@ -366,9 +362,7 @@ defmodule Edifice.Vision.VisionKAN do
       )
 
     rbf_weights =
-      Axon.param("#{name}_rbf_w", {dim, num_rbf_centers},
-        initializer: :lecun_uniform
-      )
+      Axon.param("#{name}_rbf_w", {dim, num_rbf_centers}, initializer: :lecun_uniform)
 
     base_weight =
       Axon.param("#{name}_base_w", {dim},
@@ -440,7 +434,12 @@ defmodule Edifice.Vision.VisionKAN do
 
     # RBF: exp(-||x - c||^2 / (2 * sigma^2))
     diff = Nx.subtract(x_exp, c_exp)
-    rbf_vals = Nx.exp(Nx.negate(Nx.divide(Nx.multiply(diff, diff), Nx.multiply(2.0, Nx.multiply(s_exp, s_exp)))))
+
+    rbf_vals =
+      Nx.exp(
+        Nx.negate(Nx.divide(Nx.multiply(diff, diff), Nx.multiply(2.0, Nx.multiply(s_exp, s_exp))))
+      )
+
     # rbf_vals: [BPP, PP, C, G]
 
     # Weighted sum: sum over G with per-channel weights
@@ -515,9 +514,7 @@ defmodule Edifice.Vision.VisionKAN do
 
     # Global average pool: [B, H, W, C] -> [B, C]
     pooled =
-      Axon.nx(input, fn t -> Nx.mean(t, axes: [1, 2]) end,
-        name: "#{name}_gap"
-      )
+      Axon.nx(input, fn t -> Nx.mean(t, axes: [1, 2]) end, name: "#{name}_gap")
 
     # Bottleneck MLP: C -> C/r -> C
     x =
@@ -527,7 +524,12 @@ defmodule Edifice.Vision.VisionKAN do
       |> Axon.dense(dim, name: "#{name}_up")
 
     # Broadcast back to spatial: [B, C] -> [B, H, W, C]
-    Axon.nx(x, fn t -> Nx.reshape(t, {Nx.axis_size(t, 0), 1, 1, Nx.axis_size(t, 1)}) |> Nx.broadcast({Nx.axis_size(t, 0), spatial, spatial, Nx.axis_size(t, 1)}) end,
+    Axon.nx(
+      x,
+      fn t ->
+        Nx.reshape(t, {Nx.axis_size(t, 0), 1, 1, Nx.axis_size(t, 1)})
+        |> Nx.broadcast({Nx.axis_size(t, 0), spatial, spatial, Nx.axis_size(t, 1)})
+      end,
       name: "#{name}_broadcast"
     )
   end

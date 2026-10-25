@@ -138,7 +138,9 @@ defmodule Edifice.Serving.GenerateTest do
       assert Nx.shape(embed_grad) == {@vocab_size, @embed_dim}
 
       grad_magnitude = embed_grad |> Nx.abs() |> Nx.sum() |> Nx.to_number()
-      assert grad_magnitude > 0.0, "embedding gradient is identically zero — table is not training"
+
+      assert grad_magnitude > 0.0,
+             "embedding gradient is identically zero — table is not training"
     end
 
     test "generate_simple works end-to-end from raw token IDs" do

@@ -214,6 +214,7 @@ defmodule Edifice.Interpretability.LEACETest do
         |> Nx.as_type(:s64)
 
       half = 256
+
       split = fn t ->
         {Nx.slice_along_axis(t, 0, half, axis: 0), Nx.slice_along_axis(t, half, half, axis: 0)}
       end

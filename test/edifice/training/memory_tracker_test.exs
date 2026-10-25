@@ -42,7 +42,10 @@ defmodule Edifice.Training.MemoryTrackerTest do
             MemoryTracker.measure(
               fn ->
                 # Allocate a tensor on the EXLA host backend
-                Nx.Defn.jit(fn -> Nx.iota({100, 100}, type: :f32) end, compiler: EXLA, client: :host).()
+                Nx.Defn.jit(fn -> Nx.iota({100, 100}, type: :f32) end,
+                  compiler: EXLA,
+                  client: :host
+                ).()
               end,
               client: :host,
               label: "test_compute"

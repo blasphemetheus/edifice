@@ -56,7 +56,9 @@ defmodule Edifice.Tokenizers do
     return_type = Keyword.get(opts, :return_type, :tensor)
     add_special = Keyword.get(opts, :add_special_tokens, true)
 
-    {:ok, encoding} = apply(tokenizer_mod(), :encode, [tokenizer, text, [add_special_tokens: add_special]])
+    {:ok, encoding} =
+      apply(tokenizer_mod(), :encode, [tokenizer, text, [add_special_tokens: add_special]])
+
     ids = apply(encoding_mod(), :get_ids, [encoding])
 
     case return_type do
@@ -78,7 +80,9 @@ defmodule Edifice.Tokenizers do
 
     encodings =
       Enum.map(texts, fn text ->
-        {:ok, encoding} = apply(tokenizer_mod(), :encode, [tokenizer, text, [add_special_tokens: add_special]])
+        {:ok, encoding} =
+          apply(tokenizer_mod(), :encode, [tokenizer, text, [add_special_tokens: add_special]])
+
         apply(encoding_mod(), :get_ids, [encoding])
       end)
 

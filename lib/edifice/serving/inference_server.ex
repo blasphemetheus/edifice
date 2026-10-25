@@ -202,7 +202,9 @@ defmodule Edifice.Serving.InferenceServer do
 
     # Unbatch and reply to each caller
     unbatched = unbatch_output(output, batch_size)
-    Enum.zip(froms, unbatched) |> Enum.each(fn {from, result} ->
+
+    Enum.zip(froms, unbatched)
+    |> Enum.each(fn {from, result} ->
       GenServer.reply(from, result)
     end)
 

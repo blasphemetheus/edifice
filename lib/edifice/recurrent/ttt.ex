@@ -332,7 +332,17 @@ defmodule Edifice.Recurrent.TTT do
                 pred = Nx.squeeze(pred, axes: [2])
                 pred_normed = manual_layer_norm(pred, ln_gamma, ln_beta)
                 error = Nx.subtract(pred_normed, v_t)
-                grad = Nx.dot(Nx.new_axis(Nx.multiply(eta_t, error), 2), [2], [0], Nx.new_axis(k_act, 1), [1], [0])
+
+                grad =
+                  Nx.dot(
+                    Nx.new_axis(Nx.multiply(eta_t, error), 2),
+                    [2],
+                    [0],
+                    Nx.new_axis(k_act, 1),
+                    [1],
+                    [0]
+                  )
+
                 w_new = Nx.subtract(w_prev, grad)
                 q_act = Nx.multiply(q_t, Nx.sigmoid(q_t))
                 out = Nx.dot(w_new, [2], [0], Nx.new_axis(q_act, 2), [1], [0])
@@ -343,7 +353,17 @@ defmodule Edifice.Recurrent.TTT do
                 pred = Nx.squeeze(pred, axes: [2])
                 pred_normed = manual_layer_norm(pred, ln_gamma, ln_beta)
                 error = Nx.subtract(pred_normed, v_t)
-                grad = Nx.dot(Nx.new_axis(Nx.multiply(eta_t, error), 2), [2], [0], Nx.new_axis(k_t, 1), [1], [0])
+
+                grad =
+                  Nx.dot(
+                    Nx.new_axis(Nx.multiply(eta_t, error), 2),
+                    [2],
+                    [0],
+                    Nx.new_axis(k_t, 1),
+                    [1],
+                    [0]
+                  )
+
                 w_new = Nx.subtract(w_prev, grad)
                 out = Nx.dot(w_new, [2], [0], Nx.new_axis(q_t, 2), [1], [0])
                 {w_new, Nx.squeeze(out, axes: [2])}
@@ -387,7 +407,12 @@ defmodule Edifice.Recurrent.TTT do
         pred = Nx.dot(w_prev, [2], [0], Nx.new_axis(k_t, 2), [1], [0]) |> Nx.squeeze(axes: [2])
         pred_normed = manual_layer_norm(pred, ln_gamma, ln_beta)
         error = Nx.subtract(pred_normed, v_t)
-        grad = Nx.dot(Nx.new_axis(Nx.multiply(eta_t, error), 2), [2], [0], Nx.new_axis(k_t, 1), [1], [0])
+
+        grad =
+          Nx.dot(Nx.new_axis(Nx.multiply(eta_t, error), 2), [2], [0], Nx.new_axis(k_t, 1), [1], [
+            0
+          ])
+
         w_new = Nx.subtract(w_prev, grad)
         out = Nx.dot(w_new, [2], [0], Nx.new_axis(q_t, 2), [1], [0]) |> Nx.squeeze(axes: [2])
         {w_new, [out | acc]}

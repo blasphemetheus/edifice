@@ -99,15 +99,16 @@ defmodule Edifice.Pretrained.KeyMaps.ViT do
   @impl true
   def tensor_transforms do
     [
-      {~r/\.kernel$/, fn tensor ->
-        case Nx.rank(tensor) do
-          # CLS token: [1, 1, D] -> [1, D]
-          3 -> Nx.squeeze(tensor, axes: [0])
-          # Linear weights: transpose [out, in] -> [in, out]
-          2 -> Transform.transpose_linear(tensor)
-          _ -> tensor
-        end
-      end},
+      {~r/\.kernel$/,
+       fn tensor ->
+         case Nx.rank(tensor) do
+           # CLS token: [1, 1, D] -> [1, D]
+           3 -> Nx.squeeze(tensor, axes: [0])
+           # Linear weights: transpose [out, in] -> [in, out]
+           2 -> Transform.transpose_linear(tensor)
+           _ -> tensor
+         end
+       end},
       {~r/\.bias$/, &Function.identity/1}
     ]
   end

@@ -44,7 +44,12 @@ defmodule Edifice.Metrics do
     pred_indices = to_class_indices(y_pred)
     true_indices = to_class_indices(y_true)
 
-    cm = apply(Scholar.Metrics.Classification, :confusion_matrix, [true_indices, pred_indices, [num_classes: num_classes]])
+    cm =
+      apply(Scholar.Metrics.Classification, :confusion_matrix, [
+        true_indices,
+        pred_indices,
+        [num_classes: num_classes]
+      ])
 
     # Per-class metrics from confusion matrix
     tp = Nx.take_diagonal(cm)
@@ -53,8 +58,12 @@ defmodule Edifice.Metrics do
 
     precision = Nx.divide(tp, Nx.add(Nx.add(tp, fp), 1.0e-8))
     recall = Nx.divide(tp, Nx.add(Nx.add(tp, fn_), 1.0e-8))
-    f1 = Nx.divide(Nx.multiply(2.0, Nx.multiply(precision, recall)),
-                    Nx.add(Nx.add(precision, recall), 1.0e-8))
+
+    f1 =
+      Nx.divide(
+        Nx.multiply(2.0, Nx.multiply(precision, recall)),
+        Nx.add(Nx.add(precision, recall), 1.0e-8)
+      )
 
     total = Nx.size(true_indices)
     correct = Nx.sum(Nx.equal(true_indices, pred_indices)) |> Nx.to_number()
@@ -98,7 +107,11 @@ defmodule Edifice.Metrics do
     pred_indices = to_class_indices(y_pred)
     true_indices = to_class_indices(y_true)
 
-    apply(Scholar.Metrics.Classification, :confusion_matrix, [true_indices, pred_indices, [num_classes: num_classes]])
+    apply(Scholar.Metrics.Classification, :confusion_matrix, [
+      true_indices,
+      pred_indices,
+      [num_classes: num_classes]
+    ])
   end
 
   defp to_class_indices(tensor) do

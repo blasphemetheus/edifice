@@ -28,14 +28,18 @@ defmodule Edifice.Serving.SamplingTest do
       # High temperature + no top-k: can sample any token
       tokens_no_filter =
         for seed <- 1..50 do
-          {t, _} = Sampling.sample_adaptive(@logits, Nx.Random.key(seed), Nx.tensor(5.0), Nx.tensor(0))
+          {t, _} =
+            Sampling.sample_adaptive(@logits, Nx.Random.key(seed), Nx.tensor(5.0), Nx.tensor(0))
+
           t |> Nx.squeeze() |> Nx.to_number()
         end
 
       # High temperature + top-k=1: always picks token 3
       tokens_top1 =
         for seed <- 1..50 do
-          {t, _} = Sampling.sample_adaptive(@logits, Nx.Random.key(seed), Nx.tensor(5.0), Nx.tensor(1))
+          {t, _} =
+            Sampling.sample_adaptive(@logits, Nx.Random.key(seed), Nx.tensor(5.0), Nx.tensor(1))
+
           t |> Nx.squeeze() |> Nx.to_number()
         end
 

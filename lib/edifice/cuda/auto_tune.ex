@@ -23,12 +23,35 @@ defmodule Edifice.CUDA.AutoTune do
   @timed_runs 10
 
   @all_kernels [
-    :mingru, :minlstm, :elu_gru, :real_gru, :diag_linear, :liquid,
-    :linear_scan, :delta_net_scan, :gated_delta_net_scan, :delta_product_scan,
-    :slstm_scan, :lstm_scan, :gru_scan, :ttt_scan, :selective_scan,
-    :kda_scan, :rla_scan, :flash_attention, :laser_attention, :fox_attention,
-    :reservoir_scan, :titans_scan, :miras_scan, :gsa_scan,
-    :mingru_block, :minlstm_block, :linear_block, :lstm_block, :gru_block
+    :mingru,
+    :minlstm,
+    :elu_gru,
+    :real_gru,
+    :diag_linear,
+    :liquid,
+    :linear_scan,
+    :delta_net_scan,
+    :gated_delta_net_scan,
+    :delta_product_scan,
+    :slstm_scan,
+    :lstm_scan,
+    :gru_scan,
+    :ttt_scan,
+    :selective_scan,
+    :kda_scan,
+    :rla_scan,
+    :flash_attention,
+    :laser_attention,
+    :fox_attention,
+    :reservoir_scan,
+    :titans_scan,
+    :miras_scan,
+    :gsa_scan,
+    :mingru_block,
+    :minlstm_block,
+    :linear_block,
+    :lstm_block,
+    :gru_block
   ]
 
   # ============================================================================
@@ -65,8 +88,12 @@ defmodule Edifice.CUDA.AutoTune do
         key = cache_key(kernel_name, dim, dtype)
 
         case :persistent_term.get(key, :not_cached) do
-          :fused -> true
-          :fallback -> false
+          :fused ->
+            true
+
+          :fallback ->
+            false
+
           :not_cached ->
             result = run_benchmark(kernel_name, dim, dtype)
             result == :fused
@@ -91,7 +118,9 @@ defmodule Edifice.CUDA.AutoTune do
     dtype = Keyword.get(opts, :dtype, {:f, 32})
     kernels = Keyword.get(opts, :kernels, @all_kernels)
 
-    Logger.info("[AutoTune] Warming up #{length(kernels)} kernels (hidden=#{hidden}, dtype=#{inspect(dtype)})")
+    Logger.info(
+      "[AutoTune] Warming up #{length(kernels)} kernels (hidden=#{hidden}, dtype=#{inspect(dtype)})"
+    )
 
     results =
       Enum.map(kernels, fn kernel ->
@@ -345,8 +374,18 @@ defmodule Edifice.CUDA.AutoTune do
   # ============================================================================
 
   # 2-arg kernels
-  for k <- [:mingru, :elu_gru, :real_gru, :diag_linear, :liquid,
-            :linear_scan, :slstm_scan, :lstm_scan, :gru_scan, :reservoir_scan] do
+  for k <- [
+        :mingru,
+        :elu_gru,
+        :real_gru,
+        :diag_linear,
+        :liquid,
+        :linear_scan,
+        :slstm_scan,
+        :lstm_scan,
+        :gru_scan,
+        :reservoir_scan
+      ] do
     defp make_fused_bench_fn(unquote(k)) do
       fn a, b -> apply(Edifice.CUDA.FusedScan, unquote(k), [a, b]) end
     end
@@ -429,8 +468,18 @@ defmodule Edifice.CUDA.AutoTune do
   # ============================================================================
 
   # 2-arg kernels
-  for k <- [:mingru, :elu_gru, :real_gru, :diag_linear, :liquid,
-            :linear_scan, :slstm_scan, :lstm_scan, :gru_scan, :reservoir_scan] do
+  for k <- [
+        :mingru,
+        :elu_gru,
+        :real_gru,
+        :diag_linear,
+        :liquid,
+        :linear_scan,
+        :slstm_scan,
+        :lstm_scan,
+        :gru_scan,
+        :reservoir_scan
+      ] do
     defp make_fallback_bench_fn(unquote(k)) do
       fn a, b -> apply(Edifice.CUDA.FusedScan, unquote(k), [a, b]) end
     end

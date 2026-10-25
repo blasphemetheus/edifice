@@ -31,8 +31,17 @@ defmodule Edifice.CUDA.NIF do
     do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_minlstm_scan(_forget_ptr, _input_ptr, _cand_ptr, _h0_ptr, _batch, _seq_len, _hidden, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_minlstm_scan(
+        _forget_ptr,
+        _input_ptr,
+        _cand_ptr,
+        _h0_ptr,
+        _batch,
+        _seq_len,
+        _hidden,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
   def fused_elu_gru_scan(_gates, _cand, _h0, _batch, _seq, _hidden, _dtype),
@@ -59,8 +68,19 @@ defmodule Edifice.CUDA.NIF do
     do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_gated_delta_net_scan(_q, _k, _v, _beta, _alpha, _batch, _seq, _heads, _head_dim, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_gated_delta_net_scan(
+        _q,
+        _k,
+        _v,
+        _beta,
+        _alpha,
+        _batch,
+        _seq,
+        _heads,
+        _head_dim,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
   def fused_delta_product_scan(_q, _k, _v, _beta, _batch, _seq, _n_h, _heads, _head_dim, _dtype),
@@ -91,8 +111,22 @@ defmodule Edifice.CUDA.NIF do
     do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_rla_scan(_q, _k, _v, _alpha, _beta, _gamma, _batch, _seq, _heads, _head_dim, _variant, _clip, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_rla_scan(
+        _q,
+        _k,
+        _v,
+        _alpha,
+        _beta,
+        _gamma,
+        _batch,
+        _seq,
+        _heads,
+        _head_dim,
+        _variant,
+        _clip,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
   def fused_flash_attention(_q, _k, _v, _batch, _heads, _seq, _head_dim, _causal, _dtype),
@@ -124,106 +158,372 @@ defmodule Edifice.CUDA.NIF do
 
   # Multi-layer block scan kernels
   @doc false
-  def fused_mingru_block_scan(_input_ptr, _weights_ptr, _h0_ptr, _batch, _seq_len, _hidden, _num_layers, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_mingru_block_scan(
+        _input_ptr,
+        _weights_ptr,
+        _h0_ptr,
+        _batch,
+        _seq_len,
+        _hidden,
+        _num_layers,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_minlstm_block_scan(_input_ptr, _weights_ptr, _h0_ptr, _batch, _seq_len, _hidden, _num_layers, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_minlstm_block_scan(
+        _input_ptr,
+        _weights_ptr,
+        _h0_ptr,
+        _batch,
+        _seq_len,
+        _hidden,
+        _num_layers,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_linear_block_scan(_input_ptr, _weights_ptr, _h0_ptr, _batch, _seq_len, _hidden, _num_layers, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_linear_block_scan(
+        _input_ptr,
+        _weights_ptr,
+        _h0_ptr,
+        _batch,
+        _seq_len,
+        _hidden,
+        _num_layers,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_lstm_block_scan(_input_ptr, _weights_ptr, _h0_ptr, _c0_ptr, _batch, _seq_len, _hidden, _num_layers, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_lstm_block_scan(
+        _input_ptr,
+        _weights_ptr,
+        _h0_ptr,
+        _c0_ptr,
+        _batch,
+        _seq_len,
+        _hidden,
+        _num_layers,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_gru_block_scan(_input_ptr, _weights_ptr, _h0_ptr, _batch, _seq_len, _hidden, _num_layers, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_gru_block_scan(
+        _input_ptr,
+        _weights_ptr,
+        _h0_ptr,
+        _batch,
+        _seq_len,
+        _hidden,
+        _num_layers,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   # Backward kernels — multi-output via concatenated buffer
   @doc false
-  def fused_linear_scan_backward(_a_ptr, _h0_ptr, _fwd_ptr, _grad_ptr, _batch, _seq, _hidden, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_linear_scan_backward(
+        _a_ptr,
+        _h0_ptr,
+        _fwd_ptr,
+        _grad_ptr,
+        _batch,
+        _seq,
+        _hidden,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_mingru_scan_backward(_z_ptr, _cand_ptr, _h0_ptr, _fwd_ptr, _grad_ptr, _batch, _seq, _hidden, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_mingru_scan_backward(
+        _z_ptr,
+        _cand_ptr,
+        _h0_ptr,
+        _fwd_ptr,
+        _grad_ptr,
+        _batch,
+        _seq,
+        _hidden,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_minlstm_scan_backward(_f_ptr, _i_ptr, _cand_ptr, _h0_ptr, _fwd_ptr, _grad_ptr, _batch, _seq, _hidden, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_minlstm_scan_backward(
+        _f_ptr,
+        _i_ptr,
+        _cand_ptr,
+        _h0_ptr,
+        _fwd_ptr,
+        _grad_ptr,
+        _batch,
+        _seq,
+        _hidden,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_elu_gru_scan_backward(_z_ptr, _c_ptr, _h0_ptr, _fwd_ptr, _grad_ptr, _batch, _seq, _hidden, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_elu_gru_scan_backward(
+        _z_ptr,
+        _c_ptr,
+        _h0_ptr,
+        _fwd_ptr,
+        _grad_ptr,
+        _batch,
+        _seq,
+        _hidden,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_real_gru_scan_backward(_z_ptr, _cand_ptr, _h0_ptr, _fwd_ptr, _grad_ptr, _batch, _seq, _hidden, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_real_gru_scan_backward(
+        _z_ptr,
+        _cand_ptr,
+        _h0_ptr,
+        _fwd_ptr,
+        _grad_ptr,
+        _batch,
+        _seq,
+        _hidden,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_diag_linear_scan_backward(_a_ptr, _h0_ptr, _fwd_ptr, _grad_ptr, _batch, _seq, _hidden, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_diag_linear_scan_backward(
+        _a_ptr,
+        _h0_ptr,
+        _fwd_ptr,
+        _grad_ptr,
+        _batch,
+        _seq,
+        _hidden,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_lstm_scan_backward(_wx_ptr, _r_ptr, _h0_ptr, _c0_ptr, _fwd_ptr, _grad_ptr, _batch, _seq, _hidden, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_lstm_scan_backward(
+        _wx_ptr,
+        _r_ptr,
+        _h0_ptr,
+        _c0_ptr,
+        _fwd_ptr,
+        _grad_ptr,
+        _batch,
+        _seq,
+        _hidden,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_gru_scan_backward(_wx_ptr, _r_ptr, _h0_ptr, _bhn_ptr, _fwd_ptr, _grad_ptr, _batch, _seq, _hidden, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_gru_scan_backward(
+        _wx_ptr,
+        _r_ptr,
+        _h0_ptr,
+        _bhn_ptr,
+        _fwd_ptr,
+        _grad_ptr,
+        _batch,
+        _seq,
+        _hidden,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   # Phase 3 backward kernels
   @doc false
-  def fused_liquid_scan_backward(_tau_ptr, _act_ptr, _h0_ptr, _fwd_ptr, _grad_ptr, _batch, _seq, _hidden, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_liquid_scan_backward(
+        _tau_ptr,
+        _act_ptr,
+        _h0_ptr,
+        _fwd_ptr,
+        _grad_ptr,
+        _batch,
+        _seq,
+        _hidden,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_delta_rule_scan_backward(_q, _k, _v, _beta, _fwd, _grad, _batch, _seq, _heads, _head_dim, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_delta_rule_scan_backward(
+        _q,
+        _k,
+        _v,
+        _beta,
+        _fwd,
+        _grad,
+        _batch,
+        _seq,
+        _heads,
+        _head_dim,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_gated_delta_net_scan_backward(_q, _k, _v, _beta, _alpha, _fwd, _grad, _batch, _seq, _heads, _head_dim, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_gated_delta_net_scan_backward(
+        _q,
+        _k,
+        _v,
+        _beta,
+        _alpha,
+        _fwd,
+        _grad,
+        _batch,
+        _seq,
+        _heads,
+        _head_dim,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_delta_product_scan_backward(_q, _k, _v, _beta, _fwd, _grad, _batch, _seq, _n_h, _heads, _head_dim, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_delta_product_scan_backward(
+        _q,
+        _k,
+        _v,
+        _beta,
+        _fwd,
+        _grad,
+        _batch,
+        _seq,
+        _n_h,
+        _heads,
+        _head_dim,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
   def fused_slstm_scan_backward(_wx, _r, _h0, _c0, _fwd, _grad, _batch, _seq, _hidden, _dtype),
     do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_selective_scan_backward(_x, _dt, _a, _b, _c, _grad, _batch, _seq, _hidden, _state, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_selective_scan_backward(
+        _x,
+        _dt,
+        _a,
+        _b,
+        _c,
+        _grad,
+        _batch,
+        _seq,
+        _hidden,
+        _state,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   # Phase 4 backward kernels
   @doc false
-  def fused_kda_scan_backward(_q, _k, _v, _alpha, _beta, _fwd, _grad, _batch, _seq, _heads, _head_dim, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_kda_scan_backward(
+        _q,
+        _k,
+        _v,
+        _alpha,
+        _beta,
+        _fwd,
+        _grad,
+        _batch,
+        _seq,
+        _heads,
+        _head_dim,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_rla_scan_backward(_q, _k, _v, _alpha, _beta, _gamma, _fwd, _grad, _batch, _seq, _heads, _head_dim, _variant, _clip, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_rla_scan_backward(
+        _q,
+        _k,
+        _v,
+        _alpha,
+        _beta,
+        _gamma,
+        _fwd,
+        _grad,
+        _batch,
+        _seq,
+        _heads,
+        _head_dim,
+        _variant,
+        _clip,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_ttt_scan_backward(_q, _k, _v, _eta, _w0, _lng, _lnb, _grad, _batch, _seq, _inner, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_ttt_scan_backward(
+        _q,
+        _k,
+        _v,
+        _eta,
+        _w0,
+        _lng,
+        _lnb,
+        _grad,
+        _batch,
+        _seq,
+        _inner,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   # Attention backward kernels
   @doc false
-  def fused_flash_attention_backward(_q, _k, _v, _o, _grad_o, _batch, _heads, _seq, _dim, _causal, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_flash_attention_backward(
+        _q,
+        _k,
+        _v,
+        _o,
+        _grad_o,
+        _batch,
+        _heads,
+        _seq,
+        _dim,
+        _causal,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_laser_attention_backward(_q, _k, _v, _vmax, _o, _grad_o, _batch, _heads, _seq, _dim, _causal, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_laser_attention_backward(
+        _q,
+        _k,
+        _v,
+        _vmax,
+        _o,
+        _grad_o,
+        _batch,
+        _heads,
+        _seq,
+        _dim,
+        _causal,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 
   @doc false
-  def fused_fox_attention_backward(_q, _k, _v, _cs, _o, _grad_o, _batch, _heads, _seq, _dim, _dtype),
-    do: :erlang.nif_error(:not_loaded)
+  def fused_fox_attention_backward(
+        _q,
+        _k,
+        _v,
+        _cs,
+        _o,
+        _grad_o,
+        _batch,
+        _heads,
+        _seq,
+        _dim,
+        _dtype
+      ),
+      do: :erlang.nif_error(:not_loaded)
 end

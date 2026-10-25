@@ -87,10 +87,26 @@ defmodule Edifice.Sharding do
     fn input ->
       case input do
         %Nx.Tensor{} ->
-          run_data_parallel_tensor(predict_fn, params, input, mesh, batch_dim, num_devices, client)
+          run_data_parallel_tensor(
+            predict_fn,
+            params,
+            input,
+            mesh,
+            batch_dim,
+            num_devices,
+            client
+          )
 
         %{} = map_input ->
-          run_data_parallel_map(predict_fn, params, map_input, mesh, batch_dim, num_devices, client)
+          run_data_parallel_map(
+            predict_fn,
+            params,
+            map_input,
+            mesh,
+            batch_dim,
+            num_devices,
+            client
+          )
       end
     end
   end
@@ -251,10 +267,17 @@ defmodule Edifice.Sharding do
     end
 
     case length(keys) do
-      1 -> fn a -> rebuild.([a]) end
-      2 -> fn a, b -> rebuild.([a, b]) end
-      3 -> fn a, b, c -> rebuild.([a, b, c]) end
-      4 -> fn a, b, c, d -> rebuild.([a, b, c, d]) end
+      1 ->
+        fn a -> rebuild.([a]) end
+
+      2 ->
+        fn a, b -> rebuild.([a, b]) end
+
+      3 ->
+        fn a, b, c -> rebuild.([a, b, c]) end
+
+      4 ->
+        fn a, b, c, d -> rebuild.([a, b, c, d]) end
 
       n ->
         raise ArgumentError,

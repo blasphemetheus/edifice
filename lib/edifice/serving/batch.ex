@@ -147,7 +147,17 @@ defmodule Edifice.Serving.Batch do
   """
   @spec generation(function(), map(), keyword()) :: Nx.Serving.t()
   def generation(predict_fn, params, opts) do
-    gen_opts = Keyword.take(opts, [:embed_fn, :seq_len, :max_tokens, :temperature, :top_k, :top_p, :seed, :stop_token])
+    gen_opts =
+      Keyword.take(opts, [
+        :embed_fn,
+        :seq_len,
+        :max_tokens,
+        :temperature,
+        :top_k,
+        :top_p,
+        :seed,
+        :stop_token
+      ])
 
     Nx.Serving.new(fn _opts ->
       fn prompt ->
@@ -158,9 +168,7 @@ defmodule Edifice.Serving.Batch do
             {_batch, _seq} -> prompt
           end
 
-        Edifice.Serving.Generate.generate(predict_fn, params,
-          [{:prompt, prompt} | gen_opts]
-        )
+        Edifice.Serving.Generate.generate(predict_fn, params, [{:prompt, prompt} | gen_opts])
       end
     end)
     |> Nx.Serving.client_preprocessing(fn input ->

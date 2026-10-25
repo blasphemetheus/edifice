@@ -247,10 +247,8 @@ defmodule Edifice.Pretrained.KeyMaps.WhisperTest do
         "model.encoder.layers.0.final_layer_norm.bias" =>
           Nx.broadcast(Nx.tensor(0.0, type: :f32), {d}),
         # Encoder final norm
-        "model.encoder.layer_norm.weight" =>
-          Nx.broadcast(Nx.tensor(1.0, type: :f32), {d}),
-        "model.encoder.layer_norm.bias" =>
-          Nx.broadcast(Nx.tensor(0.0, type: :f32), {d}),
+        "model.encoder.layer_norm.weight" => Nx.broadcast(Nx.tensor(1.0, type: :f32), {d}),
+        "model.encoder.layer_norm.bias" => Nx.broadcast(Nx.tensor(0.0, type: :f32), {d}),
         # Decoder embeddings
         "model.decoder.embed_tokens.weight" => Nx.iota({100, d}, type: :f32),
         "model.decoder.embed_positions.weight" => Nx.iota({50, d}, type: :f32),
@@ -290,10 +288,8 @@ defmodule Edifice.Pretrained.KeyMaps.WhisperTest do
         "model.decoder.layers.0.final_layer_norm.bias" =>
           Nx.broadcast(Nx.tensor(0.0, type: :f32), {d}),
         # Decoder final norm
-        "model.decoder.layer_norm.weight" =>
-          Nx.broadcast(Nx.tensor(1.0, type: :f32), {d}),
-        "model.decoder.layer_norm.bias" =>
-          Nx.broadcast(Nx.tensor(0.0, type: :f32), {d}),
+        "model.decoder.layer_norm.weight" => Nx.broadcast(Nx.tensor(1.0, type: :f32), {d}),
+        "model.decoder.layer_norm.bias" => Nx.broadcast(Nx.tensor(0.0, type: :f32), {d}),
         # Output projection (skipped)
         "proj_out.weight" => Nx.iota({100, d}, type: :f32)
       }
@@ -345,10 +341,8 @@ defmodule Edifice.Pretrained.KeyMaps.WhisperTest do
         "model.encoder.conv1.bias" => Nx.iota({d}, type: :f32),
         "model.encoder.conv2.weight" => Nx.iota({d, d, 3}, type: :f32),
         "model.encoder.conv2.bias" => Nx.iota({d}, type: :f32),
-        "model.encoder.layer_norm.weight" =>
-          Nx.broadcast(Nx.tensor(1.0, type: :f32), {d}),
-        "model.encoder.layer_norm.bias" =>
-          Nx.broadcast(Nx.tensor(0.0, type: :f32), {d})
+        "model.encoder.layer_norm.weight" => Nx.broadcast(Nx.tensor(1.0, type: :f32), {d}),
+        "model.encoder.layer_norm.bias" => Nx.broadcast(Nx.tensor(0.0, type: :f32), {d})
       }
 
       path = write_fixture(tensors)

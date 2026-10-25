@@ -22,8 +22,12 @@ defmodule Edifice.CUDA.BlockScanTest do
       num_layers = 2
 
       key = Nx.Random.key(42)
-      {input, key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {h0, key} = Nx.Random.uniform(key, -0.1, 0.1, shape: {batch, num_layers, hidden}, type: {:f, 32})
+
+      {input, key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {h0, key} =
+        Nx.Random.uniform(key, -0.1, 0.1, shape: {batch, num_layers, hidden}, type: {:f, 32})
 
       # Build packed weights for each layer
       weights = build_linear_block_weights(key, hidden, num_layers)
@@ -44,8 +48,12 @@ defmodule Edifice.CUDA.BlockScanTest do
       num_layers = 4
 
       key = Nx.Random.key(123)
-      {input, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {h0, key} = Nx.Random.uniform(key, 0.0, 0.0, shape: {batch, num_layers, hidden}, type: {:f, 32})
+
+      {input, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {h0, key} =
+        Nx.Random.uniform(key, 0.0, 0.0, shape: {batch, num_layers, hidden}, type: {:f, 32})
 
       weights = build_linear_block_weights(key, hidden, num_layers)
       block_out = FusedScan.linear_block(input, weights, h0, num_layers)
@@ -61,7 +69,10 @@ defmodule Edifice.CUDA.BlockScanTest do
       num_layers = 1
 
       key = Nx.Random.key(77)
-      {input, key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {input, key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, num_layers, hidden})
 
       weights = build_linear_block_weights(key, hidden, num_layers)
@@ -84,9 +95,15 @@ defmodule Edifice.CUDA.BlockScanTest do
       num_layers = 2
 
       key = Nx.Random.key(42)
-      {input, key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {h0, key} = Nx.Random.uniform(key, -0.1, 0.1, shape: {batch, num_layers, hidden}, type: {:f, 32})
-      {c0, key} = Nx.Random.uniform(key, -0.1, 0.1, shape: {batch, num_layers, hidden}, type: {:f, 32})
+
+      {input, key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {h0, key} =
+        Nx.Random.uniform(key, -0.1, 0.1, shape: {batch, num_layers, hidden}, type: {:f, 32})
+
+      {c0, key} =
+        Nx.Random.uniform(key, -0.1, 0.1, shape: {batch, num_layers, hidden}, type: {:f, 32})
 
       weights = build_lstm_block_weights(key, hidden, num_layers)
       block_out = FusedScan.lstm_block(input, weights, h0, c0, num_layers)
@@ -102,7 +119,10 @@ defmodule Edifice.CUDA.BlockScanTest do
       num_layers = 3
 
       key = Nx.Random.key(99)
-      {input, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {input, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, num_layers, hidden})
       c0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, num_layers, hidden})
 
@@ -126,8 +146,12 @@ defmodule Edifice.CUDA.BlockScanTest do
       num_layers = 2
 
       key = Nx.Random.key(42)
-      {input, key} = Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
-      {h0, key} = Nx.Random.uniform(key, -0.1, 0.1, shape: {batch, num_layers, hidden}, type: {:f, 32})
+
+      {input, key} =
+        Nx.Random.uniform(key, -1.0, 1.0, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {h0, key} =
+        Nx.Random.uniform(key, -0.1, 0.1, shape: {batch, num_layers, hidden}, type: {:f, 32})
 
       weights = build_gru_block_weights(key, hidden, num_layers)
       block_out = FusedScan.gru_block(input, weights, h0, num_layers)
@@ -143,7 +167,10 @@ defmodule Edifice.CUDA.BlockScanTest do
       num_layers = 3
 
       key = Nx.Random.key(55)
-      {input, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
+      {input, key} =
+        Nx.Random.uniform(key, -0.5, 0.5, shape: {batch, seq_len, hidden}, type: {:f, 32})
+
       h0 = Nx.broadcast(Nx.tensor(0.0, type: {:f, 32}), {batch, num_layers, hidden})
 
       weights = build_gru_block_weights(key, hidden, num_layers)
@@ -248,7 +275,10 @@ defmodule Edifice.CUDA.BlockScanTest do
       # LayerNorm
       mean = Nx.mean(x, axes: [-1], keep_axes: true)
       var = Nx.variance(x, axes: [-1], keep_axes: true)
-      normed = Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
+      normed =
+        Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
       normed = Nx.add(normed, beta)
 
       a_pre = Nx.add(Nx.dot(normed, [2], w_a, [0]), b_a)
@@ -257,6 +287,7 @@ defmodule Edifice.CUDA.BlockScanTest do
       h_init = Nx.slice_along_axis(h0, layer, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
       {_batch, seq_len, _hidden} = Nx.shape(a_pre)
+
       {_, h_list} =
         Enum.reduce(0..(seq_len - 1), {h_init, []}, fn t, {h_prev, acc} ->
           a_t = Nx.slice_along_axis(a_pre, t, 1, axis: 1) |> Nx.squeeze(axes: [1])
@@ -264,6 +295,7 @@ defmodule Edifice.CUDA.BlockScanTest do
           h_t = Nx.add(Nx.multiply(a_t, h_prev), b_t)
           {h_t, [h_t | acc]}
         end)
+
       scan_out = h_list |> Enum.reverse() |> Nx.stack(axis: 1)
       Nx.add(x, scan_out)
     end)
@@ -288,7 +320,10 @@ defmodule Edifice.CUDA.BlockScanTest do
 
       mean = Nx.mean(x, axes: [-1], keep_axes: true)
       var = Nx.variance(x, axes: [-1], keep_axes: true)
-      normed = Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
+      normed =
+        Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
       normed = Nx.add(normed, beta)
 
       wx_proj = Nx.add(Nx.dot(normed, [2], w_x, [0]), b_x)
@@ -301,6 +336,7 @@ defmodule Edifice.CUDA.BlockScanTest do
       c_init = Nx.slice_along_axis(c0, layer, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
       {_batch, seq_len, _hidden} = Nx.shape(wx_i)
+
       {_, h_list} =
         Enum.reduce(0..(seq_len - 1), {{h_init, c_init}, []}, fn t, {{h_prev, c_prev}, acc} ->
           rh = Nx.dot(h_prev, [1], r_w, [0])
@@ -323,6 +359,7 @@ defmodule Edifice.CUDA.BlockScanTest do
           h_t = Nx.multiply(o_gate, Nx.tanh(c_t))
           {{h_t, c_t}, [h_t | acc]}
         end)
+
       scan_out = h_list |> Enum.reverse() |> Nx.stack(axis: 1)
       Nx.add(x, scan_out)
     end)
@@ -347,7 +384,10 @@ defmodule Edifice.CUDA.BlockScanTest do
 
       mean = Nx.mean(x, axes: [-1], keep_axes: true)
       var = Nx.variance(x, axes: [-1], keep_axes: true)
-      normed = Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
+      normed =
+        Nx.multiply(Nx.multiply(Nx.subtract(x, mean), Nx.rsqrt(Nx.add(var, 1.0e-5))), gamma)
+
       normed = Nx.add(normed, beta)
 
       wx_proj = Nx.add(Nx.dot(normed, [2], w_x, [0]), b_x)
@@ -358,6 +398,7 @@ defmodule Edifice.CUDA.BlockScanTest do
       h_init = Nx.slice_along_axis(h0, layer, 1, axis: 1) |> Nx.squeeze(axes: [1])
 
       {_batch, seq_len, _hidden} = Nx.shape(wx_r)
+
       {_, h_list} =
         Enum.reduce(0..(seq_len - 1), {h_init, []}, fn t, {h_prev, acc} ->
           rh = Nx.dot(h_prev, [1], r_w, [0])
@@ -376,6 +417,7 @@ defmodule Edifice.CUDA.BlockScanTest do
           h_t = Nx.add(Nx.multiply(Nx.subtract(1.0, z_gate), h_prev), Nx.multiply(z_gate, n_gate))
           {h_t, [h_t | acc]}
         end)
+
       scan_out = h_list |> Enum.reverse() |> Nx.stack(axis: 1)
       Nx.add(x, scan_out)
     end)

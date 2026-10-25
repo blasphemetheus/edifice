@@ -68,8 +68,11 @@ defmodule Edifice.Interpretability.SSMAnalysisTest do
       {_b, _c, dt_small} = sites(0.001)
       {_b2, _c2, dt_big} = sites(0.1)
 
-      h_small = SSMAnalysis.timescale_map(dt_small, @state).horizon_frames |> Nx.mean() |> Nx.to_number()
-      h_big = SSMAnalysis.timescale_map(dt_big, @state).horizon_frames |> Nx.mean() |> Nx.to_number()
+      h_small =
+        SSMAnalysis.timescale_map(dt_small, @state).horizon_frames |> Nx.mean() |> Nx.to_number()
+
+      h_big =
+        SSMAnalysis.timescale_map(dt_big, @state).horizon_frames |> Nx.mean() |> Nx.to_number()
 
       assert h_small > h_big
     end

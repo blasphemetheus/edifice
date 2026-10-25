@@ -309,6 +309,7 @@ defmodule Edifice.Meta.AgentSwarm do
         stacked,
         fn tensor ->
           {b, a, s, h} = Nx.shape(tensor)
+
           tensor
           |> Nx.transpose(axes: [0, 2, 1, 3])
           |> Nx.reshape({b * s, a, h})
@@ -352,9 +353,7 @@ defmodule Edifice.Meta.AgentSwarm do
     if gate do
       # gate_param: [1, num_agents, 1, 1] — one scalar gate per agent
       gate_param =
-        Axon.param("#{name}_gate", {1, num_agents, 1, 1},
-          initializer: :zeros
-        )
+        Axon.param("#{name}_gate", {1, num_agents, 1, 1}, initializer: :zeros)
 
       Axon.layer(
         fn comm, original, g, _opts ->

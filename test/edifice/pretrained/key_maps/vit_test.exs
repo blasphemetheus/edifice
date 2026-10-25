@@ -218,8 +218,7 @@ defmodule Edifice.Pretrained.KeyMaps.ViTTest do
         # Other required keys
         "vit.encoder.layer.0.attention.output.dense.weight" =>
           Nx.iota({embed_dim, embed_dim}, type: :f32),
-        "vit.encoder.layer.0.attention.output.dense.bias" =>
-          Nx.iota({embed_dim}, type: :f32),
+        "vit.encoder.layer.0.attention.output.dense.bias" => Nx.iota({embed_dim}, type: :f32),
         "vit.encoder.layer.0.layernorm_before.weight" =>
           Nx.broadcast(Nx.tensor(1.0, type: :f32), {embed_dim}),
         "vit.encoder.layer.0.layernorm_before.bias" =>
@@ -230,24 +229,17 @@ defmodule Edifice.Pretrained.KeyMaps.ViTTest do
           Nx.broadcast(Nx.tensor(0.0, type: :f32), {embed_dim}),
         "vit.encoder.layer.0.intermediate.dense.weight" =>
           Nx.iota({embed_dim * 4, embed_dim}, type: :f32),
-        "vit.encoder.layer.0.intermediate.dense.bias" =>
-          Nx.iota({embed_dim * 4}, type: :f32),
+        "vit.encoder.layer.0.intermediate.dense.bias" => Nx.iota({embed_dim * 4}, type: :f32),
         "vit.encoder.layer.0.output.dense.weight" =>
           Nx.iota({embed_dim, embed_dim * 4}, type: :f32),
-        "vit.encoder.layer.0.output.dense.bias" =>
-          Nx.iota({embed_dim}, type: :f32),
-        "vit.layernorm.weight" =>
-          Nx.broadcast(Nx.tensor(1.0, type: :f32), {embed_dim}),
-        "vit.layernorm.bias" =>
-          Nx.broadcast(Nx.tensor(0.0, type: :f32), {embed_dim}),
+        "vit.encoder.layer.0.output.dense.bias" => Nx.iota({embed_dim}, type: :f32),
+        "vit.layernorm.weight" => Nx.broadcast(Nx.tensor(1.0, type: :f32), {embed_dim}),
+        "vit.layernorm.bias" => Nx.broadcast(Nx.tensor(0.0, type: :f32), {embed_dim}),
         "vit.embeddings.patch_embeddings.projection.weight" =>
           Nx.iota({embed_dim, 4}, type: :f32),
-        "vit.embeddings.patch_embeddings.projection.bias" =>
-          Nx.iota({embed_dim}, type: :f32),
-        "vit.embeddings.cls_token" =>
-          Nx.iota({1, 1, embed_dim}, type: :f32),
-        "vit.embeddings.position_embeddings" =>
-          Nx.iota({1, 10, embed_dim}, type: :f32)
+        "vit.embeddings.patch_embeddings.projection.bias" => Nx.iota({embed_dim}, type: :f32),
+        "vit.embeddings.cls_token" => Nx.iota({1, 1, embed_dim}, type: :f32),
+        "vit.embeddings.position_embeddings" => Nx.iota({1, 10, embed_dim}, type: :f32)
       }
 
       # Use build_concat_keys(1) since we only have 1 layer
@@ -288,18 +280,13 @@ defmodule Edifice.Pretrained.KeyMaps.ViTTest do
       embed_dim = 4
 
       tensors = %{
-        "vit.embeddings.cls_token" =>
-          Nx.iota({1, 1, embed_dim}, type: :f32),
-        "vit.embeddings.position_embeddings" =>
-          Nx.iota({1, 5, embed_dim}, type: :f32),
+        "vit.embeddings.cls_token" => Nx.iota({1, 1, embed_dim}, type: :f32),
+        "vit.embeddings.position_embeddings" => Nx.iota({1, 5, embed_dim}, type: :f32),
         "vit.embeddings.patch_embeddings.projection.weight" =>
           Nx.iota({embed_dim, 3}, type: :f32),
-        "vit.embeddings.patch_embeddings.projection.bias" =>
-          Nx.iota({embed_dim}, type: :f32),
-        "vit.layernorm.weight" =>
-          Nx.broadcast(Nx.tensor(1.0, type: :f32), {embed_dim}),
-        "vit.layernorm.bias" =>
-          Nx.broadcast(Nx.tensor(0.0, type: :f32), {embed_dim})
+        "vit.embeddings.patch_embeddings.projection.bias" => Nx.iota({embed_dim}, type: :f32),
+        "vit.layernorm.weight" => Nx.broadcast(Nx.tensor(1.0, type: :f32), {embed_dim}),
+        "vit.layernorm.bias" => Nx.broadcast(Nx.tensor(0.0, type: :f32), {embed_dim})
       }
 
       path = write_fixture(tensors)
@@ -321,52 +308,34 @@ defmodule Edifice.Pretrained.KeyMaps.ViTTest do
       d = 8
 
       tensors = %{
-        "vit.embeddings.patch_embeddings.projection.weight" =>
-          Nx.iota({d, 4}, type: :f32),
-        "vit.embeddings.patch_embeddings.projection.bias" =>
-          Nx.iota({d}, type: :f32),
+        "vit.embeddings.patch_embeddings.projection.weight" => Nx.iota({d, 4}, type: :f32),
+        "vit.embeddings.patch_embeddings.projection.bias" => Nx.iota({d}, type: :f32),
         "vit.embeddings.cls_token" => Nx.iota({1, 1, d}, type: :f32),
         "vit.embeddings.position_embeddings" => Nx.iota({1, 10, d}, type: :f32),
         "vit.encoder.layer.0.layernorm_before.weight" =>
           Nx.broadcast(Nx.tensor(1.0, type: :f32), {d}),
         "vit.encoder.layer.0.layernorm_before.bias" =>
           Nx.broadcast(Nx.tensor(0.0, type: :f32), {d}),
-        "vit.encoder.layer.0.attention.attention.query.weight" =>
-          Nx.iota({d, d}, type: :f32),
-        "vit.encoder.layer.0.attention.attention.query.bias" =>
-          Nx.iota({d}, type: :f32),
-        "vit.encoder.layer.0.attention.attention.key.weight" =>
-          Nx.iota({d, d}, type: :f32),
-        "vit.encoder.layer.0.attention.attention.key.bias" =>
-          Nx.iota({d}, type: :f32),
-        "vit.encoder.layer.0.attention.attention.value.weight" =>
-          Nx.iota({d, d}, type: :f32),
-        "vit.encoder.layer.0.attention.attention.value.bias" =>
-          Nx.iota({d}, type: :f32),
-        "vit.encoder.layer.0.attention.output.dense.weight" =>
-          Nx.iota({d, d}, type: :f32),
-        "vit.encoder.layer.0.attention.output.dense.bias" =>
-          Nx.iota({d}, type: :f32),
+        "vit.encoder.layer.0.attention.attention.query.weight" => Nx.iota({d, d}, type: :f32),
+        "vit.encoder.layer.0.attention.attention.query.bias" => Nx.iota({d}, type: :f32),
+        "vit.encoder.layer.0.attention.attention.key.weight" => Nx.iota({d, d}, type: :f32),
+        "vit.encoder.layer.0.attention.attention.key.bias" => Nx.iota({d}, type: :f32),
+        "vit.encoder.layer.0.attention.attention.value.weight" => Nx.iota({d, d}, type: :f32),
+        "vit.encoder.layer.0.attention.attention.value.bias" => Nx.iota({d}, type: :f32),
+        "vit.encoder.layer.0.attention.output.dense.weight" => Nx.iota({d, d}, type: :f32),
+        "vit.encoder.layer.0.attention.output.dense.bias" => Nx.iota({d}, type: :f32),
         "vit.encoder.layer.0.layernorm_after.weight" =>
           Nx.broadcast(Nx.tensor(1.0, type: :f32), {d}),
         "vit.encoder.layer.0.layernorm_after.bias" =>
           Nx.broadcast(Nx.tensor(0.0, type: :f32), {d}),
-        "vit.encoder.layer.0.intermediate.dense.weight" =>
-          Nx.iota({d * 4, d}, type: :f32),
-        "vit.encoder.layer.0.intermediate.dense.bias" =>
-          Nx.iota({d * 4}, type: :f32),
-        "vit.encoder.layer.0.output.dense.weight" =>
-          Nx.iota({d, d * 4}, type: :f32),
-        "vit.encoder.layer.0.output.dense.bias" =>
-          Nx.iota({d}, type: :f32),
-        "vit.layernorm.weight" =>
-          Nx.broadcast(Nx.tensor(1.0, type: :f32), {d}),
-        "vit.layernorm.bias" =>
-          Nx.broadcast(Nx.tensor(0.0, type: :f32), {d}),
-        "classifier.weight" =>
-          Nx.iota({10, d}, type: :f32),
-        "classifier.bias" =>
-          Nx.iota({10}, type: :f32)
+        "vit.encoder.layer.0.intermediate.dense.weight" => Nx.iota({d * 4, d}, type: :f32),
+        "vit.encoder.layer.0.intermediate.dense.bias" => Nx.iota({d * 4}, type: :f32),
+        "vit.encoder.layer.0.output.dense.weight" => Nx.iota({d, d * 4}, type: :f32),
+        "vit.encoder.layer.0.output.dense.bias" => Nx.iota({d}, type: :f32),
+        "vit.layernorm.weight" => Nx.broadcast(Nx.tensor(1.0, type: :f32), {d}),
+        "vit.layernorm.bias" => Nx.broadcast(Nx.tensor(0.0, type: :f32), {d}),
+        "classifier.weight" => Nx.iota({10, d}, type: :f32),
+        "classifier.bias" => Nx.iota({10}, type: :f32)
       }
 
       path = write_fixture(tensors)

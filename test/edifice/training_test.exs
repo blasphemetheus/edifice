@@ -208,19 +208,23 @@ defmodule Edifice.TrainingTest do
 
   describe "integration with Edifice architectures" do
     test "checkpointed_grad works with decoder_only" do
-      model = Edifice.build(:decoder_only,
-        embed_dim: @embed_dim,
-        hidden_size: @embed_dim,
-        seq_len: 16,
-        num_layers: 1,
-        num_heads: 2,
-        num_kv_heads: 2
-      )
+      model =
+        Edifice.build(:decoder_only,
+          embed_dim: @embed_dim,
+          hidden_size: @embed_dim,
+          seq_len: 16,
+          num_layers: 1,
+          num_heads: 2,
+          num_kv_heads: 2
+        )
 
       template = %{"state_sequence" => Nx.template({@batch, 16, @embed_dim}, :f32)}
       {init_fn, predict_fn} = Axon.build(model)
       params = init_fn.(template, Axon.ModelState.empty())
-      input = %{"state_sequence" => Nx.iota({@batch, 16, @embed_dim}, type: :f32) |> Nx.divide(128)}
+
+      input = %{
+        "state_sequence" => Nx.iota({@batch, 16, @embed_dim}, type: :f32) |> Nx.divide(128)
+      }
 
       # Normal
       loss_fn = fn p -> predict_fn.(p, input) |> Nx.mean() end
@@ -240,14 +244,15 @@ defmodule Edifice.TrainingTest do
     end
 
     test "estimate_memory works with edifice model" do
-      model = Edifice.build(:decoder_only,
-        embed_dim: @embed_dim,
-        hidden_size: @embed_dim,
-        seq_len: 16,
-        num_layers: 2,
-        num_heads: 2,
-        num_kv_heads: 2
-      )
+      model =
+        Edifice.build(:decoder_only,
+          embed_dim: @embed_dim,
+          hidden_size: @embed_dim,
+          seq_len: 16,
+          num_layers: 2,
+          num_heads: 2,
+          num_kv_heads: 2
+        )
 
       est = Training.estimate_memory(model, {@batch, 16, @embed_dim})
       formatted = Training.format_memory(est)

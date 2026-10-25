@@ -149,9 +149,7 @@ defmodule Edifice.RL.AutoregressiveHead do
 
         # Embed the action for conditioning next components
         action_embed =
-          Axon.embedding(action_input, num_actions, embed_dim,
-            name: "#{comp_name}_action_embed"
-          )
+          Axon.embedding(action_input, num_actions, embed_dim, name: "#{comp_name}_action_embed")
 
         logits_map = Map.put(logits_acc, String.to_atom(comp_name), logits)
         {logits_map, [action_embed | prev_embeds]}
@@ -196,7 +194,9 @@ defmodule Edifice.RL.AutoregressiveHead do
 
         conditioning =
           case prev_embeds do
-            [] -> hidden
+            [] ->
+              hidden
+
             embeds ->
               Axon.concatenate([hidden | Enum.reverse(embeds)],
                 axis: 1,
@@ -213,15 +213,11 @@ defmodule Edifice.RL.AutoregressiveHead do
 
         # Greedy selection: argmax
         sampled_action =
-          Axon.nx(logits, fn l -> Nx.argmax(l, axis: 1) end,
-            name: "#{comp_name}_inf_sample"
-          )
+          Axon.nx(logits, fn l -> Nx.argmax(l, axis: 1) end, name: "#{comp_name}_inf_sample")
 
         # Embed sampled action for next component
         action_embed =
-          Axon.embedding(sampled_action, num_actions, embed_dim,
-            name: "#{comp_name}_inf_embed"
-          )
+          Axon.embedding(sampled_action, num_actions, embed_dim, name: "#{comp_name}_inf_embed")
 
         log_acc = Map.put(log_acc, String.to_atom(comp_name), logits)
         act_acc = Map.put(act_acc, String.to_atom(comp_name), sampled_action)

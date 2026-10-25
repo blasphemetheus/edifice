@@ -185,9 +185,10 @@ defmodule Edifice.Checkpoint do
   """
   @spec load(String.t(), keyword()) :: map() | {map(), map()}
   def load(path, opts \\ []) do
-    format = Keyword.get_lazy(opts, :format, fn ->
-      if String.ends_with?(path, ".safetensors"), do: :safetensors, else: :nx
-    end)
+    format =
+      Keyword.get_lazy(opts, :format, fn ->
+        if String.ends_with?(path, ".safetensors"), do: :safetensors, else: :nx
+      end)
 
     if format == :safetensors do
       import_safetensors(path, opts)
@@ -397,7 +398,8 @@ defmodule Edifice.Checkpoint do
 
       raise RuntimeError,
             "Checkpoint parameters do not match the model rebuilt from its spec." <>
-              arch_line <> sections <>
+              arch_line <>
+              sections <>
               "\nThe checkpoint was likely saved with different build options than " <>
               "the embedded spec, or the file is corrupted."
     end
@@ -677,7 +679,10 @@ defmodule Edifice.Checkpoint do
     apply(Safetensors, :write!, [path, flat])
 
     size = File.stat!(path).size
-    Logger.info("[Checkpoint] Exported #{readable_size(size)} safetensors to #{path} (#{map_size(flat)} tensors)")
+
+    Logger.info(
+      "[Checkpoint] Exported #{readable_size(size)} safetensors to #{path} (#{map_size(flat)} tensors)"
+    )
 
     :ok
   end
@@ -694,7 +699,10 @@ defmodule Edifice.Checkpoint do
     flat = apply(Safetensors, :read!, [path])
 
     size = File.stat!(path).size
-    Logger.info("[Checkpoint] Imported #{readable_size(size)} safetensors from #{path} (#{map_size(flat)} tensors)")
+
+    Logger.info(
+      "[Checkpoint] Imported #{readable_size(size)} safetensors from #{path} (#{map_size(flat)} tensors)"
+    )
 
     unflatten_from_dot_keys(flat)
   end

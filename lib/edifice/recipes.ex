@@ -444,7 +444,11 @@ defmodule Edifice.Recipes do
     case recipe do
       :classify ->
         %{
-          loss: if(Keyword.get(opts, :label_smoothing, 0.0) > 0, do: :categorical_cross_entropy_smoothed, else: :categorical_cross_entropy),
+          loss:
+            if(Keyword.get(opts, :label_smoothing, 0.0) > 0,
+              do: :categorical_cross_entropy_smoothed,
+              else: :categorical_cross_entropy
+            ),
           optimizer: :adamw,
           schedule: :cosine_decay,
           metrics: [:loss, :accuracy],
@@ -566,7 +570,9 @@ defmodule Edifice.Recipes do
 
   defp maybe_attach_monitor(loop, nil), do: loop
   defp maybe_attach_monitor(loop, true), do: Edifice.Training.Monitor.attach(loop)
-  defp maybe_attach_monitor(loop, opts) when is_list(opts), do: Edifice.Training.Monitor.attach(loop, opts)
+
+  defp maybe_attach_monitor(loop, opts) when is_list(opts),
+    do: Edifice.Training.Monitor.attach(loop, opts)
 
   defp maybe_attach_adaptive(loop, nil), do: loop
 
@@ -579,15 +585,21 @@ defmodule Edifice.Recipes do
 
   defp maybe_skip_spikes(loop, nil), do: loop
   defp maybe_skip_spikes(loop, true), do: Edifice.Training.Adaptive.skip_on_loss_spike(loop)
-  defp maybe_skip_spikes(loop, opts) when is_list(opts), do: Edifice.Training.Adaptive.skip_on_loss_spike(loop, opts)
+
+  defp maybe_skip_spikes(loop, opts) when is_list(opts),
+    do: Edifice.Training.Adaptive.skip_on_loss_spike(loop, opts)
 
   defp maybe_nan_halt(loop, nil), do: loop
   defp maybe_nan_halt(loop, true), do: Edifice.Training.Adaptive.halt_on_persistent_nan(loop)
-  defp maybe_nan_halt(loop, opts) when is_list(opts), do: Edifice.Training.Adaptive.halt_on_persistent_nan(loop, opts)
+
+  defp maybe_nan_halt(loop, opts) when is_list(opts),
+    do: Edifice.Training.Adaptive.halt_on_persistent_nan(loop, opts)
 
   defp maybe_log_grad_norm(loop, nil), do: loop
   defp maybe_log_grad_norm(loop, true), do: Edifice.Training.Adaptive.log_grad_norm(loop)
-  defp maybe_log_grad_norm(loop, opts) when is_list(opts), do: Edifice.Training.Adaptive.log_grad_norm(loop, opts)
+
+  defp maybe_log_grad_norm(loop, opts) when is_list(opts),
+    do: Edifice.Training.Adaptive.log_grad_norm(loop, opts)
 
   # Build optimizer from name atom + options
   defp build_optimizer(name, lr_or_schedule, weight_decay) do
@@ -627,7 +639,11 @@ defmodule Edifice.Recipes do
       []
       |> then(fn u -> if centralize, do: [Polaris.Updates.centralize() | u], else: u end)
       |> then(fn u -> if add_noise, do: [Polaris.Updates.add_noise() | u], else: u end)
-      |> then(fn u -> if max_grad_norm, do: [Polaris.Updates.clip_by_global_norm(max_norm: max_grad_norm) | u], else: u end)
+      |> then(fn u ->
+        if max_grad_norm,
+          do: [Polaris.Updates.clip_by_global_norm(max_norm: max_grad_norm) | u],
+          else: u
+      end)
 
     case updates do
       [] -> optimizer
@@ -640,19 +656,36 @@ defmodule Edifice.Recipes do
 
   defp maybe_extra_metrics(loop, metrics) when is_list(metrics) do
     Enum.reduce(metrics, loop, fn
-      :precision, loop -> Axon.Loop.metric(loop, &Axon.Metrics.precision/2, "precision")
-      :recall, loop -> Axon.Loop.metric(loop, &Axon.Metrics.recall/2, "recall")
-      :sensitivity, loop -> Axon.Loop.metric(loop, &Axon.Metrics.sensitivity/2, "sensitivity")
-      :specificity, loop -> Axon.Loop.metric(loop, &Axon.Metrics.specificity/2, "specificity")
-      :top_k_accuracy, loop -> Axon.Loop.metric(loop, &Axon.Metrics.top_k_categorical_accuracy(&1, &2, k: 5), "top_5_accuracy")
-      _, loop -> loop
+      :precision, loop ->
+        Axon.Loop.metric(loop, &Axon.Metrics.precision/2, "precision")
+
+      :recall, loop ->
+        Axon.Loop.metric(loop, &Axon.Metrics.recall/2, "recall")
+
+      :sensitivity, loop ->
+        Axon.Loop.metric(loop, &Axon.Metrics.sensitivity/2, "sensitivity")
+
+      :specificity, loop ->
+        Axon.Loop.metric(loop, &Axon.Metrics.specificity/2, "specificity")
+
+      :top_k_accuracy, loop ->
+        Axon.Loop.metric(
+          loop,
+          &Axon.Metrics.top_k_categorical_accuracy(&1, &2, k: 5),
+          "top_5_accuracy"
+        )
+
+      _, loop ->
+        loop
     end)
   end
 
   # Reduce LR on plateau
   defp maybe_reduce_lr(loop, nil), do: loop
   defp maybe_reduce_lr(loop, true), do: Axon.Loop.reduce_lr_on_plateau(loop, "loss", mode: :min)
-  defp maybe_reduce_lr(loop, opts) when is_list(opts), do: Axon.Loop.reduce_lr_on_plateau(loop, "loss", opts)
+
+  defp maybe_reduce_lr(loop, opts) when is_list(opts),
+    do: Axon.Loop.reduce_lr_on_plateau(loop, "loss", opts)
 
   defp warmup_cosine_schedule(peak_lr, warmup_steps, total_steps) do
     decay_steps = max(total_steps - warmup_steps, 1)

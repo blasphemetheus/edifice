@@ -154,7 +154,9 @@ defmodule Edifice.CUDA.AutoTuneProfiler do
       end
 
       if length(kernel_entries) > 1 do
-        IO.puts("  #{pad("", 25)} #{pad("", 14)} #{pad("subtotal", 25)} #{pad("", 8)} #{kernel_total}")
+        IO.puts(
+          "  #{pad("", 25)} #{pad("", 14)} #{pad("subtotal", 25)} #{pad("", 8)} #{kernel_total}"
+        )
       end
     end
 

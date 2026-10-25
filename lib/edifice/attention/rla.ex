@@ -294,8 +294,14 @@ defmodule Edifice.Attention.RLA do
     # Returns [B, T, H, d]
     scan_output =
       Edifice.CUDA.FusedScan.rla_scan(
-        q_all, k_all, v_all, alpha_scalar, beta_scalar, gamma_scalar,
-        variant: variant, clip_threshold: clip_threshold
+        q_all,
+        k_all,
+        v_all,
+        alpha_scalar,
+        beta_scalar,
+        gamma_scalar,
+        variant: variant,
+        clip_threshold: clip_threshold
       )
 
     # Flatten heads: [batch, seq_len, num_heads * head_dim]

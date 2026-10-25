@@ -93,7 +93,9 @@ defmodule Edifice.Sets.EntityEncoderTest do
       out_b = predict_fn.(params, %{"entity_features" => features, "entity_types" => types_b})
 
       # Different types should produce different outputs
-      diff = Nx.subtract(out_a.global, out_b.global) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
+      diff =
+        Nx.subtract(out_a.global, out_b.global) |> Nx.abs() |> Nx.reduce_max() |> Nx.to_number()
+
       assert diff > 1.0e-5
     end
   end

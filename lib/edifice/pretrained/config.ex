@@ -26,11 +26,9 @@ defmodule Edifice.Pretrained.Config do
     "vit" => {KeyMaps.ViT, &Edifice.Vision.ViT.build/1, &__MODULE__.map_vit_config/1},
     "convnext" =>
       {KeyMaps.ConvNeXt, &Edifice.Vision.ConvNeXt.build/1, &__MODULE__.map_convnext_config/1},
-    "detr" =>
-      {KeyMaps.DETR, &Edifice.Detection.DETR.build/1, &__MODULE__.map_detr_config/1},
+    "detr" => {KeyMaps.DETR, &Edifice.Detection.DETR.build/1, &__MODULE__.map_detr_config/1},
     "resnet" =>
-      {KeyMaps.ResNet, &Edifice.Convolutional.ResNet.build/1,
-       &__MODULE__.map_resnet_config/1},
+      {KeyMaps.ResNet, &Edifice.Convolutional.ResNet.build/1, &__MODULE__.map_resnet_config/1},
     "whisper" => {KeyMaps.Whisper, nil, &__MODULE__.map_whisper_config/1}
   }
 

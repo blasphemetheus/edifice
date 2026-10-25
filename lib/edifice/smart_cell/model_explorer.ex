@@ -190,6 +190,7 @@ if Code.ensure_loaded?(Kino.SmartCell) do
       variable = variable || "model"
 
       opts_ast = build_opts_ast(attrs["family"], attrs["options"])
+
       arch_atom =
         try do
           String.to_existing_atom(arch)
