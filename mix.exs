@@ -14,7 +14,7 @@ defmodule Edifice.MixProject do
       deps: deps(),
       aliases: aliases(),
       test_coverage: [tool: ExCoveralls],
-      dialyzer: [plt_add_apps: [:mix, :jason]],
+      dialyzer: [plt_add_apps: [:mix, :jason, :ex_unit]],
 
       # Docs
       name: "Edifice",
