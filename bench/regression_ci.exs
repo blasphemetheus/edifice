@@ -8,7 +8,10 @@
 #   BENCH_UPDATE_BASELINE=1 mix run bench/regression_ci.exs  # write new baseline
 #
 # Baseline stored in bench/results/ci_baseline.json (checked into repo).
-# Threshold: 20% regression (accounts for shared CI runner variance).
+# Threshold: 20% regression after normalizing for machine speed. The median
+# current/baseline ratio across architectures is treated as the hardware scale
+# (CI runners are far slower than the machine that wrote the baseline), so only
+# architectures that slow down relative to the others are flagged.
 
 Logger.configure(level: :warning)
 
@@ -166,6 +169,9 @@ defmodule RegressionCI do
     IO.puts("Regression Check (threshold: #{round((@threshold - 1) * 100)}%)")
     IO.puts("-" |> String.duplicate(60))
 
+    scale = hardware_scale(results, baseline)
+    IO.puts("Hardware scale (median current/baseline): #{Float.round(scale, 2)}x")
+
     regressions =
       for {name, %{median_ns: current_ns}} <- Enum.sort(results), reduce: [] do
         acc ->
@@ -175,13 +181,13 @@ defmodule RegressionCI do
               acc
 
             %{"median_ns" => baseline_ns} ->
-              ratio = current_ns / baseline_ns
+              ratio = current_ns / baseline_ns / scale
               status = if ratio > @threshold, do: "REGRESSED", else: "ok"
 
               IO.puts(
                 "  #{String.pad_trailing(name, 12)} " <>
                   "#{format_time(current_ns)} vs #{format_time(baseline_ns)} " <>
-                  "(#{Float.round(ratio, 2)}x) #{status}"
+                  "(#{Float.round(ratio, 2)}x normalized) #{status}"
               )
 
               if ratio > @threshold, do: [name | acc], else: acc
@@ -198,6 +204,20 @@ defmodule RegressionCI do
       System.halt(1)
     else
       IO.puts("OK: All architectures within #{round((@threshold - 1) * 100)}% of baseline.")
+    end
+  end
+
+  # Median of current/baseline across architectures with a baseline entry.
+  # A uniform slowdown is machine speed; a single outlier is a regression.
+  defp hardware_scale(results, baseline) do
+    ratios =
+      for {name, %{median_ns: current_ns}} <- results,
+          %{"median_ns" => baseline_ns} <- [Map.get(baseline, name)],
+          do: current_ns / baseline_ns
+
+    case Enum.sort(ratios) do
+      [] -> 1.0
+      sorted -> Enum.at(sorted, div(length(sorted), 2))
     end
   end
 

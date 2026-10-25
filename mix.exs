@@ -67,7 +67,7 @@ defmodule Edifice.MixProject do
       {:tokenizers, "~> 0.5", optional: true},
 
       # Dev & Test
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.34", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 1.1", only: [:dev, :test]},
       {:benchee, "~> 1.0", only: :dev},
