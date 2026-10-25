@@ -57,7 +57,7 @@ defmodule Edifice.RL.PPOTrainer do
   @default_value_coeff 0.5
   @default_entropy_coeff 0.01
   @default_learning_rate 3.0e-4
-  # @default_max_grad_norm 0.5 — TODO: implement gradient clipping
+  @default_max_grad_norm 0.5
 
   # ============================================================================
   # Training
@@ -81,11 +81,17 @@ defmodule Edifice.RL.PPOTrainer do
     - `:value_coeff` - Value loss coefficient (default: 0.5)
     - `:entropy_coeff` - Entropy bonus coefficient (default: 0.01)
     - `:learning_rate` - Learning rate (default: 3e-4)
+    - `:max_grad_norm` - Global gradient norm limit before Adam (default: 0.5)
+    - `:seed` - Weight initialization seed (default: 42)
+    - `:compiler` - Optional Nx compiler, e.g. EXLA, for prediction and updates
     - `:reset_opts` - Environment reset options (default: [])
     - `:on_iteration` - Callback fn(iteration, avg_reward) for logging (optional)
 
   ## Returns
-    `%{params: trained_params, reward_history: [avg_reward_per_iteration]}`
+    `%{params: trained_params, reward_history: [avg_reward_per_iteration]}`.
+    Rewards average episode segments inside each rollout, including partial
+    episodes. This trainer supports discrete, stateless PolicyValue models;
+    inference-mode differentiation keeps dropout/state updates out of PPO ratios.
   """
   @spec train(Axon.t(), module(), keyword()) :: map()
   def train(model, env_module, opts \\ []) do
@@ -101,101 +107,145 @@ defmodule Edifice.RL.PPOTrainer do
     learning_rate = Keyword.get(opts, :learning_rate, @default_learning_rate)
     reset_opts = Keyword.get(opts, :reset_opts, [])
     on_iteration = Keyword.get(opts, :on_iteration, nil)
+    max_grad_norm = Keyword.get(opts, :max_grad_norm, @default_max_grad_norm)
+    compiler_opts = Keyword.take(opts, [:compiler, :client])
+
+    for {name, value} <- [
+          num_iterations: num_iterations,
+          rollout_steps: rollout_steps,
+          num_epochs: num_epochs,
+          batch_size: batch_size
+        ] do
+      unless is_integer(value) and value > 0,
+        do: raise(ArgumentError, "#{name} must be a positive integer")
+    end
+
+    unless is_number(max_grad_norm) and max_grad_norm > 0,
+      do: raise(ArgumentError, "max_grad_norm must be positive")
+
+    unless env_module.action_space().type == :discrete,
+      do: raise(ArgumentError, "PPOTrainer supports discrete action spaces only")
 
     # Get observation size from environment
     obs_space = env_module.observation_space()
     obs_size = elem(obs_space.shape, 0)
 
     # Initialize model parameters
-    {init_fn, predict_fn} = Axon.build(model, mode: :train)
-    params = init_fn.(Nx.template({1, obs_size}, :f32), Axon.ModelState.empty())
+    {init_fn, predict_fn} =
+      Axon.build(model, [mode: :inference, seed: Keyword.get(opts, :seed, 42)] ++ compiler_opts)
+
+    params =
+      init_fn.(%{"observation" => Nx.template({1, obs_size}, :f32)}, Axon.ModelState.empty())
 
     # Initialize optimizer (Adam)
-    {optimizer_init, optimizer_update} = Polaris.Optimizers.adam(learning_rate: learning_rate)
+    {optimizer_init, optimizer_update} =
+      Polaris.Updates.clip_by_global_norm(max_norm: max_grad_norm)
+      |> Polaris.Updates.compose(Polaris.Optimizers.adam(learning_rate: learning_rate))
+
     optimizer_state = optimizer_init.(params)
 
+    # Trace prediction, differentiation, clipping and Adam as one executable.
+    update =
+      Nx.Defn.jit(
+        fn p, os, obs, actions, old_log_probs, advantages, returns ->
+          {_loss, grads} =
+            ppo_loss_and_grad(
+              p,
+              predict_fn,
+              obs,
+              actions,
+              old_log_probs,
+              advantages,
+              returns,
+              epsilon,
+              value_coeff,
+              entropy_coeff
+            )
+
+          {updates, new_os} = optimizer_update.(grads, os, p)
+          {Polaris.Updates.apply_updates(p, updates), new_os}
+        end,
+        compiler_opts
+      )
+
     # Training loop
-    {final_params, _opt_state, reward_history} =
-      Enum.reduce(1..num_iterations, {params, optimizer_state, []}, fn iteration,
-                                                                       {current_params, opt_state,
-                                                                        rewards_acc} ->
-        # 1. Collect rollout with policy
-        {trajectory, avg_reward} =
-          collect_rollout(env_module, predict_fn, current_params, rollout_steps, reset_opts)
+    {initial_obs, initial_env} = env_module.reset(reset_opts)
 
-        # 2. Compute GAE advantages
-        traj_rewards = Enum.map(trajectory, & &1.reward)
-        traj_values = Enum.map(trajectory, & &1.value)
-        traj_dones = Enum.map(trajectory, & &1.done)
+    {final_params, _opt_state, reward_history, _carry} =
+      Enum.reduce(
+        1..num_iterations,
+        {params, optimizer_state, [], {initial_obs, initial_env, false}},
+        fn iteration, {current_params, opt_state, rewards_acc, carry} ->
+          # 1. Collect rollout with policy
+          {trajectory, avg_reward, last_value, carry} =
+            collect_rollout_continuing(
+              env_module,
+              predict_fn,
+              current_params,
+              rollout_steps,
+              reset_opts,
+              carry
+            )
 
-        # Last value bootstrap
-        last_exp = List.last(trajectory)
-        last_value = if last_exp.done, do: 0.0, else: last_exp.value
+          # 2. Compute GAE advantages
+          traj_rewards = Enum.map(trajectory, & &1.reward)
+          traj_values = Enum.map(trajectory, & &1.value)
+          traj_dones = Enum.map(trajectory, & &1.done)
 
-        {advantages, returns} =
-          GAE.compute(traj_rewards, traj_values, traj_dones, last_value,
-            gamma: gamma,
-            lambda: lambda
-          )
+          {advantages, returns} =
+            GAE.compute(traj_rewards, traj_values, traj_dones, last_value,
+              gamma: gamma,
+              lambda: lambda
+            )
 
-        # Normalize advantages
-        advantages = GAE.normalize(advantages)
+          # Normalize advantages
+          advantages = GAE.normalize(advantages)
 
-        # 3. Prepare training data as tensors
-        obs_tensor = trajectory |> Enum.map(& &1.obs) |> Nx.stack()
-        actions_tensor = trajectory |> Enum.map(& &1.action) |> Nx.tensor(type: :s32)
-        old_log_probs_tensor = trajectory |> Enum.map(& &1.log_prob) |> Nx.tensor(type: :f32)
-        advantages_tensor = Nx.tensor(advantages, type: :f32)
-        returns_tensor = Nx.tensor(returns, type: :f32)
+          # 3. Prepare training data as tensors
+          obs_tensor = trajectory |> Enum.map(& &1.obs) |> Nx.stack()
+          actions_tensor = trajectory |> Enum.map(& &1.action) |> Nx.tensor(type: :s32)
+          old_log_probs_tensor = trajectory |> Enum.map(& &1.log_prob) |> Nx.tensor(type: :f32)
+          advantages_tensor = Nx.tensor(advantages, type: :f32)
+          returns_tensor = Nx.tensor(returns, type: :f32)
 
-        num_samples = length(trajectory)
+          num_samples = length(trajectory)
 
-        # 4. PPO optimization epochs
-        {updated_params, updated_opt_state} =
-          Enum.reduce(1..num_epochs, {current_params, opt_state}, fn _epoch, {p, os} ->
-            # Shuffle indices
-            indices = Enum.shuffle(0..(num_samples - 1))
+          # 4. PPO optimization epochs
+          {updated_params, updated_opt_state} =
+            Enum.reduce(1..num_epochs, {current_params, opt_state}, fn _epoch, {p, os} ->
+              # Shuffle indices
+              indices = Enum.shuffle(0..(num_samples - 1))
 
-            # Mini-batch updates
-            indices
-            |> Enum.chunk_every(batch_size)
-            |> Enum.reject(fn chunk -> length(chunk) < 2 end)
-            |> Enum.reduce({p, os}, fn batch_indices, {bp, bos} ->
-              idx = Nx.tensor(batch_indices, type: :s32)
-              batch_obs = Nx.take(obs_tensor, idx)
-              batch_actions = Nx.take(actions_tensor, idx)
-              batch_old_log_probs = Nx.take(old_log_probs_tensor, idx)
-              batch_advantages = Nx.take(advantages_tensor, idx)
-              batch_returns = Nx.take(returns_tensor, idx)
+              # Mini-batch updates
+              indices
+              |> Enum.chunk_every(batch_size)
+              |> Enum.reduce({p, os}, fn batch_indices, {bp, bos} ->
+                idx = Nx.tensor(batch_indices, type: :s32)
+                batch_obs = Nx.take(obs_tensor, idx)
+                batch_actions = Nx.take(actions_tensor, idx)
+                batch_old_log_probs = Nx.take(old_log_probs_tensor, idx)
+                batch_advantages = Nx.take(advantages_tensor, idx)
+                batch_returns = Nx.take(returns_tensor, idx)
 
-              # Compute gradients and update
-              {loss, grads} =
-                ppo_loss_and_grad(
+                # Compute gradients and update
+                update.(
                   bp,
-                  predict_fn,
+                  bos,
                   batch_obs,
                   batch_actions,
                   batch_old_log_probs,
                   batch_advantages,
-                  batch_returns,
-                  epsilon,
-                  value_coeff,
-                  entropy_coeff
+                  batch_returns
                 )
-
-              {updates, new_os} = optimizer_update.(grads, bos, bp)
-              new_params = Polaris.Updates.apply_updates(bp, updates)
-
-              _ = loss
-              {new_params, new_os}
+              end)
             end)
-          end)
 
-        # Log progress
-        if on_iteration, do: on_iteration.(iteration, avg_reward)
+          # Log progress
+          if on_iteration, do: on_iteration.(iteration, avg_reward)
 
-        {updated_params, updated_opt_state, [avg_reward | rewards_acc]}
-      end)
+          {updated_params, updated_opt_state, [avg_reward | rewards_acc], carry}
+        end
+      )
 
     %{
       params: final_params,
@@ -207,53 +257,84 @@ defmodule Edifice.RL.PPOTrainer do
   # Rollout Collection
   # ============================================================================
 
-  defp collect_rollout(env_module, predict_fn, params, num_steps, reset_opts) do
+  @doc false
+  def collect_rollout(env_module, predict_fn, params, num_steps, reset_opts) do
     {obs, env_state} = env_module.reset(reset_opts)
 
-    {trajectory, _obs, _state, _done, total_reward, episode_count} =
-      Enum.reduce(1..num_steps, {[], obs, env_state, false, 0.0, 0}, fn _step,
-                                                                        {traj, current_obs,
-                                                                         current_state, done,
-                                                                         total_r, ep_count} ->
-        # Reset if previous episode ended
-        {actual_obs, actual_state, new_ep_count} =
-          if done do
-            {new_obs, new_state} = env_module.reset(reset_opts)
-            {new_obs, new_state, ep_count + 1}
-          else
-            {current_obs, current_state, ep_count}
-          end
+    {trajectory, reward, value, _} =
+      collect_rollout_continuing(
+        env_module,
+        predict_fn,
+        params,
+        num_steps,
+        reset_opts,
+        {obs, env_state, false}
+      )
 
-        # Get policy output
-        input = Nx.new_axis(actual_obs, 0)
-        %{policy: probs, value: value} = predict_fn.(params, %{"observation" => input})
+    {trajectory, reward, value}
+  end
 
-        # Sample action from policy
-        probs_flat = Nx.squeeze(probs)
-        value_scalar = Nx.to_number(Nx.squeeze(value))
+  defp collect_rollout_continuing(
+         env_module,
+         predict_fn,
+         params,
+         num_steps,
+         reset_opts,
+         {obs, env_state, done}
+       ) do
+    {trajectory, final_obs, final_state, final_done, total_reward, episode_count} =
+      Enum.reduce(
+        1..num_steps,
+        {[], obs, env_state, done, 0.0, if(done, do: -1, else: 0)},
+        fn _step, {traj, current_obs, current_state, done, total_r, ep_count} ->
+          # Reset if previous episode ended
+          {actual_obs, actual_state, new_ep_count} =
+            if done do
+              {new_obs, new_state} = env_module.reset(reset_opts)
+              {new_obs, new_state, ep_count + 1}
+            else
+              {current_obs, current_state, ep_count}
+            end
 
-        action = sample_categorical(probs_flat)
-        log_prob = Nx.to_number(Nx.log(Nx.add(probs_flat[action], 1.0e-8)))
+          # Get policy output
+          input = Nx.new_axis(actual_obs, 0)
+          %{policy: probs, value: value} = predict_fn.(params, %{"observation" => input})
 
-        # Step environment
-        {next_obs, reward, next_done, _info, next_state} = env_module.step(action, actual_state)
+          # Sample action from policy
+          probs_flat = Nx.squeeze(probs, axes: [0])
+          value_scalar = Nx.to_number(Nx.squeeze(value))
 
-        experience = %{
-          obs: actual_obs,
-          action: action,
-          reward: reward,
-          done: next_done,
-          log_prob: log_prob,
-          value: value_scalar
-        }
+          action = sample_categorical(probs_flat)
+          log_prob = Nx.to_number(Nx.log(Nx.add(probs_flat[action], 1.0e-8)))
 
-        {[experience | traj], next_obs, next_state, next_done, total_r + reward, new_ep_count}
-      end)
+          # Step environment
+          {next_obs, reward, next_done, _info, next_state} = env_module.step(action, actual_state)
+
+          experience = %{
+            obs: actual_obs,
+            action: action,
+            reward: reward,
+            done: next_done,
+            log_prob: log_prob,
+            value: value_scalar
+          }
+
+          {[experience | traj], next_obs, next_state, next_done, total_r + reward, new_ep_count}
+        end
+      )
 
     trajectory = Enum.reverse(trajectory)
-    avg_reward = if episode_count > 0, do: total_reward / episode_count, else: total_reward
+    avg_reward = total_reward / (episode_count + 1)
 
-    {trajectory, avg_reward}
+    last_value =
+      if final_done do
+        0.0
+      else
+        %{value: value} = predict_fn.(params, %{"observation" => Nx.new_axis(final_obs, 0)})
+        Nx.to_number(Nx.squeeze(value))
+      end
+
+    {trajectory, avg_reward, last_value, {final_obs, final_state, final_done}}
   end
 
   # Sample from a categorical distribution
