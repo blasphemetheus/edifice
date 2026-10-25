@@ -107,11 +107,43 @@ defmodule Edifice.Stateful do
   def clear_jit_cache do
     for {key, _} <- :persistent_term.get(),
         match?({__MODULE__, :jit_step, _, _}, key) or
-          match?({__MODULE__, :jit_step, _, _, _}, key) do
+          match?({__MODULE__, :jit_step, _, _, _}, key) or
+          match?({__MODULE__, :jit_replay, _, _, _}, key) do
       :persistent_term.erase(key)
     end
 
     :ok
+  end
+
+  @doc """
+  Cached compiled chunk replay returning final carry only.
+
+  The returned function accepts `(params, state, frames)` with frames shaped
+  `[batch, time, features]`. It preserves the same state as successive steps,
+  including convolution history, using one compiled loop. Use for cold-start
+  padding or resync; ordinary one-frame inference still uses `jit_step/3`.
+  """
+  @spec jit_replay(module(), module(), keyword()) ::
+          (params(), state(), Nx.Tensor.t() -> state())
+  def jit_replay(module, compiler, opts \\ []) do
+    key = {__MODULE__, :jit_replay, module, compiler, opts}
+
+    case :persistent_term.get(key, nil) do
+      nil ->
+        fun =
+          Nx.Defn.jit(
+            fn params, state, frames ->
+              Edifice.Stateful.Replay.run(params, state, frames, module: module)
+            end,
+            [compiler: compiler] ++ opts
+          )
+
+        :persistent_term.put(key, fun)
+        fun
+
+      fun ->
+        fun
+    end
   end
 
   @doc """

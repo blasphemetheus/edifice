@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Edifice.Stateful.jit_replay/3` compiles chunk-to-carry replay as a bounded
+  loop for cold-start padding and resynchronization, avoiding per-frame host
+  dispatch and graph unrolling. Includes parity checks and CPU replay benchmarks.
+
 - Stateful single-frame inference for GatedDeltaNet (`:gated_delta_net`) and
   Mamba-2/SSD (`:mamba_ssd`), including causal convolution history, serializable
   rollback state and structured-mask state for SSD. Prefix outputs and parameter

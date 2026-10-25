@@ -2,6 +2,42 @@
 
 ## Scope and model selection
 
+### Compiled replay follow-up (2026-10-25)
+
+`Edifice.Stateful.jit_replay/3` now returns a cached function that consumes a
+`[batch, time, features]` chunk and returns final carry. An Nx `while` loop
+keeps compilation size bounded and runs the replay in one executable call.
+The loop retains convolution history and supports nonzero starting state.
+It does not change the recurrence or the resync schedule.
+
+CPU replay-core medians, batch 1, two layers, input width 264, highest
+precision, seeded synthetic weights, 40 samples after warmup:
+
+| Architecture | Hidden/window | Cold: separate steps | Cold: compiled replay | Resync: separate steps | Resync: compiled replay |
+|---|---|---:|---:|---:|---:|
+| MinGRU | 256/80 | 10.945 ms | 1.007 ms | 10.609 ms | 0.979 ms |
+| GRU | 512/60 | 12.892 ms | 4.603 ms | 14.675 ms | 4.917 ms |
+| Mamba | 512/80 | 27.641 ms | 9.255 ms | 23.975 ms | 9.187 ms |
+| Mamba-2/SSD | 256/60 | 11.137 ms | 2.756 ms | 11.385 ms | 2.770 ms |
+
+Inputs/weights were resident and final carry was synchronized. These timings
+exclude input assembly, embedding, action heads, first compilation and IPC.
+The overnight ExPhil league was running concurrently, so these are indicative
+CPU measurements rather than an idle-machine baseline. No GPU benchmark was
+run against the occupied device. Results:
+`bench/results/recurrent_replay_host_2026-10-25.json`; reproduce with
+`mix run scripts/bench_recurrent_replay.exs --client host --out /tmp/replay.json`.
+
+ExPhil integration is in its `feat/compiled-replay` worktree while the live
+league finishes. It uses replay for single-agent cold starts, observe-only
+cold starts, single-agent resync and batched cold/reset rows. Warmup compiles
+replay on throwaway carry. Mamba-2 aliases `:mamba_2` and `:mamba_ssd` now have
+Agent adapters there. Snapshot v2 also stores resync history/counters, frame
+debounce, controller queue and stick-run state; this fixes deterministic replay
+across resync boundaries. Per-row **batched resync itself remains unimplemented**.
+
+### Original benchmark scope
+
 Measured on October 24, 2026 on a Ryzen 9 9950X3D and RTX 5090. These are
 **Edifice backbone microbenchmarks**, not recorded game-loop or complete policy
 latencies. Weights are seeded synthetic weights, not exported trained policies.

@@ -1,0 +1,182 @@
+{
+  "precision": "highest",
+  "embed": 264,
+  "client": "host",
+  "iterations": 40,
+  "results": [
+    {
+      "hidden": 256,
+      "window": 80,
+      "results": [
+        {
+          "sequential": {
+            "median_us": 10945,
+            "p95_us": 19932
+          },
+          "kind": "cold_start",
+          "compiled": {
+            "median_us": 1007,
+            "p95_us": 1143
+          },
+          "speedup": 10.868917576961271
+        },
+        {
+          "sequential": {
+            "median_us": 10609,
+            "p95_us": 11663
+          },
+          "kind": "resync",
+          "compiled": {
+            "median_us": 979,
+            "p95_us": 1084
+          },
+          "speedup": 10.836567926455567
+        },
+        {
+          "sequential": {
+            "median_us": 10519,
+            "p95_us": 10801
+          },
+          "kind": "continued_chunk",
+          "compiled": {
+            "median_us": 945,
+            "p95_us": 1021
+          },
+          "speedup": 11.131216931216931
+        }
+      ],
+      "architecture": "min_gru"
+    },
+    {
+      "hidden": 512,
+      "window": 60,
+      "results": [
+        {
+          "sequential": {
+            "median_us": 12892,
+            "p95_us": 19123
+          },
+          "kind": "cold_start",
+          "compiled": {
+            "median_us": 4603,
+            "p95_us": 4819
+          },
+          "speedup": 2.8007820986313274
+        },
+        {
+          "sequential": {
+            "median_us": 14675,
+            "p95_us": 18935
+          },
+          "kind": "resync",
+          "compiled": {
+            "median_us": 4917,
+            "p95_us": 5724
+          },
+          "speedup": 2.9845434207850317
+        },
+        {
+          "sequential": {
+            "median_us": 12938,
+            "p95_us": 18835
+          },
+          "kind": "continued_chunk",
+          "compiled": {
+            "median_us": 4771,
+            "p95_us": 5838
+          },
+          "speedup": 2.711800461119262
+        }
+      ],
+      "architecture": "gru"
+    },
+    {
+      "hidden": 512,
+      "window": 80,
+      "results": [
+        {
+          "sequential": {
+            "median_us": 27641,
+            "p95_us": 31623
+          },
+          "kind": "cold_start",
+          "compiled": {
+            "median_us": 9255,
+            "p95_us": 9718
+          },
+          "speedup": 2.9866018368449487
+        },
+        {
+          "sequential": {
+            "median_us": 23975,
+            "p95_us": 29519
+          },
+          "kind": "resync",
+          "compiled": {
+            "median_us": 9187,
+            "p95_us": 10016
+          },
+          "speedup": 2.6096658321541306
+        },
+        {
+          "sequential": {
+            "median_us": 28053,
+            "p95_us": 34766
+          },
+          "kind": "continued_chunk",
+          "compiled": {
+            "median_us": 9428,
+            "p95_us": 10511
+          },
+          "speedup": 2.9754985150615187
+        }
+      ],
+      "architecture": "mamba"
+    },
+    {
+      "hidden": 256,
+      "window": 60,
+      "results": [
+        {
+          "sequential": {
+            "median_us": 11137,
+            "p95_us": 14870
+          },
+          "kind": "cold_start",
+          "compiled": {
+            "median_us": 2756,
+            "p95_us": 3077
+          },
+          "speedup": 4.0410014513788095
+        },
+        {
+          "sequential": {
+            "median_us": 11385,
+            "p95_us": 16882
+          },
+          "kind": "resync",
+          "compiled": {
+            "median_us": 2770,
+            "p95_us": 3323
+          },
+          "speedup": 4.110108303249097
+        },
+        {
+          "sequential": {
+            "median_us": 11636,
+            "p95_us": 17162
+          },
+          "kind": "continued_chunk",
+          "compiled": {
+            "median_us": 2884,
+            "p95_us": 3599
+          },
+          "speedup": 4.034674063800278
+        }
+      ],
+      "architecture": "mamba_ssd"
+    }
+  ],
+  "batch": 1,
+  "note": "Synthetic weights, resident inputs, backbone-only replay; no embedding/head/IPC time. All final state leaves checked against sequential calls before timing."
+}
