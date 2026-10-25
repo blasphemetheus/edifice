@@ -79,7 +79,7 @@ jobs:
         run: mix compile --warnings-as-errors
 
       - name: Run tests
-        run: mix test
+        run: mix test --max-cases "$(nproc)"
 
       - name: Test sharding with virtual CPU devices
         env:
@@ -124,7 +124,7 @@ jobs:
         run: mix compile
 
       - name: Run slow tests (partition ${{ matrix.partition }}/4)
-        run: mix test --include slow --partitions 4
+        run: mix test --include slow --partitions 4 --max-cases "$(nproc)"
 
   # Benchmark regression detection (parallel with test pipeline)
   benchmark:

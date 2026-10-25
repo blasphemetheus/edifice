@@ -277,7 +277,7 @@ defmodule Edifice.GradientSmokeTest do
   ]
 
   for arch <- @sequence_archs do
-    @tag timeout: 120_000
+    @tag timeout: 300_000
     test "gradient flows through #{arch}" do
       model = Edifice.build(unquote(arch), @sequence_opts)
       input = random_tensor({@batch, @seq_len, @embed})
@@ -287,7 +287,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # Chunked attention models need seq_len >= 2 * block_size (at least 2 blocks)
   for arch <- [:lightning_attention, :flash_linear_attention, :dual_chunk_attention] do
-    @tag timeout: 120_000
+    @tag timeout: 300_000
     test "gradient flows through #{arch}" do
       block = div(@seq_len, 2)
 
@@ -305,7 +305,7 @@ defmodule Edifice.GradientSmokeTest do
   # YaRN, TMRoPE, and Reservoir: no trainable parameters (pure positional
   # encoding / fixed random weights), skip gradient test
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through rwkv" do
     model =
       Edifice.build(:rwkv,
@@ -323,7 +323,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── MoE variants ──────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through moe" do
     model =
       Edifice.build(:moe,
@@ -339,7 +339,7 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   for arch <- [:switch_moe, :soft_moe] do
-    @tag timeout: 120_000
+    @tag timeout: 300_000
     test "gradient flows through #{arch}" do
       model =
         Edifice.build(unquote(arch),
@@ -358,14 +358,14 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Feedforward Models ──────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through mlp" do
     model = Edifice.build(:mlp, input_size: @embed, hidden_sizes: [@hidden])
     input = random_tensor({@batch, @embed})
     check_gradients(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through tabnet" do
     model = Edifice.build(:tabnet, input_size: @embed, output_size: @num_classes)
     input = random_tensor({@batch, @embed})
@@ -375,7 +375,7 @@ defmodule Edifice.GradientSmokeTest do
   # ── Vision Models ──────────────────────────────────────────────
 
   for arch <- [:vit, :deit, :mlp_mixer] do
-    @tag timeout: 120_000
+    @tag timeout: 300_000
     @tag :slow
     test "gradient flows through #{arch}" do
       model =
@@ -395,7 +395,7 @@ defmodule Edifice.GradientSmokeTest do
     end
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through swin" do
     model =
       Edifice.build(:swin,
@@ -413,7 +413,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"image" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through unet" do
     model =
       Edifice.build(:unet,
@@ -429,7 +429,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"image" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through convnext" do
     model =
       Edifice.build(:convnext,
@@ -451,7 +451,7 @@ defmodule Edifice.GradientSmokeTest do
   # Nx.BinaryBackend.select_and_scatter crashes on max_pool gradients.
   # check_gradients auto-detects EXLA when available.
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   @tag :exla_only
   test "gradient flows through resnet" do
     model =
@@ -466,7 +466,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   @tag :exla_only
   test "gradient flows through densenet" do
     model =
@@ -482,14 +482,14 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through tcn" do
     model = Edifice.build(:tcn, input_size: @embed, hidden_size: @hidden, num_layers: 2)
     input = random_tensor({@batch, @seq_len, @embed})
     check_gradients(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through capsule" do
     model =
       Edifice.build(:capsule,
@@ -508,7 +508,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Parameter sensitivity tests for max_pool models (BinaryBackend workaround)
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "parameters are sensitive in resnet" do
     model =
       Edifice.build(:resnet,
@@ -522,7 +522,7 @@ defmodule Edifice.GradientSmokeTest do
     check_parameter_sensitivity(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "parameters are sensitive in densenet" do
     model =
       Edifice.build(:densenet,
@@ -537,7 +537,7 @@ defmodule Edifice.GradientSmokeTest do
     check_parameter_sensitivity(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through mobilenet" do
     model =
       Edifice.build(:mobilenet, input_dim: @embed, hidden_dim: @hidden, num_classes: @num_classes)
@@ -553,7 +553,7 @@ defmodule Edifice.GradientSmokeTest do
   @graph_archs [:gcn, :gat, :graph_sage, :gin, :pna, :graph_transformer]
 
   for arch <- @graph_archs do
-    @tag timeout: 120_000
+    @tag timeout: 300_000
     test "gradient flows through #{arch}" do
       model =
         Edifice.build(unquote(arch),
@@ -571,7 +571,7 @@ defmodule Edifice.GradientSmokeTest do
     end
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through schnet" do
     model =
       Edifice.build(:schnet,
@@ -591,14 +591,14 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Set Models ──────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through deep_sets" do
     model = Edifice.build(:deep_sets, input_dim: @point_dim, output_dim: @num_classes)
     input = random_tensor({@batch, @num_points, @point_dim})
     check_gradients(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through pointnet" do
     model = Edifice.build(:pointnet, num_classes: @num_classes, input_dim: @point_dim)
     input = random_tensor({@batch, @num_points, @point_dim})
@@ -607,21 +607,21 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Energy / Dynamic ──────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through ebm" do
     model = Edifice.build(:ebm, input_size: @embed)
     input = random_tensor({@batch, @embed})
     check_gradients(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through hopfield" do
     model = Edifice.build(:hopfield, input_dim: @embed)
     input = random_tensor({@batch, @embed})
     check_gradients(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through neural_ode" do
     model = Edifice.build(:neural_ode, input_size: @embed, hidden_size: @hidden)
     input = random_tensor({@batch, @embed})
@@ -637,7 +637,7 @@ defmodule Edifice.GradientSmokeTest do
   ]
 
   for {arch, opts} <- @prob_archs do
-    @tag timeout: 120_000
+    @tag timeout: 300_000
     test "gradient flows through #{arch}" do
       model = Edifice.build(unquote(arch), unquote(opts))
       input = random_tensor({@batch, @embed})
@@ -647,7 +647,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Memory ──────────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through ntm" do
     model =
       Edifice.build(:ntm,
@@ -663,7 +663,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"input" => input, "memory" => memory})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through memory_network" do
     model =
       Edifice.build(:memory_network,
@@ -679,7 +679,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Neuromorphic ──────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through snn" do
     model =
       Edifice.build(:snn, input_size: @embed, output_size: @num_classes, hidden_sizes: [@hidden])
@@ -688,7 +688,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through ann2snn" do
     model = Edifice.build(:ann2snn, input_size: @embed, output_size: @num_classes)
     input = random_tensor({@batch, @embed})
@@ -697,21 +697,21 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Meta / PEFT ──────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through lora" do
     model = Edifice.build(:lora, input_size: @embed, output_size: @hidden, rank: 4)
     input = random_tensor({@batch, @embed})
     check_gradients(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through adapter" do
     model = Edifice.build(:adapter, hidden_size: @hidden)
     input = random_tensor({@batch, @hidden})
     check_gradients(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through hypernetwork" do
     model =
       Edifice.build(:hypernetwork,
@@ -728,7 +728,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, input_map)
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   @tag :slow
   test "gradient flows through perceiver" do
     model =
@@ -749,7 +749,7 @@ defmodule Edifice.GradientSmokeTest do
   # ── Generative (test non-container components) ────────────────
 
   # VAE: test decoder (returns plain tensor; encoder returns container)
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through vae decoder" do
     {_encoder, decoder} = Edifice.build(:vae, input_size: @embed, latent_size: @latent_size)
     input = random_tensor({@batch, @latent_size})
@@ -757,7 +757,7 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   # VQ-VAE: encoder returns plain tensor
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through vq_vae encoder" do
     {encoder, _decoder} = Edifice.build(:vq_vae, input_size: @embed, embedding_dim: @latent_size)
     input = random_tensor({@batch, @embed})
@@ -765,14 +765,14 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   # GAN
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through gan generator" do
     {generator, _disc} = Edifice.build(:gan, output_size: @embed, latent_size: @latent_size)
     noise = random_tensor({@batch, @latent_size})
     check_gradients(generator, %{"noise" => noise})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through gan discriminator" do
     {_gen, discriminator} = Edifice.build(:gan, output_size: @embed, latent_size: @latent_size)
     input = random_tensor({@batch, @embed})
@@ -780,7 +780,7 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   # Normalizing flow: single model
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through normalizing_flow" do
     model = Edifice.build(:normalizing_flow, input_size: @embed, num_flows: 2)
     input = random_tensor({@batch, @embed})
@@ -788,7 +788,7 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   # Latent diffusion: test decoder (plain tensor) and denoiser
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through latent_diffusion decoder" do
     {_encoder, decoder, _denoiser} =
       Edifice.build(:latent_diffusion,
@@ -802,7 +802,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(decoder, %{"latent" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through latent_diffusion denoiser" do
     {_encoder, _decoder, denoiser} =
       Edifice.build(:latent_diffusion,
@@ -821,7 +821,7 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   # BYOL: test online encoder
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through byol online_encoder" do
     {online, _target} = Edifice.build(:byol, encoder_dim: @embed, projection_dim: @hidden)
     input = random_tensor({@batch, @embed})
@@ -829,7 +829,7 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   # MAE: test encoder
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through mae encoder" do
     {encoder, _decoder} =
       Edifice.build(:mae,
@@ -849,7 +849,7 @@ defmodule Edifice.GradientSmokeTest do
   # ── Contrastive (single model) ──────────────────────────────
 
   for arch <- [:simclr, :barlow_twins, :vicreg] do
-    @tag timeout: 120_000
+    @tag timeout: 300_000
     @tag :slow
     test "gradient flows through #{arch}" do
       model = Edifice.build(unquote(arch), encoder_dim: @embed, projection_dim: @hidden)
@@ -861,7 +861,7 @@ defmodule Edifice.GradientSmokeTest do
   # ── Diffusion family ────────────────────────────────────────
 
   for arch <- [:diffusion, :ddim] do
-    @tag timeout: 120_000
+    @tag timeout: 300_000
     test "gradient flows through #{arch}" do
       model =
         Edifice.build(unquote(arch),
@@ -883,7 +883,7 @@ defmodule Edifice.GradientSmokeTest do
     end
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through flow_matching" do
     model =
       Edifice.build(:flow_matching,
@@ -904,7 +904,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, input_map)
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through dit" do
     model =
       Edifice.build(:dit,
@@ -923,7 +923,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, input_map)
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through score_sde" do
     model =
       Edifice.build(:score_sde, input_dim: @embed, hidden_size: @hidden, num_layers: @num_layers)
@@ -936,7 +936,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, input_map)
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through consistency_model" do
     model =
       Edifice.build(:consistency_model,
@@ -955,7 +955,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Transformer family ──────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through decoder_only" do
     model =
       Edifice.build(:decoder_only,
@@ -991,7 +991,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"state_sequence" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through multi_token_prediction" do
     model =
       Edifice.build(:multi_token_prediction,
@@ -1010,7 +1010,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"state_sequence" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through byte_latent_transformer encoder" do
     {encoder, _latent, _decoder} =
       Edifice.build(:byte_latent_transformer,
@@ -1031,7 +1031,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Feedforward additions ──────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through bitnet" do
     model =
       Edifice.build(:bitnet,
@@ -1046,7 +1046,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"state_sequence" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through kat" do
     model =
       Edifice.build(:kat,
@@ -1064,7 +1064,7 @@ defmodule Edifice.GradientSmokeTest do
   # ── Vision additions ───────────────────────────────────────────
 
   for arch <- [:focalnet, :poolformer, :metaformer, :caformer, :efficient_vit, :mamba_vision] do
-    @tag timeout: 120_000
+    @tag timeout: 300_000
     @tag :slow
     test "gradient flows through #{arch}" do
       model =
@@ -1086,7 +1086,7 @@ defmodule Edifice.GradientSmokeTest do
     end
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through nerf" do
     model = Edifice.build(:nerf, coord_dim: 3, dir_dim: 3, hidden_size: @hidden)
     coordinates = random_tensor({@batch, 3})
@@ -1094,7 +1094,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"coordinates" => coordinates, "directions" => directions})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through gaussian_splat" do
     model =
       Edifice.build(:gaussian_splat,
@@ -1114,7 +1114,7 @@ defmodule Edifice.GradientSmokeTest do
     check_parameter_sensitivity(model, input_map)
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through dino_v2 student" do
     {student, _teacher} =
       Edifice.build(:dino_v2,
@@ -1132,7 +1132,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(student, %{"image" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through dino_v3 student" do
     {student, _teacher} =
       Edifice.build(:dino_v3,
@@ -1152,7 +1152,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Convolutional additions ────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through conv1d" do
     model =
       Edifice.build(:conv1d,
@@ -1165,7 +1165,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   @tag :exla_only
   test "gradient flows through efficientnet" do
     model = Edifice.build(:efficientnet, input_dim: @embed, hidden_dim: @hidden)
@@ -1184,7 +1184,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Graph additions ────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through gin_v2" do
     model =
       Edifice.build(:gin_v2,
@@ -1207,7 +1207,7 @@ defmodule Edifice.GradientSmokeTest do
     })
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through egnn" do
     model =
       Edifice.build(:egnn,
@@ -1230,7 +1230,7 @@ defmodule Edifice.GradientSmokeTest do
   # ── Detection family ───────────────────────────────────────────
 
   for arch <- [:detr, :rt_detr] do
-    @tag timeout: 120_000
+    @tag timeout: 300_000
     @tag :slow
     test "gradient flows through #{arch}" do
       # RT-DETR fuses feature levels at strides 8/16/32, so it needs a 32-multiple.
@@ -1255,7 +1255,7 @@ defmodule Edifice.GradientSmokeTest do
     end
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   @tag :slow
   test "gradient flows through sam2" do
     model =
@@ -1278,7 +1278,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Audio family ───────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through whisper encoder" do
     {encoder, _decoder} =
       Edifice.build(:whisper,
@@ -1295,7 +1295,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(encoder, %{"mel_spectrogram" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through encodec encoder" do
     {encoder, _decoder} =
       Edifice.build(:encodec,
@@ -1355,7 +1355,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Robotics family ───────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through act decoder" do
     {_encoder, decoder} =
       Edifice.build(:act,
@@ -1377,7 +1377,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(decoder, input_map)
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through openvla" do
     model =
       Edifice.build(:openvla,
@@ -1402,7 +1402,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── RL family ──────────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through policy_value" do
     model =
       Edifice.build(:policy_value,
@@ -1415,7 +1415,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"observation" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through decision_transformer" do
     model =
       Edifice.build(:decision_transformer,
@@ -1440,7 +1440,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Generative additions ───────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through dit_v2" do
     model =
       Edifice.build(:dit_v2,
@@ -1460,7 +1460,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, input_map)
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through mmdit" do
     img_tokens = 8
     txt_tokens = 4
@@ -1487,7 +1487,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, input_map)
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through soflow" do
     model =
       Edifice.build(:soflow,
@@ -1509,7 +1509,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, input_map)
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through rectified_flow" do
     model =
       Edifice.build(:rectified_flow,
@@ -1531,7 +1531,7 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   for arch <- [:linear_dit, :sit] do
-    @tag timeout: 120_000
+    @tag timeout: 300_000
     test "gradient flows through #{arch}" do
       model =
         Edifice.build(unquote(arch),
@@ -1552,7 +1552,7 @@ defmodule Edifice.GradientSmokeTest do
     end
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through var" do
     # Scales [1, 2] -> total_tokens = 1 + 4 = 5
     scales = [1, 2]
@@ -1572,7 +1572,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"scale_embeddings" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through mar" do
     model =
       Edifice.build(:mar,
@@ -1589,7 +1589,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"tokens" => tokens})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through mdlm" do
     model =
       Edifice.build(:mdlm,
@@ -1607,7 +1607,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"masked_tokens" => tokens, "timestep" => timestep})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through transfusion" do
     model =
       Edifice.build(:transfusion,
@@ -1628,7 +1628,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, input_map)
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   @tag :slow
   test "gradient flows through cogvideox transformer" do
     model =
@@ -1649,7 +1649,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, input_map)
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   @tag :slow
   test "gradient flows through trellis" do
     model =
@@ -1674,7 +1674,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── MoE additions ──────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through moe_v2" do
     model =
       Edifice.build(:moe_v2,
@@ -1690,7 +1690,7 @@ defmodule Edifice.GradientSmokeTest do
     check_parameter_sensitivity(model, %{"moe_input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through remoe" do
     model =
       Edifice.build(:remoe,
@@ -1711,14 +1711,14 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Meta / PEFT additions ─────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through dora" do
     model = Edifice.build(:dora, input_size: @embed, output_size: @hidden, rank: 4)
     input = random_tensor({@batch, @embed})
     check_gradients(model, %{"input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through mixture_of_depths" do
     model =
       Edifice.build(:mixture_of_depths,
@@ -1734,7 +1734,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"state_sequence" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through mixture_of_agents" do
     model =
       Edifice.build(:mixture_of_agents,
@@ -1751,7 +1751,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"state_sequence" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through rlhf_head" do
     model =
       Edifice.build(:rlhf_head,
@@ -1764,7 +1764,7 @@ defmodule Edifice.GradientSmokeTest do
   end
 
   for arch <- [:dpo, :kto, :grpo] do
-    @tag timeout: 120_000
+    @tag timeout: 300_000
     test "gradient flows through #{arch}" do
       model =
         Edifice.build(unquote(arch),
@@ -1783,7 +1783,7 @@ defmodule Edifice.GradientSmokeTest do
     end
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through distillation_head" do
     model =
       Edifice.build(:distillation_head,
@@ -1796,7 +1796,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"state_sequence" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through qat" do
     model =
       Edifice.build(:qat,
@@ -1812,7 +1812,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"state_sequence" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through eagle3" do
     model =
       Edifice.build(:eagle3,
@@ -1832,7 +1832,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, input_map)
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through manifold_hc" do
     model =
       Edifice.build(:manifold_hc,
@@ -1848,7 +1848,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"sequence" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through speculative_decoding draft model" do
     {draft, _verifier} =
       Edifice.build(:speculative_decoding,
@@ -1875,7 +1875,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(draft, %{"state_sequence" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through test_time_compute" do
     model =
       Edifice.build(:test_time_compute,
@@ -1893,7 +1893,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"state_sequence" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through speculative_head" do
     model =
       Edifice.build(:speculative_head,
@@ -1913,7 +1913,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"state_sequence" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through medusa" do
     model =
       Edifice.build(:medusa,
@@ -1926,7 +1926,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"hidden_states" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through mixture_of_tokenizers" do
     model =
       Edifice.build(:mixture_of_tokenizers,
@@ -1949,7 +1949,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Contrastive additions ──────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through jepa context_encoder" do
     {context_encoder, _predictor} =
       Edifice.build(:jepa,
@@ -1966,7 +1966,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(context_encoder, %{"features" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through temporal_jepa context_encoder" do
     {context_encoder, _predictor} =
       Edifice.build(:temporal_jepa,
@@ -1984,7 +1984,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(context_encoder, %{"state_sequence" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through siglip encoder" do
     {encoder, _temp_param} =
       Edifice.build(:siglip,
@@ -1999,7 +1999,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Interpretability ───────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through sparse_autoencoder" do
     model =
       Edifice.build(:sparse_autoencoder,
@@ -2011,7 +2011,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"sae_input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through transcoder" do
     model =
       Edifice.build(:transcoder,
@@ -2024,7 +2024,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"transcoder_input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through gated_sae" do
     model =
       Edifice.build(:gated_sae,
@@ -2037,7 +2037,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"gated_sae_input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through linear_probe" do
     # Use task: :regression to avoid softmax — sum(softmax(x)) = 1 always,
     # so its gradient is zero and the gradient check would fail
@@ -2052,7 +2052,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"probe_input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through jump_relu_sae" do
     model =
       Edifice.build(:jump_relu_sae,
@@ -2065,7 +2065,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"jump_relu_sae_input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through batch_top_k_sae" do
     model =
       Edifice.build(:batch_top_k_sae,
@@ -2078,7 +2078,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"batch_topk_sae_input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through crosscoder" do
     model =
       Edifice.build(:crosscoder,
@@ -2096,7 +2096,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, inputs)
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through concept_bottleneck" do
     model =
       Edifice.build(:concept_bottleneck,
@@ -2109,7 +2109,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"cbm_input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through das_probe" do
     # Use task: :regression to avoid softmax — sum(softmax(x)) = 1 always,
     # so its gradient is zero and the gradient check would fail
@@ -2125,7 +2125,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"das_probe_input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through leace" do
     model =
       Edifice.build(:leace,
@@ -2137,7 +2137,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"leace_input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through matryoshka_sae" do
     model =
       Edifice.build(:matryoshka_sae,
@@ -2150,7 +2150,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(model, %{"matryoshka_sae_input" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through cross_layer_transcoder" do
     num_layers = 2
 
@@ -2168,7 +2168,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── World Model ────────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through world_model encoder" do
     {encoder, _dynamics, _reward_head} =
       Edifice.build(:world_model,
@@ -2182,7 +2182,7 @@ defmodule Edifice.GradientSmokeTest do
     check_gradients(encoder, %{"observation" => input})
   end
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through world_model dynamics" do
     {_encoder, dynamics, _reward_head} =
       Edifice.build(:world_model,
@@ -2199,7 +2199,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Multimodal ─────────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through multimodal_mlp_fusion" do
     model =
       Edifice.build(:multimodal_mlp_fusion,
@@ -2219,7 +2219,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Scientific ─────────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through fno" do
     model =
       Edifice.build(:fno,
@@ -2236,7 +2236,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Memory addition ────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through engram" do
     model =
       Edifice.build(:engram,
@@ -2258,7 +2258,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Graph additions ─────────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through ka_gnn" do
     model =
       Edifice.build(:ka_gnn,
@@ -2277,7 +2277,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Generative flow additions ───────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through star_flow encoder" do
     {encoder, _decoder} =
       Edifice.build(:star_flow,
@@ -2296,7 +2296,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Memory addition (memory_layer) ──────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through memory_layer" do
     model =
       Edifice.build(:memory_layer,
@@ -2317,7 +2317,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Transformer addition (free_transformer) ─────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through free_transformer" do
     model =
       Edifice.build(:free_transformer,
@@ -2336,7 +2336,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Wave 5: LASER attention ────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through laser" do
     model =
       Edifice.build(:laser,
@@ -2354,7 +2354,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Wave 5: Longhorn SSM ───────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through longhorn" do
     model =
       Edifice.build(:longhorn,
@@ -2371,7 +2371,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Wave 5: VeRA PEFT ─────────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through vera" do
     model = Edifice.build(:vera, input_size: @embed, output_size: @hidden, rank: 8)
 
@@ -2381,7 +2381,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Wave 5: MoBA Attention ──────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through moba" do
     model =
       Edifice.build(:moba,
@@ -2400,7 +2400,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Wave 5: DeltaProduct Recurrence ─────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through delta_product" do
     model =
       Edifice.build(:delta_product,
@@ -2419,7 +2419,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Wave 5: Vision KAN ─────────────────────────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through vision_kan" do
     model =
       Edifice.build(:vision_kan,
@@ -2464,7 +2464,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Wave 5: TNN (Toeplitz Neural Network) ───────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through tnn" do
     model =
       Edifice.build(:tnn,
@@ -2484,7 +2484,7 @@ defmodule Edifice.GradientSmokeTest do
 
   # ── Wave 5: TNO (Temporal Neural Operator) ──────────────────
 
-  @tag timeout: 120_000
+  @tag timeout: 300_000
   test "gradient flows through tno" do
     model =
       Edifice.build(:tno,

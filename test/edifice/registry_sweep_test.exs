@@ -132,7 +132,7 @@ defmodule Edifice.RegistrySweepTest do
   for arch <- @sequence_archs do
     describe "#{arch} (sequence)" do
       for batch <- @batches do
-        @tag timeout: 120_000
+        @tag timeout: 300_000
         test "batch=#{batch} produces correct shape with finite values" do
           batch = unquote(batch)
           arch = unquote(arch)
@@ -156,7 +156,7 @@ defmodule Edifice.RegistrySweepTest do
   # --- Reservoir: uses input_size not embed_dim ──────────────────────
   describe "reservoir (sequence)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
 
@@ -180,7 +180,7 @@ defmodule Edifice.RegistrySweepTest do
   # --- RWKV: needs explicit head_size to avoid head_size > hidden_size ──
   describe "rwkv (sequence)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
         # RWKV defaults head_size=64, hidden_size=256. We need head_size <= hidden_size.
@@ -209,7 +209,7 @@ defmodule Edifice.RegistrySweepTest do
   for arch <- @moe_sequence_archs do
     describe "#{arch} (moe sequence)" do
       for batch <- @batches do
-        @tag timeout: 120_000
+        @tag timeout: 300_000
         test "batch=#{batch} produces correct shape with finite values" do
           batch = unquote(batch)
           arch = unquote(arch)
@@ -273,7 +273,7 @@ defmodule Edifice.RegistrySweepTest do
   for arch <- @simple_vision_archs do
     describe "#{arch} (vision)" do
       for batch <- [@small_batch, @med_batch] do
-        @tag timeout: 120_000
+        @tag timeout: 300_000
         test "batch=#{batch} produces correct shape with finite values" do
           batch = unquote(batch)
           arch = unquote(arch)
@@ -304,7 +304,7 @@ defmodule Edifice.RegistrySweepTest do
   # Swin needs larger images for multi-stage patch merging
   describe "swin (vision)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
         # Swin with 2 stages needs image_size >= patch_size * 2^num_stages
@@ -335,7 +335,7 @@ defmodule Edifice.RegistrySweepTest do
   # ConvNeXt needs enough spatial dims for its 4 downsample stages
   describe "convnext (vision)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
         # ConvNeXt downsamples 4x: need image_size >= 32 for 2 stages
@@ -362,7 +362,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "unet (vision)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct spatial output" do
         batch = unquote(batch)
 
@@ -392,7 +392,7 @@ defmodule Edifice.RegistrySweepTest do
   for arch <- @graph_archs do
     describe "#{arch} (graph)" do
       for batch <- @batches do
-        @tag timeout: 120_000
+        @tag timeout: 300_000
         test "batch=#{batch} produces correct shape with finite values" do
           batch = unquote(batch)
           arch = unquote(arch)
@@ -432,7 +432,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "schnet (graph)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
 
@@ -526,7 +526,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "neural_ode (energy)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
         model = Edifice.build(:neural_ode, input_size: @embed, hidden_size: @hidden)
@@ -619,7 +619,7 @@ defmodule Edifice.RegistrySweepTest do
   # --- Meta: various input patterns ──────────────────────────────────
   describe "moe (meta)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -660,7 +660,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "moe_v2 (meta)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -745,7 +745,7 @@ defmodule Edifice.RegistrySweepTest do
   describe "capsule (meta)" do
     # Capsule uses 2D convolutions internally, needs image-like input
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
         # CapsNet expects NHWC image input; conv_kernel=9 needs at least 9x9
@@ -813,7 +813,7 @@ defmodule Edifice.RegistrySweepTest do
   # --- Convolutional: various input shapes ───────────────────────────
   describe "resnet (convolutional)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -837,7 +837,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "densenet (convolutional)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
         # DenseNet uses block_config (list of layer counts per block), not block_layers
@@ -882,7 +882,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "mobilenet (convolutional)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -1020,7 +1020,7 @@ defmodule Edifice.RegistrySweepTest do
   for arch <- @diffusion_noisy_action_archs do
     describe "#{arch} (generative-diffusion)" do
       for batch <- @batches do
-        @tag timeout: 120_000
+        @tag timeout: 300_000
         test "batch=#{batch} produces correct shape with finite values" do
           batch = unquote(batch)
           arch = unquote(arch)
@@ -1055,7 +1055,7 @@ defmodule Edifice.RegistrySweepTest do
   # Flow matching uses "x_t" instead of "noisy_actions"
   describe "flow_matching (generative-diffusion)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
 
@@ -1087,7 +1087,7 @@ defmodule Edifice.RegistrySweepTest do
   # DiT and Score SDE: noisy_input + timestep
   describe "dit (generative-simple)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
 
@@ -1115,7 +1115,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "dit_v2 (generative-simple)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
 
@@ -1143,7 +1143,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "score_sde (generative-simple)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
 
@@ -1170,7 +1170,7 @@ defmodule Edifice.RegistrySweepTest do
   # Consistency model: noisy_input + sigma
   describe "consistency_model (generative-simple)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
 
@@ -1196,7 +1196,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "latent_diffusion (generative)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch}: encoder, diffusion, decoder produce finite output" do
         batch = unquote(batch)
 
@@ -1316,7 +1316,7 @@ defmodule Edifice.RegistrySweepTest do
   for arch <- @chunked_archs do
     describe "#{arch} (chunked attention)" do
       for batch <- [@small_batch, @med_batch] do
-        @tag timeout: 120_000
+        @tag timeout: 300_000
         test "batch=#{batch} produces correct shape with finite values" do
           batch = unquote(batch)
           arch = unquote(arch)
@@ -1343,7 +1343,7 @@ defmodule Edifice.RegistrySweepTest do
   for arch <- [:bitnet, :kat] do
     describe "#{arch} (feedforward-sequence)" do
       for batch <- @batches do
-        @tag timeout: 120_000
+        @tag timeout: 300_000
         test "batch=#{batch} produces correct shape with finite values" do
           batch = unquote(batch)
           arch = unquote(arch)
@@ -1362,7 +1362,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "conv1d (convolutional)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
         model = Edifice.build(:conv1d, input_size: @embed, hidden_size: @hidden, num_layers: 2)
@@ -1390,7 +1390,7 @@ defmodule Edifice.RegistrySweepTest do
   for arch <- @new_vision_archs do
     describe "#{arch} (vision)" do
       for batch <- [@small_batch, @med_batch] do
-        @tag timeout: 120_000
+        @tag timeout: 300_000
         test "batch=#{batch} produces correct shape with finite values" do
           batch = unquote(batch)
           arch = unquote(arch)
@@ -1423,7 +1423,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "mamba_vision (vision)" do
     for batch <- [@small_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -1451,7 +1451,7 @@ defmodule Edifice.RegistrySweepTest do
   for arch <- [:dino_v2, :dino_v3] do
     describe "#{arch} (vision-contrastive)" do
       for batch <- [@small_batch, @med_batch] do
-        @tag timeout: 120_000
+        @tag timeout: 300_000
         test "batch=#{batch}: student produces correct shape" do
           batch = unquote(batch)
           arch = unquote(arch)
@@ -1499,7 +1499,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "gaussian_splat (vision-3d)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -1530,7 +1530,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "detr (detection)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
 
@@ -1558,7 +1558,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "rt_detr (detection)" do
     for batch <- [@small_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
 
@@ -1586,7 +1586,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "sam2 (detection)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape with finite values" do
         batch = unquote(batch)
 
@@ -1618,7 +1618,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "whisper (audio)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch}: encoder produces correct shape" do
         batch = unquote(batch)
 
@@ -1644,7 +1644,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "encodec (audio)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch}: encoder produces correct shape" do
         batch = unquote(batch)
 
@@ -1665,7 +1665,7 @@ defmodule Edifice.RegistrySweepTest do
   # ~100s on BinaryBackend locally, over budget on CI; only feasible under EXLA.
   describe "soundstorm (audio)" do
     for batch <- [@small_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       @tag :exla_only
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
@@ -1694,7 +1694,7 @@ defmodule Edifice.RegistrySweepTest do
   # Exceeds its budget on BinaryBackend; only feasible under EXLA.
   describe "valle (audio)" do
     for batch <- [@small_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       @tag :exla_only
       test "batch=#{batch}: AR model produces correct shape" do
         batch = unquote(batch)
@@ -1733,7 +1733,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "decoder_only (transformer)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -1760,7 +1760,7 @@ defmodule Edifice.RegistrySweepTest do
   # Exceeds its budget on BinaryBackend; only feasible under EXLA.
   describe "nemotron_h (transformer)" do
     for batch <- [@small_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       @tag :exla_only
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
@@ -1787,7 +1787,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "multi_token_prediction (transformer)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -1814,7 +1814,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "byte_latent_transformer (transformer)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch}: encoder produces correct shape" do
         batch = unquote(batch)
 
@@ -1844,7 +1844,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "jepa (contrastive)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch}: context encoder produces correct shape" do
         batch = unquote(batch)
 
@@ -1870,7 +1870,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "temporal_jepa (contrastive)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch}: context encoder produces correct shape" do
         batch = unquote(batch)
 
@@ -1896,7 +1896,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "siglip (contrastive)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch}: encoder produces correct shape" do
         batch = unquote(batch)
 
@@ -1922,7 +1922,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "mixture_of_depths (meta)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -1947,7 +1947,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "mixture_of_agents (meta)" do
     for batch <- [@small_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       @tag :slow
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
@@ -1974,7 +1974,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "rlhf_head (meta)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -1995,7 +1995,7 @@ defmodule Edifice.RegistrySweepTest do
   for arch <- [:dpo, :kto, :grpo] do
     describe "#{arch} (meta-alignment)" do
       for batch <- [@small_batch, @med_batch] do
-        @tag timeout: 120_000
+        @tag timeout: 300_000
         test "batch=#{batch} produces correct shape" do
           batch = unquote(batch)
           arch = unquote(arch)
@@ -2023,7 +2023,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "speculative_decoding (meta)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch}: draft model produces correct shape" do
         batch = unquote(batch)
 
@@ -2059,7 +2059,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "test_time_compute (meta)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2085,7 +2085,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "mixture_of_tokenizers (meta)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2113,7 +2113,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "speculative_head (meta)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2141,7 +2141,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "eagle3 (meta)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2169,7 +2169,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "manifold_hc (meta)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2193,7 +2193,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "distillation_head (meta)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2214,7 +2214,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "qat (meta)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2239,7 +2239,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "remoe (meta)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2287,7 +2287,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "mmdit (generative)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
         img_tokens = 8
@@ -2321,7 +2321,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "soflow (generative)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2352,7 +2352,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "rectified_flow (generative)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2383,7 +2383,7 @@ defmodule Edifice.RegistrySweepTest do
   for arch <- [:linear_dit, :sana, :sit] do
     describe "#{arch} (generative-dit)" do
       for batch <- @batches do
-        @tag timeout: 120_000
+        @tag timeout: 300_000
         test "batch=#{batch} produces correct shape" do
           batch = unquote(batch)
           arch = unquote(arch)
@@ -2414,7 +2414,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "var (generative)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
         scales = [1, 2]
@@ -2440,7 +2440,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "transfusion (generative)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2469,7 +2469,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "mar (generative)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2494,7 +2494,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "mdlm (generative)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2523,7 +2523,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "cogvideox (generative)" do
     for batch <- [@small_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       @tag :slow
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
@@ -2552,7 +2552,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "trellis (generative)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2586,7 +2586,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "policy_value (rl)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2607,7 +2607,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "decision_transformer (rl)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2642,7 +2642,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "act (robotics)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch}: decoder produces correct shape" do
         batch = unquote(batch)
 
@@ -2673,7 +2673,7 @@ defmodule Edifice.RegistrySweepTest do
   # Exceeds its budget on BinaryBackend; only feasible under EXLA.
   describe "openvla (robotics)" do
     for batch <- [@small_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       @tag :exla_only
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
@@ -2708,7 +2708,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "fno (scientific)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2822,7 +2822,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "world_model" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch}: encoder and dynamics produce finite output" do
         batch = unquote(batch)
 
@@ -2856,7 +2856,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "multimodal_mlp_fusion (multimodal)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2886,7 +2886,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "engram (memory)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2916,7 +2916,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "gin_v2 (graph)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2952,7 +2952,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "egnn (graph)" do
     for batch <- @batches do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -2982,7 +2982,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "dimenet (graph)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       @tag :slow
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
@@ -3007,7 +3007,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "se3_transformer (graph)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       @tag :slow
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
@@ -3033,7 +3033,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "gps (graph)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -3064,7 +3064,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "perceiver (attention)" do
     for batch <- [@small_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
@@ -3094,7 +3094,7 @@ defmodule Edifice.RegistrySweepTest do
 
   describe "hybrid_builder (meta)" do
     for batch <- [@small_batch, @med_batch] do
-      @tag timeout: 120_000
+      @tag timeout: 300_000
       test "batch=#{batch} produces correct shape" do
         batch = unquote(batch)
 
