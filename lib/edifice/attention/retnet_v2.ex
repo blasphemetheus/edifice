@@ -1,23 +1,24 @@
 defmodule Edifice.Attention.RetNetV2 do
   @moduledoc """
-  RetNet v2: Improved Retentive Network with Enhanced Chunkwise Retention.
+  RetNet v2: a gated parallel-retention variant with log-spaced decay rates.
 
-  Builds on the original RetNet with improvements from follow-up work
-  including YOCO (You Only Cache Once) and GLA-style gating.
+  Builds on RetNet with output gating and a different decay schedule.
+  This is an Edifice variant, not a reproduction of YOCO or GLA.
 
   ## Key Improvements over RetNet v1
 
-  1. **Improved chunkwise formulation**: Better inter-chunk state propagation
-     that reduces approximation error in long sequences. Uses a running state
-     that accumulates retention across chunk boundaries.
+  1. **Log-spaced decay timescales**: retention heads span decay factors
+     from 0.9 to 0.9999.
 
   2. **GLA-style gating on retention**: Applies Gated Linear Attention (GLA)
      gating to the retention output, providing data-dependent modulation:
      `Y = gate(x) * Retention(x)` where gate learns per-dimension importance.
 
-  3. **Optional cross-chunk attention**: For sequences where very long-range
-     dependencies are critical, adds sparse cross-chunk attention that attends
-     to summary states from distant chunks.
+  3. **Per-token head normalization**: each retention head is normalized
+     independently, without pooling across time.
+
+  `build/1` implements parallel retention. Chunkwise execution and cross-chunk
+  summary attention are not implemented by this module.
 
   ## Architecture
 
@@ -193,6 +194,9 @@ defmodule Edifice.Attention.RetNetV2 do
     num_heads = Keyword.get(opts, :num_heads, default_num_heads())
     name = Keyword.get(opts, :name, "msr_v2")
 
+    unless is_integer(num_heads) and num_heads > 0 and rem(hidden_size, num_heads) == 0,
+      do: raise(ArgumentError, "hidden_size must be divisible by a positive num_heads")
+
     head_dim = div(hidden_size, num_heads)
 
     q = Axon.dense(input, hidden_size, name: "#{name}_q_proj")
@@ -215,8 +219,9 @@ defmodule Edifice.Attention.RetNetV2 do
         op_name: :retention_v2
       )
 
-    # GroupNorm approximation
-    retention_normed = Axon.layer_norm(retention_out, name: "#{name}_group_norm")
+    # Normalize each head independently at each timestep.
+    retention_normed =
+      Edifice.Blocks.HeadNorm.layer(retention_out, num_heads, name: "#{name}_group_norm")
 
     # GLA gating: gate * retention
     gated = Axon.multiply(gate, retention_normed, name: "#{name}_gated")

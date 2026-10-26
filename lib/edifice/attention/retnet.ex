@@ -18,10 +18,14 @@ defmodule Edifice.Attention.RetNet do
 
   ## Triple Paradigm
 
-  The same weights support three computation modes:
+  The RetNet formulation admits three computation modes:
   - **Parallel**: Training mode, O(L^2) but GPU-parallel
   - **Recurrent**: Inference mode, O(1) per token
   - **Chunkwise**: Long sequences, O(L) with chunking
+
+  This module's `build/1` uses parallel retention. It also exposes the low-level
+  `recurrent_retention_step/5`; a full chunkwise model is not implemented here.
+  Head normalization is per token, with learned channel-wise scale and bias.
 
   ## Multi-Scale Retention (MSR)
 
@@ -124,7 +128,6 @@ defmodule Edifice.Attention.RetNet do
     - `:expand_factor` - FFN expansion factor (default: 2)
     - `:dropout` - Dropout rate (default: 0.0)
     - `:window_size` - Expected sequence length (default: 60)
-    - `:mode` - Computation mode: :parallel, :recurrent, :chunkwise (default: :parallel)
 
   ## Returns
     An Axon model that processes sequences and outputs the last hidden state.
@@ -241,6 +244,9 @@ defmodule Edifice.Attention.RetNet do
     num_heads = Keyword.get(opts, :num_heads, default_num_heads())
     name = Keyword.get(opts, :name, "msr")
 
+    unless is_integer(num_heads) and num_heads > 0 and rem(hidden_size, num_heads) == 0,
+      do: raise(ArgumentError, "hidden_size must be divisible by a positive num_heads")
+
     head_dim = div(hidden_size, num_heads)
 
     # Q, K, V projections
@@ -264,8 +270,9 @@ defmodule Edifice.Attention.RetNet do
         op_name: :retention
       )
 
-    # Apply GroupNorm (approximated with LayerNorm per head)
-    retention_normed = Axon.layer_norm(retention_out, name: "#{name}_group_norm")
+    # Normalize each head independently at each timestep.
+    retention_normed =
+      Edifice.Blocks.HeadNorm.layer(retention_out, num_heads, name: "#{name}_group_norm")
 
     # SiLU gating: Y = gate . retention
     gated = Axon.multiply(gate, retention_normed, name: "#{name}_gated")
