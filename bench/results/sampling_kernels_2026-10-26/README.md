@@ -36,7 +36,8 @@ replaces only the RNG implementation for the reference variant. Source and input
 hashes are recorded, and complete seeded priming-controller streams must match.
 The companion results live in ExPhil at
 `eval_runs/sampling_kernels_20261026/RESULTS.md`; the driver is
-`scripts/profile_sampling_kernels.py`.
+`scripts/sweep_sampling_kernels.exs` (Elixir; replaces the original orchestration
+helper without changing the measured numerical code).
 
 Three Edifice tests cover exact values/key transitions and invalid keys. ExPhil's
 targeted suite passes on host and CUDA: 34 tests, 0 failures, 1 excluded on each.
