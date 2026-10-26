@@ -99,6 +99,8 @@ defmodule Edifice.Pretrained.KeyMaps.ViT do
   @impl true
   def tensor_transforms do
     [
+      {~r/^patch_embed_proj\.kernel$/,
+       fn tensor -> Nx.reshape(tensor, {Nx.axis_size(tensor, 0), :auto}) |> Nx.transpose() end},
       {~r/\.kernel$/,
        fn tensor ->
          case Nx.rank(tensor) do

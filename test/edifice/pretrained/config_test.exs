@@ -137,7 +137,7 @@ defmodule Edifice.Pretrained.ConfigTest do
 
       opts = parsed.build_opts
       assert opts[:n_mels] == 80
-      assert opts[:max_audio_len] == 1500
+      assert opts[:max_audio_len] == 3000
       assert opts[:hidden_dim] == 512
       assert opts[:encoder_layers] == 6
       assert opts[:decoder_layers] == 6

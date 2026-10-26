@@ -261,6 +261,7 @@ defmodule Edifice.Convolutional.ResNet do
     - `opts` - Options:
       - `:strides` - Convolution stride for downsampling (default: 1)
       - `:expansion` - Expansion factor for output channels (default: 4)
+      - `:padding` - Padding for the middle 3x3 convolution (default: `:same`)
       - `:name` - Layer name prefix (default: "bottleneck")
 
   ## Returns
@@ -272,6 +273,7 @@ defmodule Edifice.Convolutional.ResNet do
     strides = Keyword.get(opts, :strides, 1)
     expansion = Keyword.get(opts, :expansion, 4)
     name = Keyword.get(opts, :name, "bottleneck")
+    padding = Keyword.get(opts, :padding, :same)
 
     out_channels = channels * expansion
 
@@ -292,7 +294,7 @@ defmodule Edifice.Convolutional.ResNet do
       Axon.conv(x, channels,
         kernel_size: {3, 3},
         strides: [strides, strides],
-        padding: :same,
+        padding: padding,
         name: "#{name}_conv2"
       )
 

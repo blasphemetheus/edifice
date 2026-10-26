@@ -50,7 +50,7 @@ defmodule Edifice.Pretrained.NumericalValidationTest do
     {init_fn, predict_fn} = Axon.build(model, mode: :inference)
     full_state = init_fn.(template, Axon.ModelState.empty())
     merged = deep_merge(full_state.data, hf_state.data)
-    {merged, predict_fn}
+    {%{full_state | data: merged}, predict_fn}
   end
 
   defp deep_merge(base, overlay) when is_map(base) and is_map(overlay) do
@@ -89,9 +89,8 @@ defmodule Edifice.Pretrained.NumericalValidationTest do
           build_opts: [num_classes: 1000]
         )
 
-      # Pass .data (plain map) to avoid Axon.ModelState Access protocol issue
       {_init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      output = predict_fn.(hf_params.data, %{"image" => input})
+      output = predict_fn.(hf_params, %{"image" => input})
 
       assert_all_close(output, expected_logits, atol: 1.0e-4)
     end
@@ -99,9 +98,6 @@ defmodule Edifice.Pretrained.NumericalValidationTest do
 
   describe "ConvNeXt forward pass" do
     @tag timeout: 600_000
-    @tag :skip
-    # Skipped: facebook/convnext-tiny-224 only has pytorch_model.bin (no safetensors).
-    # ConvNeXt is validated via random-weight tests in architecture_numerical_test.exs.
     test "matches PyTorch reference output" do
       fixture_file = "convnext_reference.safetensors"
 
@@ -123,11 +119,13 @@ defmodule Edifice.Pretrained.NumericalValidationTest do
 
       {model, hf_params} =
         Edifice.Pretrained.from_hub("facebook/convnext-tiny-224",
+          # Safetensors convertbot's conversion, pinned instead of following a PR branch.
+          revision: "754ee4efa2810dce51a80eff8b21737c8da9a92f",
           build_opts: [num_classes: 1000]
         )
 
       {_init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      output = predict_fn.(hf_params.data, %{"image" => input})
+      output = predict_fn.(hf_params, %{"image" => input})
 
       assert_all_close(output, expected_logits, atol: 1.0e-4)
     end
@@ -237,8 +235,8 @@ defmodule Edifice.Pretrained.NumericalValidationTest do
       {encoder, _decoder, hf_params} =
         Edifice.Pretrained.from_hub("openai/whisper-base")
 
-      {_init_fn, predict_fn} = Axon.build(encoder, mode: :inference)
-      output = predict_fn.(hf_params.data, %{"mel_spectrogram" => mel_input})
+      {_init, predict_fn} = Axon.build(encoder, mode: :inference)
+      output = predict_fn.(hf_params, %{"mel_spectrogram" => mel_input})
 
       assert_all_close(output, expected_output, atol: 1.0e-4)
     end

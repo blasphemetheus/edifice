@@ -70,4 +70,23 @@ defmodule Edifice.Blocks.SinusoidalPE2D do
     # Add batch dimension: [1, seq_len, dim]
     Nx.reshape(pe, {1, seq_len, dim})
   end
+
+  @doc "DETR encoding for an unpadded rectangular grid, with interleaved sine/cosine channels."
+  def detr_table(height, width, dim) when rem(dim, 4) == 0 do
+    half = div(dim, 2)
+
+    frequencies =
+      Nx.pow(10_000.0, Nx.divide(Nx.multiply(Nx.quotient(Nx.iota({half}), 2), 2), half))
+
+    encode = fn positions, size ->
+      angles = positions |> Nx.add(1) |> Nx.divide(size + 1.0e-6) |> Nx.multiply(2 * :math.pi())
+      angles = Nx.divide(Nx.new_axis(angles, -1), frequencies)
+      mask = Nx.broadcast(Nx.equal(Nx.remainder(Nx.iota({half}), 2), 0), Nx.shape(angles))
+      Nx.select(mask, Nx.sin(angles), Nx.cos(angles))
+    end
+
+    y = encode.(Nx.iota({height, width}, axis: 0), height)
+    x = encode.(Nx.iota({height, width}, axis: 1), width)
+    Nx.concatenate([y, x], axis: 2) |> Nx.reshape({1, height * width, dim})
+  end
 end

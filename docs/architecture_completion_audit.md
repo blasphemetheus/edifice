@@ -21,7 +21,8 @@ checkpointing remains deferred until the upstream Nx checkpoint work merges.
   `Generate.build_cache/1` integrates token embedding and the LM head in the same
   executable. Sampling and context-overflow behavior match full prediction.
 - **Numerical validation executed:** eight small random-weight fixtures pass.
-  Full pretrained tests report one pass, three failures and one skip. See
+  Full pretrained tests now report four passes and one remaining Whisper
+  precision failure, with no skips and unchanged tolerances. See
   [results and commands](plans/pretrained-validation-fixes.md).
 
 ## Next priorities
@@ -42,8 +43,9 @@ checkpoints using that path need revalidation (details in the benchmark report).
 | Completed October 25 | NSA/MoBA causal routing, actual selected-block execution and partial lengths fixed; local NSA attention uses gathers | [CPU/CUDA measurements and remaining paper-fidelity limits](../bench/results/sparse_attention_2026-10-25/README.md). Short contexts need not be faster; no fused sparse CUDA kernel yet |
 | 3 | [RetNetV2](../lib/edifice/attention/retnet_v2.ex) uses LayerNorm at the layer named `group_norm` | Implement grouped normalization and compare a reference fixture before relying on retention fidelity |
 | 3 | [Reservoir](../lib/edifice/recurrent/reservoir.ex) estimates spectral radius using a Frobenius-norm proxy | Measure the resulting radius and correct scaling before interpreting requested reservoir timescales |
-| Conditional on visual observations | [ViT](../lib/edifice/vision/vit.ex) ignores `_num_heads` in self-attention and broadcasts one dense-produced positional vector, in addition to failing checkpoint patch-weight layout | Restore multi-head attention and a position table, fix checkpoint transforms, then require pretrained numerical parity |
-| Conditional on visual observations | DETR has a large pretrained mismatch | Compare intermediate outputs against the fixture generator to locate the first divergence |
+| Completed October 26 | ViT attention heads, position table and pretrained layout corrected; ViT and ConvNeXt pass original numerical bounds | Keep numerical and focused regressions |
+| Completed October 26 | DETR positional encoding, projection order, backbone padding and query-weight loading corrected | Class logits and boxes pass original numerical bounds |
+| Conditional on audio | Whisper encoder loads and runs, but maximum numerical error remains `2.59e-4` against a `1e-4` bound | Use the Rust/Elixir intermediate comparison to isolate accumulated differences; decoder parity is not certified |
 
 ## Other approximation findings
 

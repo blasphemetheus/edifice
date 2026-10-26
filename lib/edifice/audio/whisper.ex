@@ -158,13 +158,31 @@ defmodule Edifice.Audio.Whisper do
       |> Axon.conv(hidden_dim,
         kernel_size: {3},
         strides: 2,
-        padding: :same,
+        padding: [{1, 1}],
         name: "enc_conv2"
       )
       |> Axon.activation(:gelu, name: "enc_conv2_act")
 
-    # Sinusoidal positional encoding
-    x = SinusoidalPE.layer(x, dim: hidden_dim, name: "enc_pos")
+    # Load the exact frozen table from pretrained checkpoints. Recomputing the
+    # trigonometric values can amplify small differences through the encoder.
+    positions =
+      Axon.param("kernel", {div(max_audio_len + 1, 2), hidden_dim},
+        initializer: fn {length, dim}, type, _key ->
+          SinusoidalPE.build_table(max_len: length, dim: dim) |> Nx.as_type(type)
+        end
+      )
+
+    positions = %{positions | frozen: true}
+
+    x =
+      Axon.layer(
+        fn input, positions, _opts ->
+          Nx.add(input, Nx.slice_along_axis(positions, 0, Nx.axis_size(input, 1), axis: 0))
+        end,
+        [x, positions],
+        name: "enc_pos_embed",
+        op_name: :position_embedding
+      )
 
     # Encoder transformer blocks (pre-norm self-attention + FFN)
     x =
@@ -282,7 +300,7 @@ defmodule Edifice.Audio.Whisper do
   @spec self_attention(Axon.t(), pos_integer(), pos_integer(), String.t()) :: Axon.t()
   defp self_attention(input, hidden_dim, num_heads, name) do
     q = Axon.dense(input, hidden_dim, name: "#{name}_q")
-    k = Axon.dense(input, hidden_dim, name: "#{name}_k")
+    k = Axon.dense(input, hidden_dim, use_bias: false, name: "#{name}_k")
     v = Axon.dense(input, hidden_dim, name: "#{name}_v")
 
     head_dim = div(hidden_dim, num_heads)

@@ -1,0 +1,27 @@
+• Running devenv:files:cleanup
+• Running devenv:python:virtualenv
+✓ Running devenv:files:cleanup in 4.88ms
+✓ Running devenv:python:virtualenv in 9.05ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 4.59ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 270ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+Compiling 3 files (.ex)
+Generated edifice app
+Running ExUnit with seed: 957752, max_cases: 64
+Excluding tags: [:slow, :integration, :exla_only, :known_issue]
+Including tags: [:external]
+
+....................................................................................................................................................
+
+  1) test Whisper encoder forward pass matches PyTorch reference output (Edifice.Pretrained.NumericalValidationTest)
+     test/edifice/pretrained/numerical_validation_test.exs:217
+     Max absolute difference 2.593994140625e-4 exceeds tolerance 0.0001. Mean diff: 1.3388971638050862e-5
+     code: assert_all_close(output, expected_output, atol: 1.0e-4)
+     stacktrace:
+       test/edifice/pretrained/numerical_validation_test.exs:241: (test)
+
+
+Finished in 16.8 seconds (5.1s async, 11.7s sync)
+151 tests, 1 failure, 2 excluded
