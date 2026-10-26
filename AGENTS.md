@@ -24,6 +24,13 @@ Nx repository's `AGENTS.md` to Edifice.
 
 - Explain things so a beginner can understand. Lead with the main point.
 - Be direct. Use simple sentences and familiar words. Define necessary jargon.
+- Break complex interactions into small, connected steps: what we observed, how
+  the parts interact, why the problem happens, and what a fix would change. Make
+  each step help explain the next.
+- For possible directions, explain what each option enables, its tradeoffs, and
+  what evidence would help choose. Separate observed facts from hypotheses.
+- Avoid "AI dialect": jargon, vague abstractions, compressed labels, and filler
+  that sounds polished but does not explain what is happening.
 - Use concrete examples when helpful. Preserve technical accuracy and important
   limitations without talking down to the reader.
 - Apply this style to conversation, docs, comments, reports, and commit/PR
