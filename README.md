@@ -42,10 +42,10 @@ def deps do
 end
 ```
 
-Edifice requires Nx ~> 0.12 and Axon ~> 0.8. For GPU acceleration, add EXLA:
+Edifice requires Nx ~> 1.0 and Axon ~> 0.9. For GPU acceleration, add EXLA:
 
 ```elixir
-{:exla, "~> 0.11"}
+{:exla, "~> 1.0"}
 ```
 
 EXLA is optional for consumers: core architectures run on `Nx.BinaryBackend`

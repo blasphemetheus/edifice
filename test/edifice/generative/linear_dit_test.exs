@@ -51,7 +51,7 @@ defmodule Edifice.Generative.LinearDiTTest do
             "noisy_input" => Nx.template({batch_size, input_dim}, :f32),
             "timestep" => Nx.template({batch_size}, :f32)
           },
-          %{}
+          Axon.ModelState.empty()
         )
 
       input = %{
@@ -88,7 +88,7 @@ defmodule Edifice.Generative.LinearDiTTest do
             "timestep" => Nx.template({batch_size}, :f32),
             "class_label" => Nx.template({batch_size}, :f32)
           },
-          %{}
+          Axon.ModelState.empty()
         )
 
       input = %{

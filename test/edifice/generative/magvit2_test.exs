@@ -29,14 +29,14 @@ defmodule Edifice.Generative.MAGVIT2Test do
       {encoder, decoder} = MAGVIT2.build(@opts)
 
       {enc_init, enc_pred} = Axon.build(encoder)
-      enc_params = enc_init.(Nx.template({2, 32}, :f32), %{})
+      enc_params = enc_init.(Nx.template({2, 32}, :f32), Axon.ModelState.empty())
       z_e = enc_pred.(enc_params, Nx.iota({2, 32}, type: :f32) |> Nx.divide(100))
 
       assert z_e |> Nx.is_nan() |> Nx.any() |> Nx.to_number() == 0
       assert z_e |> Nx.is_infinity() |> Nx.any() |> Nx.to_number() == 0
 
       {dec_init, dec_pred} = Axon.build(decoder)
-      dec_params = dec_init.(Nx.template({2, 8}, :f32), %{})
+      dec_params = dec_init.(Nx.template({2, 8}, :f32), Axon.ModelState.empty())
       recon = dec_pred.(dec_params, z_e)
 
       assert recon |> Nx.is_nan() |> Nx.any() |> Nx.to_number() == 0
@@ -47,12 +47,12 @@ defmodule Edifice.Generative.MAGVIT2Test do
       {encoder, decoder} = MAGVIT2.build(@opts)
 
       {enc_init, enc_pred} = Axon.build(encoder)
-      enc_params = enc_init.(Nx.template({1, 32}, :f32), %{})
+      enc_params = enc_init.(Nx.template({1, 32}, :f32), Axon.ModelState.empty())
       z_e = enc_pred.(enc_params, Nx.iota({1, 32}, type: :f32) |> Nx.divide(100))
       assert Nx.shape(z_e) == {1, 8}
 
       {dec_init, dec_pred} = Axon.build(decoder)
-      dec_params = dec_init.(Nx.template({1, 8}, :f32), %{})
+      dec_params = dec_init.(Nx.template({1, 8}, :f32), Axon.ModelState.empty())
       recon = dec_pred.(dec_params, z_e)
       assert Nx.shape(recon) == {1, 32}
     end
@@ -62,12 +62,12 @@ defmodule Edifice.Generative.MAGVIT2Test do
       {encoder, decoder} = MAGVIT2.build(opts)
 
       {enc_init, enc_pred} = Axon.build(encoder)
-      enc_params = enc_init.(Nx.template({2, 32}, :f32), %{})
+      enc_params = enc_init.(Nx.template({2, 32}, :f32), Axon.ModelState.empty())
       z_e = enc_pred.(enc_params, Nx.iota({2, 32}, type: :f32) |> Nx.divide(100))
       assert Nx.shape(z_e) == {2, 14}
 
       {dec_init, dec_pred} = Axon.build(decoder)
-      dec_params = dec_init.(Nx.template({2, 14}, :f32), %{})
+      dec_params = dec_init.(Nx.template({2, 14}, :f32), Axon.ModelState.empty())
       recon = dec_pred.(dec_params, z_e)
       assert Nx.shape(recon) == {2, 32}
     end
@@ -77,12 +77,12 @@ defmodule Edifice.Generative.MAGVIT2Test do
       {encoder, decoder} = MAGVIT2.build(opts)
 
       {enc_init, enc_pred} = Axon.build(encoder)
-      enc_params = enc_init.(Nx.template({2, 32}, :f32), %{})
+      enc_params = enc_init.(Nx.template({2, 32}, :f32), Axon.ModelState.empty())
       z_e = enc_pred.(enc_params, Nx.iota({2, 32}, type: :f32) |> Nx.divide(100))
       assert Nx.shape(z_e) == {2, 8}
 
       {dec_init, dec_pred} = Axon.build(decoder)
-      dec_params = dec_init.(Nx.template({2, 8}, :f32), %{})
+      dec_params = dec_init.(Nx.template({2, 8}, :f32), Axon.ModelState.empty())
       recon = dec_pred.(dec_params, z_e)
       assert Nx.shape(recon) == {2, 32}
     end

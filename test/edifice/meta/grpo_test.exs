@@ -37,7 +37,7 @@ defmodule Edifice.Meta.GRPOTest do
       params =
         init_fn.(
           Nx.template({batch_size, seq_len}, :s64),
-          %{}
+          Axon.ModelState.empty()
         )
 
       input = Nx.broadcast(1, {batch_size, seq_len}) |> Nx.as_type(:s64)

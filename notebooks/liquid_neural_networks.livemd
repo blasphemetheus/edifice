@@ -584,6 +584,7 @@ defmodule SineTrainer do
       log: 1
     )
     |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: epochs)
+    |> then(& &1.step_state.model_state)
   end
 
   def evaluate(model, state, test_x, test_y) do

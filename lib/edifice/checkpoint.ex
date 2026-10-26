@@ -530,12 +530,12 @@ defmodule Edifice.Checkpoint do
       loop = Edifice.Recipes.classify(model, num_classes: 10)
 
       # First run
-      state = Axon.Loop.run(loop, data, %{}, epochs: 5)
+      state = Axon.Loop.run(loop, data, Axon.ModelState.empty(), epochs: 5)
       Edifice.Checkpoint.save_loop_state(state, "checkpoints/state.bin")
 
       # Later: resume
       loop = Edifice.Checkpoint.resume(loop, "checkpoints/state.bin")
-      state = Axon.Loop.run(loop, data, %{}, epochs: 10)
+      state = Axon.Loop.run(loop, data, Axon.ModelState.empty(), epochs: 10)
   """
   @spec resume(loop(), String.t()) :: loop()
   def resume(%Axon.Loop{} = loop, path) do

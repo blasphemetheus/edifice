@@ -44,10 +44,10 @@ defmodule Edifice.MixProject do
       # ML Core
       if(local_nx?,
         do: {:nx, path: "../nx/nx", override: true},
-        else: {:nx, "~> 0.12"}
+        else: {:nx, "~> 1.0"}
       ),
-      {:axon, "~> 0.8"},
-      {:polaris, "~> 0.1"},
+      {:axon, "~> 0.9"},
+      {:polaris, "~> 0.2"},
       # Pretrained.Config/Hub parse HF JSON; a real dep so consumers
       # compile warning-free (it was previously assumed ambient).
       {:jason, "~> 1.4"},
@@ -55,15 +55,15 @@ defmodule Edifice.MixProject do
       # GPU Backend
       if(local_nx?,
         do: {:exla, path: "../nx/exla", optional: true},
-        else: {:exla, "~> 0.11", optional: true}
+        else: {:exla, "~> 1.0", optional: true}
       ),
 
       # Pretrained weight loading (optional)
-      {:safetensors, "~> 0.1.3", optional: true},
+      {:safetensors, "~> 0.2", optional: true},
       {:req, "~> 0.5", optional: true},
 
       # ML utilities (optional)
-      {:scholar, "~> 0.4", optional: true},
+      {:scholar, "~> 0.5", optional: true},
       {:tokenizers, "~> 0.5", optional: true},
 
       # Dev & Test

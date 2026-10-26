@@ -25,7 +25,7 @@ defmodule Edifice.Generative.ShowOTest do
             "input_ids" => Nx.template({2, 8}, :s64),
             "modality_mask" => Nx.template({2, 8}, :s64)
           },
-          %{}
+          Axon.ModelState.empty()
         )
 
       input_ids = Nx.tensor([[1, 2, 3, 50, 51, 52, 53, 54], [4, 5, 6, 50, 51, 52, 53, 54]])
@@ -45,7 +45,7 @@ defmodule Edifice.Generative.ShowOTest do
             "input_ids" => Nx.template({2, 6}, :s64),
             "modality_mask" => Nx.template({2, 6}, :s64)
           },
-          %{}
+          Axon.ModelState.empty()
         )
 
       input_ids = Nx.tensor([[1, 2, 50, 51, 52, 53], [3, 4, 50, 51, 52, 53]])
@@ -67,7 +67,7 @@ defmodule Edifice.Generative.ShowOTest do
             "input_ids" => Nx.template({1, 6}, :s64),
             "modality_mask" => Nx.template({1, 6}, :s64)
           },
-          %{}
+          Axon.ModelState.empty()
         )
 
       input_ids = Nx.tensor([[1, 2, 50, 51, 52, 53]])
@@ -87,7 +87,7 @@ defmodule Edifice.Generative.ShowOTest do
             "input_ids" => Nx.template({2, 4}, :s64),
             "modality_mask" => Nx.template({2, 4}, :s64)
           },
-          %{}
+          Axon.ModelState.empty()
         )
 
       input_ids = Nx.tensor([[1, 2, 3, 4], [5, 6, 7, 8]])
@@ -108,7 +108,7 @@ defmodule Edifice.Generative.ShowOTest do
             "input_ids" => Nx.template({2, 4}, :s64),
             "modality_mask" => Nx.template({2, 4}, :s64)
           },
-          %{}
+          Axon.ModelState.empty()
         )
 
       input_ids = Nx.tensor([[50, 51, 52, 53], [54, 55, 56, 57]])
@@ -130,7 +130,7 @@ defmodule Edifice.Generative.ShowOTest do
             "input_ids" => Nx.template({2, 6}, :s64),
             "modality_mask" => Nx.template({2, 6}, :s64)
           },
-          %{}
+          Axon.ModelState.empty()
         )
 
       input_ids = Nx.tensor([[1, 2, 50, 51, 52, 53], [3, 4, 50, 51, 52, 53]])
@@ -156,7 +156,7 @@ defmodule Edifice.Generative.ShowOTest do
             "input_ids" => Nx.template({2, 4}, :s64),
             "modality_mask" => Nx.template({2, 4}, :s64)
           },
-          %{}
+          Axon.ModelState.empty()
         )
 
       input_ids = Nx.tensor([[1, 2, 3, 4], [5, 6, 7, 8]])

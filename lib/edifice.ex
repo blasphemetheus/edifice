@@ -683,7 +683,9 @@ defmodule Edifice do
 
   ## Example
 
-      params = Axon.Loop.run(loop, data, %{}, epochs: 10)
+      %Axon.Loop.State{step_state: %{model_state: params}} =
+        Axon.Loop.run(loop, data, Axon.ModelState.empty(), epochs: 10)
+
       q_params = Edifice.quantize_fp8(params)
   """
   def quantize_fp8(params, opts \\ []) do

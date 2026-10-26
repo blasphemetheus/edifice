@@ -309,6 +309,7 @@ defmodule GraphTrainer do
       model
       |> Axon.Loop.trainer(:categorical_cross_entropy, Polaris.Optimizers.adam(learning_rate: lr))
       |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: epochs)
+      |> then(& &1.step_state.model_state)
 
     {_init_fn, predict_fn} = Axon.build(model)
     preds = predict_fn.(trained_state, %{"nodes" => test_nodes, "adjacency" => test_adj})

@@ -12,7 +12,7 @@ defmodule Edifice.CUDA.AutoTuneProfiler do
       Edifice.CUDA.AutoTuneProfiler.start()
 
       # Run training...
-      Axon.Loop.run(loop, data, %{}, epochs: 5)
+      Axon.Loop.run(loop, data, Axon.ModelState.empty(), epochs: 5)
 
       # After training
       Edifice.CUDA.AutoTuneProfiler.report()

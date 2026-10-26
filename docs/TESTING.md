@@ -94,6 +94,13 @@ First run builds a manifest and runs everything. Subsequent runs are fast.
 | `:known_issue` | Known failing tests | Excluded |
 | (none) | Fast unit tests | Included |
 
+### EXLA client
+
+`test/test_helper.exs` pins EXLA to its **host** client, even on a machine
+with a GPU: the default suite is CPU-sized, and JIT-compiled checks that
+silently ran on the GPU produced intermittent NaN gradients when the GPU was
+busy with training. Set `EDIFICE_TEST_CLIENT=cuda` to run the suite on the GPU.
+
 ### Domain Tags (Architecture Family)
 
 Use `--only <tag>` to run a specific family:

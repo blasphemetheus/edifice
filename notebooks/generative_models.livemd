@@ -283,6 +283,7 @@ trained_state =
   vae_model
   |> Axon.Loop.trainer(vae_loss, Polaris.Optimizers.adam(learning_rate: 3.0e-3))
   |> Axon.Loop.run(train_batches, Axon.ModelState.empty(), epochs: epochs)
+  |> then(& &1.step_state.model_state)
 
 IO.puts("Training complete!")
 ```

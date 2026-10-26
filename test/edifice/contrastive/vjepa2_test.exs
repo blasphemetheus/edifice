@@ -78,12 +78,12 @@ defmodule Edifice.Contrastive.VJEPA2Test do
 
       enc_input = random_tensor({1, @num_tokens, @patch_dim}, 55)
       {enc_init, enc_pred} = Axon.build(encoder)
-      enc_params = enc_init.(enc_input, %{})
+      enc_params = enc_init.(enc_input, Axon.ModelState.empty())
       enc_out = enc_pred.(enc_params, enc_input)
       assert Nx.shape(enc_out) == {1, @num_tokens, @embed_dim}
 
       {pred_init, pred_pred} = Axon.build(predictor)
-      pred_params = pred_init.(enc_out, %{})
+      pred_params = pred_init.(enc_out, Axon.ModelState.empty())
       pred_out = pred_pred.(pred_params, enc_out)
       assert Nx.shape(pred_out) == {1, @num_tokens, @embed_dim}
     end

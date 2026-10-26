@@ -175,6 +175,7 @@ trained_state =
   |> Axon.Loop.metric(:accuracy)
   # 10 epochs is enough to see convergence; increase to 30+ for tighter fit
   |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: 10)
+  |> then(& &1.step_state.model_state)
 
 IO.puts("Training complete!")
 ```
@@ -359,6 +360,7 @@ mlp_tab_state =
   |> Axon.Loop.trainer(:categorical_cross_entropy, Polaris.Optimizers.adam(learning_rate: 1.0e-2))
   |> Axon.Loop.metric(:accuracy)
   |> Axon.Loop.run(train_data_tab, Axon.ModelState.empty(), epochs: 10)
+  |> then(& &1.step_state.model_state)
 
 IO.puts("\nTraining TabNet on insurance data...")
 
@@ -372,6 +374,7 @@ tabnet_tab_state =
   |> Axon.Loop.trainer(:categorical_cross_entropy, Polaris.Optimizers.adam(learning_rate: 1.0e-2))
   |> Axon.Loop.metric(:accuracy)
   |> Axon.Loop.run(train_data_tab, Axon.ModelState.empty(), epochs: 10)
+  |> then(& &1.step_state.model_state)
 
 # Evaluate both
 {_, mlp_tab_pred_fn} = Axon.build(mlp_tab)
@@ -507,6 +510,7 @@ mc_state =
   )
   |> Axon.Loop.metric(:accuracy)
   |> Axon.Loop.run(train_data_tab, Axon.ModelState.empty(), epochs: 10)
+  |> then(& &1.step_state.model_state)
 
 IO.puts("Training complete!")
 ```
@@ -707,6 +711,7 @@ mamba_state =
   |> Axon.Loop.trainer(:mean_squared_error, Polaris.Optimizers.adam(learning_rate: 1.0e-3))
   # 3 epochs for a quick demo; increase for better fit
   |> Axon.Loop.run(train_data_seq, Axon.ModelState.empty(), epochs: 3)
+  |> then(& &1.step_state.model_state)
 
 # Evaluate
 {_init, mamba_pred_fn} = Axon.build(mamba_model)
@@ -781,6 +786,7 @@ gru_state =
   gru_model
   |> Axon.Loop.trainer(:mean_squared_error, Polaris.Optimizers.adam(learning_rate: 1.0e-3))
   |> Axon.Loop.run(train_data_seq, Axon.ModelState.empty(), epochs: 3)
+  |> then(& &1.step_state.model_state)
 
 {_init, gru_pred_fn} = Axon.build(gru_model)
 gru_preds = gru_pred_fn.(gru_state, test_x_seq)
@@ -1040,6 +1046,7 @@ boundary_results =
       |> Axon.Loop.trainer(:categorical_cross_entropy, Polaris.Optimizers.adam(learning_rate: 1.0e-2))
       |> Axon.Loop.metric(:accuracy)
       |> Axon.Loop.run(train_data_3c, Axon.ModelState.empty(), epochs: 10)
+      |> then(& &1.step_state.model_state)
 
     {_, pred_fn} = Axon.build(full_model)
 
@@ -1234,6 +1241,7 @@ vae_state =
   vae_model
   |> Axon.Loop.trainer(vae_loss, Polaris.Optimizers.adam(learning_rate: 3.0e-3))
   |> Axon.Loop.run(vae_batches, Axon.ModelState.empty(), epochs: epochs)
+  |> then(& &1.step_state.model_state)
 
 IO.puts("Training complete!")
 ```

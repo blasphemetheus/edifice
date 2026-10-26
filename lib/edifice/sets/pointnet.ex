@@ -306,6 +306,8 @@ defmodule Edifice.Sets.PointNet do
     # transform: [batch, k, k]
     # output: input @ transform^T = [batch, num_points, k]
     transform_t = Nx.transpose(transform, axes: [0, 2, 1])
-    Nx.dot(input, [2], transform_t, [1])
+    # Batched contraction: without the batch axes this would pair every
+    # sample's points with every sample's transform ([batch, n, batch, k]).
+    Nx.dot(input, [2], [0], transform_t, [1], [0])
   end
 end

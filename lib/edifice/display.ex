@@ -324,6 +324,10 @@ defmodule Edifice.Display do
         %Axon.Parameter{template: shape_fn}, acc when is_function(shape_fn) ->
           acc + safe_param_size(shape_fn, parent_shapes)
 
+        # Axon 0.9 stores static shapes as template tensors
+        %Axon.Parameter{template: %Nx.Tensor{} = template}, acc ->
+          acc + Nx.size(template)
+
         _, acc ->
           acc
       end)
@@ -332,10 +336,18 @@ defmodule Edifice.Display do
     {str, total}
   end
 
+  # Axon 0.8 shape functions take parent shapes; Axon 0.9 template
+  # functions take parent templates. Try shapes first, then templates.
   defp safe_param_size(shape_fn, parent_shapes) do
     Nx.size(apply(shape_fn, parent_shapes))
   rescue
-    _ -> 0
+    _ ->
+      try do
+        templates = Enum.map(parent_shapes, &Nx.template(&1, :f32))
+        Nx.size(apply(shape_fn, templates))
+      rescue
+        _ -> 0
+      end
   end
 
   defp readable_size(n) when n < 1_000, do: "#{n} bytes"

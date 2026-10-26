@@ -13,15 +13,18 @@ defmodule Edifice.Recipes do
 
       # Classification
       loop = Edifice.Recipes.classify(model, num_classes: 10)
-      state = Axon.Loop.run(loop, train_data, %{}, epochs: 10)
+      %Axon.Loop.State{step_state: %{model_state: model_state}} =
+        Axon.Loop.run(loop, train_data, Axon.ModelState.empty(), epochs: 10)
 
       # Language modeling
       loop = Edifice.Recipes.language_model(model, vocab_size: 32000)
-      state = Axon.Loop.run(loop, train_data, %{}, epochs: 5)
+      %Axon.Loop.State{step_state: %{model_state: model_state}} =
+        Axon.Loop.run(loop, train_data, Axon.ModelState.empty(), epochs: 5)
 
       # Fine-tuning with frozen base
       loop = Edifice.Recipes.fine_tune(model, base_params, strategy: :head_only)
-      state = Axon.Loop.run(loop, train_data, %{}, epochs: 3)
+      %Axon.Loop.State{step_state: %{model_state: model_state}} =
+        Axon.Loop.run(loop, train_data, Axon.ModelState.empty(), epochs: 3)
 
   ## Recipes
 
@@ -73,7 +76,8 @@ defmodule Edifice.Recipes do
 
       model = Edifice.build(:vit, embed_dim: 128, ...)
       loop = Edifice.Recipes.classify(model, num_classes: 10)
-      state = Axon.Loop.run(loop, train_data, %{}, epochs: 10)
+      %Axon.Loop.State{step_state: %{model_state: model_state}} =
+        Axon.Loop.run(loop, train_data, Axon.ModelState.empty(), epochs: 10)
   """
   @spec classify(Axon.t(), keyword()) :: loop()
   def classify(model, opts \\ []) do
@@ -155,7 +159,8 @@ defmodule Edifice.Recipes do
 
       model = Edifice.build(:decoder_only, embed_dim: 256, ...)
       loop = Edifice.Recipes.language_model(model, vocab_size: 32000)
-      state = Axon.Loop.run(loop, train_data, %{}, epochs: 5)
+      %Axon.Loop.State{step_state: %{model_state: model_state}} =
+        Axon.Loop.run(loop, train_data, Axon.ModelState.empty(), epochs: 5)
   """
   @spec language_model(Axon.t(), keyword()) :: loop()
   def language_model(model, opts \\ []) do
@@ -233,7 +238,8 @@ defmodule Edifice.Recipes do
 
       encoder = Edifice.build(:mlp, layers: [128, 64])
       loop = Edifice.Recipes.contrastive(encoder, temperature: 0.1)
-      state = Axon.Loop.run(loop, paired_data, %{}, epochs: 100)
+      %Axon.Loop.State{step_state: %{model_state: model_state}} =
+        Axon.Loop.run(loop, paired_data, Axon.ModelState.empty(), epochs: 100)
   """
   @spec contrastive(Axon.t(), keyword()) :: loop()
   def contrastive(model, opts \\ []) do
@@ -383,7 +389,8 @@ defmodule Edifice.Recipes do
 
       model = Edifice.build(:mlp, embed_dim: 64, hidden_sizes: [128, 64])
       loop = Edifice.Recipes.regress(model, loss: :huber)
-      state = Axon.Loop.run(loop, train_data, %{}, epochs: 10)
+      %Axon.Loop.State{step_state: %{model_state: model_state}} =
+        Axon.Loop.run(loop, train_data, Axon.ModelState.empty(), epochs: 10)
   """
   @spec regress(Axon.t(), keyword()) :: loop()
   def regress(model, opts \\ []) do

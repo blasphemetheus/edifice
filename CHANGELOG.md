@@ -75,6 +75,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Nx 1.0 ecosystem.** Edifice now requires `nx ~> 1.0`, `axon ~> 0.9`,
+  `polaris ~> 0.2`, and (optionally) `exla ~> 1.0`, `scholar ~> 0.5`,
+  `safetensors ~> 0.2`. Consumers on the Nx 0.13 line should stay on Edifice
+  0.2.x. Two upstream changes surface in Edifice's API surface:
+  - `Axon.Loop.run/4` now returns the full `%Axon.Loop.State{}` instead of
+    the model state (Axon dropped the loop output transform). Extract it with
+    `%Axon.Loop.State{step_state: %{model_state: model_state}} = ...`; the
+    `Recipes`, `Checkpoint` and notebook examples were updated accordingly.
+  - Passing a plain `%{}` as the initial state to `Axon.Loop.run/4` or an
+    `init_fn` logs a deprecation; use `Axon.ModelState.empty()`.
+  `Edifice.Display.as_table/2` counts static-shape parameters that Axon 0.9
+  stores as template tensors, and `Edifice.CUDA.Library` loads the FFI
+  library through the public `EXLA.load_dylib/1`.
 - `Edifice.Utils.Quantization.gptq/3` now requires actual per-layer input
   activations keyed by full parameter paths. A list remains valid for a single
   kernel; missing calibration raises. Dense kernels now use full Hessian error
@@ -89,6 +102,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `PointNet` T-Net transforms used an unbatched contraction, pairing every
+  sample's points with every sample's transform (`[batch, n, batch, k]`);
+  with `use_t_net`/`use_feature_t_net` the classifier output was
+  `{batch, batch, classes}`. The contraction is now batched.
+- The test suite pins EXLA to its host client (`EDIFICE_TEST_CLIENT=cuda` to
+  opt in to the GPU). JIT-compiled gradient checks were silently running on
+  the GPU when one was present and produced intermittent NaN gradients
+  under load.
 - `MixtureOfAgents` honours `:hidden_size` for the aggregator instead of
   silently using the 256-wide default (`:aggregator_hidden_size` still wins).
 - `MambaVision` accepts any number of stages; the stage dims, the hybrid-stage

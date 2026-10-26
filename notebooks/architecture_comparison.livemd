@@ -224,6 +224,7 @@ results =
           Polaris.Optimizers.adam(learning_rate: lr)
         )
         |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: epochs)
+        |> then(& &1.step_state.model_state)
       end)
 
     {_init_fn, predict_fn} = Axon.build(model)

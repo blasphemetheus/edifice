@@ -332,6 +332,9 @@ defmodule Edifice.CoverageBatchATest do
         )
 
       assert %Axon{} = model
+      # the transform must be a batched contraction, not [batch, n, batch, k]
+      template = %{"input" => Nx.template({2, 8, 3}, :f32)}
+      assert Nx.shape(Axon.get_output_shape(model, template)) == {2, 4}
     end
 
     test "build with use_feature_t_net: true" do
@@ -345,6 +348,9 @@ defmodule Edifice.CoverageBatchATest do
         )
 
       assert %Axon{} = model
+      # the transform must be a batched contraction, not [batch, n, batch, k]
+      template = %{"input" => Nx.template({2, 8, 3}, :f32)}
+      assert Nx.shape(Axon.get_output_shape(model, template)) == {2, 4}
     end
 
     test "build with both T-Nets" do
@@ -359,6 +365,9 @@ defmodule Edifice.CoverageBatchATest do
         )
 
       assert %Axon{} = model
+      # the transform must be a batched contraction, not [batch, n, batch, k]
+      template = %{"input" => Nx.template({2, 8, 3}, :f32)}
+      assert Nx.shape(Axon.get_output_shape(model, template)) == {2, 4}
     end
   end
 

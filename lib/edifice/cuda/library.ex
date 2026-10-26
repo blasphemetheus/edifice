@@ -52,13 +52,7 @@ defmodule Edifice.CUDA.Library do
               "Edifice CUDA library not found at #{path}. Run mix edifice.cuda.build --arch <GPU target> before enabling EDIFICE_FUSED_CUSTOM_CALL=1."
             )
 
-        unless Code.ensure_loaded?(EXLA.NIF) and function_exported?(EXLA.NIF, :load_dylib, 1),
-          do:
-            raise(
-              "This EXLA build does not support loading CUDA libraries (EXLA.NIF.load_dylib/1)"
-            )
-
-        case apply(EXLA.NIF, :load_dylib, [path]) do
+        case load_dylib(path) do
           :ok -> :ok
           other -> raise "Could not load Edifice CUDA library: #{inspect(other)}"
         end
@@ -66,5 +60,19 @@ defmodule Edifice.CUDA.Library do
 
     :persistent_term.put(__MODULE__, :loaded)
     :ok
+  end
+
+  # EXLA 1.0 exposes `EXLA.load_dylib/1`; older builds only had the NIF.
+  defp load_dylib(path) do
+    cond do
+      Code.ensure_loaded?(EXLA) and function_exported?(EXLA, :load_dylib, 1) ->
+        apply(EXLA, :load_dylib, [path])
+
+      Code.ensure_loaded?(EXLA.NIF) and function_exported?(EXLA.NIF, :load_dylib, 1) ->
+        apply(EXLA.NIF, :load_dylib, [path])
+
+      true ->
+        raise "This EXLA build does not support loading CUDA libraries (needs EXLA.load_dylib/1)"
+    end
   end
 end

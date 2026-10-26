@@ -80,8 +80,8 @@ defmodule Edifice.RecipesTest do
       model = build_classifier()
       data = make_classification_data(5)
       loop = Recipes.classify(model, num_classes: @num_classes, log: false, patience: 100)
-      state = Axon.Loop.run(loop, data, %{}, epochs: 1, iterations: 5)
-      assert %Axon.ModelState{} = state
+      state = Axon.Loop.run(loop, data, Axon.ModelState.empty(), epochs: 1, iterations: 5)
+      assert %Axon.Loop.State{step_state: %{model_state: %Axon.ModelState{}}} = state
     end
 
     test "accepts label_smoothing" do
@@ -108,8 +108,8 @@ defmodule Edifice.RecipesTest do
       model = build_lm()
       data = make_classification_data(5)
       loop = Recipes.language_model(model, vocab_size: @num_classes, log: false)
-      state = Axon.Loop.run(loop, data, %{}, epochs: 1, iterations: 5)
-      assert %Axon.ModelState{} = state
+      state = Axon.Loop.run(loop, data, Axon.ModelState.empty(), epochs: 1, iterations: 5)
+      assert %Axon.Loop.State{step_state: %{model_state: %Axon.ModelState{}}} = state
     end
 
     test "respects gradient clipping config" do
@@ -137,8 +137,8 @@ defmodule Edifice.RecipesTest do
       model = build_encoder()
       data = make_contrastive_data(5)
       loop = Recipes.contrastive(model, temperature: 0.1, log: false)
-      state = Axon.Loop.run(loop, data, %{}, epochs: 1, iterations: 5)
-      assert %Axon.ModelState{} = state
+      state = Axon.Loop.run(loop, data, Axon.ModelState.empty(), epochs: 1, iterations: 5)
+      assert %Axon.Loop.State{step_state: %{model_state: %Axon.ModelState{}}} = state
     end
   end
 
@@ -185,8 +185,8 @@ defmodule Edifice.RecipesTest do
       model = build_regressor()
       data = make_regression_data(5)
       loop = Recipes.regress(model, log: false, patience: 100)
-      state = Axon.Loop.run(loop, data, %{}, epochs: 1, iterations: 5)
-      assert %Axon.ModelState{} = state
+      state = Axon.Loop.run(loop, data, Axon.ModelState.empty(), epochs: 1, iterations: 5)
+      assert %Axon.Loop.State{step_state: %{model_state: %Axon.ModelState{}}} = state
     end
 
     test "accepts huber loss" do

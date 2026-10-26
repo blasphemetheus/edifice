@@ -189,6 +189,7 @@ trained_state =
   |> Axon.Loop.metric(:accuracy)
   # Increase to 30-50 for lower loss; 10 is enough to see convergence
   |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: 10)
+  |> then(& &1.step_state.model_state)
 
 IO.puts("Training complete!")
 ```
@@ -295,6 +296,7 @@ tabnet_state =
   |> Axon.Loop.metric(:accuracy)
   # Increase to 30-50 for lower loss; 10 is enough to see convergence
   |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: 10)
+  |> then(& &1.step_state.model_state)
 
 # Evaluate TabNet
 {_init_fn, tabnet_predict} = Axon.build(tabnet_model)

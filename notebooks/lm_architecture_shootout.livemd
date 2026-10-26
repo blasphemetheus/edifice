@@ -380,6 +380,7 @@ defmodule LMTrainer do
         {:continue, loop_state}
       end)
       |> Axon.Loop.run(train_data, Axon.ModelState.empty(), epochs: epochs)
+      |> then(& &1.step_state.model_state)
 
     elapsed_ms = System.monotonic_time(:millisecond) - start_time
     losses = Process.get(:epoch_losses)

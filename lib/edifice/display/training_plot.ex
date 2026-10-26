@@ -15,7 +15,7 @@ defmodule Edifice.Display.TrainingPlot do
         |> Axon.Loop.trainer(loss, optimizer)
         |> Edifice.Display.TrainingPlot.attach(widget)
 
-      Axon.Loop.run(loop, data, %{}, epochs: 10)
+      Axon.Loop.run(loop, data, Axon.ModelState.empty(), epochs: 10)
 
   ## Static Charts
 

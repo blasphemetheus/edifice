@@ -41,7 +41,7 @@ defmodule Edifice.MixedPrecision do
       model
       |> Axon.Loop.trainer(:categorical_cross_entropy, :adam)
       |> Edifice.MixedPrecision.with_loss_scaling(scale: 1024.0)
-      |> Axon.Loop.run(data, %{}, epochs: 10)
+      |> Axon.Loop.run(data, Axon.ModelState.empty(), epochs: 10)
 
   ## What Gets Excluded
 
@@ -248,7 +248,7 @@ defmodule Edifice.MixedPrecision do
       model
       |> Axon.Loop.trainer(:categorical_cross_entropy, :adam)
       |> Edifice.MixedPrecision.with_loss_scaling(scale: 1024.0)
-      |> Axon.Loop.run(data, %{}, epochs: 10)
+      |> Axon.Loop.run(data, Axon.ModelState.empty(), epochs: 10)
   """
   @spec with_loss_scaling(loop(), keyword()) :: loop()
   def with_loss_scaling(%Axon.Loop{} = loop, opts \\ []) do

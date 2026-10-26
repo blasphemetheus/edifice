@@ -7,7 +7,7 @@ defmodule Mix.Tasks.Edifice.Cuda.Build do
 
       mix edifice.cuda.build --arch sm_120
 
-  Requires nvcc and an installed EXLA whose NIF exports the dynamic-library loader (EXLA 0.11+).
+  Requires nvcc and an installed EXLA with `EXLA.load_dylib/1` (EXLA 1.0+).
   `--arch` defaults to `EXLA_GPU_ARCH`, then `sm_75`. The build uses the
   headers and library from the resolved EXLA dependency's XLA installation.
   Enable loading with `EDIFICE_FUSED_CUSTOM_CALL=1` before starting the VM.
