@@ -1,6 +1,6 @@
 # Architecture Index
 
-Complete listing of all 196 architectures and 20 shared blocks in Edifice.
+Complete listing of all 267 architectures and 20 shared blocks in Edifice.
 
 For descriptions, paper references, and decision guidance, see [Architecture Taxonomy](architecture_taxonomy.md).
 
@@ -24,6 +24,7 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 | **Multi-Token Prediction** | `Edifice.Transformer.MultiTokenPrediction` | Predict next N tokens simultaneously |
 | **Byte Latent Transformer** | `Edifice.Transformer.ByteLatentTransformer` | Byte-level processing via encoder-latent-decoder |
 | **Nemotron-H** | `Edifice.Transformer.NemotronH` | NVIDIA's hybrid Mamba-Transformer |
+| **Free Transformer** | `Edifice.Transformer.FreeTransformer` | Decoder with discrete latent variable injected at midpoint |
 
 ## State Space Models
 
@@ -47,6 +48,10 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 | **GSS** | `Edifice.SSM.GSS` | Gated State Space (simplified S4 with gating) |
 | **Hymba** | `Edifice.SSM.Hymba` | Hybrid Mamba + attention with learnable meta tokens |
 | **SS Transformer** | `Edifice.SSM.SSTransformer` | State Space Transformer |
+| **Hyena v2** | `Edifice.SSM.HyenaV2` | Improved implicit long convolution with short conv and better decay |
+| **Longhorn** | `Edifice.SSM.Longhorn` | SSM derived from online associative recall |
+| **Mixture-of-Mamba** | `Edifice.SSM.MixtureOfMamba` | MoM: modality-aware sparse Mamba blocks |
+| **Samba** | `Edifice.SSM.Samba` | Hybrid Mamba + sliding window attention + SwiGLU MLP |
 
 ## Attention & Linear Attention
 
@@ -80,6 +85,23 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 | **Dual Chunk** | `Edifice.Attention.DualChunk` | Dual Chunk Attention for long-context |
 | **TMRoPE** | `Edifice.Attention.TMRoPE` | Time-aligned Multimodal RoPE |
 | **RNoPE-SWA** | `Edifice.Attention.RNoPESWA` | No positional encoding + sliding window |
+| **FoX** | `Edifice.Attention.FoX` | Forgetting Transformer with learnable per-head forget gates |
+| **GLA v2** | `Edifice.Attention.GLAv2` | Improved Gated Linear Attention |
+| **GSA** | `Edifice.Attention.GSA` | Gated Slot Attention with low-rank memory bottleneck |
+| **Hawk** | `Edifice.Attention.Hawk` | Pure RG-LRU recurrent model (RecurrentGemma) |
+| **HGRN v2** | `Edifice.Attention.HGRNv2` | Multi-resolution hierarchical gating with outer product state |
+| **InfLLM-V2** | `Edifice.Attention.InfLLMV2` | Dense-sparse switchable attention |
+| **LASER** | `Edifice.Attention.LASER` | Attention with exponential transformation |
+| **Log-Linear Attention** | `Edifice.Attention.LogLinear` | O(log T) memory bridging linear and softmax attention |
+| **MEGALODON** | `Edifice.Attention.Megalodon` | Complex EMA and timestep normalization at mega scale |
+| **MoBA** | `Edifice.Attention.MoBA` | Mixture of Block Attention |
+| **MTA** | `Edifice.Attention.MTA` | Multi-Token Attention, 2D convolution on attention logits |
+| **NHA** | `Edifice.Attention.NHA` | Native Hybrid Attention: learned per-layer linear vs softmax selection |
+| **RLA / RDN** | `Edifice.Attention.RLA` | Residual Linear Attention with error-correcting dual-state recurrence |
+| **RetNet v2** | `Edifice.Attention.RetNetV2` | Improved Retentive Network with enhanced chunkwise retention |
+| **Sigmoid Attention** | `Edifice.Attention.SigmoidAttention` | Drop-in softmax replacement using normalized sigmoid |
+| **SPLA** | `Edifice.Attention.SPLA` | Block Sparse Plus Linear Attention |
+| **TNN** | `Edifice.Attention.TNN` | Toeplitz Neural Network, learned Toeplitz convolutions |
 
 ## Recurrent Networks
 
@@ -98,6 +120,12 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 | **Gated DeltaNet** | `Edifice.Recurrent.GatedDeltaNet` | Linear attention with data-dependent gating |
 | **TTT-E2E** | `Edifice.Recurrent.TTTE2E` | End-to-end test-time training |
 | **Native Recurrence** | `Edifice.Recurrent.NativeRecurrence` | Native recurrence block |
+| **DeepResLSTM** | `Edifice.Recurrent.DeepResLSTM` | Stacked residual LSTM blocks (slippi-ai) |
+| **DeltaProduct** | `Edifice.Recurrent.DeltaProduct` | Multi-step DeltaNet via Householder products |
+| **Huginn** | `Edifice.Recurrent.Huginn` | Depth-recurrent transformer with adaptive iteration |
+| **MIRAS** | `Edifice.Recurrent.MIRAS` | Memory as Iterative Reasoning over Associative Structures |
+| **Multi-Timescale Recurrence** | `Edifice.Recurrent.MultiTimescaleRecurrence` | Parallel recurrent cores at different temporal strides |
+| **TransformerLike** | `Edifice.Recurrent.TransformerLike` | Hybrid recurrent + FFN architecture (slippi-ai) |
 
 ## Vision
 
@@ -117,6 +145,9 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 | **DINOv2** | `Edifice.Vision.DINOv2` | Self-distillation vision backbone |
 | **MetaFormer** | `Edifice.Vision.MetaFormer` | Architecture-first framework (+ CAFormer variant) |
 | **EfficientViT** | `Edifice.Vision.EfficientViT` | Linear attention ViT |
+| **DINOv3** | `Edifice.Vision.DINOv3` | Self-supervised backbone with axial RoPE and text alignment |
+| **Janus** | `Edifice.Vision.Janus` | Unified multimodal understanding and generation |
+| **Vision KAN** | `Edifice.Vision.VisionKAN` | Attention-free hierarchical backbone using RBF KAN layers |
 
 ## Convolutional
 
@@ -156,6 +187,15 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 | **CogVideoX** | `Edifice.Generative.CogVideoX` | 3D causal VAE + expert transformer for video |
 | **TRELLIS** | `Edifice.Generative.TRELLIS` | Sparse 3D lattice + rectified flow |
 | **MDLM** | `Edifice.Generative.MDLM` | Discrete diffusion language model |
+| **CaDDi** | `Edifice.Generative.CaDDi` | Causal Discrete Diffusion |
+| **DeepFlow** | `Edifice.Generative.DeepFlow` | Deeply supervised flow-based generative model |
+| **JanusFlow** | `Edifice.Generative.JanusFlow` | Unified AR text + rectified flow image generation |
+| **LLaDA** | `Edifice.Generative.LLaDA` | Large Language Diffusion with Masking |
+| **MAGVIT-v2** | `Edifice.Generative.MAGVIT2` | Lookup-Free Quantization for visual tokens |
+| **Meissonic** | `Edifice.Generative.Meissonic` | Masked generative transformer for images |
+| **Show-o** | `Edifice.Generative.ShowO` | Unified autoregressive + discrete diffusion multimodal model |
+| **STARFlow** | `Edifice.Generative.STARFlow` | Scaled transformer autoregressive flow |
+| **TarFlow** | `Edifice.Generative.TarFlow` | Transformer-based autoregressive normalizing flow |
 
 ## Contrastive & Self-Supervised
 
@@ -169,6 +209,7 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 | **JEPA** | `Edifice.Contrastive.JEPA` | Joint Embedding Predictive Architecture |
 | **Temporal JEPA** | `Edifice.Contrastive.TemporalJEPA` | V-JEPA for video/temporal sequences |
 | **SigLIP** | `Edifice.Contrastive.SigLIP` | Sigmoid contrastive learning (CLIP improvement) |
+| **V-JEPA 2** | `Edifice.Contrastive.VJEPA2` | Video Joint Embedding Predictive Architecture v2 |
 
 ## Graph & Set Networks
 
@@ -185,6 +226,12 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 | **EGNN** | `Edifice.Graph.EGNN` | E(n)-equivariant GNN for molecular simulation |
 | **DeepSets** | `Edifice.Sets.DeepSets` | Permutation-invariant set functions |
 | **PointNet** | `Edifice.Sets.PointNet` | Point cloud processing with T-Net alignment |
+| **DimeNet++** | `Edifice.Graph.DimeNet` | Directional message passing for molecules |
+| **GPS** | `Edifice.Graph.GPS` | General, Powerful, Scalable graph transformer |
+| **KA-GNN** | `Edifice.Graph.KAGNN` | Kolmogorov-Arnold Graph Neural Network |
+| **SE(3)-Transformer** | `Edifice.Graph.SE3Transformer` | 3D roto-translation equivariant attention |
+| **Entity Encoder** | `Edifice.Sets.EntityEncoder` | Type-conditioned encoder for heterogeneous game entities |
+| **PointNet++** | `Edifice.Sets.PointNetPP` | Hierarchical feature learning on point sets |
 
 ## Energy, Probabilistic & Memory
 
@@ -199,6 +246,7 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 | **NTM** | `Edifice.Memory.NTM` | Neural Turing Machine, differentiable memory |
 | **Memory Network** | `Edifice.Memory.MemoryNetwork` | End-to-end memory with multi-hop attention |
 | **Engram** | `Edifice.Memory.Engram` | O(1) hash-based associative memory |
+| **Memory Layer** | `Edifice.Memory.MemoryLayer` | Sparse key-value lookup replacing dense FFN |
 
 ## Meta-Learning & Specialized
 
@@ -225,6 +273,21 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 | **Mixture of Tokenizers** | `Edifice.Meta.MixtureOfTokenizers` | Multi-tokenization expert routing |
 | **QAT** | `Edifice.Meta.QAT` | Quantization-Aware Training |
 | **Hybrid Builder** | `Edifice.Meta.HybridBuilder` | Configurable SSM/Attention ratio |
+| **Agent Swarm** | `Edifice.Meta.AgentSwarm` | Communication-augmented multi-agent ensemble |
+| **Coconut** | `Edifice.Meta.Coconut` | Continuous Chain of Thought via latent reasoning |
+| **Distillation Head** | `Edifice.Meta.DistillationHead` | Projects student hidden states to match teacher representations |
+| **EAGLE-3** | `Edifice.Meta.Eagle3` | Multi-level feature fusion draft head for speculative decoding |
+| **Kron-LoRA** | `Edifice.Meta.KronLoRA` | Hybrid Kronecker-LoRA adapters |
+| **mHC** | `Edifice.Meta.ManifoldHC` | Manifold-Constrained Hyper-Connections |
+| **Message-Passing Agents** | `Edifice.Meta.MessagePassingAgents` | GNN-inspired agent communication graph |
+| **Mixture of Expert Depths** | `Edifice.Meta.MixtureOfExpertDepths` | MoED: joint expert selection + depth routing |
+| **Mixture of Recursions** | `Edifice.Meta.MixtureOfRecursions` | MoR: dynamic recursive depth with per-token routing |
+| **Mixture of Transformers** | `Edifice.Meta.MixtureOfTransformers` | MoT: modality-sparse multi-modal architecture |
+| **PiSSA** | `Edifice.Meta.PiSSA` | Principal Singular Values and Singular Vectors Adaptation |
+| **Router Network** | `Edifice.Meta.RouterNetwork` | Learned input-level dispatch to specialist models |
+| **Speculative Head** | `Edifice.Meta.SpeculativeHead` | Multi-head parallel draft with per-head MLPs (Medusa/EAGLE) |
+| **Stateful Agent** | `Edifice.Meta.StatefulAgent` | Multi-turn architecture wrapper with persistent memory |
+| **VeRA** | `Edifice.Meta.VeRA` | Vector-based Random Matrix Adaptation |
 
 ## Detection & Segmentation
 
@@ -242,6 +305,8 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 | **VALL-E** | `Edifice.Audio.VALLE` | Codec language model for zero-shot TTS |
 | **SoundStorm** | `Edifice.Audio.SoundStorm` | Parallel audio token generation |
 | **Whisper** | `Edifice.Audio.Whisper` | Encoder-decoder ASR (OpenAI) |
+| **F5-TTS** | `Edifice.Audio.F5TTS` | Flow-matching text-to-speech |
+| **Wav2Vec 2.0** | `Edifice.Audio.Wav2Vec2` | Self-supervised speech representation learning |
 
 ## Robotics
 
@@ -249,6 +314,7 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 |-------------|--------|-------------|
 | **ACT** | `Edifice.Robotics.ACT` | Action Chunking Transformer for imitation learning |
 | **OpenVLA** | `Edifice.Robotics.OpenVLA` | Vision-Language-Action model for robot control |
+| **Diffusion Policy** | `Edifice.Robotics.DiffusionPolicy` | Visuomotor policy learning via action diffusion |
 
 ## RL & World Models
 
@@ -258,12 +324,29 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 | **Decision Transformer** | `Edifice.RL.DecisionTransformer` | Offline RL as conditional sequence generation |
 | **World Model** | `Edifice.WorldModel.WorldModel` | Encoder + dynamics + reward head |
 | **Medusa** | `Edifice.Inference.Medusa` | Multi-head speculative decoding |
+| **Autoregressive Head** | `Edifice.RL.AutoregressiveHead` | Autoregressive action head with cross-component conditioning |
+| **Pointer Network** | `Edifice.RL.PointerNetwork` | Attention-based pointer network for entity selection |
 
 ## Multimodal
 
 | Architecture | Module | Key Feature |
 |-------------|--------|-------------|
 | **Multimodal Fusion** | `Edifice.Multimodal.Fusion` | MLP projection, cross-attention, Perceiver resampler |
+
+## Interpretability
+
+| Architecture | Module | Key Feature |
+|-------------|--------|-------------|
+| **BatchTopK SAE** | `Edifice.Interpretability.BatchTopKSAE` | BatchTopK sparse autoencoder |
+| **Concept Bottleneck** | `Edifice.Interpretability.ConceptBottleneck` | CBM for inherently interpretable prediction |
+| **Cross-Layer Transcoder** | `Edifice.Interpretability.CrossLayerTranscoder` | Cross-layer transcoder (status: broken, needs redesign) |
+| **Crosscoder** | `Edifice.Interpretability.Crosscoder` | Joint sparse dictionary learning across multiple sources |
+| **DAS Probe** | `Edifice.Interpretability.DASProbe` | Rank-limited linear probe (status: mislabeled, not true DAS) |
+| **Gated SAE** | `Edifice.Interpretability.GatedSAE` | Gated sparse autoencoder (status: broken, gate does not train) |
+| **JumpReLU SAE** | `Edifice.Interpretability.JumpReluSAE` | JumpReLU sparse autoencoder |
+| **LEACE** | `Edifice.Interpretability.LEACE` | LEAst-squares Concept Erasure (Belrose et al., 2023) |
+| **Linear Probe** | `Edifice.Interpretability.LinearProbe` | Linear probe for interpretability analysis |
+| **Matryoshka SAE** | `Edifice.Interpretability.MatryoshkaSAE` | Matryoshka SAE (status: broken, nested-prefix loss missing) |
 
 ## Other
 
@@ -275,6 +358,8 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 | **Sparse Autoencoder** | `Edifice.Interpretability.SparseAutoencoder` | Feature extraction from model activations |
 | **Transcoder** | `Edifice.Interpretability.Transcoder` | Cross-layer mechanistic interpretability |
 | **FNO** | `Edifice.Scientific.FNO` | Fourier Neural Operator for solving PDEs |
+| **DeepONet** | `Edifice.Scientific.DeepONet` | Deep Operator Network |
+| **TNO** | `Edifice.Scientific.TNO` | Temporal Neural Operator for time-dependent PDEs |
 
 ## Shared Building Blocks
 

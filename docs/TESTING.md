@@ -1,6 +1,6 @@
 # Edifice Testing Guide
 
-Edifice has 263 test files covering 231 registered architecture implementations across
+Edifice has 263 test files covering 267 registered architecture implementations across
 26 families. The full suite takes ~9 minutes on BinaryBackend (CPU), so targeted test
 runs are essential.
 
@@ -176,7 +176,7 @@ test/
 │   ├── inference/               # Medusa (1)
 │   ├── export/                  # GGUF export (1)
 │   ├── registry_sweep_test.exs  # Forward-pass tests for all architectures (batch=1,4)
-│   ├── registry_integrity_test.exs  # Build-only tests for all 231 architectures
+│   ├── registry_integrity_test.exs  # Build-only tests for all 267 architectures
 │   ├── gradient_smoke_test.exs  # Gradient flow for all architectures
 │   ├── output_size_sweep_test.exs  # output_size/1 for all modules
 │   ├── coverage_batch_*.exs     # Coverage sweep tests (a-f batches)
@@ -193,7 +193,7 @@ properties across ALL architectures:
 | File | Purpose | Speed |
 |------|---------|-------|
 | `registry_sweep_test.exs` | Forward pass at batch=1,4 for all architectures | Slow (~5 min) |
-| `registry_integrity_test.exs` | Build-only test for all 231 registered architectures | Fast (~30s) |
+| `registry_integrity_test.exs` | Build-only test for all 267 registered architectures | Fast (~30s) |
 | `gradient_smoke_test.exs` | Gradient flows through all 26 families | Moderate (~2 min) |
 | `output_size_sweep_test.exs` | `output_size/1` returns correct values for all modules | Fast (~10s) |
 | `coverage_batch_*.exs` | Coverage sweep in batches (a-f) | Slow |

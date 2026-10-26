@@ -89,6 +89,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `MixtureOfAgents` honours `:hidden_size` for the aggregator instead of
+  silently using the 256-wide default (`:aggregator_hidden_size` still wins).
+- `MambaVision` accepts any number of stages; the stage dims, the hybrid-stage
+  boundary and the downsample schedule are derived from `:depths` instead of
+  a hardcoded four, and mismatched `:num_heads` lengths raise `ArgumentError`.
+- `RTDETR` rejects an `:image_size` that is not a multiple of 32 up front
+  (the stride-8/16/32 feature levels could not be fused otherwise).
+- `Training.Adaptive`, `Training.Monitor` and `Display.Heatmap` detect NaN
+  losses again: `Nx.to_number/1` returns `:nan`, so the old `x != x` check never
+  fired and spikes/NaN streaks went unreported.
+- `Recipes` epoch logging passed the event and the formatter to `Axon.Loop.log/3`
+  in the wrong order; per-epoch metrics now print.
+- CI is green again: formatting, Credo, Dialyzer (test env, `ex_unit` in the
+  PLT), `mix docs`, `deps.audit`, the hex build, the benchmark-regression gate
+  (now normalised by a hardware scale factor) and all test shards pass.
+  `rustler_precompiled` 0.10 fixes the tokenizers `header_too_long` download
+  failure; CPU-infeasible tests are tagged `:exla_only`; test jobs cap
+  `--max-cases` at `nproc`.
+- `mix test` runs warning-free (29 compiler warnings in tests removed).
 - NSA and MoBA now gather selected blocks before token attention and preserve
   causal routing, including incomplete final blocks. NSA uses compressed
   probabilities for actual top-k retrieval and gathers its local window; MoBA

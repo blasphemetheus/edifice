@@ -76,7 +76,7 @@ defmodule Edifice.MixedPrecision do
   @doc """
   Create a mixed precision policy.
 
-  Accepts a preset atom or an `Axon.MixedPrecision.Policy` struct.
+  Accepts a preset atom or an Axon mixed-precision policy struct (`%Axon.MixedPrecision.Policy{}`).
 
   ## Presets
 
@@ -113,7 +113,7 @@ defmodule Edifice.MixedPrecision do
   ## Parameters
 
   - `model` — Axon model graph
-  - `policy_or_preset` — A preset atom (`:bf16`, `:fp16`) or `Axon.MixedPrecision.Policy`
+  - `policy_or_preset` — A preset atom (`:bf16`, `:fp16`) or a `%Axon.MixedPrecision.Policy{}` struct
   - `opts` — Additional options
 
   ## Options

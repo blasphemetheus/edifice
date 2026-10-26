@@ -8,7 +8,7 @@
 
 A comprehensive ML architecture library for Elixir, built on [Nx](https://github.com/elixir-nx/nx) and [Axon](https://github.com/elixir-nx/axon).
 
-196 neural network architectures across 26 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons, audio codecs to robotics, scientific ML to 3D generation.
+267 neural network architectures across 26 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons, audio codecs to robotics, scientific ML to 3D generation.
 
 ## What is this repo?
 I wanted to build Neural Networks of various architectures. I saw that Nx exists (check out elixir-nx's github page for all the various projects). I vibe coded a scaffold, an 'edifice' to put together the architectures I wanted to support a bot that plays melee. That project is called 'exphil' which is a play on elixir and philip, the colloqial name for slippi-ai's latest bot that combines imitation learning with reinforcement learning to create the currently most capable melee bots that I am aware of. This work to support implementations of various different kinds of architectures mostly coincided with me learning about the existence of the ideas that led to these architectures. The process for implementing them was to ask the coding agent of the time (encoded in the commit themselves, if you want to know more specifically) about the different options for ML neural net architectures. There are papers that lead to the popularization of various architectures, and ML is a very very new field all in all.
@@ -60,7 +60,7 @@ after `mix deps.get`.
 
 For native fused GRU and Mamba selective scans, build Edifice's separate FFI
 library with nvcc and an EXLA build that exposes `EXLA.CustomCall` and
-`EXLA.NIF.load_dylib/1`:
+the EXLA NIF dynamic-library loader (`load_dylib`):
 
 ```bash
 devenv shell -- mix edifice.cuda.build --arch sm_120  # RTX 5090; choose your GPU target
@@ -120,7 +120,7 @@ Edifice.list_families()
 
 ## Architecture Families
 
-196 architectures across 26 families, plus 20 shared building blocks. See the **[full architecture index](guides/architecture_index.md)** for every module.
+267 architectures across 26 families, plus 20 shared building blocks. See the **[full architecture index](guides/architecture_index.md)** for every module.
 
 | Family | Count | Highlights |
 |--------|------:|------------|
@@ -161,7 +161,7 @@ Start here if you're new to machine learning. These guides build from zero to fl
 
 ### Reference
 
-- **[Architecture Index](guides/architecture_index.md)** — Full listing of all 196 architectures with modules and descriptions
+- **[Architecture Index](guides/architecture_index.md)** — Full listing of all 267 architectures with modules and descriptions
 - **[Architecture Taxonomy](guides/architecture_taxonomy.md)** — Paper references, strengths/weaknesses, adoption context, and gap analysis
 
 ### Architecture Guides
