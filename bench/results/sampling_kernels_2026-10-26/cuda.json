@@ -1,0 +1,78 @@
+{
+  "client": "cuda",
+  "results": [
+    {
+      "shape": [
+        1,
+        8
+      ],
+      "implementation": "reference",
+      "median_us": 363,
+      "p95_us": 596
+    },
+    {
+      "shape": [
+        1,
+        8
+      ],
+      "implementation": "unrolled",
+      "median_us": 58,
+      "p95_us": 106
+    },
+    {
+      "shape": [
+        1,
+        17
+      ],
+      "implementation": "reference",
+      "median_us": 347,
+      "p95_us": 536
+    },
+    {
+      "shape": [
+        1,
+        17
+      ],
+      "implementation": "unrolled",
+      "median_us": 62,
+      "p95_us": 103
+    },
+    {
+      "shape": [
+        8,
+        17
+      ],
+      "implementation": "reference",
+      "median_us": 356,
+      "p95_us": 601
+    },
+    {
+      "shape": [
+        8,
+        17
+      ],
+      "implementation": "unrolled",
+      "median_us": 74,
+      "p95_us": 135
+    },
+    {
+      "shape": [
+        128,
+        17
+      ],
+      "implementation": "reference",
+      "median_us": 356,
+      "p95_us": 578
+    },
+    {
+      "shape": [
+        128,
+        17
+      ],
+      "implementation": "unrolled",
+      "median_us": 59,
+      "p95_us": 101
+    }
+  ],
+  "exact_reference_parity": true
+}
