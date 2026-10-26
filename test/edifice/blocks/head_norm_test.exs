@@ -1,10 +1,11 @@
 defmodule Edifice.Blocks.HeadNormTest do
   use ExUnit.Case, async: true
   import Nx.Defn
+  alias Edifice.Blocks.HeadNorm
 
   test "normalizes per token and head, with channel-wise affine parameters" do
     model =
-      Axon.input("x", shape: {nil, nil, 4}) |> Edifice.Blocks.HeadNorm.layer(2, name: "norm")
+      Axon.input("x", shape: {nil, nil, 4}) |> HeadNorm.layer(2, name: "norm")
 
     {init, predict} = Axon.build(model)
     x = Nx.tensor([[[1.0, 3, 10, 14], [100, 104, -5, 1]]])
@@ -30,7 +31,7 @@ defmodule Edifice.Blocks.HeadNormTest do
   end
 
   test "input gradients match finite differences" do
-    model = Axon.input("x", shape: {nil, 2, 6}) |> Edifice.Blocks.HeadNorm.layer(2, name: "norm")
+    model = Axon.input("x", shape: {nil, 2, 6}) |> HeadNorm.layer(2, name: "norm")
     {init, predict} = Axon.build(model)
     x = Nx.tensor([[[0.2, 1.3, -0.7, 2.0, 0.1, -1.0], [1.0, 2.0, 4.0, -2.0, 0.3, 1.0]]])
     state = init.(x, Axon.ModelState.empty())

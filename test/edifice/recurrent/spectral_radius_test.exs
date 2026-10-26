@@ -1,7 +1,7 @@
 defmodule Edifice.Recurrent.SpectralRadiusTest do
   use ExUnit.Case, async: true
-  alias Edifice.Utils.SpectralRadius
   alias Edifice.Recurrent.Reservoir
+  alias Edifice.Utils.SpectralRadius
 
   test "nonsymmetric sparse and dense matrices match NumPy eigenvalues" do
     fixtures = File.read!("test/fixtures/reservoir_spectral_radius.json") |> Jason.decode!()

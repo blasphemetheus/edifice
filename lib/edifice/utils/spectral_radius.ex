@@ -20,7 +20,11 @@ defmodule Edifice.Utils.SpectralRadius do
     else
       storage = :atomics.new(n * n, signed: false)
       a = {storage, n}
-      Enum.with_index(values, fn value, i -> put(a, div(i, n), rem(i, n), value / scale) end)
+
+      values
+      |> Enum.with_index()
+      |> Enum.each(fn {value, i} -> put(a, div(i, n), rem(i, n), value / scale) end)
+
       hessenberg(a, n)
       qr(a, n - 1, 0, 0.0) * scale
     end
