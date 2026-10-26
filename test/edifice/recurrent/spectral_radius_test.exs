@@ -34,6 +34,10 @@ defmodule Edifice.Recurrent.SpectralRadiusTest do
     end
 
     assert Nx.to_flat_list(Reservoir.scale_spectral_radius(Nx.tensor([[2.0]]), 0)) == [0.0]
+
+    assert_in_delta Nx.to_number(Reservoir.scale_spectral_radius(Nx.tensor([[2]]), 0.9)[0][0]),
+                    0.9,
+                    1.0e-6
   end
 
   test "known linearized decay agrees with target radius and leak rate" do

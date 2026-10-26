@@ -36,6 +36,10 @@ Leak rate additionally changes the linearized spectrum to
   affine behavior, independence from future tokens and other heads, numerical
   input gradients, full RetNet/RetNetV2 prefix causality, existing model tests,
   frozen/trainable reservoir parameters and deterministic predictions.
+- All 10 normalization and reservoir-correctness cases also pass with EXLA/CUDA
+  at highest precision. The gradient test passes parameters as explicit traced
+  inputs, avoiding captured-device-tensor errors. These were correctness checks
+  alongside another GPU process, not latency measurements.
 - Checked-in NumPy `eigvals` references cover 12 dense/sparse matrices of sizes
   3, 8, 32 and 64. Analytic tests also cover complex rotations, a cyclic
   permutation, negative eigenvalues, nonnormal triangular matrices and nilpotence.

@@ -154,6 +154,8 @@ defmodule Edifice.Recurrent.Reservoir do
   readout weights require the original reservoir to reproduce their predictions.
   """
   def scale_spectral_radius(matrix, target) when is_number(target) and target >= 0 do
+    matrix = Nx.as_type(matrix, Nx.Type.to_floating(Nx.type(matrix)))
+
     if target == 0 do
       Nx.multiply(matrix, 0)
     else

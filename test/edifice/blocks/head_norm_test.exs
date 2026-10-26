@@ -36,7 +36,13 @@ defmodule Edifice.Blocks.HeadNormTest do
     state = init.(x, Axon.ModelState.empty())
     weights = Nx.iota({1, 2, 6}, type: :f32)
     loss = fn input -> Nx.sum(Nx.multiply(predict.(state, input), weights)) end
-    gradient = grad(x, loss) |> Nx.to_flat_list()
+
+    {gradient, _, _} =
+      grad({x, state, weights}, fn {input, params, w} ->
+        Nx.sum(Nx.multiply(predict.(params, input), w))
+      end)
+
+    gradient = Nx.to_flat_list(gradient)
 
     for i <- 0..11 do
       delta = Nx.equal(Nx.iota({1, 2, 6}), i) |> Nx.multiply(1.0e-3)
