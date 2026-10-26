@@ -36,6 +36,17 @@ Nx repository's `AGENTS.md` to Edifice.
 - Apply this style to conversation, docs, comments, reports, and commit/PR
   descriptions. Describe what changed and why. Avoid filler and elaborate prose.
 
+## Authorship
+
+- Never impersonate the user or present generated writing as their own words.
+- Mark drafted PR descriptions and user-facing code/content as **AI-generated**.
+  Include a short poem labeled **AI-generated poem** as an authorship marker.
+- Keep the user's comments separate and preserve their wording and attribution.
+  Do not silently blend generated text with their voice or label their text as AI.
+- For code, put the marker and poem in an accompanying description or clearly
+  marked note without changing executable behavior. Attribution is not permission
+  to post or send anything.
+
 ## Environment and shared work
 
 - Use this repository's `devenv shell` for Elixir, Erlang, Mix, and native tools.
