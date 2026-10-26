@@ -94,6 +94,26 @@ First run builds a manifest and runs everything. Subsequent runs are fast.
 | `:known_issue` | Known failing tests | Excluded |
 | (none) | Fast unit tests | Included |
 
+### CUDA kernels (GPU host only)
+
+The fused CUDA kernels have three execution tiers (see the header of
+`lib/edifice/cuda/fused_scan.ex`): the EXLA custom-call tier, the NIF bridge
+and the pure-Nx fallback. Hosted CI exercises only the fallback. On a machine
+with a GPU and `nvcc`:
+
+```bash
+scripts/check_cuda_kernels.sh          # build kernels, NIF, FFI library; syntax-check every .cu
+scripts/check_cuda_kernels.sh --test   # ... then run the GPU parity matrix
+EDIFICE_TEST_CLIENT=cuda mix test --only cuda_kernels   # the matrix alone
+```
+
+`test/edifice/cuda/kernel_matrix_gpu_test.exs` runs every forward kernel
+(including the five block scans) through the NIF against the Elixir fallback,
+the custom-call handlers (GRU, selective scan) forward and backward against
+the tier forced off, and the simple scans in bf16. `dispatch_gating_test.exs`
+pins the tier-selection rules on any machine. `.github/workflows/cuda.yml`
+runs the script weekly on a self-hosted runner labelled `gpu`.
+
 ### EXLA client
 
 `test/test_helper.exs` pins EXLA to its **host** client, even on a machine

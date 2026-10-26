@@ -3,28 +3,24 @@ defmodule Edifice.CUDA.FusedScan do
   # High-level dispatch for fused CUDA scan kernels.
   #
   # Three-tier dispatch (highest priority first):
-  # 1. XLA-graph tier via Nx.block (Edifice.Block.run) — stays inside XLA graph,
-  #    no graph breaks. Requires EXLA fork with fused scan kernels.
-  # 2. NIF bridge — breaks graph but uses fused CUDA kernel. Requires
-  #    Edifice NIF compiled with CUDA support.
+  # 1. XLA-graph tier via Nx.block (Edifice.Block.run) — stays inside the
+  #    XLA graph, no graph breaks. Needs `mix edifice.cuda.build`, EXLA 1.0's
+  #    `EXLA.load_dylib/1` and EDIFICE_FUSED_CUSTOM_CALL=1. Only the ops in
+  #    `Edifice.Block.native_ops/0` have handlers; `custom_call_available?/1`
+  #    is per-op so the other ops are not routed here (that would compile
+  #    the pure fallback and shadow tier 2).
+  # 2. NIF bridge — breaks the graph but runs the fused CUDA kernel on
+  #    eager EXLA.Backend tensors. Needs priv/libedifice_cuda_nif.so and
+  #    priv/cuda/libedifice_cuda_kernels{,_bf16}.so (`make -C c_src`,
+  #    `make -C native/cuda`); `Edifice.CUDA.NIF.loaded?/0` is the gate.
   # 3. Elixir sequential scan — pure Nx, works on any backend.
-  #
-  # The block path uses Nx.block + EXLA.CustomCall (see Edifice.Block) which:
-  # - In defn context (EXLA+CUDA): creates an :optional Expr node that
-  #   EXLA pattern-matches into a stablehlo.custom_call
-  # - In eager context or non-CUDA: runs the fallback callback
   #
   # Memory management (NIF path only): The NIF returns a gc_ref (NIF
   # resource) alongside the output pointer. This gc_ref calls cudaFree
   # when garbage collected.
   #
-  # Known Limitations:
-  # - Flash Attention custom call always uses causal=1. The `:causal` option
-  #   is respected by the NIF and fallback paths, but the EXLA custom call
-  #   path hardcodes causal=1 to avoid a scalar operand segfault in XLA.
-  #   Non-causal flash attention falls back to NIF or Elixir.
-  # - LASER Attention custom call: same limitation, hardcoded causal=1.
-  # - See docs/cuda_custom_call_debugging.md for technical details.
+  # Parity of every tier against the pure-Nx reference is checked by
+  # test/edifice/cuda/kernel_matrix_gpu_test.exs (EDIFICE_TEST_CLIENT=cuda).
 
   alias Edifice.CUDA.AutoTuneProfiler
 
@@ -3339,9 +3335,9 @@ defmodule Edifice.CUDA.FusedScan do
     h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(gates)), {batch, hidden})
 
     # Extract device pointers
-    z_ptr = Nx.to_pointer(z, mode: :local)
-    c_ptr = Nx.to_pointer(candidates, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
+    z_ptr = device_ptr(z)
+    c_ptr = device_ptr(candidates)
+    h0_ptr = device_ptr(h0)
 
     case Edifice.CUDA.NIF.fused_mingru_scan(
            z_ptr.address,
@@ -3359,7 +3355,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(gates), client: :cuda, device_id: 0},
+          {backend_for(gates), client: :cuda, device_id: device_id_of(gates)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -3388,10 +3384,10 @@ defmodule Edifice.CUDA.FusedScan do
       )
 
     # Extract device pointers
-    f_ptr = Nx.to_pointer(f, mode: :local)
-    i_ptr = Nx.to_pointer(i, mode: :local)
-    c_ptr = Nx.to_pointer(candidates, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
+    f_ptr = device_ptr(f)
+    i_ptr = device_ptr(i)
+    c_ptr = device_ptr(candidates)
+    h0_ptr = device_ptr(h0)
 
     case Edifice.CUDA.NIF.fused_minlstm_scan(
            f_ptr.address,
@@ -3409,7 +3405,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(forget_gates), client: :cuda, device_id: 0},
+          {backend_for(forget_gates), client: :cuda, device_id: device_id_of(forget_gates)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -3433,9 +3429,9 @@ defmodule Edifice.CUDA.FusedScan do
 
     h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(gates)), {batch, hidden})
 
-    g_ptr = Nx.to_pointer(gates, mode: :local)
-    c_ptr = Nx.to_pointer(candidates, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
+    g_ptr = device_ptr(gates)
+    c_ptr = device_ptr(candidates)
+    h0_ptr = device_ptr(h0)
 
     case Edifice.CUDA.NIF.fused_elu_gru_scan(
            g_ptr.address,
@@ -3451,7 +3447,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(gates), client: :cuda, device_id: 0},
+          {backend_for(gates), client: :cuda, device_id: device_id_of(gates)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -3470,9 +3466,9 @@ defmodule Edifice.CUDA.FusedScan do
 
     h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(gates)), {batch, hidden})
 
-    g_ptr = Nx.to_pointer(gates, mode: :local)
-    c_ptr = Nx.to_pointer(candidates, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
+    g_ptr = device_ptr(gates)
+    c_ptr = device_ptr(candidates)
+    h0_ptr = device_ptr(h0)
 
     case Edifice.CUDA.NIF.fused_real_gru_scan(
            g_ptr.address,
@@ -3488,7 +3484,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(gates), client: :cuda, device_id: 0},
+          {backend_for(gates), client: :cuda, device_id: device_id_of(gates)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -3507,9 +3503,9 @@ defmodule Edifice.CUDA.FusedScan do
 
     h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(a_vals)), {batch, hidden})
 
-    a_ptr = Nx.to_pointer(a_vals, mode: :local)
-    b_ptr = Nx.to_pointer(b_vals, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
+    a_ptr = device_ptr(a_vals)
+    b_ptr = device_ptr(b_vals)
+    h0_ptr = device_ptr(h0)
 
     case Edifice.CUDA.NIF.fused_diag_linear_scan(
            a_ptr.address,
@@ -3525,7 +3521,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(a_vals), client: :cuda, device_id: 0},
+          {backend_for(a_vals), client: :cuda, device_id: device_id_of(a_vals)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -3544,9 +3540,9 @@ defmodule Edifice.CUDA.FusedScan do
 
     h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(a_vals)), {batch, hidden})
 
-    a_ptr = Nx.to_pointer(a_vals, mode: :local)
-    b_ptr = Nx.to_pointer(b_vals, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
+    a_ptr = device_ptr(a_vals)
+    b_ptr = device_ptr(b_vals)
+    h0_ptr = device_ptr(h0)
 
     case Edifice.CUDA.NIF.fused_linear_scan(
            a_ptr.address,
@@ -3562,7 +3558,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(a_vals), client: :cuda, device_id: 0},
+          {backend_for(a_vals), client: :cuda, device_id: device_id_of(a_vals)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -3581,9 +3577,9 @@ defmodule Edifice.CUDA.FusedScan do
 
     h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(tau)), {batch, hidden})
 
-    tau_ptr = Nx.to_pointer(tau, mode: :local)
-    act_ptr = Nx.to_pointer(activation, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
+    tau_ptr = device_ptr(tau)
+    act_ptr = device_ptr(activation)
+    h0_ptr = device_ptr(h0)
 
     case Edifice.CUDA.NIF.fused_liquid_scan(
            tau_ptr.address,
@@ -3599,7 +3595,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(tau), client: :cuda, device_id: 0},
+          {backend_for(tau), client: :cuda, device_id: device_id_of(tau)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -3620,10 +3616,10 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(q)
     ttype = tensor_type(q)
 
-    q_ptr = Nx.to_pointer(q, mode: :local)
-    k_ptr = Nx.to_pointer(k, mode: :local)
-    v_ptr = Nx.to_pointer(v, mode: :local)
-    beta_ptr = Nx.to_pointer(beta, mode: :local)
+    q_ptr = device_ptr(q)
+    k_ptr = device_ptr(k)
+    v_ptr = device_ptr(v)
+    beta_ptr = device_ptr(beta)
 
     case Edifice.CUDA.NIF.fused_delta_net_scan(
            q_ptr.address,
@@ -3641,7 +3637,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * num_heads * head_dim * esize
 
         Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: 0},
+          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, num_heads, head_dim}
@@ -3658,11 +3654,11 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(q)
     ttype = tensor_type(q)
 
-    q_ptr = Nx.to_pointer(q, mode: :local)
-    k_ptr = Nx.to_pointer(k, mode: :local)
-    v_ptr = Nx.to_pointer(v, mode: :local)
-    beta_ptr = Nx.to_pointer(beta, mode: :local)
-    alpha_ptr = Nx.to_pointer(alpha, mode: :local)
+    q_ptr = device_ptr(q)
+    k_ptr = device_ptr(k)
+    v_ptr = device_ptr(v)
+    beta_ptr = device_ptr(beta)
+    alpha_ptr = device_ptr(alpha)
 
     case Edifice.CUDA.NIF.fused_gated_delta_net_scan(
            q_ptr.address,
@@ -3681,7 +3677,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * num_heads * head_dim * esize
 
         Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: 0},
+          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, num_heads, head_dim}
@@ -3699,10 +3695,10 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(q)
     ttype = tensor_type(q)
 
-    q_ptr = Nx.to_pointer(q, mode: :local)
-    k_ptr = Nx.to_pointer(k, mode: :local)
-    v_ptr = Nx.to_pointer(v, mode: :local)
-    beta_ptr = Nx.to_pointer(beta, mode: :local)
+    q_ptr = device_ptr(q)
+    k_ptr = device_ptr(k)
+    v_ptr = device_ptr(v)
+    beta_ptr = device_ptr(beta)
 
     case Edifice.CUDA.NIF.fused_delta_product_scan(
            q_ptr.address,
@@ -3721,7 +3717,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * num_heads * head_dim * esize
 
         Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: 0},
+          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, num_heads, head_dim}
@@ -3746,10 +3742,10 @@ defmodule Edifice.CUDA.FusedScan do
     h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
     c0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
 
-    wx_ptr = Nx.to_pointer(wx, mode: :local)
-    r_ptr = Nx.to_pointer(recurrent_weight, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
-    c0_ptr = Nx.to_pointer(c0, mode: :local)
+    wx_ptr = device_ptr(wx)
+    r_ptr = device_ptr(recurrent_weight)
+    h0_ptr = device_ptr(h0)
+    c0_ptr = device_ptr(c0)
 
     case Edifice.CUDA.NIF.fused_slstm_scan(
            wx_ptr.address,
@@ -3766,7 +3762,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(wx), client: :cuda, device_id: 0},
+          {backend_for(wx), client: :cuda, device_id: device_id_of(wx)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -3787,10 +3783,10 @@ defmodule Edifice.CUDA.FusedScan do
     h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
     c0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
 
-    wx_ptr = Nx.to_pointer(wx, mode: :local)
-    r_ptr = Nx.to_pointer(recurrent_weight, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
-    c0_ptr = Nx.to_pointer(c0, mode: :local)
+    wx_ptr = device_ptr(wx)
+    r_ptr = device_ptr(recurrent_weight)
+    h0_ptr = device_ptr(h0)
+    c0_ptr = device_ptr(c0)
 
     case Edifice.CUDA.NIF.fused_lstm_scan(
            wx_ptr.address,
@@ -3807,7 +3803,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(wx), client: :cuda, device_id: 0},
+          {backend_for(wx), client: :cuda, device_id: device_id_of(wx)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -3830,10 +3826,10 @@ defmodule Edifice.CUDA.FusedScan do
 
     bhn = bhn || Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {hidden})
 
-    wx_ptr = Nx.to_pointer(wx, mode: :local)
-    r_ptr = Nx.to_pointer(recurrent_weight, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
-    bhn_ptr = Nx.to_pointer(bhn, mode: :local)
+    wx_ptr = device_ptr(wx)
+    r_ptr = device_ptr(recurrent_weight)
+    h0_ptr = device_ptr(h0)
+    bhn_ptr = device_ptr(bhn)
 
     case Edifice.CUDA.NIF.fused_gru_scan(
            wx_ptr.address,
@@ -3850,7 +3846,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(wx), client: :cuda, device_id: 0},
+          {backend_for(wx), client: :cuda, device_id: device_id_of(wx)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -3875,13 +3871,13 @@ defmodule Edifice.CUDA.FusedScan do
         w0
       end
 
-    q_ptr = Nx.to_pointer(q, mode: :local)
-    k_ptr = Nx.to_pointer(k, mode: :local)
-    v_ptr = Nx.to_pointer(v, mode: :local)
-    eta_ptr = Nx.to_pointer(eta, mode: :local)
-    w0_ptr = Nx.to_pointer(w0_batched, mode: :local)
-    lng_ptr = Nx.to_pointer(ln_gamma, mode: :local)
-    lnb_ptr = Nx.to_pointer(ln_beta, mode: :local)
+    q_ptr = device_ptr(q)
+    k_ptr = device_ptr(k)
+    v_ptr = device_ptr(v)
+    eta_ptr = device_ptr(eta)
+    w0_ptr = device_ptr(w0_batched)
+    lng_ptr = device_ptr(ln_gamma)
+    lnb_ptr = device_ptr(ln_beta)
 
     case Edifice.CUDA.NIF.fused_ttt_scan(
            q_ptr.address,
@@ -3901,7 +3897,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * inner_size * esize
 
         Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: 0},
+          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, inner_size}
@@ -3919,11 +3915,11 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(x)
     ttype = tensor_type(x)
 
-    x_ptr = Nx.to_pointer(x, mode: :local)
-    dt_ptr = Nx.to_pointer(dt, mode: :local)
-    a_ptr = Nx.to_pointer(a, mode: :local)
-    b_ptr = Nx.to_pointer(b, mode: :local)
-    c_ptr = Nx.to_pointer(c, mode: :local)
+    x_ptr = device_ptr(x)
+    dt_ptr = device_ptr(dt)
+    a_ptr = device_ptr(a)
+    b_ptr = device_ptr(b)
+    c_ptr = device_ptr(c)
 
     case Edifice.CUDA.NIF.fused_selective_scan(
            x_ptr.address,
@@ -3942,7 +3938,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(x), client: :cuda, device_id: 0},
+          {backend_for(x), client: :cuda, device_id: device_id_of(x)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -3963,11 +3959,11 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(q)
     ttype = tensor_type(q)
 
-    q_ptr = Nx.to_pointer(q, mode: :local)
-    k_ptr = Nx.to_pointer(k, mode: :local)
-    v_ptr = Nx.to_pointer(v, mode: :local)
-    alpha_ptr = Nx.to_pointer(alpha, mode: :local)
-    beta_ptr = Nx.to_pointer(beta, mode: :local)
+    q_ptr = device_ptr(q)
+    k_ptr = device_ptr(k)
+    v_ptr = device_ptr(v)
+    alpha_ptr = device_ptr(alpha)
+    beta_ptr = device_ptr(beta)
 
     case Edifice.CUDA.NIF.fused_kda_scan(
            q_ptr.address,
@@ -3986,7 +3982,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * num_heads * head_dim * esize
 
         Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: 0},
+          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, num_heads, head_dim}
@@ -4009,12 +4005,12 @@ defmodule Edifice.CUDA.FusedScan do
     beta = Nx.reshape(beta, {batch, seq_len, num_heads})
     gamma = Nx.reshape(gamma, {batch, seq_len, num_heads})
 
-    q_ptr = Nx.to_pointer(q, mode: :local)
-    k_ptr = Nx.to_pointer(k, mode: :local)
-    v_ptr = Nx.to_pointer(v, mode: :local)
-    alpha_ptr = Nx.to_pointer(alpha, mode: :local)
-    beta_ptr = Nx.to_pointer(beta, mode: :local)
-    gamma_ptr = Nx.to_pointer(gamma, mode: :local)
+    q_ptr = device_ptr(q)
+    k_ptr = device_ptr(k)
+    v_ptr = device_ptr(v)
+    alpha_ptr = device_ptr(alpha)
+    beta_ptr = device_ptr(beta)
+    gamma_ptr = device_ptr(gamma)
 
     case Edifice.CUDA.NIF.fused_rla_scan(
            q_ptr.address,
@@ -4036,7 +4032,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * num_heads * head_dim * esize
 
         Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: 0},
+          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, num_heads, head_dim}
@@ -4095,7 +4091,7 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   defp flash_attention_custom_call_available? do
-    custom_call_available?()
+    custom_call_available?(:flash_attention)
   end
 
   defp flash_attention_custom_call(q, k, v, causal) do
@@ -4126,9 +4122,9 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(q)
     ttype = tensor_type(q)
 
-    q_ptr = Nx.to_pointer(q, mode: :local)
-    k_ptr = Nx.to_pointer(k, mode: :local)
-    v_ptr = Nx.to_pointer(v, mode: :local)
+    q_ptr = device_ptr(q)
+    k_ptr = device_ptr(k)
+    v_ptr = device_ptr(v)
 
     case Edifice.CUDA.NIF.fused_flash_attention(
            q_ptr.address,
@@ -4146,7 +4142,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * num_heads * seq_len * head_dim * esize
 
         Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: 0},
+          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, num_heads, seq_len, head_dim}
@@ -4340,10 +4336,10 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(q)
     ttype = tensor_type(q)
 
-    q_ptr = Nx.to_pointer(q, mode: :local)
-    k_ptr = Nx.to_pointer(k, mode: :local)
-    v_ptr = Nx.to_pointer(v, mode: :local)
-    vmax_ptr = Nx.to_pointer(v_max, mode: :local)
+    q_ptr = device_ptr(q)
+    k_ptr = device_ptr(k)
+    v_ptr = device_ptr(v)
+    vmax_ptr = device_ptr(v_max)
 
     case Edifice.CUDA.NIF.fused_laser_attention(
            q_ptr.address,
@@ -4362,7 +4358,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * num_heads * seq_len * head_dim * esize
 
         Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: 0},
+          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, num_heads, seq_len, head_dim}
@@ -4558,10 +4554,10 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(q)
     ttype = tensor_type(q)
 
-    q_ptr = Nx.to_pointer(q, mode: :local)
-    k_ptr = Nx.to_pointer(k, mode: :local)
-    v_ptr = Nx.to_pointer(v, mode: :local)
-    cs_ptr = Nx.to_pointer(cs, mode: :local)
+    q_ptr = device_ptr(q)
+    k_ptr = device_ptr(k)
+    v_ptr = device_ptr(v)
+    cs_ptr = device_ptr(cs)
 
     case Edifice.CUDA.NIF.fused_fox_attention(
            q_ptr.address,
@@ -4579,7 +4575,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * num_heads * seq_len * head_dim * esize
 
         Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: 0},
+          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, num_heads, seq_len, head_dim}
@@ -4785,10 +4781,11 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(wx)
     ttype = tensor_type(wx)
 
-    wx_ptr = Nx.to_pointer(wx, mode: :local)
-    wres_ptr = Nx.to_pointer(w_res, mode: :local)
-    h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype), {batch, hidden})
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
+    wx_ptr = device_ptr(wx)
+    wres_ptr = device_ptr(w_res)
+    # Must live on the same device as wx: a BinaryBackend h0 has no pointer.
+    h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
+    h0_ptr = device_ptr(h0)
 
     case Edifice.CUDA.NIF.fused_reservoir_scan(
            wx_ptr.address,
@@ -4805,7 +4802,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(wx), client: :cuda, device_id: 0},
+          {backend_for(wx), client: :cuda, device_id: device_id_of(wx)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, hidden}
@@ -4888,7 +4885,7 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(combined)
     ttype = tensor_type(combined)
 
-    combined_ptr = Nx.to_pointer(combined, mode: :local)
+    combined_ptr = device_ptr(combined)
 
     case Edifice.CUDA.NIF.fused_titans_scan(
            combined_ptr.address,
@@ -4903,7 +4900,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * memory_size * esize
 
         Nx.from_pointer(
-          {backend_for(combined), client: :cuda, device_id: 0},
+          {backend_for(combined), client: :cuda, device_id: device_id_of(combined)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, memory_size}
@@ -5003,7 +5000,7 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(combined)
     ttype = tensor_type(combined)
 
-    combined_ptr = Nx.to_pointer(combined, mode: :local)
+    combined_ptr = device_ptr(combined)
 
     case Edifice.CUDA.NIF.fused_miras_scan(
            combined_ptr.address,
@@ -5018,7 +5015,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * memory_size * esize
 
         Nx.from_pointer(
-          {backend_for(combined), client: :cuda, device_id: 0},
+          {backend_for(combined), client: :cuda, device_id: device_id_of(combined)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, memory_size}
@@ -5124,10 +5121,10 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(q)
     ttype = tensor_type(q)
 
-    q_ptr = Nx.to_pointer(q, mode: :local)
-    ks_ptr = Nx.to_pointer(k_slot, mode: :local)
-    v_ptr = Nx.to_pointer(v, mode: :local)
-    alpha_ptr = Nx.to_pointer(alpha, mode: :local)
+    q_ptr = device_ptr(q)
+    ks_ptr = device_ptr(k_slot)
+    v_ptr = device_ptr(v)
+    alpha_ptr = device_ptr(alpha)
 
     case Edifice.CUDA.NIF.fused_gsa_scan(
            q_ptr.address,
@@ -5146,7 +5143,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * num_heads * head_dim * esize
 
         Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: 0},
+          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, num_heads * head_dim}
@@ -5267,9 +5264,9 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(input)
     ttype = tensor_type(input)
 
-    input_ptr = Nx.to_pointer(input, mode: :local)
-    weights_ptr = Nx.to_pointer(weights, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
+    input_ptr = device_ptr(input)
+    weights_ptr = device_ptr(weights)
+    h0_ptr = device_ptr(h0)
 
     case Edifice.CUDA.NIF.fused_mingru_block_scan(
            input_ptr.address,
@@ -5286,7 +5283,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(input), client: :cuda, device_id: 0},
+          {backend_for(input), client: :cuda, device_id: device_id_of(input)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -5404,9 +5401,9 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(input)
     ttype = tensor_type(input)
 
-    input_ptr = Nx.to_pointer(input, mode: :local)
-    weights_ptr = Nx.to_pointer(weights, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
+    input_ptr = device_ptr(input)
+    weights_ptr = device_ptr(weights)
+    h0_ptr = device_ptr(h0)
 
     case Edifice.CUDA.NIF.fused_minlstm_block_scan(
            input_ptr.address,
@@ -5423,7 +5420,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(input), client: :cuda, device_id: 0},
+          {backend_for(input), client: :cuda, device_id: device_id_of(input)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -5553,9 +5550,9 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(input)
     ttype = tensor_type(input)
 
-    input_ptr = Nx.to_pointer(input, mode: :local)
-    weights_ptr = Nx.to_pointer(weights, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
+    input_ptr = device_ptr(input)
+    weights_ptr = device_ptr(weights)
+    h0_ptr = device_ptr(h0)
 
     case Edifice.CUDA.NIF.fused_linear_block_scan(
            input_ptr.address,
@@ -5572,7 +5569,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(input), client: :cuda, device_id: 0},
+          {backend_for(input), client: :cuda, device_id: device_id_of(input)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -5689,10 +5686,10 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(input)
     ttype = tensor_type(input)
 
-    input_ptr = Nx.to_pointer(input, mode: :local)
-    weights_ptr = Nx.to_pointer(weights, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
-    c0_ptr = Nx.to_pointer(c0, mode: :local)
+    input_ptr = device_ptr(input)
+    weights_ptr = device_ptr(weights)
+    h0_ptr = device_ptr(h0)
+    c0_ptr = device_ptr(c0)
 
     case Edifice.CUDA.NIF.fused_lstm_block_scan(
            input_ptr.address,
@@ -5710,7 +5707,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(input), client: :cuda, device_id: 0},
+          {backend_for(input), client: :cuda, device_id: device_id_of(input)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -5846,9 +5843,9 @@ defmodule Edifice.CUDA.FusedScan do
     esize = elem_size(input)
     ttype = tensor_type(input)
 
-    input_ptr = Nx.to_pointer(input, mode: :local)
-    weights_ptr = Nx.to_pointer(weights, mode: :local)
-    h0_ptr = Nx.to_pointer(h0, mode: :local)
+    input_ptr = device_ptr(input)
+    weights_ptr = device_ptr(weights)
+    h0_ptr = device_ptr(h0)
 
     case Edifice.CUDA.NIF.fused_gru_block_scan(
            input_ptr.address,
@@ -5865,7 +5862,7 @@ defmodule Edifice.CUDA.FusedScan do
         out_bytes = batch * seq_len * hidden * esize
 
         Nx.from_pointer(
-          {backend_for(input), client: :cuda, device_id: 0},
+          {backend_for(input), client: :cuda, device_id: device_id_of(input)},
           %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
           ttype,
           {batch, seq_len, hidden}
@@ -5944,16 +5941,16 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   @doc false
-  def block_custom_call_available?, do: custom_call_available?()
+  def block_custom_call_available?, do: custom_call_available?(:mingru_block)
 
   @doc false
-  def linear_block_custom_call_available?, do: custom_call_available?()
+  def linear_block_custom_call_available?, do: custom_call_available?(:linear_block)
 
   @doc false
-  def lstm_block_custom_call_available?, do: custom_call_available?()
+  def lstm_block_custom_call_available?, do: custom_call_available?(:lstm_block)
 
   @doc false
-  def gru_block_custom_call_available?, do: custom_call_available?()
+  def gru_block_custom_call_available?, do: custom_call_available?(:gru_block)
 
   # ============================================================================
   # GC reference tracking
@@ -5976,38 +5973,98 @@ defmodule Edifice.CUDA.FusedScan do
     exla_cuda_backend?(tensor) and nif_loaded?()
   end
 
+  # The NIF hands raw device pointers to CUDA kernels, so the tensor must
+  # live on the :cuda client — an EXLA host-client tensor would pass a CPU
+  # address through. Checked per tensor rather than per process so a host
+  # default client (e.g. the test suite) never reaches the NIF arm.
   defp exla_cuda_backend?(tensor) do
     exla_backend = Module.concat([EXLA, Backend])
-    tensor.data.__struct__ == exla_backend
+
+    tensor.data.__struct__ == exla_backend and
+      match?(%{buffer: %{client_name: :cuda}}, tensor.data)
   rescue
     _ -> false
+  end
+
+  # Device of the EXLA buffer backing `tensor` (same device as the inputs).
+  defp device_id_of(tensor), do: tensor.data.buffer.device_id
+
+  # Raw device address of an EXLA tensor, guaranteed to be READY.
+  #
+  # EXLA (PjRt) enqueues host->device copies from a thread pool and
+  # `Nx.to_pointer/2` returns the address without waiting for the buffer's
+  # definition event. The NIF launches on the legacy default stream and
+  # synchronizes the device first, but that cannot cover a copy that has not
+  # been enqueued yet — observed as run-to-run garbage/NaN in GRU H=512 and
+  # flash attention (kernel_matrix_gpu_test). A sized `DeviceBuffer.read`
+  # goes through PjRt's synchronous ToLiteral, which blocks the host until
+  # the buffer is defined, and copies only the first element back. (Running
+  # an executable on the tensor instead is NOT safe: it can donate the buffer
+  # out from under the pointer we are about to hand to the kernel.)
+  defp device_ptr(tensor) do
+    _ = apply(Module.concat([EXLA, DeviceBuffer]), :read, [tensor.data.buffer, elem_size(tensor)])
+    Nx.to_pointer(tensor, mode: :local)
   end
 
   defp backend_for(tensor) do
     tensor.data.__struct__
   end
 
-  defp nif_loaded? do
-    Code.ensure_loaded?(Edifice.CUDA.NIF) and
-      function_exported?(Edifice.CUDA.NIF, :fused_mingru_scan, 7)
+  # The NIF stubs exist whether or not priv/libedifice_cuda_nif.so loaded,
+  # so only the load flag is trustworthy (function_exported?/3 is not).
+  defp nif_loaded?, do: Edifice.CUDA.NIF.loaded?()
+
+  @doc """
+  Whether the in-graph custom-call tier is active for any op.
+
+  Prefer `custom_call_available?/1`: the tier is only worth taking for
+  ops that have a native handler (`Edifice.Block.native_ops/0`); for the
+  rest it compiles the pure fallback and would shadow the NIF arm.
+  """
+  def custom_call_available? do
+    custom_call_tier_enabled?()
   end
 
+  @doc """
+  Whether the custom-call tier is active AND `kernel_name` (an AutoTune /
+  dispatch kernel name such as `:gru_scan`, or a `FusedOp` op such as
+  `:fused_gru_scan`) has a native handler behind it.
+  """
+  def custom_call_available?(kernel_name) do
+    custom_call_tier_enabled?() and Edifice.Block.native_op?(block_op(kernel_name))
+  end
+
+  # Dispatch/AutoTune kernel names -> Edifice.Block.FusedOp op atoms.
   @doc false
-  def custom_call_available? do
+  def block_op(name) when is_atom(name) do
+    case Atom.to_string(name) do
+      "fused_" <> _ ->
+        name
+
+      s when s in ~w(mingru minlstm elu_gru real_gru diag_linear liquid) ->
+        :"fused_#{s}_scan"
+
+      s when s in ~w(flash_attention laser_attention fox_attention) ->
+        :"fused_#{s}"
+
+      s when s in ~w(mingru_block minlstm_block linear_block lstm_block gru_block) ->
+        :"fused_#{s}_scan"
+
+      s ->
+        :"fused_#{s}"
+    end
+  end
+
+  defp custom_call_tier_enabled? do
     # Allow disabling fused CUDA custom calls for A/B benchmarking
     # Process dict flag used by AutoTune to force fallback during benchmarking
     if System.get_env("EDIFICE_DISABLE_FUSED") == "1" or
          Process.get(:__edifice_force_fallback__, false) do
       false
     else
-      # Post-Nx.block migration: true only when the (env-gated) FusedOp
-      # defimpl is ACTIVE — i.e. EDIFICE_FUSED_CUSTOM_CALL=1 requests
-      # loading the Edifice FFI library — AND a real
-      # (non-Any) EXLA.CustomCall impl is registered. Taking the block
-      # tier without both would silently run the pure fallback and
-      # shadow the faster NIF arm, so the probe must stay truthful (the
-      # defimpl also self-gates per-op; this keeps the whole tier's
-      # dispatch honest).
+      # True only when the (env-gated) FusedOp defimpl is ACTIVE — i.e.
+      # EDIFICE_FUSED_CUSTOM_CALL=1 requests loading the Edifice FFI
+      # library — AND a real (non-Any) EXLA.CustomCall impl is registered.
       System.get_env("EDIFICE_FUSED_CUSTOM_CALL") == "1" and
         Edifice.Block.native_impl?()
     end

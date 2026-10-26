@@ -589,8 +589,20 @@ static void gpu_buffer_dtor(ErlNifEnv* env, void* obj) {
  * wrapping pointer_int. When resource_ref is GC'd, cudaFree is called.
  */
 static ERL_NIF_TERM alloc_gpu_buffer(ErlNifEnv* env, size_t bytes) {
+    /* Every NIF allocates its output here right before launching on the
+     * legacy default stream. The input tensors were produced by EXLA on its
+     * own NON-blocking streams (host->device copies, XLA executables), which
+     * the legacy stream does NOT implicitly synchronize with, so the kernel
+     * could read buffers whose writes were still in flight. Observed as
+     * run-to-run NaN/garbage (GRU H=512, flash attention) before this
+     * device-wide barrier was added. */
+    cudaError_t err = s_cuda_sync();
+    if (err != 0) {
+        return make_error(env, "cudaDeviceSynchronize before launch failed");
+    }
+
     void* dev_ptr = NULL;
-    cudaError_t err = s_cuda_malloc(&dev_ptr, bytes);
+    err = s_cuda_malloc(&dev_ptr, bytes);
     if (err != 0) {
         return make_error(env, "cudaMalloc failed for output buffer");
     }

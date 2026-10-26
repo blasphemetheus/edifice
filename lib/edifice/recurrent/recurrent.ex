@@ -519,15 +519,15 @@ defmodule Edifice.Recurrent do
 
   @doc false
   def fused_rnn_available?(cell_type) when cell_type in [:lstm, :gru] do
-    Edifice.CUDA.FusedScan.custom_call_available?() or nif_available?()
+    # Per-op: only the GRU scan has a custom-call handler today, so an
+    # LSTM graph must not pick the fused parameter layout on the strength
+    # of the tier being enabled. The NIF flag is the real load status
+    # (the stubs always exist, so function_exported?/3 was never a test).
+    Edifice.CUDA.FusedScan.custom_call_available?(:"#{cell_type}_scan") or
+      Edifice.CUDA.NIF.loaded?()
   end
 
   def fused_rnn_available?(_), do: false
-
-  defp nif_available? do
-    Code.ensure_loaded?(Edifice.CUDA.NIF) and
-      function_exported?(Edifice.CUDA.NIF, :fused_lstm_scan, 7)
-  end
 
   # ============================================================================
   # Fused Block Scan (multi-layer kernel dispatch)

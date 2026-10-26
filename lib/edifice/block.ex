@@ -41,6 +41,26 @@ defmodule Edifice.Block do
     Nx.block(%FusedOp{op: op, attrs: attrs}, args, output, wrap(fallback, length(args)))
   end
 
+  @native_ops [
+    :fused_gru_scan,
+    :fused_gru_scan_backward,
+    :fused_selective_scan,
+    :fused_selective_scan_backward
+  ]
+
+  @doc """
+  The `FusedOp` ops that the `EXLA.CustomCall` implementation can lower
+  to a native handler (`native/cuda/Makefile` `FFI_SOURCES`). Every
+  other op compiles its pure fallback in-graph even when the native tier
+  is enabled, so dispatch must not route them here ahead of the NIF.
+  """
+  @spec native_ops() :: [atom()]
+  def native_ops, do: @native_ops
+
+  @doc "Whether `op` has a native custom-call handler. See `native_ops/0`."
+  @spec native_op?(atom()) :: boolean()
+  def native_op?(op), do: op in @native_ops
+
   @doc """
   Whether a real (non-Any) `EXLA.CustomCall` implementation is
   registered for `FusedOp` — i.e. an in-graph native tier exists.

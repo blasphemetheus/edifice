@@ -184,7 +184,7 @@ defmodule Edifice.SSM.Mamba do
     state_size = opts[:state_size]
     hidden_size = Nx.axis_size(x, 2)
 
-    if Edifice.CUDA.FusedScan.custom_call_available?() do
+    if Edifice.CUDA.FusedScan.custom_call_available?(:selective_scan) do
       # Fused kernel handles discretization + scan + output in one pass.
       # Build A matrix: [hidden_size, state_size] — fixed negative diagonal
       a_diag = Nx.negate(Nx.add(Nx.iota({state_size}), 1.0))

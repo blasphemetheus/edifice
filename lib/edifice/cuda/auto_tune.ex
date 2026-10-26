@@ -70,17 +70,19 @@ defmodule Edifice.CUDA.AutoTune do
         false
 
       System.get_env("EDIFICE_AUTOTUNE") == "0" ->
-        FusedScan.custom_call_available?()
+        FusedScan.custom_call_available?(kernel_name)
 
       System.get_env("EDIFICE_AUTOTUNE") == "fallback" ->
         false
 
-      not FusedScan.custom_call_available?() ->
+      # Per-op: ops without a native handler must fall through to the NIF
+      # arm (or the fallback) instead of compiling the fallback in-graph.
+      not FusedScan.custom_call_available?(kernel_name) ->
         false
 
-      # During benchmarking, defer to custom_call_available?() (respects force_fallback)
+      # During benchmarking, defer to custom_call_available?/1 (respects force_fallback)
       Process.get(:__edifice_benchmarking__, false) ->
-        FusedScan.custom_call_available?()
+        FusedScan.custom_call_available?(kernel_name)
 
       true ->
         dim = extract_key_dim(kernel_name, tensor)

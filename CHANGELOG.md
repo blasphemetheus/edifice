@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- GPU parity matrix for the fused CUDA kernels
+  (`test/edifice/cuda/kernel_matrix_gpu_test.exs`, `--only cuda_kernels`,
+  needs `EDIFICE_TEST_CLIENT=cuda`): every forward kernel reachable from
+  Elixir, including the five block scans, through the NIF against the pure-Nx
+  reference; the custom-call handlers forward and backward against the tier
+  forced off; the simple scans in bf16. `dispatch_gating_test.exs` pins the
+  tier-selection rules on CPU. `scripts/check_cuda_kernels.sh` builds the
+  kernel libraries, the NIF and the FFI library and syntax-checks every `.cu`
+  (`--test` adds the matrix); `.github/workflows/cuda.yml` runs it on a
+  self-hosted GPU runner.
+
 - `Edifice.Stateful.jit_replay_rows/3` compiles selected-row replay with fused
   gather/scatter and preserves padded or unaffected rows. Tuple histories in
   `jit_replay/3` fuse history assembly into the executable. Includes CPU/CUDA
@@ -102,6 +113,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Fused CUDA kernel dispatch.** Three gating bugs meant the tiers in
+  the fused-scan dispatcher (`lib/edifice/cuda/fused_scan.ex`) were not the
+  ones actually running:
+  - The custom-call tier was reported available for every op whenever
+    `EDIFICE_FUSED_CUSTOM_CALL=1` was set, although only the ops in
+    `Edifice.Block.native_ops/0` (GRU scan, selective scan, forward and
+    backward) have FFI handlers. The other 25 ops were routed into `Nx.block`,
+    compiled the pure fallback and shadowed the NIF kernels; AutoTune then
+    timed fallback against fallback. `custom_call_available?/1` is now per op.
+  - "NIF loaded" was probed with `function_exported?/3` against stubs that
+    always exist, so it was always true; the NIF module's new `loaded?/0`
+    reports the real `:erlang.load_nif/2` outcome.
+  - `Recurrent` tested `fused_lstm_scan/7` against an arity-8 stub, so the
+    fused LSTM/GRU parameter layout could never be selected through the NIF.
+  The NIF arm additionally requires the tensor to live on the `:cuda` client
+  (host-client EXLA tensors were handed through as device pointers) and uses
+  the input's device id instead of device 0.
+- **NIF kernels read inputs before EXLA had finished writing them.** EXLA
+  enqueues host->device copies from a thread pool and `Nx.to_pointer/2`
+  does not wait for the buffer's definition event; the NIF launched on the
+  legacy stream and could read a buffer whose copy was still pending or not
+  yet queued. Seen as run-to-run NaN/garbage (GRU at H=512, flash attention)
+  on an RTX 5090. Every NIF now synchronizes the device before launching and
+  the dispatcher blocks on each input's readiness before taking its pointer.
+- `FusedScan.reservoir_scan/3` built its initial state on the BinaryBackend
+  on the NIF path and crashed taking its pointer.
 - `PointNet` T-Net transforms used an unbatched contraction, pairing every
   sample's points with every sample's transform (`[batch, n, batch, k]`);
   with `use_t_net`/`use_feature_t_net` the classifier output was

@@ -16,15 +16,37 @@ defmodule Edifice.CUDA.NIF do
 
   @on_load :load_nif
 
+  @loaded_key {__MODULE__, :loaded}
+
   def load_nif do
     path = :filename.join(:code.priv_dir(:edifice), ~c"libedifice_cuda_nif")
 
     case :erlang.load_nif(path, 0) do
-      :ok -> :ok
-      {:error, {:load_failed, _}} -> :ok
-      {:error, reason} -> {:error, reason}
+      :ok ->
+        :persistent_term.put(@loaded_key, true)
+        :ok
+
+      {:error, {:load_failed, _}} ->
+        # No priv/libedifice_cuda_nif.so (or it failed to link): the stubs
+        # below stay in place and raise :not_loaded, so dispatch must
+        # consult loaded?/0 instead of function_exported?/3.
+        :persistent_term.put(@loaded_key, false)
+        :ok
+
+      {:error, reason} ->
+        :persistent_term.put(@loaded_key, false)
+        {:error, reason}
     end
   end
+
+  @doc """
+  Whether the native library behind this module actually loaded.
+
+  `function_exported?/3` cannot tell: the Elixir stubs exist whether or
+  not the `.so` was found. Only this flag reflects `:erlang.load_nif/2`.
+  """
+  @spec loaded?() :: boolean()
+  def loaded?, do: :persistent_term.get(@loaded_key, false)
 
   @doc false
   def fused_mingru_scan(_gates_ptr, _cand_ptr, _h0_ptr, _batch, _seq_len, _hidden, _dtype),

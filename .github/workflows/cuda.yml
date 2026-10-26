@@ -1,0 +1,50 @@
+name: CUDA kernels
+
+# The hosted CI (ci.yml) is CPU-only and never invokes nvcc. This workflow
+# builds every kernel library and runs the GPU parity matrix on a
+# self-hosted runner with an NVIDIA GPU, nvcc, Elixir/OTP and the repo's
+# dev shell available. Register such a runner with the labels below;
+# until one exists the workflow can only be triggered by hand.
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: CUDA target (sm_XX)
+        default: sm_120
+        required: true
+      run_tests:
+        description: Run the GPU parity matrix after building
+        type: boolean
+        default: true
+  schedule:
+    # Weekly, so kernel bit-rot against new Nx/EXLA releases is caught.
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  kernels:
+    name: Build kernels and run GPU matrix
+    runs-on: [self-hosted, linux, gpu]
+    timeout-minutes: 60
+    env:
+      MIX_ENV: test
+      EXLA_GPU_ARCH: ${{ inputs.arch || 'sm_120' }}
+      EXLA_TARGET: cuda
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          nvcc --version
+          nvidia-smi
+          elixir --version
+
+      - name: Build and test
+        run: |
+          if [ "${{ inputs.run_tests != false }}" = "true" ]; then
+            scripts/check_cuda_kernels.sh --test
+          else
+            scripts/check_cuda_kernels.sh
+          fi
