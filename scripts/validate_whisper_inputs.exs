@@ -29,7 +29,7 @@ time = Nx.iota(shape, axis: 2, type: :f32)
 frequency = Nx.iota(shape, axis: 1, type: :f32)
 {noise, _} = Nx.Random.normal(Nx.Random.key(20_261_026), shape: shape)
 
-cases = [
+synthetic_cases = [
   {"original", original},
   {"constant_zero", Nx.broadcast(0.0, shape)},
   {"constant_minus_one", Nx.broadcast(-1.0, shape)},
@@ -42,6 +42,21 @@ cases = [
   {"pulse_holdout",
    Nx.select(Nx.logical_and(Nx.greater(time, 1400), Nx.less(time, 1600)), 1.5, -0.5)}
 ]
+
+# Positional arguments select recorded-audio feature fixtures instead of the
+# synthetic suite. Generate them with the Rust whisper-audio executable.
+cases =
+  case System.argv() do
+    [] ->
+      synthetic_cases
+
+    paths ->
+      Enum.map(paths, fn path ->
+        input = Safetensors.read!(path)["mel_input"]
+        unless Nx.shape(input) == shape, do: raise("Expected #{inspect(shape)} in #{path}")
+        {Path.basename(path, ".safetensors"), input}
+      end)
+  end
 
 {encoder, _, loaded} = Edifice.Pretrained.from_hub("openai/whisper-base")
 {_, predict32} = Axon.build(encoder, mode: :inference)

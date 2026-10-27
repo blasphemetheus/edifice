@@ -516,6 +516,59 @@ Rust formatting checks passed.
 References: [tch-rs](https://github.com/LaurentMazare/tch-rs),
 [Whisper implementation](https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/models/whisper/modeling_whisper.py).
 
+### Recorded speech
+
+**AI-generated update.** The Rust `whisper-audio` executable now converts audio
+into a Whisper-base input. It uses FFmpeg to decode mono 16 kHz signed 16-bit
+audio, pads to 30 seconds, and computes the log-mel features with LibTorch and
+OpenAI's published mel filter bank. Longer recordings use only their first
+30 seconds; this diagnostic is not a long-form transcription implementation.
+The preprocessing follows [OpenAI's audio implementation](https://github.com/openai/whisper/blob/86098128c0b4f24f0e2aa2994de830614b474227/whisper/audio.py).
+No Python process is used.
+
+`scripts/validate_whisper_recordings.exs` downloads three public clips and the
+filter bank from pinned revisions, verifies their SHA-256 hashes, and passes
+their features through the existing f32/f64 encoder comparisons. Downloads and
+generated tensors stay in `/tmp` by default. The input sources and checksums
+are recorded in the script. No audio is added to the repository.
+
+| Recording | Duration | EXLA/Torch f64 max error | EXLA/Torch f32 max error | EXLA/Torch f32 mean error |
+| --- | ---: | ---: | ---: | ---: |
+| OpenAI Whisper test `jfk.flac` | 11 s | 2.58e-12 | 0.001746 | 1.74e-6 |
+| Narsil/asr_dummy `1.flac` | 10.435 s | 1.36e-12 | 0.000544 | 1.36e-6 |
+| Narsil/asr_dummy `2.flac` | 3.275 s | 1.97e-12 | 0.000811 | 1.57e-6 |
+
+All twelve comparisons passed the bounds fixed in the synthetic-input
+experiment. No tolerance was changed. The larger JFK f32 error is still well
+localized; f64 agreement remains close. Full results are in
+`bench/results/pretrained_2026-10-26/whisper_recorded_speech.log`.
+
+Build both Rust executables with the existing Cargo command, put FFmpeg on PATH
+(or set `FFMPEG` to its executable), then run:
+
+```sh
+devenv shell -- env MIX_DEPS_PATH=/tmp/edifice-upstream-deps \
+  MIX_BUILD_PATH=/tmp/edifice-upstream-build MIX_ENV=test \
+  XLA_TARGET=cpu EXLA_CPU_ONLY=1 ERL_FLAGS='+S 4:4' \
+  mix run scripts/validate_whisper_recordings.exs
+```
+
+Append local recording paths to use your own audio instead of the public clips.
+`WHISPER_RECORDINGS_DIR` changes the download/feature directory. `LIBTORCH` has
+the same meaning as in the synthetic runner. Audio decoding and inference run
+locally. The default fixture downloads and model configuration fetch still use
+the network. The run above used FFmpeg 8.1.2 on CPU.
+
+A Rust unit test verifies that silent audio maps to Whisper's log floor (-1.5),
+including padding and the output shape. Both encoders receive the same feature
+array, so encoder agreement does **not** independently establish frontend parity.
+These three clips also do not measure transcription accuracy, accents, noisy
+microphones, or long recordings. A separate frontend reference comparison and
+decoder/checkpoint validation are needed before treating Edifice as a dictation
+engine. In particular, the current key map skips `proj_out.weight` while the
+decoder builds a separate output projection. The notebook's demonstration
+decode loop is not evidence of pretrained transcript compatibility.
+
 **AI-generated poem**
 
 > A small difference starts the trail;
