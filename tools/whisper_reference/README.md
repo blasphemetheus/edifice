@@ -210,6 +210,71 @@ the existing isolated CPU build and did not rebuild native libraries.
 
 Full results: `bench/results/pretrained_2026-10-26/whisper_block5.log`.
 
+### Small erf reproduction and remaining outliers
+
+`mix run scripts/reproduce_gelu_cpu.exs` needs no checkpoint. It compares the
+ordinary GELU formula, the erfc formula, standalone erf, and separate GELU steps
+with host transfers preventing cross-step fusion. Expected values use Erlang's
+f64 math functions on the actual rounded f32 inputs, then round to f32.
+Both a short vector and a tensor with 2,048 columns reproduce the discrepancy.
+Setting `XLA_FLAGS=--xla_cpu_enable_fast_math=false` before starting the VM does
+not change the results. When using devenv, set this variable after `devenv shell`
+with `env` so the shell configuration does not override it.
+
+The error is present in standalone erf: for large positive arguments, this
+CPU build returns 0.9999998211860657 rather than 1.0. Host transfers between
+erf and the remaining GELU arithmetic produce the same GELU error as the fused
+calculation. Thus fusion across the GELU steps is not necessary to reproduce it.
+
+This matches a known upstream bug. The installed `xla` package is 0.10.0; its
+Makefile pins OpenXLA revision `bb760b047bdbfeff962f0366ad5cc782c98657e0`.
+At that revision, the scalar erf lowering clamps its argument to approximately
+[-3.743921, 3.743921], then evaluates a rational approximation. It never selects
+an exact +1 or -1 for larger original arguments. The generated LLVM for our
+small reproduction contains the same clamp, polynomial arithmetic, and division
+without that final selection. The small endpoint error therefore persists even
+for very large inputs, where it should round away.
+
+Sources: [pinned implementation](https://github.com/openxla/xla/blob/bb760b047bdbfeff962f0366ad5cc782c98657e0/xla/codegen/emitters/transforms/expand_float_ops.cc#L57),
+[upstream fix merged April 24, 2026](https://github.com/openxla/xla/pull/41202).
+This is evidence for updating/backporting the underlying XLA fix, rather than
+treating the observed error as unavoidable f32 rounding. An updated binary still
+needs validation; no XLA rebuild or dependency update was performed here.
+
+To inspect generated code, run the reproduction in a fresh VM with
+`XLA_FLAGS="--xla_dump_to=/tmp/edifice-gelu-hlo --xla_dump_hlo_as_text=true"`.
+The saved `gelu_erf.before_optimizations.txt` and `gelu_erf.ir-no-opt.ll` under
+`bench/results/pretrained_2026-10-26/` capture the erf operation and its compiled
+implementation. `gelu_cpu.log` and `gelu_cpu_strict.log` record both flag variants.
+
+`mix run scripts/trace_whisper_gelu_outliers.exs /tmp/whisper-sdpa.safetensors`
+continues the network investigation using the diagnostic erfc formula. It also
+changes the two convolution-stem GELUs, which earlier feed-forward-only runs
+left unchanged. The full encoder maximum drops to 0.00013065, with mean error
+0.000001895 and seven values still at or above 0.0001. The largest is at frame
+890, channel 323: -15.34093952 versus reference -15.34107018.
+
+| Exact reference supplied through, with all GELUs using erfc | Maximum final error | Values at or above 0.0001 |
+| --- | ---: | ---: |
+| No replacement | 0.00013065 | 7 |
+| First convolution+GELU | 0.00011206 | 4 |
+| Second convolution+GELU / position addition | 0.00015354 | 6 |
+| Block 1 attention | 0.00011921 | 6 |
+| Block 1 feed-forward section | 0.00013351 | 1 |
+| Block 2 attention | 0.00008965 | 0 |
+| Block 2 feed-forward section | 0.00007248 | 0 |
+| Block 3 feed-forward section | 0.00003815 | 0 |
+| Block 5 attention | 0.00001335 | 0 |
+
+Every tested later boundary also remains below the limit. The remaining outliers
+therefore point to differences accumulated through the early stem and first two
+attention blocks, rather than solely to block five. This is not proof of a new
+architecture bug, and replacement boundaries can change compilation. The next
+priority is validating an XLA build with the upstream erf fix, then repeating
+the original full-encoder test before pursuing smaller arithmetic differences.
+No production code, dependency, or tolerance was changed. Full trace:
+`bench/results/pretrained_2026-10-26/whisper_gelu_outliers.log`.
+
 References: [tch-rs](https://github.com/LaurentMazare/tch-rs),
 [Whisper implementation](https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/models/whisper/modeling_whisper.py).
 

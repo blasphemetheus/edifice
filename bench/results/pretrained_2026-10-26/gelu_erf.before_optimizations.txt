@@ -1,0 +1,11 @@
+HloModule main, entry_computation_layout={(u8[8]{0}, f32[11]{0})->f32[11]{0}}
+
+ENTRY %main.1 (Arg_0.1: u8[8], Arg_1.1: f32[11]) -> f32[11] {
+  %Arg_0.1 = u8[8]{0} parameter(0)
+  %Arg_1.1 = f32[11]{0} parameter(1)
+  %constant.1 = f32[] constant(1.41421354)
+  %broadcast.1 = f32[11]{0} broadcast(%constant.1), dimensions={}
+  %divide.1 = f32[11]{0} divide(%Arg_1.1, %broadcast.1)
+  ROOT %erf.1 = f32[11]{0} erf(%divide.1)
+}
+
