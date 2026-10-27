@@ -29,6 +29,50 @@ for name <- Enum.sort(Map.keys(reference)) do
   })
 end
 
+# Compare each operation on identical inputs. This removes differences inherited
+# from earlier operations and keeps the production model unchanged.
+dense = fn x, params -> Axon.Layers.dense(x, params["kernel"], params["bias"] || 0) end
+
+attention =
+  Nx.Defn.jit(fn x, q, k, v, out ->
+    Edifice.Blocks.SDPA.compute(dense.(x, q), dense.(x, k), dense.(x, v), 8, 64)
+    |> then(&dense.(&1, out))
+  end)
+
+project = Nx.Defn.jit(dense)
+gelu = Nx.Defn.jit(&Axon.Activations.gelu/1)
+
+for layer <- 1..6 do
+  name = "enc_block_#{layer}"
+  params = loaded.data
+
+  operations = [
+    {"attn_out",
+     fn ->
+       attention.(
+         reference["#{name}_attn_norm"],
+         params["#{name}_attn_q"],
+         params["#{name}_attn_k"],
+         params["#{name}_attn_v"],
+         params["#{name}_attn_out"]
+       )
+     end},
+    {"ffn_up", fn -> project.(reference["#{name}_ffn_norm"], params["#{name}_ffn_up"]) end},
+    {"ffn_act", fn -> gelu.(reference["#{name}_ffn_up"]) end},
+    {"ffn_down", fn -> project.(reference["#{name}_ffn_act"], params["#{name}_ffn_down"]) end}
+  ]
+
+  for {suffix, run} <- operations, expected = reference["#{name}_#{suffix}"], expected != nil do
+    error = Nx.abs(Nx.subtract(run.(), expected))
+
+    IO.inspect(%{
+      isolated_operation: "#{name}_#{suffix}",
+      max_absolute_error: Nx.to_number(Nx.reduce_max(error)),
+      mean_absolute_error: Nx.to_number(Nx.mean(error))
+    })
+  end
+end
+
 # Feed exactly the reference input to each normalization, separating local
 # arithmetic differences from errors accumulated by earlier layers.
 normalize = Nx.Defn.jit(&Axon.Layers.layer_norm/3)

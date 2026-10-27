@@ -69,12 +69,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => return Err("attention must be eager or sdpa".into()),
         };
         let attended = attended.transpose(1, 2).contiguous().view([1, 1500, 512]);
-        x = &x + linear(&attended, &format!("{prefix}.self_attn.out_proj"));
+        let projected = linear(&attended, &format!("{prefix}.self_attn.out_proj"));
+        saved.push((format!("{name}_attn_out"), projected.shallow_clone()));
+        x = &x + projected;
         saved.push((format!("{name}_attn_residual"), x.shallow_clone()));
         let normalized = norm(&x, &format!("{prefix}.final_layer_norm"));
         saved.push((format!("{name}_ffn_norm"), normalized.shallow_clone()));
-        let hidden = linear(&normalized, &format!("{prefix}.fc1")).gelu("none");
-        x = &x + linear(&hidden, &format!("{prefix}.fc2"));
+        let up = linear(&normalized, &format!("{prefix}.fc1"));
+        saved.push((format!("{name}_ffn_up"), up.shallow_clone()));
+        let hidden = up.gelu("none");
+        saved.push((format!("{name}_ffn_act"), hidden.shallow_clone()));
+        let down = linear(&hidden, &format!("{prefix}.fc2"));
+        saved.push((format!("{name}_ffn_down"), down.shallow_clone()));
+        x = &x + down;
         saved.push((format!("{name}_ffn_residual"), x.shallow_clone()));
     }
     x = norm(&x, "layer_norm");

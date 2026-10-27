@@ -40,6 +40,33 @@ The layer comparison exposes intermediate nodes, which can change XLA fusion
 and rounding. Its final error need not equal a prediction that returns only
 the final output. Keep the original numerical test as the acceptance check.
 
+The runner also saves attention outputs and the two dense projections around
+each feed-forward activation. The Elixir script feeds the saved reference inputs
+into each operation separately. Regenerate the reference file to get these
+additional comparisons; older files still support the earlier comparisons.
+
+On the CPU with Nx 1.0.0 and Axon 0.9.0, the isolated comparisons against
+LibTorch eager attention found these largest absolute differences:
+
+| Operation | Largest difference across six blocks |
+| --- | ---: |
+| Attention including its projections | 0.00001645 |
+| First feed-forward dense layer | 0.00011444 |
+| GELU activation | 0.00001526 |
+| Second feed-forward dense layer | 0.00001526 |
+
+The largest isolated dense difference occurs in block six. This calculation
+combines 512 input values per output. Different accumulation orders can round
+differently even with identical inputs and weights. Together with the earlier
+normalization checks, this supports accumulated arithmetic differences as a
+working explanation; it does not prove the whole discrepancy is harmless or
+establish transcription accuracy. The original final-output test still fails
+at roughly 0.0002594 against its unchanged 0.0001 limit. No production math or
+test tolerance was changed by this diagnostic extension.
+
+The full isolated run is recorded in
+`bench/results/pretrained_2026-10-26/whisper_isolated_operations.log`.
+
 References: [tch-rs](https://github.com/LaurentMazare/tch-rs),
 [Whisper implementation](https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/models/whisper/modeling_whisper.py).
 

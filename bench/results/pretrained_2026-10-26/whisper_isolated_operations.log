@@ -1,0 +1,453 @@
+• Running devenv:python:virtualenv
+• Running devenv:files:cleanup
+✓ Running devenv:files:cleanup in 5.24ms
+✓ Running devenv:python:virtualenv in 10.1ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 4.63ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 240ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+
+19:52:41.188 [debug] redirecting to /api/resolve-cache/models/openai/whisper-base/e37978b90ca9030d5170a5c07aadb050351a65bb/config.json?%2Fopenai%2Fwhisper-base%2Fresolve%2Fmain%2Fconfig.json=&etag=%22708cca09e7e8a9364e444efe8b4f9c2691fc5f51%22
+
+19:52:41.273 [info] Cached model.safetensors (1/1)
+%{
+  layer: "enc_block_1_attn_norm",
+  max_absolute_error: 1.52587890625e-5,
+  mean_absolute_error: 2.493327428965131e-7
+}
+%{
+  layer: "enc_block_1_attn_out",
+  max_absolute_error: 1.704692840576172e-5,
+  mean_absolute_error: 5.003894898436556e-7
+}
+%{
+  layer: "enc_block_1_attn_residual",
+  max_absolute_error: 1.7017126083374023e-5,
+  mean_absolute_error: 5.452579898701515e-7
+}
+%{
+  layer: "enc_block_1_ffn_act",
+  max_absolute_error: 2.9087066650390625e-5,
+  mean_absolute_error: 2.3659687542476604e-7
+}
+%{
+  layer: "enc_block_1_ffn_down",
+  max_absolute_error: 7.808208465576172e-6,
+  mean_absolute_error: 3.970076534187683e-7
+}
+%{
+  layer: "enc_block_1_ffn_norm",
+  max_absolute_error: 4.601478576660156e-5,
+  mean_absolute_error: 1.0183144922848442e-6
+}
+%{
+  layer: "enc_block_1_ffn_residual",
+  max_absolute_error: 1.5556812286376953e-5,
+  mean_absolute_error: 6.236085710042971e-7
+}
+%{
+  layer: "enc_block_1_ffn_up",
+  max_absolute_error: 2.86102294921875e-5,
+  mean_absolute_error: 9.009892210087855e-7
+}
+%{
+  layer: "enc_block_2_attn_norm",
+  max_absolute_error: 3.8743019104003906e-5,
+  mean_absolute_error: 1.1380859632481588e-6
+}
+%{
+  layer: "enc_block_2_attn_out",
+  max_absolute_error: 2.175569534301758e-6,
+  mean_absolute_error: 1.382541512384705e-7
+}
+%{
+  layer: "enc_block_2_attn_residual",
+  max_absolute_error: 1.3768672943115234e-5,
+  mean_absolute_error: 6.231433644643403e-7
+}
+%{
+  layer: "enc_block_2_ffn_act",
+  max_absolute_error: 2.6702880859375e-5,
+  mean_absolute_error: 2.0350182694528485e-7
+}
+%{
+  layer: "enc_block_2_ffn_down",
+  max_absolute_error: 8.732080459594727e-6,
+  mean_absolute_error: 3.074993912832724e-7
+}
+%{
+  layer: "enc_block_2_ffn_norm",
+  max_absolute_error: 5.936622619628906e-5,
+  mean_absolute_error: 1.4570389339496614e-6
+}
+%{
+  layer: "enc_block_2_ffn_residual",
+  max_absolute_error: 1.3470649719238281e-5,
+  mean_absolute_error: 6.568094477188424e-7
+}
+%{
+  layer: "enc_block_2_ffn_up",
+  max_absolute_error: 3.24249267578125e-5,
+  mean_absolute_error: 1.098012603506504e-6
+}
+%{
+  layer: "enc_block_3_attn_norm",
+  max_absolute_error: 3.9577484130859375e-5,
+  mean_absolute_error: 1.4676470527774654e-6
+}
+%{
+  layer: "enc_block_3_attn_out",
+  max_absolute_error: 1.7285346984863281e-6,
+  mean_absolute_error: 1.4577146600913693e-7
+}
+%{
+  layer: "enc_block_3_attn_residual",
+  max_absolute_error: 1.3470649719238281e-5,
+  mean_absolute_error: 6.647716759289324e-7
+}
+%{
+  layer: "enc_block_3_ffn_act",
+  max_absolute_error: 2.0503997802734375e-5,
+  mean_absolute_error: 1.9383956839646999e-7
+}
+%{
+  layer: "enc_block_3_ffn_down",
+  max_absolute_error: 4.0978193283081055e-6,
+  mean_absolute_error: 3.152925387439609e-7
+}
+%{
+  layer: "enc_block_3_ffn_norm",
+  max_absolute_error: 5.1975250244140625e-5,
+  mean_absolute_error: 1.7018026028381428e-6
+}
+%{
+  layer: "enc_block_3_ffn_residual",
+  max_absolute_error: 1.3887882232666016e-5,
+  mean_absolute_error: 6.888955113026896e-7
+}
+%{
+  layer: "enc_block_3_ffn_up",
+  max_absolute_error: 2.9325485229492188e-5,
+  mean_absolute_error: 1.1103870747319888e-6
+}
+%{
+  layer: "enc_block_4_attn_norm",
+  max_absolute_error: 5.7697296142578125e-5,
+  mean_absolute_error: 1.6805872746772366e-6
+}
+%{
+  layer: "enc_block_4_attn_out",
+  max_absolute_error: 1.6689300537109375e-6,
+  mean_absolute_error: 1.5164364697284327e-7
+}
+%{
+  layer: "enc_block_4_attn_residual",
+  max_absolute_error: 1.424551010131836e-5,
+  mean_absolute_error: 7.00935231634503e-7
+}
+%{
+  layer: "enc_block_4_ffn_act",
+  max_absolute_error: 3.0517578125e-5,
+  mean_absolute_error: 2.3932790327307885e-7
+}
+%{
+  layer: "enc_block_4_ffn_down",
+  max_absolute_error: 1.0585784912109375e-4,
+  mean_absolute_error: 4.20483985408282e-7
+}
+%{
+  layer: "enc_block_4_ffn_norm",
+  max_absolute_error: 7.843971252441406e-5,
+  mean_absolute_error: 2.5506178644718602e-6
+}
+%{
+  layer: "enc_block_4_ffn_residual",
+  max_absolute_error: 1.0776519775390625e-4,
+  mean_absolute_error: 8.109017812785169e-7
+}
+%{
+  layer: "enc_block_4_ffn_up",
+  max_absolute_error: 6.29425048828125e-5,
+  mean_absolute_error: 1.5689873862356762e-6
+}
+%{
+  layer: "enc_block_5_attn_norm",
+  max_absolute_error: 1.125335693359375e-4,
+  mean_absolute_error: 2.247797056043055e-6
+}
+%{
+  layer: "enc_block_5_attn_out",
+  max_absolute_error: 9.059906005859375e-6,
+  mean_absolute_error: 3.401990227303031e-7
+}
+%{
+  layer: "enc_block_5_attn_residual",
+  max_absolute_error: 1.1730194091796875e-4,
+  mean_absolute_error: 8.776386835052108e-7
+}
+%{
+  layer: "enc_block_5_ffn_act",
+  max_absolute_error: 1.7344951629638672e-4,
+  mean_absolute_error: 1.0885931942539173e-6
+}
+%{
+  layer: "enc_block_5_ffn_down",
+  max_absolute_error: 2.3651123046875e-4,
+  mean_absolute_error: 5.212880751059856e-6
+}
+%{
+  layer: "enc_block_5_ffn_norm",
+  max_absolute_error: 3.376007080078125e-4,
+  mean_absolute_error: 1.0689128430385608e-5
+}
+%{
+  layer: "enc_block_5_ffn_residual",
+  max_absolute_error: 2.40325927734375e-4,
+  mean_absolute_error: 5.2572104323189706e-6
+}
+%{
+  layer: "enc_block_5_ffn_up",
+  max_absolute_error: 1.735687255859375e-4,
+  mean_absolute_error: 8.069461728155147e-6
+}
+%{
+  layer: "enc_block_6_attn_norm",
+  max_absolute_error: 8.20159912109375e-5,
+  mean_absolute_error: 1.0597828804748133e-5
+}
+%{
+  layer: "enc_block_6_attn_out",
+  max_absolute_error: 6.031990051269531e-5,
+  mean_absolute_error: 6.012645371811232e-6
+}
+%{
+  layer: "enc_block_6_attn_residual",
+  max_absolute_error: 2.498626708984375e-4,
+  mean_absolute_error: 6.6121860982093494e-6
+}
+%{
+  layer: "enc_block_6_ffn_act",
+  max_absolute_error: 0.0013561248779296875,
+  mean_absolute_error: 2.8498989195213653e-6
+}
+%{
+  layer: "enc_block_6_ffn_down",
+  max_absolute_error: 7.7056884765625e-4,
+  mean_absolute_error: 1.1713325875462033e-5
+}
+%{
+  layer: "enc_block_6_ffn_norm",
+  max_absolute_error: 7.28607177734375e-4,
+  mean_absolute_error: 7.721877045696601e-5
+}
+%{
+  layer: "enc_block_6_ffn_residual",
+  max_absolute_error: 0.0010223388671875,
+  mean_absolute_error: 1.3985611076350324e-5
+}
+%{
+  layer: "enc_block_6_ffn_up",
+  max_absolute_error: 0.0013303756713867188,
+  mean_absolute_error: 4.894434459856711e-5
+}
+%{
+  layer: "enc_conv1_act",
+  max_absolute_error: 3.5762786865234375e-6,
+  mean_absolute_error: 8.616216007339972e-8
+}
+%{
+  layer: "enc_conv2_act",
+  max_absolute_error: 3.337860107421875e-6,
+  mean_absolute_error: 1.5678440945521288e-7
+}
+%{
+  layer: "enc_final_norm",
+  max_absolute_error: 1.964569091796875e-4,
+  mean_absolute_error: 1.3390754247666337e-5
+}
+%{
+  layer: "enc_pos_embed",
+  max_absolute_error: 3.337860107421875e-6,
+  mean_absolute_error: 1.5676502584938135e-7
+}
+%{
+  max_absolute_error: 1.6450881958007812e-5,
+  mean_absolute_error: 3.8650779288218473e-7,
+  isolated_operation: "enc_block_1_attn_out"
+}
+%{
+  max_absolute_error: 1.430511474609375e-5,
+  mean_absolute_error: 3.4696384432209015e-7,
+  isolated_operation: "enc_block_1_ffn_up"
+}
+%{
+  max_absolute_error: 1.4975755675550317e-6,
+  mean_absolute_error: 9.80795036298332e-8,
+  isolated_operation: "enc_block_1_ffn_act"
+}
+%{
+  max_absolute_error: 2.86102294921875e-6,
+  mean_absolute_error: 1.1170009628358457e-7,
+  isolated_operation: "enc_block_1_ffn_down"
+}
+%{
+  max_absolute_error: 2.205371856689453e-6,
+  mean_absolute_error: 9.682970159019533e-8,
+  isolated_operation: "enc_block_2_attn_out"
+}
+%{
+  max_absolute_error: 6.67572021484375e-6,
+  mean_absolute_error: 2.7879673325514887e-7,
+  isolated_operation: "enc_block_2_ffn_up"
+}
+%{
+  max_absolute_error: 1.2476230040192604e-6,
+  mean_absolute_error: 8.751999303058255e-8,
+  isolated_operation: "enc_block_2_ffn_act"
+}
+%{
+  max_absolute_error: 9.5367431640625e-7,
+  mean_absolute_error: 6.125474527607366e-8,
+  isolated_operation: "enc_block_2_ffn_down"
+}
+%{
+  max_absolute_error: 1.6093254089355469e-6,
+  mean_absolute_error: 9.951767765414843e-8,
+  isolated_operation: "enc_block_3_attn_out"
+}
+%{
+  max_absolute_error: 4.5299530029296875e-6,
+  mean_absolute_error: 2.5293411454185843e-7,
+  isolated_operation: "enc_block_3_ffn_up"
+}
+%{
+  max_absolute_error: 1.3469834811985493e-6,
+  mean_absolute_error: 8.485672964297919e-8,
+  isolated_operation: "enc_block_3_ffn_act"
+}
+%{
+  max_absolute_error: 1.385807991027832e-6,
+  mean_absolute_error: 5.5409390853355944e-8,
+  isolated_operation: "enc_block_3_ffn_down"
+}
+%{
+  max_absolute_error: 1.430511474609375e-6,
+  mean_absolute_error: 9.126588906838151e-8,
+  isolated_operation: "enc_block_4_attn_out"
+}
+%{
+  max_absolute_error: 2.09808349609375e-5,
+  mean_absolute_error: 3.6263776337364106e-7,
+  isolated_operation: "enc_block_4_ffn_up"
+}
+%{
+  max_absolute_error: 2.433946292512701e-6,
+  mean_absolute_error: 1.3774192098026106e-7,
+  isolated_operation: "enc_block_4_ffn_act"
+}
+%{
+  max_absolute_error: 3.814697265625e-6,
+  mean_absolute_error: 4.9732893359077934e-8,
+  isolated_operation: "enc_block_4_ffn_down"
+}
+%{
+  max_absolute_error: 3.5762786865234375e-6,
+  mean_absolute_error: 1.2154376349826634e-7,
+  isolated_operation: "enc_block_5_attn_out"
+}
+%{
+  max_absolute_error: 4.9591064453125e-5,
+  mean_absolute_error: 2.5947013000404695e-6,
+  isolated_operation: "enc_block_5_ffn_up"
+}
+%{
+  max_absolute_error: 7.62939453125e-6,
+  mean_absolute_error: 9.26657435229572e-7,
+  isolated_operation: "enc_block_5_ffn_act"
+}
+%{
+  max_absolute_error: 7.62939453125e-6,
+  mean_absolute_error: 6.494533266732105e-8,
+  isolated_operation: "enc_block_5_ffn_down"
+}
+%{
+  max_absolute_error: 5.4836273193359375e-6,
+  mean_absolute_error: 2.454228535953007e-7,
+  isolated_operation: "enc_block_6_attn_out"
+}
+%{
+  max_absolute_error: 1.1444091796875e-4,
+  mean_absolute_error: 2.9025645744695794e-6,
+  isolated_operation: "enc_block_6_ffn_up"
+}
+%{
+  max_absolute_error: 1.52587890625e-5,
+  mean_absolute_error: 1.0283963547408348e-6,
+  isolated_operation: "enc_block_6_ffn_act"
+}
+%{
+  max_absolute_error: 1.52587890625e-5,
+  mean_absolute_error: 1.0648744108721075e-7,
+  isolated_operation: "enc_block_6_ffn_down"
+}
+%{
+  max_absolute_error: 4.76837158203125e-6,
+  mean_absolute_error: 7.016583225549766e-8,
+  isolated_normalization: "enc_block_1_attn_norm"
+}
+%{
+  max_absolute_error: 3.814697265625e-6,
+  mean_absolute_error: 9.077859175476988e-8,
+  isolated_normalization: "enc_block_1_ffn_norm"
+}
+%{
+  max_absolute_error: 2.86102294921875e-6,
+  mean_absolute_error: 7.906316312755735e-8,
+  isolated_normalization: "enc_block_2_attn_norm"
+}
+%{
+  max_absolute_error: 3.814697265625e-6,
+  mean_absolute_error: 9.866424477422697e-8,
+  isolated_normalization: "enc_block_2_ffn_norm"
+}
+%{
+  max_absolute_error: 2.384185791015625e-6,
+  mean_absolute_error: 9.210702955897432e-8,
+  isolated_normalization: "enc_block_3_attn_norm"
+}
+%{
+  max_absolute_error: 2.86102294921875e-6,
+  mean_absolute_error: 1.0267460481827584e-7,
+  isolated_normalization: "enc_block_3_ffn_norm"
+}
+%{
+  max_absolute_error: 2.384185791015625e-6,
+  mean_absolute_error: 1.00310927564351e-7,
+  isolated_normalization: "enc_block_4_attn_norm"
+}
+%{
+  max_absolute_error: 3.814697265625e-6,
+  mean_absolute_error: 1.466888477352768e-7,
+  isolated_normalization: "enc_block_4_ffn_norm"
+}
+%{
+  max_absolute_error: 3.814697265625e-6,
+  mean_absolute_error: 1.1723925297246751e-7,
+  isolated_normalization: "enc_block_5_attn_norm"
+}
+%{
+  max_absolute_error: 1.1444091796875e-5,
+  mean_absolute_error: 4.994472533326189e-7,
+  isolated_normalization: "enc_block_5_ffn_norm"
+}
+%{
+  max_absolute_error: 5.7220458984375e-6,
+  mean_absolute_error: 1.2021604334222502e-7,
+  isolated_normalization: "enc_block_6_attn_norm"
+}
+%{
+  max_absolute_error: 3.0517578125e-5,
+  mean_absolute_error: 6.029223982295662e-7,
+  isolated_normalization: "enc_block_6_ffn_norm"
+}
