@@ -428,14 +428,90 @@ accumulated f32 arithmetic, rather than different encoder equations or weight
 mapping. It does not establish correctness on every input, decoder parity,
 transcription quality, or GPU numerical behavior.
 
-The original strict test is still failing and has not been relaxed. A subsequent
-validation change should preserve a separate strict mathematical comparison and
-choose f32 absolute/relative bounds using multiple representative inputs and
-reference execution modes. Continuing to tune individual operations solely to
-match one f32 fixture would risk fitting its particular rounding behavior.
+At this stage the original strict test was still failing. The broader experiment
+below establishes separate f64 and f32 checks rather than tuning operations to
+match one f32 fixture's rounding behavior.
 
 Evidence: `whisper_native_outliers.log`, `whisper_early_blocks.log`, and
 `whisper_f64_parity.log` under `bench/results/pretrained_2026-10-26/`.
+
+### Varied-input validation and regression bounds
+
+**AI-generated update.** `scripts/validate_whisper_inputs.exs` now compares ten
+synthetic inputs through EXLA f32, LibTorch SDPA f32, EXLA f64, and LibTorch eager
+f64. Each comparison covers all 768,000 output values. The inputs include the
+original fixture, two constants, a scaled original, smooth time/frequency
+patterns, seeded noise, an abrupt step, quiet noise, reversed time, and a pulse.
+These exercise numerical behavior; they are not recorded speech or a test of
+transcription quality.
+
+| Comparison, maximum across ten inputs | Worst absolute error | Worst mean absolute error |
+| --- | ---: | ---: |
+| EXLA f64 / LibTorch f64 | 4.68e-12 | 8.61e-15 |
+| EXLA f32 / LibTorch SDPA f32 | 0.001112 | 2.45e-6 |
+| EXLA f32 / LibTorch f64 | 0.000921 | 2.76e-6 |
+| LibTorch SDPA f32 / LibTorch f64 | 0.000440 | 1.60e-6 |
+
+The first trial used `atol=1e-4, rtol=1e-5`. It failed on several inputs, even
+when comparing LibTorch's own f32 and f64 results. Constant and abrupt inputs
+produce larger isolated errors while the average stays small. All f64
+comparisons agree closely. This strengthens the evidence for accumulated f32
+rounding rather than a different encoder equation or weight mapping.
+
+The reusable stress runner therefore checks each f32 value against
+`abs(actual-reference) <= 0.002 + 0.00001 * abs(reference)` and also requires
+mean absolute error at most `5e-6`. The absolute allowance is roughly twice the
+largest initial error; the mean limit prevents a widespread shift from passing.
+These limits were fixed after the first seven cases. Quiet noise, reversed time,
+and the pulse were then added as holdouts; all passed without changing the
+limits. These are empirical CPU regression bounds, not guaranteed limits for
+every possible input or backend.
+
+The original fixture's ExUnit test remains much tighter: `atol=1e-4, rtol=1e-5`
+and mean error below `5e-6`. No other architecture's tolerance changed. A new
+external test checks the full saved independent f64 output with `atol=1e-9`,
+`rtol=1e-10`, and mean error below `1e-11`. The existing direct f32 erf/GELU
+regression still guards the upstream bug; f64 agreement alone cannot do that.
+The f64 diagnostic uses an equivalent attention calculation to avoid the
+production helper's intentional f32 softmax cast. Production code is unchanged.
+
+Build the Rust tool as described above, then run from the repository root:
+
+```sh
+devenv shell -- env MIX_DEPS_PATH=/tmp/edifice-upstream-deps \
+  MIX_BUILD_PATH=/tmp/edifice-upstream-build MIX_ENV=test \
+  XLA_TARGET=cpu EXLA_CPU_ONLY=1 ERL_FLAGS='+S 4:4' \
+  mix run scripts/validate_whisper_inputs.exs
+```
+
+Those dependency/build directories are the isolated checkout used for these
+measurements; use your own matching build if needed. `LIBTORCH` can select a
+LibTorch installation. Its default is the existing environment's native torch
+directory; the runner never starts Python. `WHISPER_VALIDATION_DIR` sets the
+output directory (default `/tmp/whisper-input-validation`). The Rust tool now
+accepts input-only fixtures and an optional `final-only` argument to avoid
+writing large intermediate files. It still computes the entire encoder.
+
+The committed `whisper_encoder_f64_reference.safetensors` is the runner's
+`original-eager-f64.safetensors`, generated with tch 0.23.0 / LibTorch 2.10.0,
+four CPU threads, and the checkpoint used by the existing fixture. SHA-256:
+
+```text
+checkpoint: 07cadb9f25677c8d50df603e66a98fbd842cce45047139baeb16e6219a1e807b
+original fixture: 6a030bc4f91363d197f2d3b2b78ddc47a3303f82d1b6e4c25707b9e8e3c99081
+f64 reference: f73f80ae83f28384c39f87466bcbb352a35f022c315b235a6d5e98581cba18a1
+```
+
+Logs: `whisper_varied_inputs_initial.log` records the failed initial bounds;
+`whisper_varied_inputs.log` records the final ten cases, under
+`bench/results/pretrained_2026-10-26/`. Measurements used the adopted Nx/EXLA
+revision and XLA 0.11.0 on CPU. Another process was using the GPU; these results
+make no GPU or performance claim. Real-speech features, decoder output, and
+transcription quality remain outside this experiment.
+
+Validation: all six pretrained numerical tests (including the new f64 test) and
+the direct erf/GELU regression passed: seven tests, zero failures. Elixir and
+Rust formatting checks passed.
 
 References: [tch-rs](https://github.com/LaurentMazare/tch-rs),
 [Whisper implementation](https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/models/whisper/modeling_whisper.py).

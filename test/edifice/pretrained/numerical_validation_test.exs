@@ -1,3 +1,5 @@
+Code.require_file("../../../scripts/support/whisper_f64_validation.exs", __DIR__)
+
 defmodule Edifice.Pretrained.NumericalValidationTest do
   @moduledoc """
   Forward pass numerical validation against PyTorch reference outputs.
@@ -238,7 +240,32 @@ defmodule Edifice.Pretrained.NumericalValidationTest do
       {_init, predict_fn} = Axon.build(encoder, mode: :inference)
       output = predict_fn.(hf_params, %{"mel_spectrogram" => mel_input})
 
-      assert_all_close(output, expected_output, atol: 1.0e-4)
+      # Independent f64 agreement and varied-input measurements are documented
+      # in tools/whisper_reference/README.md. Large activations need a relative
+      # allowance; keep the average error small as well.
+      Nx.Testing.assert_all_close(output, expected_output, atol: 1.0e-4, rtol: 1.0e-5)
+      assert Nx.to_number(Nx.mean(Nx.abs(Nx.subtract(output, expected_output)))) < 5.0e-6
+    end
+
+    @tag timeout: 600_000
+    test "matches the independent full f64 encoder reference" do
+      Nx.Defn.default_options(compiler: EXLA, client: :host, precision: :highest)
+
+      fixture =
+        Safetensors.read!(Path.join(@fixtures_dir, "whisper_encoder_reference.safetensors"))
+
+      reference =
+        Safetensors.read!(Path.join(@fixtures_dir, "whisper_encoder_f64_reference.safetensors"))[
+          "enc_final_norm"
+        ]
+
+      {encoder, _, loaded} = Edifice.Pretrained.from_hub("openai/whisper-base")
+      {_, predict} = Axon.build(WhisperF64Validation.model(encoder), mode: :inference)
+      actual = predict.(loaded, %{"mel_spectrogram" => fixture["mel_input"]})
+      assert Nx.type(actual) == {:f, 64}
+      assert Nx.type(reference) == {:f, 64}
+      Nx.Testing.assert_all_close(actual, reference, atol: 1.0e-9, rtol: 1.0e-10)
+      assert Nx.to_number(Nx.mean(Nx.abs(Nx.subtract(actual, reference)))) < 1.0e-11
     end
   end
 end

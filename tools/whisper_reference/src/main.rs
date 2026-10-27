@@ -3,9 +3,10 @@ use tch::{Kind, Tensor};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args().collect();
-    if args.len() != 5 {
+    if args.len() != 5 && !(args.len() == 6 && args[5] == "final-only") {
         return Err(
-            "usage: whisper-reference CHECKPOINT FIXTURE OUTPUT eager|sdpa|eager-f64".into(),
+            "usage: whisper-reference CHECKPOINT FIXTURE OUTPUT eager|sdpa|eager-f64 [final-only]"
+                .into(),
         );
     }
     tch::set_num_threads(4);
@@ -102,17 +103,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         saved.push((format!("{name}_ffn_residual"), x.shallow_clone()));
     }
     x = norm(&x, "layer_norm");
-    let error = (&x - &fixture["expected_encoder_output"]).abs();
-    println!(
-        "mode={} max_abs={} mean_abs={}",
-        args[4],
-        f64::try_from(error.max())?,
-        f64::try_from(error.mean(Kind::Float))?
-    );
+    if let Some(expected) = fixture.get("expected_encoder_output") {
+        let error = (&x - expected).abs();
+        println!(
+            "mode={} max_abs={} mean_abs={}",
+            args[4],
+            f64::try_from(error.max())?,
+            f64::try_from(error.mean(Kind::Float))?
+        );
+    }
     saved.push(("enc_final_norm".into(), x));
     // The precision experiment needs only the final output, avoiding a large
     // double-precision intermediate fixture on disk.
-    if kind == Kind::Double {
+    if kind == Kind::Double || args.len() == 6 {
         saved.retain(|(name, _)| name == "enc_final_norm");
     }
     let saved: Vec<_> = saved
