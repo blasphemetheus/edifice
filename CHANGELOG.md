@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Kernel tier benchmark (`bench/kernel_tier_bench.exs`, results and method in
+  `docs/kernel_tier_benchmarks.md` and `bench/results/kernel_tiers_2026-10-26/`):
+  GRU scan and Mamba selective scan, op-level and inside the 2-layer models,
+  forward and gradient, as the XLA-compiled fallback (default and exact-f32
+  precision), the FFI custom call, the NIF bridge and op-by-op eager
+  evaluation, with every tier's dispatch arm asserted through the profiler.
+  On an RTX 5090 with EXLA 1.0 the GRU kernel is slower than XLA's compiled
+  fallback at every size (3-10x forward, 10-50x backward), the selective-scan
+  kernel wins only at batch (3-5x inside Mamba at batch 32, slower at batch
+  1), and the NIF bridge is always slower than the same kernel as a custom
+  call. The one universal win of the custom calls is compile time (seconds
+  instead of tens of seconds per shape).
+
 - GPU parity matrix for the fused CUDA kernels
   (`test/edifice/cuda/kernel_matrix_gpu_test.exs`, `--only cuda_kernels`,
   needs `EDIFICE_TEST_CLIENT=cuda`): every forward kernel reachable from
@@ -112,6 +125,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Crosscoder.loss/4` accepts lists or stacked tensors (was non-runnable).
 
 ### Fixed
+
+- **Custom-call operand and result layouts.** EXLA emits
+  `stablehlo.custom_call` without layout constraints, so XLA's layout
+  assignment was free to hand the FFI handlers a non-row-major buffer. Inside
+  the 2-layer GRU model it chose a time-major layout for the scan result (its
+  consumers are a reduce over the hidden axis and a last-step slice), and the
+  model's output was wrong by about 7 at batch 32 while batch 1, and every
+  parameter-fed op-level test, were exact. The `Edifice.Block.FusedOp`
+  custom-call implementation now pins row-major `operand_layouts` and
+  `result_layouts` on all four native ops; the GPU matrix gained model-level
+  GRU and Mamba cases at batch 4 and the CPU library test asserts the
+  attributes.
 
 - **Fused CUDA kernel dispatch.** Three gating bugs meant the tiers in
   the fused-scan dispatcher (`lib/edifice/cuda/fused_scan.ex`) were not the

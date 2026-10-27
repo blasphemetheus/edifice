@@ -38,12 +38,12 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
     end
 
     # :fused_gru_scan operands: [wx {B,T,3H}, R {H,3H}, h0 {B,H}, bhn {H}]
-    def call(%{op: :fused_gru_scan}, _out, [wx | _], %{platform: :cuda}) do
+    def call(%{op: :fused_gru_scan}, out, [wx | _] = args, %{platform: :cuda}) do
       with {:f, 32} <- wx.type,
            {_b, _t, h3} <- wx.shape,
            true <- div(h3, 3) <= @max_hidden,
            true <- enabled?() do
-        {:ok, %Spec{call_target_name: "exla_fused_gru_scan_f32"}}
+        {:ok, spec("exla_fused_gru_scan_f32", args, out)}
       else
         _ -> :skip
       end
@@ -51,12 +51,12 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
 
     # :fused_gru_scan_backward operands:
     # [wx, R, h0, bhn, forward_out, grad_output]
-    def call(%{op: :fused_gru_scan_backward}, _out, [wx | _], %{platform: :cuda}) do
+    def call(%{op: :fused_gru_scan_backward}, out, [wx | _] = args, %{platform: :cuda}) do
       with {:f, 32} <- wx.type,
            {_b, t, h3} <- wx.shape,
            true <- div(h3, 3) <= @max_hidden and t <= @max_backward_seq,
            true <- enabled?() do
-        {:ok, %Spec{call_target_name: "exla_fused_gru_scan_backward_f32"}}
+        {:ok, spec("exla_fused_gru_scan_backward_f32", args, out)}
       else
         _ -> :skip
       end
@@ -70,29 +70,62 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
     # through a global-memory workspace).
     @max_ssm_state 32
 
-    def call(%{op: :fused_selective_scan}, _out, [x, _dt, a | _], %{platform: :cuda}) do
+    def call(%{op: :fused_selective_scan}, out, [x, _dt, a | _] = args, %{platform: :cuda}) do
       with {:f, 32} <- x.type,
            {_h, s} <- a.shape,
            true <- s <= @max_ssm_state,
            true <- enabled?() do
-        {:ok, %Spec{call_target_name: "exla_fused_selective_scan_f32"}}
+        {:ok, spec("exla_fused_selective_scan_f32", args, out)}
       else
         _ -> :skip
       end
     end
 
     # :fused_selective_scan_backward operands: [x, dt, A, B, C, grad_output]
-    def call(%{op: :fused_selective_scan_backward}, _out, [x, _dt, a | _], %{platform: :cuda}) do
+    def call(%{op: :fused_selective_scan_backward}, out, [x, _dt, a | _] = args, %{
+          platform: :cuda
+        }) do
       with {:f, 32} <- x.type,
            {_h, s} <- a.shape,
            true <- s <= @max_ssm_state,
            true <- enabled?() do
-        {:ok, %Spec{call_target_name: "exla_fused_selective_scan_backward_f32"}}
+        {:ok, spec("exla_fused_selective_scan_backward_f32", args, out)}
       else
         _ -> :skip
       end
     end
 
     def call(_block, _out, _args, _client), do: :skip
+
+    # LAYOUT PIN. EXLA emits `stablehlo.custom_call` without layout
+    # constraints, so XLA's layout assignment may hand the handler operands
+    # or results in whatever layout their consumers prefer (observed:
+    # `f32[B,T,H]{2,0,1}`, i.e. T-major memory, for the GRU result feeding
+    # a reduce and a last-step slice). The kernels read and write row-major
+    # and cannot tell. At batch 1 a permutation of the batch axis is
+    # byte-identical, so the corruption only appears at batch > 1 (the
+    # 2-layer GRU model was off by 7.2 at B=32 and exact at B=1 on
+    # 2026-10-26). Pinning row-major on every operand and result makes XLA
+    # insert the copies instead. `out` is nil when the protocol is probed
+    # directly (tests); real lowerings always pass the output templates.
+    defp spec(target, args, out) do
+      attributes =
+        [{"operand_layouts", layouts(args)}] ++
+          case out && Nx.Defn.Composite.flatten_list([out]) do
+            [_ | _] = outs -> [{"result_layouts", layouts(outs)}]
+            _ -> []
+          end
+
+      %Spec{call_target_name: target, attributes: attributes}
+    end
+
+    defp layouts(templates), do: "[" <> Enum.map_join(templates, ", ", &row_major/1) <> "]"
+
+    defp row_major(%{shape: shape}) do
+      case tuple_size(shape) do
+        0 -> "dense<> : tensor<0xindex>"
+        rank -> "dense<[#{Enum.join((rank - 1)..0//-1, ", ")}]> : tensor<#{rank}xindex>"
+      end
+    end
   end
 end

@@ -298,12 +298,35 @@ defmodule Edifice.CUDA.KernelMatrixGpuTest do
         fused_selective_scan_backward: [x, x, a, bc, bc, x]
       }
 
+      outputs = %{
+        fused_gru_scan: x,
+        fused_gru_scan_backward: {f32, f32, h0},
+        fused_selective_scan: x,
+        fused_selective_scan_backward: {x, x, bc, bc}
+      }
+
+      row_major = fn %{shape: shape} ->
+        rank = tuple_size(shape)
+        "dense<[#{Enum.join((rank - 1)..0//-1, ", ")}]> : tensor<#{rank}xindex>"
+      end
+
       for op <- Edifice.Block.native_ops() do
         block = %Edifice.Block.FusedOp{op: op}
 
-        assert {:ok, %EXLA.CustomCall.Spec{}} =
-                 EXLA.CustomCall.call(block, nil, operands[op], client),
+        assert {:ok, %EXLA.CustomCall.Spec{attributes: attrs}} =
+                 EXLA.CustomCall.call(block, outputs[op], operands[op], client),
                "#{op}"
+
+        # Every operand and result is pinned row-major: XLA may otherwise
+        # pick a layout the kernel cannot read (T-major GRU output at B>1).
+        {_, operand_layouts} = List.keyfind(attrs, "operand_layouts", 0)
+        {_, result_layouts} = List.keyfind(attrs, "result_layouts", 0)
+        assert operand_layouts == "[" <> Enum.map_join(operands[op], ", ", row_major) <> "]"
+
+        assert result_layouts ==
+                 "[" <>
+                   Enum.map_join(Nx.Defn.Composite.flatten_list([outputs[op]]), ", ", row_major) <>
+                   "]"
       end
 
       assert :skip ==
@@ -321,6 +344,63 @@ defmodule Edifice.CUDA.KernelMatrixGpuTest do
                  operands.fused_gru_scan,
                  %{platform: :host}
                )
+    end
+
+    # Regression: inside a real model XLA assigned the GRU custom-call result
+    # a T-major layout (its consumer is a reduce over H plus a last-step
+    # slice), so the 2-layer GRU was off by ~7 at batch 32 while every
+    # parameter-fed op-level case, and batch 1, matched. The layout pin in
+    # the Spec fixes it; this exercises the whole Axon graph at batch 4.
+    for arch <- [:gru, :mamba] do
+      test "#{arch} 2-layer model at batch 4 matches the fallback, forward and gradients" do
+        {b, t, h} = {4, 24, 64}
+        extra = if unquote(arch) == :mamba, do: [state_size: 16], else: []
+        opts = [embed_dim: h, hidden_size: h, num_layers: 2, seq_len: t, dropout: 0.0] ++ extra
+        {x, _} = Nx.Random.uniform(Nx.Random.key(3), -1.0, 1.0, shape: {b, t, h}, type: :f32)
+        input = %{"state_sequence" => x}
+
+        build = fn ->
+          {init_fn, predict_fn} =
+            Edifice.build(unquote(arch), opts) |> Axon.build(mode: :inference, seed: 0)
+
+          {predict_fn, init_fn.(Nx.template({b, t, h}, :f32), Axon.ModelState.empty())}
+        end
+
+        # The fallback build decides its layer graph without the tier.
+        {pf_ref, params} = forced_fallback(build)
+        {pf_fused, _} = build.()
+        loss = fn pf, p, x -> pf.(p, x) |> Nx.pow(2) |> Nx.sum() end
+        hp = [compiler: EXLA, precision: :highest]
+
+        # Distinct closures: EXLA keys its cache on the closure, so the
+        # same wrapper around two builds would share one executable.
+        fwd_ref = Nx.Defn.jit(fn p, x -> pf_ref.(p, x) end, hp)
+        fwd_fused = Nx.Defn.jit(fn p, x -> pf_fused.(p, x) end, hp)
+        grad_ref = Nx.Defn.jit(fn p, x -> Nx.Defn.grad(p, &loss.(pf_ref, &1, x)) end, hp)
+        grad_fused = Nx.Defn.jit(fn p, x -> Nx.Defn.grad(p, &loss.(pf_fused, &1, x)) end, hp)
+
+        want =
+          forced_fallback(fn -> fwd_ref.(params, input) end) |> Nx.backend_copy(Nx.BinaryBackend)
+
+        got = fwd_fused.(params, input) |> Nx.backend_copy(Nx.BinaryBackend)
+        assert_close(got, want, atol: 1.0e-4, rtol: 1.0e-3)
+
+        want_g = forced_fallback(fn -> grad_ref.(params, input) end)
+        got_g = grad_fused.(params, input)
+
+        for {g, w} <-
+              Enum.zip(
+                Nx.Defn.Composite.flatten_list([got_g]),
+                Nx.Defn.Composite.flatten_list([want_g])
+              ) do
+          assert_close(
+            Nx.backend_copy(g, Nx.BinaryBackend),
+            Nx.backend_copy(w, Nx.BinaryBackend),
+            atol: 1.0e-3,
+            rtol: 1.0e-2
+          )
+        end
+      end
     end
   end
 

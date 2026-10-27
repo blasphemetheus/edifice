@@ -18,6 +18,7 @@ EXLA_TARGET=cuda XLA_TARGET=cuda12 mix run bench/<script>.exs
 | `memory_profile.exs` | Parameter count, size, GPU memory delta | No | ~5 min |
 | `full_sweep.exs` | All 80+ architectures, build/compile/inference | No | ~15 min |
 | `architecture_profile.exs` | 12 representative archs with Benchee stats | **Yes (required)** | ~5 min |
+| `kernel_tier_bench.exs` | GRU / selective scan: XLA fallback vs FFI custom call vs NIF, op- and model-level, fwd + grad (GPU; `EDIFICE_FUSED_CUSTOM_CALL=1 EDIFICE_AUTOTUNE=0`) | No | ~15 min (`BENCH_QUICK=1`: ~3 min) |
 
 ## Benchee Dependency
 

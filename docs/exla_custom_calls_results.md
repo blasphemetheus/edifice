@@ -1,5 +1,11 @@
 # Phase 2: EXLA Custom Calls — Results
 
+> **Historical (fork-era, NVIDIA T400).** These numbers predate EXLA 1.0's
+> `EXLA.load_dylib/1` path and the RTX 5090. For current tier-vs-tier results
+> see [kernel_tier_benchmarks.md](kernel_tier_benchmarks.md) (2026-10-26):
+> on the 5090 the compiled XLA fallback beats the GRU kernel outright, and
+> the selective-scan kernel wins only at batch.
+
 ## Summary
 
 Fused CUDA scan kernels (MinGRU, MinLSTM) are now registered as XLA custom calls
