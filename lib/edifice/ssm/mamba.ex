@@ -236,10 +236,17 @@ defmodule Edifice.SSM.Mamba do
   @doc """
   Advance one frame: `[batch, embed_dim]` in, `{[batch, hidden], state}` out.
 
-  Matches the CPU (non-fused) forward path — `Common.discretize_ssm/4` +
-  scan — exactly; equivalence at every prefix length is pinned by
+  Implements the CPU (non-fused) forward equations — `Common.discretize_ssm/4`
+  plus scan. Numerical equivalence at every prefix length is tested by
   `test/edifice/stateful/step_equivalence_test.exs`, including one case
   crossing the Blelloch-scan branch (`seq_len > 32`).
+
+  Floating-point results need not be identical across batch sizes or backends.
+  Dense reductions can use different addition orders; their rounding differences
+  then enter the convolution history and subsequent frames. Validate trained
+  checkpoints over complete trajectories, including resync, when changing the
+  batching strategy. Compare both carry and outputs against a higher-precision
+  reference: agreement between batch and single execution alone is insufficient.
   """
   @impl Edifice.Stateful
   def step(params, %{h: h, conv: conv}, frame) do

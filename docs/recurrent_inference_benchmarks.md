@@ -2,6 +2,59 @@
 
 ## Scope and model selection
 
+### Mamba accuracy promotion gate (2026-10-27)
+
+**AI-generated.** Extended trained-checkpoint validation rejected promotion of
+the experimental accurate dense path. Production stepping remains unchanged.
+The accompanying `Mamba.step/3` documentation now distinguishes the same
+mathematical equations from identical floating-point results.
+
+The experiment splits each dense product into eight-term f32 sums, combines
+those sums in f64, then rounds the result back to f32. It passed the earlier
+160-frame fixture. At 512 frames with eight independently resynchronizing rows,
+the original checkpoint still passes batch-versus-single comparisons but fails
+27 convolution-history values across the two comparisons with the f64 reference.
+Two additional Mewtwo checkpoints expose output-feature failures when fed the
+Fox observations as a cross-character stress test. The full Mewtwo checkpoint
+passes on a matching Mewtwo replay (worst error/bound ratio below 0.07). No
+tolerances were changed (`atol = rtol = 1e-4`).
+
+For the Mewtwo full checkpoint on CPU with Fox observations, f64 dense products make batch and single
+execution identical, but both fail 315 output values against the reference.
+Using f64 normalization as well reduces that count to 232, not zero. Thus dense
+accumulation explains the previously observed batch sensitivity, but changing
+it alone does not establish accuracy over trained trajectories. The next
+numerical experiment should isolate the SSM update, gated output and residual
+additions. Their responsibility is not established by these measurements.
+
+Complete ExPhil Agent timings on an idle RTX 5090, eight rows, staggered resync,
+512 calls with the first 160 excluded:
+
+| Path | Ordinary frame median / p95 | Resync frame median / p95 |
+| --- | ---: | ---: |
+| Existing f32 | 1.217 / 1.700 ms | 4.972 / 5.622 ms |
+| Experimental eight-term dense sums | 1.100 / 1.443 ms | 6.287 / 6.668 ms |
+
+These are single runs, not evidence of an ordinary-frame speedup. Resync adds
+about 3.8 ms over ordinary inference in the existing path and about 5.2 ms in
+the experiment. It remains the larger latency cost, but optimizing the rejected
+precision method would be premature. These calls include embedding and action
+heads, but exclude Dolphin and IPC. Numeric captures for CPU checkpoints ran
+concurrently with other diagnostics and are not idle timing measurements.
+
+The reusable ExPhil checker now accepts checkpoint/replay paths, replay offsets,
+per-row reset schedules, a capture-only timing mode, and `--require-pass` for a
+failing process status when a reference check fails. Its per-row reset logic is
+tested against independent chronological single-row execution. Results and
+reproduction commands are in ExPhil's
+`docs/guides/MAMBA_CARRY_RESOLUTION.md` and
+`eval_runs/mamba_accuracy_extended/summary.json`.
+
+**AI-generated poem**
+
+> Two answers match, yet miss the mark;
+> A wider check can light the dark.
+
 ### Resync profiling and optimization (2026-10-25)
 
 Profiling isolated eager history assembly (2.5–3.9 ms on CUDA at batch 32) and
