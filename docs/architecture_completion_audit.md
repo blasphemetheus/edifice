@@ -1,5 +1,106 @@
 # Architecture completion audit for ExPhil and Melee
 
+## Current ExPhil-focused completion review — October 26, 2026
+
+**AI-generated review.** Source and archived evidence were checked against
+ExPhil main `2f457fb3` and Edifice through `297b1f6`. This was read-only in ExPhil;
+its unrelated work and active GPU process were left alone. No new gameplay or
+GPU timing run was performed. The newer October 25–26 reports below supersede
+the September handoff's task status and the older benchmark recommendations.
+
+The immediate bottleneck is deployment validation and scheduling, rather than
+another recurrent architecture implementation. The basic step, replay, batching,
+and stochastic-sampling paths already exist and have measured benefits.
+
+| Area | What is complete | What remains |
+| --- | --- | --- |
+| Recurrent stepping | Edifice paths and ExPhil Agent adapters for GRU/LSTM, MinGRU, Mamba and Mamba-2/SSD; compiled history replay, selected-row replay, resets and rollback checks | Confirm the exact deployed checkpoint/runtime combination; keep each checkpoint's training-state contract |
+| Stochastic controllers | ExPhil uses `SamplingRandom` at all eight uniform-draw call sites; seeded stream parity and host/CUDA sampling tests | Revalidate on dependency changes; no further sampler rewrite is justified by the current evidence |
+| Multiple bots | CPU and CUDA actor screen complete: eight profiles, 96 phases, verified raw samples | Longer runs with actual simulator/emulator and training contention; current phases last three seconds and use a synthetic matmul competitor |
+| Mamba resync spreading | Two ten-second rounds per condition, CPU/CUDA, independent/batched, idle/loaded | Supported phase-assignment API, reset/snapshot tests, and gameplay validation; current scheduling changes are confined to a benchmark helper |
+| Numerical compatibility | Original vision fixtures pass; Whisper upstream erf fix adopted; strict f64 encoder checks and recorded speech pass; bounded one-file transcription has exact reference token parity | Whisper is parked here; no dictation application, new training, or long-form transcription is needed for ExPhil |
+| Architecture corrections | NSA/MoBA gathered execution, RetNet head normalization, and actual reservoir spectral scaling implemented | Paper-fidelity limits remain documented; these are not current recurrent-bot bottlenecks |
+| Activation checkpointing | Existing boundary/documentation work | Real recomputation waits for the user's upstream Nx work; do not count pass-through helpers as memory savings |
+
+### What the measurements actually recommend
+
+The [full-controller sampling report](../../exphil/eval_runs/sampling_kernels_20261026/RESULTS.md)
+records GPU ordinary-call speedups of 2.17–3.76x with identical seeded controller
+streams. Eight-row calls take about 1.08–1.33 ms in those fixtures. CPU effects
+are mixed, so the CUDA improvement should not be advertised as a universal win.
+
+The [actor throughput screen](../../exphil/eval_runs/actor_throughput_20261026/RESULTS.md)
+is **complete**, not a task to resume. Same-checkpoint GPU batches deliver about
+6,375–7,812 actions/s idle and 3,403–3,773 under the controlled load. All four
+batch profiles meet every deadline in their short paced phases. Independent
+Agents can miss deadlines despite sufficient average throughput. This points
+to batching and scheduling, not merely faster arithmetic. The experiment does
+not establish heterogeneous-checkpoint batching or long-run training throughput.
+
+The [resync spread experiment](../../exphil/eval_runs/resync_spread_20261026/RESULTS.md)
+assigns different bots different replay frames. It does **not** divide one bot's
+replay over multiple frames. On idle GPU, independent Mamba misses fall from
+462/464 per 4,800 calls to zero in both rounds. CPU batch misses fall from
+29/24 per 600 calls to 1/0. GPU batches already miss no deadlines when aligned;
+spreading increases their ordinary p95 from about 3.6 ms to 7.2–7.6 ms. Therefore
+phase assignment should be explicit, with separate choices for each backend
+and deployment mode, rather than a blanket new default.
+
+There is a correctness qualification: the spread harness reports batch/single
+carry differences beyond its original elementwise `1e-4` test in **both**
+schedules (135/133 CPU comparisons and 18/19 GPU comparisons). Timing passed
+finite-state and counter checks, not full numerical parity. Do not silently
+relax the test or describe this as a proved scheduling bug. First isolate
+single versus batch step/replay using the same history, carry, weights and
+precision; compare an independent/high-precision recurrence if needed. Record
+whether differences alter controller choices or rollback behavior.
+
+### Recommended order and completion criteria
+
+1. **Establish the runtime baseline and isolate Mamba batch/single discrepancies.**
+   ExPhil's devenv selects sibling Nx/EXLA with `EDIFICE_LOCAL_NX=1`. Its existing
+   application metadata says Nx/EXLA 1.0.0 and Axon 0.8.0, while its Hex lock has
+   Nx 0.12.1 / EXLA 0.12.0. These version strings do not prove that it uses
+   Edifice's newly pinned XLA 0.11 build. Capture the loaded build, then reproduce
+   the carry comparison without changing a running job's libraries. Completion
+   means a reproduced cause, an appropriate regression, and a documented
+   controller/state contract—not merely passing a wider numerical threshold.
+2. **Make resync phases a supported opt-in integration.** The current
+   `scripts/lib/resync_spread.exs` changes private counters with `:sys.replace_state`.
+   A real option must preserve cold start, partial row resets, snapshot restore,
+   observation-only updates and the maximum replay interval. Keep BPTT-trained
+   policies exempt from periodic window resync. Run sustained CPU-batch and
+   independent-GPU deadline checks; retain aligned GPU batching as the baseline.
+3. **Validate at the checkpoint's trained delay in the real deployment harness.**
+   The [96-trial delay screen](../../exphil/eval_runs/recurrent_delays_20261025/RESULTS.md)
+   is already complete. It used delay-zero-trained checkpoints at delay 3/4,
+   and found mixed quality, including regressions at delay 4. Repeat neither
+   that exact screen nor a claim that resync always preserves play quality.
+   Use appropriate trained checkpoints, multiple opponents/stages, paired seeds,
+   controller delivery latency, and actual game outcomes before promotion.
+
+Existing work to reuse: `/home/blewf/git/exphil-nx-upgrade`, branch
+`chore/framework-baseline` at `af856e27`, contains build fingerprinting, saved-step
+resume checks, and a bounded 32-update / eight-game framework comparison. It is
+not merged into ExPhil main. Its guide says longer and closed-loop adoption gates
+remain; some orchestration is old Python and should be replaced with Elixir if
+resumed. This is reusable migration evidence, not proof for the new dependency
+pin or an instruction to restart an old agent or training job.
+
+Lower priority: GatedDeltaNet has an Edifice step implementation but is absent
+from ExPhil's Agent stateful allowlist. Add that adapter when a real candidate
+checkpoint makes it useful. Mamba-2's adapter is already integrated; its archived
+leaked-label checkpoint is a speed fixture, not a clean policy-quality candidate.
+Fusing recurrence and sampling, or adding sparse CUDA kernels, should follow a
+profile showing a remaining cost in an intended deployment workload.
+
+**AI-generated poem**
+
+> The clocks are measured; paths are known.
+> Now test the bot where it is flown.
+
+## Earlier audit and implementation inventory
+
 Audited October 24, 2026. Scope: source inspection of approximation markers,
 bot-relevant stateful and generation paths, small cross-framework fixtures, and
 the existing pretrained numerical suite. This is not a paper-by-paper certification
@@ -21,8 +122,8 @@ checkpointing remains deferred until the upstream Nx checkpoint work merges.
   `Generate.build_cache/1` integrates token embedding and the LM head in the same
   executable. Sampling and context-overflow behavior match full prediction.
 - **Numerical validation executed:** eight small random-weight fixtures pass.
-  Full pretrained tests now report four passes and one remaining Whisper
-  precision failure, with no skips and unchanged tolerances. See
+  The earlier Whisper failure is resolved by the upstream math fix and separate
+  f32/f64 validation. All six current pretrained tests pass. See
   [results and commands](plans/pretrained-validation-fixes.md).
 
 ## Next priorities
@@ -41,11 +142,11 @@ checkpoints using that path need revalidation (details in the benchmark report).
 |---|---|---|
 | 1 | Actual-checkpoint MinGRU/Mamba replay and host embedding now pass CUDA baseline parity | Extend full-policy profiling to other deployed architectures and evaluate closed-loop quality separately |
 | Completed October 25 | NSA/MoBA causal routing, actual selected-block execution and partial lengths fixed; local NSA attention uses gathers | [CPU/CUDA measurements and remaining paper-fidelity limits](../bench/results/sparse_attention_2026-10-25/README.md). Short contexts need not be faster; no fused sparse CUDA kernel yet |
-| 3 | [RetNetV2](../lib/edifice/attention/retnet_v2.ex) uses LayerNorm at the layer named `group_norm` | Implement grouped normalization and compare a reference fixture before relying on retention fidelity |
-| 3 | [Reservoir](../lib/edifice/recurrent/reservoir.ex) estimates spectral radius using a Frobenius-norm proxy | Measure the resulting radius and correct scaling before interpreting requested reservoir timescales |
+| Completed October 26 | [RetNetV2](../lib/edifice/attention/retnet_v2.ex) now uses per-head normalization | Preserve CPU/CUDA normalization and prefix tests |
+| Completed October 26 | [Reservoir](../lib/edifice/recurrent/reservoir.ex) now scales using actual nonsymmetric eigenvalues | Preserve radius tests; initialization cost is separate from inference |
 | Completed October 26 | ViT attention heads, position table and pretrained layout corrected; ViT and ConvNeXt pass original numerical bounds | Keep numerical and focused regressions |
 | Completed October 26 | DETR positional encoding, projection order, backbone padding and query-weight loading corrected | Class logits and boxes pass original numerical bounds |
-| Conditional on audio | Whisper encoder loads and runs, but maximum numerical error remains `2.59e-4` against a `1e-4` bound | Use the Rust/Elixir intermediate comparison to isolate accumulated differences; decoder parity is not certified |
+| Completed bounded audio path | Whisper CPU encoder parity and short English transcription validated | [Details and limits](../tools/whisper_reference/README.md); return focus to ExPhil |
 
 ## Other approximation findings
 

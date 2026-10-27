@@ -1,5 +1,12 @@
 # Pretrained numerical validation: execution results
 
+**Current status, October 26:** the initial failure below is resolved. The
+upstream Nx/EXLA/XLA update fixes the erf bug; independent f64 and varied/recorded
+input checks justify a Whisper-specific f32 comparison. All six pretrained
+numerical tests now pass. One-file English transcription also matches an
+independent decoder's token sequence. See the [current evidence and limits](../../tools/whisper_reference/README.md).
+The remainder of this file preserves the initial investigation results.
+
 **AI-generated report and accompanying code changes — October 26, 2026.**
 
 Four pretrained models now pass. Whisper's loading and architecture failures
