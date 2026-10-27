@@ -32,79 +32,67 @@ defmodule Edifice.CUDA.FusedScan do
 
   @doc false
   def mingru(gates, candidates) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:mingru, gates) ->
-        record_dispatch(:mingru, :custom_call, gates)
-        mingru_custom_call(gates, candidates)
-
-      true ->
-        record_dispatch(:mingru, :fallback, gates)
-        Edifice.Recurrent.MinGRU.min_gru_scan(gates, candidates)
+    if Edifice.CUDA.AutoTune.use_fused?(:mingru, gates) do
+      record_dispatch(:mingru, :custom_call, gates)
+      mingru_custom_call(gates, candidates)
+    else
+      record_dispatch(:mingru, :fallback, gates)
+      Edifice.Recurrent.MinGRU.min_gru_scan(gates, candidates)
     end
   end
 
   @doc false
   def minlstm(forget_gates, input_gates, candidates) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:minlstm, forget_gates) ->
-        record_dispatch(:minlstm, :custom_call, forget_gates)
-        minlstm_custom_call(forget_gates, input_gates, candidates)
-
-      true ->
-        record_dispatch(:minlstm, :fallback, forget_gates)
-        Edifice.Recurrent.MinLSTM.min_lstm_scan(forget_gates, input_gates, candidates)
+    if Edifice.CUDA.AutoTune.use_fused?(:minlstm, forget_gates) do
+      record_dispatch(:minlstm, :custom_call, forget_gates)
+      minlstm_custom_call(forget_gates, input_gates, candidates)
+    else
+      record_dispatch(:minlstm, :fallback, forget_gates)
+      Edifice.Recurrent.MinLSTM.min_lstm_scan(forget_gates, input_gates, candidates)
     end
   end
 
   @doc false
   def elu_gru(gates, candidates) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:elu_gru, gates) ->
-        record_dispatch(:elu_gru, :custom_call, gates)
-        elu_gru_custom_call(gates, candidates)
-
-      true ->
-        record_dispatch(:elu_gru, :fallback, gates)
-        Edifice.Recurrent.NativeRecurrence.elu_gru_scan(gates, candidates)
+    if Edifice.CUDA.AutoTune.use_fused?(:elu_gru, gates) do
+      record_dispatch(:elu_gru, :custom_call, gates)
+      elu_gru_custom_call(gates, candidates)
+    else
+      record_dispatch(:elu_gru, :fallback, gates)
+      Edifice.Recurrent.NativeRecurrence.elu_gru_scan(gates, candidates)
     end
   end
 
   @doc false
   def real_gru(gates, candidates) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:real_gru, gates) ->
-        record_dispatch(:real_gru, :custom_call, gates)
-        real_gru_custom_call(gates, candidates)
-
-      true ->
-        record_dispatch(:real_gru, :fallback, gates)
-        Edifice.Recurrent.NativeRecurrence.real_gru_scan(gates, candidates)
+    if Edifice.CUDA.AutoTune.use_fused?(:real_gru, gates) do
+      record_dispatch(:real_gru, :custom_call, gates)
+      real_gru_custom_call(gates, candidates)
+    else
+      record_dispatch(:real_gru, :fallback, gates)
+      Edifice.Recurrent.NativeRecurrence.real_gru_scan(gates, candidates)
     end
   end
 
   @doc false
   def diag_linear(a_vals, b_vals) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:diag_linear, a_vals) ->
-        record_dispatch(:diag_linear, :custom_call, a_vals)
-        diag_linear_custom_call(a_vals, b_vals)
-
-      true ->
-        record_dispatch(:diag_linear, :fallback, a_vals)
-        Edifice.Recurrent.NativeRecurrence.diag_linear_scan(a_vals, b_vals)
+    if Edifice.CUDA.AutoTune.use_fused?(:diag_linear, a_vals) do
+      record_dispatch(:diag_linear, :custom_call, a_vals)
+      diag_linear_custom_call(a_vals, b_vals)
+    else
+      record_dispatch(:diag_linear, :fallback, a_vals)
+      Edifice.Recurrent.NativeRecurrence.diag_linear_scan(a_vals, b_vals)
     end
   end
 
   @doc false
   def liquid(tau, activation) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:liquid, tau) ->
-        record_dispatch(:liquid, :custom_call, tau)
-        liquid_custom_call(tau, activation)
-
-      true ->
-        record_dispatch(:liquid, :fallback, tau)
-        Edifice.Liquid.liquid_exact_scan(tau, activation)
+    if Edifice.CUDA.AutoTune.use_fused?(:liquid, tau) do
+      record_dispatch(:liquid, :custom_call, tau)
+      liquid_custom_call(tau, activation)
+    else
+      record_dispatch(:liquid, :fallback, tau)
+      Edifice.Liquid.liquid_exact_scan(tau, activation)
     end
   end
 
@@ -119,14 +107,12 @@ defmodule Edifice.CUDA.FusedScan do
   GSS SSM, MambaVision SSM.
   """
   def linear_scan(a_vals, b_vals) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:linear_scan, a_vals) ->
-        record_dispatch(:linear_scan, :custom_call, a_vals)
-        linear_scan_custom_call(a_vals, b_vals)
-
-      true ->
-        record_dispatch(:linear_scan, :fallback, a_vals)
-        linear_scan_fallback(a_vals, b_vals)
+    if Edifice.CUDA.AutoTune.use_fused?(:linear_scan, a_vals) do
+      record_dispatch(:linear_scan, :custom_call, a_vals)
+      linear_scan_custom_call(a_vals, b_vals)
+    else
+      record_dispatch(:linear_scan, :fallback, a_vals)
+      linear_scan_fallback(a_vals, b_vals)
     end
   end
 
@@ -139,14 +125,12 @@ defmodule Edifice.CUDA.FusedScan do
   Returns [batch, seq_len, num_heads, head_dim] retrieval outputs.
   """
   def delta_net_scan(q, k, v, beta) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:delta_net_scan, q) ->
-        record_dispatch(:delta_net_scan, :custom_call, q)
-        delta_net_custom_call(q, k, v, beta)
-
-      true ->
-        record_dispatch(:delta_net_scan, :fallback, q)
-        Edifice.Recurrent.DeltaNet.delta_net_sequential_scan(q, k, v, beta)
+    if Edifice.CUDA.AutoTune.use_fused?(:delta_net_scan, q) do
+      record_dispatch(:delta_net_scan, :custom_call, q)
+      delta_net_custom_call(q, k, v, beta)
+    else
+      record_dispatch(:delta_net_scan, :fallback, q)
+      Edifice.Recurrent.DeltaNet.delta_net_sequential_scan(q, k, v, beta)
     end
   end
 
@@ -159,14 +143,12 @@ defmodule Edifice.CUDA.FusedScan do
   Returns [batch, seq_len, num_heads, head_dim] retrieval outputs.
   """
   def gated_delta_net_scan(q, k, v, beta, alpha) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:gated_delta_net_scan, q) ->
-        record_dispatch(:gated_delta_net_scan, :custom_call, q)
-        gated_delta_net_custom_call(q, k, v, beta, alpha)
-
-      true ->
-        record_dispatch(:gated_delta_net_scan, :fallback, q)
-        Edifice.Recurrent.GatedDeltaNet.gated_delta_net_sequential_scan(q, k, v, beta, alpha)
+    if Edifice.CUDA.AutoTune.use_fused?(:gated_delta_net_scan, q) do
+      record_dispatch(:gated_delta_net_scan, :custom_call, q)
+      gated_delta_net_custom_call(q, k, v, beta, alpha)
+    else
+      record_dispatch(:gated_delta_net_scan, :fallback, q)
+      Edifice.Recurrent.GatedDeltaNet.gated_delta_net_sequential_scan(q, k, v, beta, alpha)
     end
   end
 
@@ -182,14 +164,12 @@ defmodule Edifice.CUDA.FusedScan do
   Returns [B, T, H, d] RMS-normalized output.
   """
   def delta_product_scan(q, k, v, beta) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:delta_product_scan, q) ->
-        record_dispatch(:delta_product_scan, :custom_call, q)
-        delta_product_custom_call(q, k, v, beta)
-
-      true ->
-        record_dispatch(:delta_product_scan, :fallback, q)
-        Edifice.Recurrent.DeltaProduct.delta_product_scan_fallback(q, k, v, beta)
+    if Edifice.CUDA.AutoTune.use_fused?(:delta_product_scan, q) do
+      record_dispatch(:delta_product_scan, :custom_call, q)
+      delta_product_custom_call(q, k, v, beta)
+    else
+      record_dispatch(:delta_product_scan, :fallback, q)
+      Edifice.Recurrent.DeltaProduct.delta_product_scan_fallback(q, k, v, beta)
     end
   end
 
@@ -201,14 +181,12 @@ defmodule Edifice.CUDA.FusedScan do
   shared memory. Uses log-domain stabilized exponential gating.
   """
   def slstm_scan(wx, recurrent_weight) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:slstm_scan, wx) ->
-        record_dispatch(:slstm_scan, :custom_call, wx)
-        slstm_custom_call(wx, recurrent_weight)
-
-      true ->
-        record_dispatch(:slstm_scan, :fallback, wx)
-        Edifice.Recurrent.SLSTM.slstm_scan_fallback(wx, recurrent_weight)
+    if Edifice.CUDA.AutoTune.use_fused?(:slstm_scan, wx) do
+      record_dispatch(:slstm_scan, :custom_call, wx)
+      slstm_custom_call(wx, recurrent_weight)
+    else
+      record_dispatch(:slstm_scan, :fallback, wx)
+      Edifice.Recurrent.SLSTM.slstm_scan_fallback(wx, recurrent_weight)
     end
   end
 
@@ -221,14 +199,12 @@ defmodule Edifice.CUDA.FusedScan do
   c = f*c + i*g, h = o*tanh(c).
   """
   def lstm_scan(wx, recurrent_weight) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:lstm_scan, wx) ->
-        record_dispatch(:lstm_scan, :custom_call, wx)
-        lstm_custom_call(wx, recurrent_weight)
-
-      true ->
-        record_dispatch(:lstm_scan, :fallback, wx)
-        lstm_scan_fallback(wx, recurrent_weight, nil, nil)
+    if Edifice.CUDA.AutoTune.use_fused?(:lstm_scan, wx) do
+      record_dispatch(:lstm_scan, :custom_call, wx)
+      lstm_custom_call(wx, recurrent_weight)
+    else
+      record_dispatch(:lstm_scan, :fallback, wx)
+      lstm_scan_fallback(wx, recurrent_weight, nil, nil)
     end
   end
 
@@ -251,14 +227,12 @@ defmodule Edifice.CUDA.FusedScan do
     the custom-call path returns its gradient.
   """
   def gru_scan(wx, recurrent_weight, h0 \\ nil, bhn \\ nil) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:gru_scan, wx) ->
-        record_dispatch(:gru_scan, :custom_call, wx)
-        gru_custom_call(wx, recurrent_weight, h0, bhn)
-
-      true ->
-        record_dispatch(:gru_scan, :fallback, wx)
-        gru_scan_fallback(wx, recurrent_weight, h0, bhn)
+    if Edifice.CUDA.AutoTune.use_fused?(:gru_scan, wx) do
+      record_dispatch(:gru_scan, :custom_call, wx)
+      gru_custom_call(wx, recurrent_weight, h0, bhn)
+    else
+      record_dispatch(:gru_scan, :fallback, wx)
+      gru_scan_fallback(wx, recurrent_weight, h0, bhn)
     end
   end
 
@@ -273,14 +247,12 @@ defmodule Edifice.CUDA.FusedScan do
   The kernel applies LayerNorm on predictions internally.
   """
   def ttt_scan(q, k, v, eta, w0, ln_gamma, ln_beta) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:ttt_scan, q) ->
-        record_dispatch(:ttt_scan, :custom_call, q)
-        ttt_custom_call(q, k, v, eta, w0, ln_gamma, ln_beta)
-
-      true ->
-        record_dispatch(:ttt_scan, :fallback, q)
-        Edifice.Recurrent.TTT.ttt_scan_fallback(q, k, v, eta, w0, ln_gamma, ln_beta)
+    if Edifice.CUDA.AutoTune.use_fused?(:ttt_scan, q) do
+      record_dispatch(:ttt_scan, :custom_call, q)
+      ttt_custom_call(q, k, v, eta, w0, ln_gamma, ln_beta)
+    else
+      record_dispatch(:ttt_scan, :fallback, q)
+      Edifice.Recurrent.TTT.ttt_scan_fallback(q, k, v, eta, w0, ln_gamma, ln_beta)
     end
   end
 
@@ -295,14 +267,12 @@ defmodule Edifice.CUDA.FusedScan do
   and the full SSM recurrence internally.
   """
   def selective_scan(x, dt, a, b, c) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:selective_scan, x) ->
-        record_dispatch(:selective_scan, :custom_call, x)
-        selective_scan_custom_call(x, dt, a, b, c)
-
-      true ->
-        record_dispatch(:selective_scan, :fallback, x)
-        Edifice.SSM.Common.selective_scan_fallback(x, dt, a, b, c)
+    if Edifice.CUDA.AutoTune.use_fused?(:selective_scan, x) do
+      record_dispatch(:selective_scan, :custom_call, x)
+      selective_scan_custom_call(x, dt, a, b, c)
+    else
+      record_dispatch(:selective_scan, :fallback, x)
+      Edifice.SSM.Common.selective_scan_fallback(x, dt, a, b, c)
     end
   end
 
@@ -319,14 +289,12 @@ defmodule Edifice.CUDA.FusedScan do
   Returns [B, T, H, d] retrieval outputs.
   """
   def kda_scan(q, k, v, alpha, beta) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:kda_scan, q) ->
-        record_dispatch(:kda_scan, :custom_call, q)
-        kda_custom_call(q, k, v, alpha, beta)
-
-      true ->
-        record_dispatch(:kda_scan, :fallback, q)
-        kda_scan_fallback(q, k, v, alpha, beta)
+    if Edifice.CUDA.AutoTune.use_fused?(:kda_scan, q) do
+      record_dispatch(:kda_scan, :custom_call, q)
+      kda_custom_call(q, k, v, alpha, beta)
+    else
+      record_dispatch(:kda_scan, :fallback, q)
+      kda_scan_fallback(q, k, v, alpha, beta)
     end
   end
 
@@ -351,14 +319,12 @@ defmodule Edifice.CUDA.FusedScan do
     variant = Keyword.get(opts, :variant, :rla)
     clip_threshold = Keyword.get(opts, :clip_threshold, 1.0)
 
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:rla_scan, q) ->
-        record_dispatch(:rla_scan, :custom_call, q)
-        rla_custom_call(q, k, v, alpha, beta, gamma, variant, clip_threshold)
-
-      true ->
-        record_dispatch(:rla_scan, :fallback, q)
-        rla_scan_fallback(q, k, v, alpha, beta, gamma, variant, clip_threshold)
+    if Edifice.CUDA.AutoTune.use_fused?(:rla_scan, q) do
+      record_dispatch(:rla_scan, :custom_call, q)
+      rla_custom_call(q, k, v, alpha, beta, gamma, variant, clip_threshold)
+    else
+      record_dispatch(:rla_scan, :fallback, q)
+      rla_scan_fallback(q, k, v, alpha, beta, gamma, variant, clip_threshold)
     end
   end
 
@@ -3253,14 +3219,12 @@ defmodule Edifice.CUDA.FusedScan do
   def flash_attention(q, k, v, opts \\ []) do
     causal = if Keyword.get(opts, :causal, false), do: 1, else: 0
 
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:flash_attention, q) ->
-        record_dispatch(:flash_attention, :custom_call, q)
-        flash_attention_custom_call(q, k, v, causal)
-
-      true ->
-        record_dispatch(:flash_attention, :fallback, q)
-        flash_attention_fallback(q, k, v, causal)
+    if Edifice.CUDA.AutoTune.use_fused?(:flash_attention, q) do
+      record_dispatch(:flash_attention, :custom_call, q)
+      flash_attention_custom_call(q, k, v, causal)
+    else
+      record_dispatch(:flash_attention, :fallback, q)
+      flash_attention_fallback(q, k, v, causal)
     end
   end
 
@@ -3433,14 +3397,12 @@ defmodule Edifice.CUDA.FusedScan do
     # Precompute v_max: [batch, heads, 1, head_dim]
     v_max = Nx.reduce_max(v, axes: [2], keep_axes: true)
 
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:laser_attention, q) ->
-        record_dispatch(:laser_attention, :custom_call, q)
-        laser_attention_custom_call(q, k, v, v_max, causal)
-
-      true ->
-        record_dispatch(:laser_attention, :fallback, q)
-        laser_attention_fallback(q, k, v, v_max, causal)
+    if Edifice.CUDA.AutoTune.use_fused?(:laser_attention, q) do
+      record_dispatch(:laser_attention, :custom_call, q)
+      laser_attention_custom_call(q, k, v, v_max, causal)
+    else
+      record_dispatch(:laser_attention, :fallback, q)
+      laser_attention_fallback(q, k, v, v_max, causal)
     end
   end
 
@@ -3614,14 +3576,12 @@ defmodule Edifice.CUDA.FusedScan do
     Output tensor `[batch, heads, seq, head_dim]` (f32)
   """
   def fox_attention(q, k, v, cs) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:fox_attention, q) ->
-        record_dispatch(:fox_attention, :custom_call, q)
-        fox_attention_custom_call(q, k, v, cs)
-
-      true ->
-        record_dispatch(:fox_attention, :fallback, q)
-        fox_attention_fallback(q, k, v, cs)
+    if Edifice.CUDA.AutoTune.use_fused?(:fox_attention, q) do
+      record_dispatch(:fox_attention, :custom_call, q)
+      fox_attention_custom_call(q, k, v, cs)
+    else
+      record_dispatch(:fox_attention, :fallback, q)
+      fox_attention_fallback(q, k, v, cs)
     end
   end
 
@@ -3802,14 +3762,12 @@ defmodule Edifice.CUDA.FusedScan do
   def reservoir_scan(wx, w_res, opts \\ []) do
     leak_rate = Keyword.get(opts, :leak_rate, 1.0)
 
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:reservoir_scan, wx) ->
-        record_dispatch(:reservoir_scan, :custom_call, wx)
-        reservoir_custom_call(wx, w_res, leak_rate)
-
-      true ->
-        record_dispatch(:reservoir_scan, :fallback, wx)
-        reservoir_scan_fallback(wx, w_res, leak_rate)
+    if Edifice.CUDA.AutoTune.use_fused?(:reservoir_scan, wx) do
+      record_dispatch(:reservoir_scan, :custom_call, wx)
+      reservoir_custom_call(wx, w_res, leak_rate)
+    else
+      record_dispatch(:reservoir_scan, :fallback, wx)
+      reservoir_scan_fallback(wx, w_res, leak_rate)
     end
   end
 
@@ -3866,14 +3824,12 @@ defmodule Edifice.CUDA.FusedScan do
     memory_size = Keyword.fetch!(opts, :memory_size)
     momentum = Keyword.get(opts, :momentum, 0.9)
 
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:titans_scan, combined) ->
-        record_dispatch(:titans_scan, :custom_call, combined)
-        titans_custom_call(combined, memory_size, momentum)
-
-      true ->
-        record_dispatch(:titans_scan, :fallback, combined)
-        titans_scan_fallback(combined, memory_size, momentum)
+    if Edifice.CUDA.AutoTune.use_fused?(:titans_scan, combined) do
+      record_dispatch(:titans_scan, :custom_call, combined)
+      titans_custom_call(combined, memory_size, momentum)
+    else
+      record_dispatch(:titans_scan, :fallback, combined)
+      titans_scan_fallback(combined, memory_size, momentum)
     end
   end
 
@@ -3945,14 +3901,12 @@ defmodule Edifice.CUDA.FusedScan do
     memory_size = Keyword.fetch!(opts, :memory_size)
     momentum = Keyword.get(opts, :momentum, 0.9)
 
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:miras_scan, combined) ->
-        record_dispatch(:miras_scan, :custom_call, combined)
-        miras_custom_call(combined, memory_size, momentum)
-
-      true ->
-        record_dispatch(:miras_scan, :fallback, combined)
-        miras_scan_fallback(combined, memory_size, momentum)
+    if Edifice.CUDA.AutoTune.use_fused?(:miras_scan, combined) do
+      record_dispatch(:miras_scan, :custom_call, combined)
+      miras_custom_call(combined, memory_size, momentum)
+    else
+      record_dispatch(:miras_scan, :fallback, combined)
+      miras_scan_fallback(combined, memory_size, momentum)
     end
   end
 
@@ -4034,14 +3988,12 @@ defmodule Edifice.CUDA.FusedScan do
     Output `[batch, seq, num_heads * head_dim]`
   """
   def gsa_scan(q, k_slot, v, alpha) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:gsa_scan, q) ->
-        record_dispatch(:gsa_scan, :custom_call, q)
-        gsa_custom_call(q, k_slot, v, alpha)
-
-      true ->
-        record_dispatch(:gsa_scan, :fallback, q)
-        gsa_scan_fallback(q, k_slot, v, alpha)
+    if Edifice.CUDA.AutoTune.use_fused?(:gsa_scan, q) do
+      record_dispatch(:gsa_scan, :custom_call, q)
+      gsa_custom_call(q, k_slot, v, alpha)
+    else
+      record_dispatch(:gsa_scan, :fallback, q)
+      gsa_scan_fallback(q, k_slot, v, alpha)
     end
   end
 
@@ -4134,14 +4086,12 @@ defmodule Edifice.CUDA.FusedScan do
     `[B, T, H]` — output of the final layer for all timesteps
   """
   def mingru_block(input, weights, h0, num_layers) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:mingru_block, input) ->
-        record_dispatch(:mingru_block, :custom_call, input)
-        mingru_block_custom_call(input, weights, h0, num_layers)
-
-      true ->
-        record_dispatch(:mingru_block, :fallback, input)
-        mingru_block_fallback(input, weights, h0, num_layers)
+    if Edifice.CUDA.AutoTune.use_fused?(:mingru_block, input) do
+      record_dispatch(:mingru_block, :custom_call, input)
+      mingru_block_custom_call(input, weights, h0, num_layers)
+    else
+      record_dispatch(:mingru_block, :fallback, input)
+      mingru_block_fallback(input, weights, h0, num_layers)
     end
   end
 
@@ -4231,14 +4181,12 @@ defmodule Edifice.CUDA.FusedScan do
     `[B, T, H]` — output of the final layer for all timesteps
   """
   def minlstm_block(input, weights, h0, num_layers) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:minlstm_block, input) ->
-        record_dispatch(:minlstm_block, :custom_call, input)
-        minlstm_block_custom_call(input, weights, h0, num_layers)
-
-      true ->
-        record_dispatch(:minlstm_block, :fallback, input)
-        minlstm_block_fallback(input, weights, h0, num_layers)
+    if Edifice.CUDA.AutoTune.use_fused?(:minlstm_block, input) do
+      record_dispatch(:minlstm_block, :custom_call, input)
+      minlstm_block_custom_call(input, weights, h0, num_layers)
+    else
+      record_dispatch(:minlstm_block, :fallback, input)
+      minlstm_block_fallback(input, weights, h0, num_layers)
     end
   end
 
@@ -4340,14 +4288,12 @@ defmodule Edifice.CUDA.FusedScan do
     `[B, T, H]` — output of the final layer for all timesteps
   """
   def linear_block(input, weights, h0, num_layers) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:linear_block, input) ->
-        record_dispatch(:linear_block, :custom_call, input)
-        linear_block_custom_call(input, weights, h0, num_layers)
-
-      true ->
-        record_dispatch(:linear_block, :fallback, input)
-        linear_block_fallback(input, weights, h0, num_layers)
+    if Edifice.CUDA.AutoTune.use_fused?(:linear_block, input) do
+      record_dispatch(:linear_block, :custom_call, input)
+      linear_block_custom_call(input, weights, h0, num_layers)
+    else
+      record_dispatch(:linear_block, :fallback, input)
+      linear_block_fallback(input, weights, h0, num_layers)
     end
   end
 
@@ -4436,14 +4382,12 @@ defmodule Edifice.CUDA.FusedScan do
     `[B, T, H]` — output of the final layer for all timesteps
   """
   def lstm_block(input, weights, h0, c0, num_layers) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:lstm_block, input) ->
-        record_dispatch(:lstm_block, :custom_call, input)
-        lstm_block_custom_call(input, weights, h0, c0, num_layers)
-
-      true ->
-        record_dispatch(:lstm_block, :fallback, input)
-        lstm_block_fallback(input, weights, h0, c0, num_layers)
+    if Edifice.CUDA.AutoTune.use_fused?(:lstm_block, input) do
+      record_dispatch(:lstm_block, :custom_call, input)
+      lstm_block_custom_call(input, weights, h0, c0, num_layers)
+    else
+      record_dispatch(:lstm_block, :fallback, input)
+      lstm_block_fallback(input, weights, h0, c0, num_layers)
     end
   end
 
@@ -4551,14 +4495,12 @@ defmodule Edifice.CUDA.FusedScan do
     `[B, T, H]` — output of the final layer for all timesteps
   """
   def gru_block(input, weights, h0, num_layers) do
-    cond do
-      Edifice.CUDA.AutoTune.use_fused?(:gru_block, input) ->
-        record_dispatch(:gru_block, :custom_call, input)
-        gru_block_custom_call(input, weights, h0, num_layers)
-
-      true ->
-        record_dispatch(:gru_block, :fallback, input)
-        gru_block_fallback(input, weights, h0, num_layers)
+    if Edifice.CUDA.AutoTune.use_fused?(:gru_block, input) do
+      record_dispatch(:gru_block, :custom_call, input)
+      gru_block_custom_call(input, weights, h0, num_layers)
+    else
+      record_dispatch(:gru_block, :fallback, input)
+      gru_block_fallback(input, weights, h0, num_layers)
     end
   end
 
