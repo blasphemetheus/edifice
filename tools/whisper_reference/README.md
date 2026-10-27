@@ -157,6 +157,59 @@ diagnostic interventions, not replacements for the original acceptance test.
 No production implementation or test tolerance changed. Full results:
 `bench/results/pretrained_2026-10-26/whisper_early_precision.log`.
 
+### Block five operation isolation
+
+Run `mix run scripts/compare_whisper_block5.exs /tmp/whisper-sdpa.safetensors`.
+This keeps the block-five residual input fixed at its reference value and moves
+the reference boundary through the feed-forward branch. Each replacement uses
+a distinct graph input, so replacing the branch never overwrites the residual
+input. The script separately compares each operation with exact reference inputs.
+
+| Exact reference supplied through | Maximum final error | Mean final error |
+| --- | ---: | ---: |
+| Section input | 0.00020218 | 0.0000130385 |
+| Normalization | 0.00019932 | 0.0000130357 |
+| First dense layer | 0.00020504 | 0.0000130255 |
+| GELU | 0.00005150 | 0.0000061576 |
+| Second dense layer | 0.00005341 | 0.0000061788 |
+| Residual addition | 0.00005341 | 0.0000061788 |
+
+The sharp improvement occurs at GELU. Its isolated maximum difference is only
+0.000007629, but later operations amplify it. The isolated residual addition
+matches exactly. A concrete GELU example is input 59.02690505981445: the
+reference returns the same value, while the ordinary Axon/EXLA calculation
+returns 59.02689743041992. At such a large positive input GELU should round to
+the input in f32.
+
+Two independent arithmetic experiments support this finding. One evaluates
+selected GELUs in f64 and rounds their outputs to f32. The other uses the
+equivalent expression `0.5 * x * erfc(-x / sqrt(2))` in f32, instead of Axon's
+`x * (1 + erf(x / sqrt(2))) / 2`. Both reduce the isolated block-five GELU maximum
+difference to 0.000001192 and its mean from 0.000000927 to about 0.000000018.
+These are diagnostic model copies; no production activation was changed.
+
+Complete encoder results, without any reference replacements:
+
+| GELU experiment | Maximum error | Mean error | Values at or above 0.0001 |
+| --- | ---: | ---: | ---: |
+| Baseline | 0.00025940 | 0.0000133890 | 115 |
+| Block five f64 | 0.00024033 | 0.0000069716 | 8 |
+| All six feed-forward GELUs f64 | 0.00020027 | 0.0000019297 | 7 |
+| Block five f32 erfc expression | 0.00023842 | 0.0000069810 | 8 |
+| All six feed-forward GELUs f32 erfc expression | 0.00024605 | 0.0000019982 | 10 |
+
+GELU evaluation is therefore a substantial contributor, not the entire failure.
+All complete variants still fail the original maximum-error limit. With exact
+block-five entry and all six feed-forward GELUs changed, both alternatives give
+a final maximum error of 0.00001335. The remaining full-run outliers require
+further investigation upstream of that entry. The experiments do not distinguish
+the error-function kernel from compiler fusion or other arithmetic ordering;
+that needs a smaller Axon/Nx/EXLA reproduction. They do not measure transcript
+accuracy or establish GPU behavior. The GPU was occupied, so these runs used
+the existing isolated CPU build and did not rebuild native libraries.
+
+Full results: `bench/results/pretrained_2026-10-26/whisper_block5.log`.
+
 References: [tch-rs](https://github.com/LaurentMazare/tch-rs),
 [Whisper implementation](https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/models/whisper/modeling_whisper.py).
 

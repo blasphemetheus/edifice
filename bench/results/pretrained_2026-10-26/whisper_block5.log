@@ -1,0 +1,205 @@
+• Running devenv:python:virtualenv
+• Running devenv:files:cleanup
+✓ Running devenv:files:cleanup in 4.33ms
+✓ Running devenv:python:virtualenv in 9.60ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 4.54ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 550ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+
+20:05:55.171 [debug] redirecting to /api/resolve-cache/models/openai/whisper-base/e37978b90ca9030d5170a5c07aadb050351a65bb/config.json?%2Fopenai%2Fwhisper-base%2Fresolve%2Fmain%2Fconfig.json=&etag=%22708cca09e7e8a9364e444efe8b4f9c2691fc5f51%22
+
+20:05:55.282 [info] Cached model.safetensors (1/1)
+%{
+  reference: "/tmp/whisper-sdpa-ops.safetensors",
+  nx: ~c"1.0.0",
+  axon: ~c"0.9.0",
+  backend: :exla_host
+}
+%{
+  input: 59.02690505981445,
+  actual: 59.02689743041992,
+  expected: 59.02690505981445,
+  worst_gelu_index: 2934433
+}
+%{
+  experiment: "baseline",
+  max_absolute_error: 2.593994140625e-4,
+  mean_absolute_error: 1.3388971638050862e-5,
+  values_at_or_above_1e_4: 115
+}
+%{
+  experiment: "isolated enc_block_5_ffn_norm",
+  max_absolute_error: 1.1444091796875e-5,
+  mean_absolute_error: 4.973508680450323e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_5_ffn_up",
+  max_absolute_error: 5.340576171875e-5,
+  mean_absolute_error: 2.5972271942009684e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_5_ffn_act",
+  max_absolute_error: 7.62939453125e-6,
+  mean_absolute_error: 9.266718734579626e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_5_ffn_down",
+  max_absolute_error: 1.52587890625e-5,
+  mean_absolute_error: 6.500680171939166e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_5_ffn_residual",
+  max_absolute_error: 0.0,
+  mean_absolute_error: 0.0,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "boundary enc_block_5_attn_residual final",
+  max_absolute_error: 2.02178955078125e-4,
+  mean_absolute_error: 1.3038493307249155e-5,
+  values_at_or_above_1e_4: 99
+}
+%{
+  experiment: "boundary enc_block_5_attn_residual block5",
+  max_absolute_error: 6.29425048828125e-5,
+  mean_absolute_error: 5.024232450523414e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "boundary enc_block_5_ffn_norm final",
+  max_absolute_error: 1.9931793212890625e-4,
+  mean_absolute_error: 1.3035728443355765e-5,
+  values_at_or_above_1e_4: 102
+}
+%{
+  experiment: "boundary enc_block_5_ffn_norm block5",
+  max_absolute_error: 6.198883056640625e-5,
+  mean_absolute_error: 5.014449470763793e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "boundary enc_block_5_ffn_up final",
+  max_absolute_error: 2.0503997802734375e-4,
+  mean_absolute_error: 1.302551208937075e-5,
+  values_at_or_above_1e_4: 87
+}
+%{
+  experiment: "boundary enc_block_5_ffn_up block5",
+  max_absolute_error: 6.198883056640625e-5,
+  mean_absolute_error: 5.012040219298797e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "boundary enc_block_5_ffn_act final",
+  max_absolute_error: 5.14984130859375e-5,
+  mean_absolute_error: 6.1576256484841e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "boundary enc_block_5_ffn_act block5",
+  max_absolute_error: 1.52587890625e-5,
+  mean_absolute_error: 6.501469584918596e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "boundary enc_block_5_ffn_down final",
+  max_absolute_error: 5.340576171875e-5,
+  mean_absolute_error: 6.178845978865866e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "boundary enc_block_5_ffn_down block5",
+  max_absolute_error: 0.0,
+  mean_absolute_error: 0.0,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "boundary enc_block_5_ffn_residual final",
+  max_absolute_error: 5.340576171875e-5,
+  mean_absolute_error: 6.178845978865866e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "boundary enc_block_5_ffn_residual block5",
+  max_absolute_error: 0.0,
+  mean_absolute_error: 0.0,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "block5_gelu_f64 full",
+  max_absolute_error: 2.40325927734375e-4,
+  mean_absolute_error: 6.971598395466572e-6,
+  values_at_or_above_1e_4: 8
+}
+%{
+  experiment: "block5_gelu_f64 exact_entry",
+  max_absolute_error: 5.14984130859375e-5,
+  mean_absolute_error: 6.159699296404142e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "block5_gelu_f64 isolated",
+  max_absolute_error: 1.1920928955078125e-6,
+  mean_absolute_error: 1.7970117838217448e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "all_ffn_gelu_f64 full",
+  max_absolute_error: 2.002716064453125e-4,
+  mean_absolute_error: 1.929699692482245e-6,
+  values_at_or_above_1e_4: 7
+}
+%{
+  experiment: "all_ffn_gelu_f64 exact_entry",
+  max_absolute_error: 1.33514404296875e-5,
+  mean_absolute_error: 6.944468964320549e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "all_ffn_gelu_f64 isolated",
+  max_absolute_error: 1.1920928955078125e-6,
+  mean_absolute_error: 1.7970117838217448e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "block5_gelu_erfc full",
+  max_absolute_error: 2.384185791015625e-4,
+  mean_absolute_error: 6.9809593696845695e-6,
+  values_at_or_above_1e_4: 8
+}
+%{
+  experiment: "block5_gelu_erfc exact_entry",
+  max_absolute_error: 5.340576171875e-5,
+  mean_absolute_error: 6.163414582260884e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "block5_gelu_erfc isolated",
+  max_absolute_error: 1.1920928955078125e-6,
+  mean_absolute_error: 1.8214349140066588e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "all_ffn_gelu_erfc full",
+  max_absolute_error: 2.460479736328125e-4,
+  mean_absolute_error: 1.99815053747443e-6,
+  values_at_or_above_1e_4: 10
+}
+%{
+  experiment: "all_ffn_gelu_erfc exact_entry",
+  max_absolute_error: 1.33514404296875e-5,
+  mean_absolute_error: 7.019008876341104e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "all_ffn_gelu_erfc isolated",
+  max_absolute_error: 1.1920928955078125e-6,
+  mean_absolute_error: 1.8214349140066588e-8,
+  values_at_or_above_1e_4: 0
+}
