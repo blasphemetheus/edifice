@@ -275,6 +275,74 @@ the original full-encoder test before pursuing smaller arithmetic differences.
 No production code, dependency, or tolerance was changed. Full trace:
 `bench/results/pretrained_2026-10-26/whisper_gelu_outliers.log`.
 
+### Prebuilt XLA 0.11 validation
+
+The fix can be tested without building XLA from source. The official
+[XLA 0.11.0 release](https://github.com/elixir-nx/xla/releases/tag/v0.11.0) provides
+a 161,993,015-byte x86_64 Linux CPU archive, already cached on this machine.
+Its SHA-256 matches the release asset digest:
+`f58a65af94e7058a82af7783b657dd4c0b29dc710cb5b8e8e6a0c1dc8f5d3f39`.
+The release pins OpenXLA `91888df6ce85102c30220e41d952065925e10886`, whose scalar
+erf implementation includes the saturation selection.
+
+Released EXLA 1.0.0 cannot compile unchanged against the new headers. This
+experiment applies only the native `c_src` changes from upstream Nx commit
+[`171dcad658ae06f726aaacf785df2989eca047e0`](https://github.com/elixir-nx/nx/commit/171dcad658ae06f726aaacf785df2989eca047e0)
+to an isolated dependency copy. These adapt device IDs and module ownership
+to the new API and update a test include. Clang 21 is used because the new
+headers fail to compile with the available GCC. No other upstream changes are
+included; this is a compatibility experiment, not validation of a full upgrade.
+
+Dependencies live at `/tmp/edifice-xla011-deps`, with build output at
+`/tmp/edifice-xla011-build`. The copied Hex `xla` application still reports
+0.10.0: `XLA_ARCHIVE_PATH` explicitly substitutes the official 0.11.0 native
+archive. Edifice's lockfile, normal dependency directory, and active GPU job
+were not changed. Four BEAM schedulers limited the native make job count to two.
+The expensive XLA compiler build was avoided; only EXLA's bridge was rebuilt.
+
+To reproduce from the existing isolated baseline dependencies, first copy them
+with `cp -a --reflink=auto /tmp/edifice-pretrained-deps /tmp/edifice-xla011-deps`
+to a fresh destination. Download the linked upstream commit's `.patch` and apply
+it from that new `exla` directory with
+`git apply -p2 --include='c_src/*' /tmp/edifice-exla011-upstream.patch`.
+Inside Edifice's `devenv shell`, set:
+
+```sh
+export MIX_DEPS_PATH=/tmp/edifice-xla011-deps
+export MIX_BUILD_PATH=/tmp/edifice-xla011-build
+export MIX_ENV=test
+export XLA_TARGET=cpu
+export EXLA_CPU_ONLY=1
+export ERL_FLAGS='+S 4:4'
+export XLA_ARCHIVE_PATH="$HOME/.cache/xla/0.11.0/download/xla_extension-0.11.0-x86_64-linux-gnu-cpu.tar.gz"
+export CXX=/nix/store/7p4sqkgph7ww7v26nssmhapsd9240l25-clang-wrapper-21.1.8/bin/clang++
+mix deps.compile
+EXLA_FORCE_REBUILD=true mix deps.compile exla --force
+mix run scripts/reproduce_gelu_cpu.exs
+mix test test/edifice/pretrained/numerical_validation_test.exs --include external
+```
+
+Use an available Clang path on other machines. The forced bridge rebuild matters:
+copied object files from XLA 0.10 may otherwise be relinked, producing undefined
+symbols at load time. Do not run this rebuild against a shared dependency tree
+used by a live process.
+
+Results: the small erf reproduction now returns exactly ±1 at large arguments;
+GELU at +59.026905 returns the input exactly. The original pretrained test file
+reports **four passes and one failure**, with Whisper still failing its unchanged
+0.0001 maximum-error requirement. Whisper's maximum is 0.00017929 and mean is
+0.0000019369, versus 0.00025940 and 0.0000133890 in the earlier 0.10 run. This
+confirms the erf fix while leaving the remaining outliers unresolved. ViT,
+ConvNeXt, ResNet, and DETR continue to pass their reference comparisons.
+
+The practical recommendation is to adopt the upstream EXLA/XLA compatibility
+update as a separately tested dependency upgrade, without a full XLA source
+build or a permanent Edifice GELU workaround. Continue outlier diagnosis using
+this fixed CPU build; GPU and wider upgrade compatibility remain untested.
+Saved evidence under `bench/results/pretrained_2026-10-26/`:
+`gelu_cpu_xla011.log`, `pretrained_test_xla011.log`, and
+`xla011_bridge_build.log`.
+
 References: [tch-rs](https://github.com/LaurentMazare/tch-rs),
 [Whisper implementation](https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/models/whisper/modeling_whisper.py).
 
