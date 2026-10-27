@@ -55,6 +55,36 @@ reproduction commands are in ExPhil's
 > Two answers match, yet miss the mark;
 > A wider check can light the dark.
 
+#### Follow-up: SSM and output-gate isolation
+
+**AI-generated.** Separate f64 experiments for the SSM update, SSM output sum,
+gate activation/multiplication, and gate-to-output projection did not clear the
+reference gate. Keeping SSM memory in f64 between frames also did not clear it.
+On the Fox CUDA capture, convolution reference failures are 15 batch / 12 single
+for the chunk8 control, 9 / 6 with f64 SSM calculation, 12 / 12 with the f64
+output path, and 9 / 15 with f64 SSM calculation and storage. The original
+tolerance stays unchanged; production behavior stays unchanged.
+
+The new frame trace separates an operation's own rounding from errors already
+in its inputs. At the Fox failure (row 3, diagnostic tick 264, layer 2, channel
+166), local projection error is about +2.25e-7, while propagated input error is
+about -1.94e-4. The projection is mainly amplifying earlier differences. The
+Mewtwo-on-Fox stress trace likewise shows that the large gated-output error is
+mostly propagated, not introduced by the gate multiplication itself.
+
+The instrumented Fox step stays within 1.91e-6 of ordinary f32 step outputs/state
+leaves; the Mewtwo stress trace reproduces its ordinary step exactly. Neither
+trace establishes the earliest error source over the complete replay, or a
+gameplay regression. A blanket precision mode is still unsupported by these
+results. Checking controller decisions on matching replays is a more useful
+next gate than assuming every feature-tolerance failure changes bot behavior.
+
+Reproduction tools: ExPhil's `scripts/trace_mamba_precision.exs`,
+`scripts/resolve_mamba_carry.exs` and `docs/guides/MAMBA_CARRY_RESOLUTION.md`.
+Stage reports and coordinate-level error decompositions are retained in
+`eval_runs/mamba_stage_precision/`. No performance claims follow from these
+diagnostic runs.
+
 ### Resync profiling and optimization (2026-10-25)
 
 Profiling isolated eager history assembly (2.5–3.9 ms on CUDA at batch 32) and
