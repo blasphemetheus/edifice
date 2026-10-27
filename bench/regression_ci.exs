@@ -12,11 +12,19 @@
 # current/baseline ratio across architectures is treated as the hardware scale
 # (CI runners are far slower than the machine that wrote the baseline), so only
 # architectures that slow down relative to the others are flagged.
+#
+# Sub-millisecond entries get a wider threshold. The hardware scale is set by
+# the 20-300 ms models, whose slowdown is compute; a 0.3 ms model is mostly
+# fixed dispatch and scheduling overhead, which does not scale the same way
+# and jitters by 15-20% on a shared runner. The MLP entry drifted 1.03x ->
+# 1.24x across four green-code runs on 2026-10-26 and tripped the 20% bar.
 
 Logger.configure(level: :warning)
 
 defmodule RegressionCI do
   @threshold 1.20
+  @small_threshold 1.50
+  @small_ns 1_000_000
   @baseline_path Path.join([__DIR__, "results", "ci_baseline.json"])
 
   def architectures do
@@ -182,15 +190,16 @@ defmodule RegressionCI do
 
             %{"median_ns" => baseline_ns} ->
               ratio = current_ns / baseline_ns / scale
-              status = if ratio > @threshold, do: "REGRESSED", else: "ok"
+              threshold = threshold_for(baseline_ns)
+              status = if ratio > threshold, do: "REGRESSED", else: "ok"
 
               IO.puts(
                 "  #{String.pad_trailing(name, 12)} " <>
                   "#{format_time(current_ns)} vs #{format_time(baseline_ns)} " <>
-                  "(#{Float.round(ratio, 2)}x normalized) #{status}"
+                  "(#{Float.round(ratio, 2)}x normalized, limit #{threshold}x) #{status}"
               )
 
-              if ratio > @threshold, do: [name | acc], else: acc
+              if ratio > threshold, do: [name | acc], else: acc
           end
       end
 
@@ -206,6 +215,10 @@ defmodule RegressionCI do
       IO.puts("OK: All architectures within #{round((@threshold - 1) * 100)}% of baseline.")
     end
   end
+
+  # Entries under a millisecond are dominated by fixed overhead (see header).
+  defp threshold_for(baseline_ns) when baseline_ns < @small_ns, do: @small_threshold
+  defp threshold_for(_baseline_ns), do: @threshold
 
   # Median of current/baseline across architectures with a baseline entry.
   # A uniform slowdown is machine speed; a single outlier is a regression.
