@@ -97,9 +97,65 @@ reference itself uses f32 arithmetic, so greater precision does not guarantee
 closer agreement with it. These results do not justify a production f64 change.
 They also do not establish the effect on transcription accuracy.
 
-A useful next comparison would isolate convolution and normalization precision
-in the same way, to test which earlier differences survive through the network.
 Full results: `bench/results/pretrained_2026-10-26/whisper_dense_precision.log`.
+
+### Convolution, normalization, and reference replacement
+
+Run `mix run scripts/compare_whisper_early_precision.exs /tmp/whisper-sdpa.safetensors`.
+This script requires the Rust SDPA reference and checks that its final output
+exactly matches the original fixture. It tests selected operations with f64
+arithmetic and f32 outputs, then separately replaces intermediate outputs with
+exact reference tensors. Both experiments keep checkpoint parameters unchanged.
+
+Using Nx 1.0.0 and Axon 0.9.0 on EXLA CPU:
+
+| Operations using f64 internally | Maximum final error | Mean final error |
+| --- | ---: | ---: |
+| None | 0.00025940 | 0.0000133890 |
+| First convolution | 0.00018978 | 0.0000133655 |
+| Second convolution | 0.00025177 | 0.0000133825 |
+| Both convolutions | 0.00018978 | 0.0000133615 |
+| Both convolutions and their GELU activations | 0.00019169 | 0.0000133471 |
+| Position addition | 0.00025940 | 0.0000133890 |
+| First normalization | 0.00019455 | 0.0000133542 |
+| Final normalization | 0.00026131 | 0.0000133875 |
+| All 13 normalizations | 0.00022078 | 0.0000133378 |
+| Both convolutions and all normalizations | 0.00017929 | 0.0000133354 |
+
+All variants still exceed 0.0001. On identical reference inputs, higher
+convolution precision reduces the first convolution+GELU maximum difference
+from 0.000003576 to 0.000001431, and the second from 0.000003576 to 0.000002384.
+The GELU operation stays f32 in these isolated comparisons. Every isolated
+normalization is below 0.0001 in both precisions. These local improvements do
+not account for the complete encoder discrepancy.
+
+Replacing intermediate outputs gives a more specific lead. Each row below
+starts the remaining f32 network from an exact reference tensor:
+
+| Reference output supplied after | Maximum final error | Mean final error |
+| --- | ---: | ---: |
+| First convolution+GELU | 0.00020218 | 0.0000133696 |
+| Second convolution+GELU | 0.00019073 | 0.0000133587 |
+| Position addition | 0.00019073 | 0.0000133587 |
+| Block 1 | 0.00020599 | 0.0000133322 |
+| Block 2 | 0.00020123 | 0.0000133136 |
+| Block 3 | 0.00019550 | 0.0000132558 |
+| Block 4 | 0.00020790 | 0.0000130375 |
+| Block 5 attention and residual addition | 0.00020218 | 0.0000130385 |
+| Block 5 feed-forward section and residual addition | 0.00005341 | 0.0000061788 |
+| Block 6 | 0.000007629 | 0.0000000675 |
+
+The last two replacements leave no final values at or above 0.0001. Exact
+inputs before block five's feed-forward section still produce a failing final
+output; exact outputs after that section bring the remaining network below the
+limit. That section is now the strongest target for further isolation: its
+normalization, first dense layer, GELU, second dense layer, and residual addition.
+This does not prove which operation is responsible, or establish transcription
+accuracy. Replacing graph nodes can also change compiler fusion, so these are
+diagnostic interventions, not replacements for the original acceptance test.
+
+No production implementation or test tolerance changed. Full results:
+`bench/results/pretrained_2026-10-26/whisper_early_precision.log`.
 
 References: [tch-rs](https://github.com/LaurentMazare/tch-rs),
 [Whisper implementation](https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/models/whisper/modeling_whisper.py).
