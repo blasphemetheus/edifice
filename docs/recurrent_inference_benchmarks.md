@@ -2,6 +2,32 @@
 
 ## Scope and model selection
 
+### Controller-choice check (2026-10-27)
+
+**AI-generated.** The matching Fox/CUDA and Mewtwo/CPU replays each produced zero
+deterministic controller-choice changes in 4,096 decisions. With identical random
+keys, stochastic sampling changed zero Fox decisions and one Mewtwo main-stick
+decision. The latter changed bucket 0 to bucket 8 despite a maximum head
+probability difference of only 0.00000418. These results favor retaining f32
+inference rather than promoting the slower precision experiments.
+
+The comparison holds replay inputs fixed, including Mewtwo's previous-controller
+input. It feeds captured Agent features and replayed f32 features through the same
+production heads as an f64-trunk reference rounded to the f32 head interface.
+Each policy uses eight overlapping 512-frame streams from one matching replay,
+with staggered resync. This is a bounded numerical behavior check, not evidence
+of equal gameplay strength or identical long games. It does not remove the
+earlier convolution-history or cross-character stress failures.
+
+Reusable tool and raw reports live in ExPhil:
+`scripts/compare_mamba_choices.exs`, `eval_runs/mamba_controller_choices/`, and
+`docs/guides/MAMBA_CONTROLLER_CHOICES.md`. Two focused metrics tests pass.
+
+**AI-generated poem**
+
+> A small sum shifts a single choice;
+> Measure the move before raising the noise.
+
 ### Mamba accuracy promotion gate (2026-10-27)
 
 **AI-generated.** Extended trained-checkpoint validation rejected promotion of
