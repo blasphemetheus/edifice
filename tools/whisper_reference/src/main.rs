@@ -4,11 +4,21 @@ use tch::{Kind, Tensor};
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args().collect();
     if args.len() != 5 {
-        return Err("usage: whisper-reference CHECKPOINT FIXTURE OUTPUT eager|sdpa".into());
+        return Err(
+            "usage: whisper-reference CHECKPOINT FIXTURE OUTPUT eager|sdpa|eager-f64".into(),
+        );
     }
     tch::set_num_threads(4);
     let _guard = tch::no_grad_guard();
-    let weights: HashMap<_, _> = Tensor::read_safetensors(&args[1])?.into_iter().collect();
+    let kind = if args[4] == "eager-f64" {
+        Kind::Double
+    } else {
+        Kind::Float
+    };
+    let weights: HashMap<_, _> = Tensor::read_safetensors(&args[1])?
+        .into_iter()
+        .map(|(name, value)| (name, value.to_kind(kind)))
+        .collect();
     let fixture: HashMap<_, _> = Tensor::read_safetensors(&args[2])?.into_iter().collect();
     let w = |name: &str| &weights[&format!("model.encoder.{name}")];
     let linear = |x: &Tensor, name: &str| {
@@ -25,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
     };
     let mut saved: Vec<(String, Tensor)> = Vec::new();
-    let mut x = fixture["mel_input"].shallow_clone();
+    let mut x = fixture["mel_input"].to_kind(kind);
     for (name, stride) in [("conv1", 1), ("conv2", 2)] {
         x = x
             .conv1d(
@@ -52,9 +62,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .transpose(1, 2)
         };
         let (q, k, v) = (project("q"), project("k"), project("v"));
+        for (part, tensor) in [("q", &q), ("k", &k), ("v", &v)] {
+            saved.push((
+                format!("{name}_attn_{part}"),
+                tensor.transpose(1, 2).contiguous().view([1, 1500, 512]),
+            ));
+        }
         let attended = match args[4].as_str() {
-            "eager" => ((q / 8.0).matmul(&k.transpose(-2, -1)))
-                .softmax(-1, Kind::Float)
+            "eager" | "eager-f64" => ((q / 8.0).matmul(&k.transpose(-2, -1)))
+                .softmax(-1, kind)
                 .matmul(&v),
             "sdpa" => Tensor::scaled_dot_product_attention(
                 &q,
@@ -66,9 +82,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 None,
                 false,
             ),
-            _ => return Err("attention must be eager or sdpa".into()),
+            _ => return Err("attention must be eager, sdpa, or eager-f64".into()),
         };
         let attended = attended.transpose(1, 2).contiguous().view([1, 1500, 512]);
+        saved.push((format!("{name}_attn_compute"), attended.shallow_clone()));
         let projected = linear(&attended, &format!("{prefix}.self_attn.out_proj"));
         saved.push((format!("{name}_attn_out"), projected.shallow_clone()));
         x = &x + projected;
@@ -93,6 +110,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         f64::try_from(error.mean(Kind::Float))?
     );
     saved.push(("enc_final_norm".into(), x));
+    // The precision experiment needs only the final output, avoiding a large
+    // double-precision intermediate fixture on disk.
+    if kind == Kind::Double {
+        saved.retain(|(name, _)| name == "enc_final_norm");
+    }
     let saved: Vec<_> = saved
         .into_iter()
         .map(|(name, tensor)| (name, tensor.contiguous()))

@@ -380,6 +380,63 @@ active; this commit does not update ExPhil's checkout or dependencies.
 Evidence: `upstream_dependency_tests.log`, `upstream_dependency_pretrained.log`,
 and `upstream_dependency_optional.log` under `bench/results/pretrained_2026-10-26/`.
 
+### Remaining discrepancy after the dependency update
+
+Run `scripts/trace_whisper_gelu_outliers.exs REFERENCE native` to trace the
+unchanged model on the fixed backend. It now has just three values at or above
+0.0001: frame/channel pairs 1355/323, 1486/145, and 1486/323. The largest
+difference is 0.00017929. Exact reference replacements do not improve the maximum
+monotonically, so threshold crossings alone cannot assign blame to one operation.
+
+The Rust runner now also saves Q, K, V, and the attention result before output
+projection. Regenerate the SDPA reference, then run
+`mix run scripts/isolate_whisper_early_blocks.exs REFERENCE` to examine the first
+two blocks. Residual inputs stay fixed when a branch is replaced. All isolated
+operations differ by less than 0.000016, and residual additions match exactly.
+Selective f64 convolution, normalization, and first-block projection/attention
+experiments all still fail the original maximum threshold. The f64 attention
+policy experiment retains the production softmax helper's f32 internal step;
+it is not the fully f64 comparison described below.
+
+To distinguish arithmetic differences from model equations, the Rust runner
+supports `eager-f64`. It casts the same checkpoint weights and input to f64,
+uses f64 attention including softmax, and saves only the final encoder output:
+
+```sh
+tools/whisper_reference/target/debug/whisper-reference \
+  "$HOME/.cache/edifice/openai/whisper-base/model.safetensors" \
+  test/fixtures/numerical/whisper_encoder_reference.safetensors \
+  /tmp/whisper-f64.safetensors eager-f64
+mix run scripts/compare_whisper_f64_reference.exs /tmp/whisper-f64.safetensors
+```
+
+Use the LibTorch library path shown earlier for the Rust command. The Elixir
+diagnostic makes a copy of the encoder with f64 computation throughout. It
+replaces only the attention calculation with equivalent f64 matrix products
+and softmax, avoiding the production helper's deliberate f32 cast. This does
+not change production behavior or the original saved fixture.
+
+| Comparison | Maximum absolute difference | Mean absolute difference |
+| --- | ---: | ---: |
+| Edifice/EXLA f64 versus independent LibTorch f64 | 5.43e-13 | 5.36e-15 |
+| LibTorch f64 versus original LibTorch f32 fixture | 0.0001322195 | 0.0000012836 |
+| Edifice/EXLA f64 versus original LibTorch f32 fixture | 0.0001322195 | 0.0000012836 |
+
+Both f64 results exceed the original fixture's 0.0001 limit at three values.
+This provides strong evidence that the remaining mismatch on this input is
+accumulated f32 arithmetic, rather than different encoder equations or weight
+mapping. It does not establish correctness on every input, decoder parity,
+transcription quality, or GPU numerical behavior.
+
+The original strict test is still failing and has not been relaxed. A subsequent
+validation change should preserve a separate strict mathematical comparison and
+choose f32 absolute/relative bounds using multiple representative inputs and
+reference execution modes. Continuing to tune individual operations solely to
+match one f32 fixture would risk fitting its particular rounding behavior.
+
+Evidence: `whisper_native_outliers.log`, `whisper_early_blocks.log`, and
+`whisper_f64_parity.log` under `bench/results/pretrained_2026-10-26/`.
+
 References: [tch-rs](https://github.com/LaurentMazare/tch-rs),
 [Whisper implementation](https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/models/whisper/modeling_whisper.py).
 

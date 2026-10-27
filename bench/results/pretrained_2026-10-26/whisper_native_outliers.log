@@ -1,0 +1,179 @@
+• Running devenv:python:virtualenv
+• Running devenv:files:cleanup
+✓ Running devenv:files:cleanup in 5.18ms
+✓ Running devenv:python:virtualenv in 10.2ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 4.21ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 300ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+
+20:33:59.455 [debug] redirecting to /api/resolve-cache/models/openai/whisper-base/e37978b90ca9030d5170a5c07aadb050351a65bb/config.json?%2Fopenai%2Fwhisper-base%2Fresolve%2Fmain%2Fconfig.json=&etag=%22708cca09e7e8a9364e444efe8b4f9c2691fc5f51%22
+
+20:33:59.555 [info] Cached model.safetensors (1/1)
+%{
+  reference: "/tmp/whisper-sdpa-ops.safetensors",
+  nx: ~c"1.0.0",
+  axon: ~c"0.9.0",
+  backend: :exla_host
+}
+%{
+  actual: -16.550825119018555,
+  expected: -16.55100440979004,
+  experiment: "baseline",
+  max_absolute_error: 1.79290771484375e-4,
+  mean_absolute_error: 1.9368740140635055e-6,
+  values_at_or_above_1e_4: 3,
+  worst_frame: 1486,
+  worst_channel: 323
+}
+%{
+  actual: -16.55076789855957,
+  expected: -16.55100440979004,
+  experiment: "native reference enc_conv1_act",
+  max_absolute_error: 2.3651123046875e-4,
+  mean_absolute_error: 1.975384520847001e-6,
+  values_at_or_above_1e_4: 4,
+  worst_frame: 1486,
+  worst_channel: 323
+}
+%{
+  actual: -16.456886291503906,
+  expected: -16.45704460144043,
+  experiment: "native reference enc_conv2_act",
+  max_absolute_error: 1.583099365234375e-4,
+  mean_absolute_error: 1.8063490188069409e-6,
+  values_at_or_above_1e_4: 5,
+  worst_frame: 1355,
+  worst_channel: 323
+}
+%{
+  actual: -16.456886291503906,
+  expected: -16.45704460144043,
+  experiment: "native reference enc_pos_embed",
+  max_absolute_error: 1.583099365234375e-4,
+  mean_absolute_error: 1.8063490188069409e-6,
+  values_at_or_above_1e_4: 5,
+  worst_frame: 1355,
+  worst_channel: 323
+}
+%{
+  actual: -16.550878524780273,
+  expected: -16.55100440979004,
+  experiment: "native reference enc_block_1_attn_residual",
+  max_absolute_error: 1.25885009765625e-4,
+  mean_absolute_error: 1.5082586060088943e-6,
+  values_at_or_above_1e_4: 2,
+  worst_frame: 1486,
+  worst_channel: 323
+}
+%{
+  actual: -4.712221622467041,
+  expected: -4.712137699127197,
+  experiment: "native reference enc_block_1_ffn_residual",
+  max_absolute_error: 8.392333984375e-5,
+  mean_absolute_error: 1.2953859140907298e-6,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 795,
+  worst_channel: 323
+}
+%{
+  actual: -16.55088996887207,
+  expected: -16.55100440979004,
+  experiment: "native reference enc_block_2_attn_residual",
+  max_absolute_error: 1.1444091796875e-4,
+  mean_absolute_error: 1.276266630156897e-6,
+  values_at_or_above_1e_4: 1,
+  worst_frame: 1486,
+  worst_channel: 323
+}
+%{
+  actual: -16.550907135009766,
+  expected: -16.55100440979004,
+  experiment: "native reference enc_block_2_ffn_residual",
+  max_absolute_error: 9.72747802734375e-5,
+  mean_absolute_error: 1.1936443797821994e-6,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 1486,
+  worst_channel: 323
+}
+%{
+  actual: 6.48064661026001,
+  expected: 6.4805755615234375,
+  experiment: "native reference enc_block_3_attn_residual",
+  max_absolute_error: 7.104873657226562e-5,
+  mean_absolute_error: 1.1229783467570087e-6,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 484,
+  worst_channel: 145
+}
+%{
+  actual: 0.5599268078804016,
+  expected: 0.5598837733268738,
+  experiment: "native reference enc_block_3_ffn_residual",
+  max_absolute_error: 4.303455352783203e-5,
+  mean_absolute_error: 9.752506002769223e-7,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 1385,
+  worst_channel: 145
+}
+%{
+  actual: -16.98405647277832,
+  expected: -16.984106063842773,
+  experiment: "native reference enc_block_4_attn_residual",
+  max_absolute_error: 4.9591064453125e-5,
+  mean_absolute_error: 9.491585615251097e-7,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 484,
+  worst_channel: 323
+}
+%{
+  actual: 2.537031650543213,
+  expected: 2.5370564460754395,
+  experiment: "native reference enc_block_4_ffn_residual",
+  max_absolute_error: 2.47955322265625e-5,
+  mean_absolute_error: 7.719980317233421e-7,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 1458,
+  worst_channel: 145
+}
+%{
+  actual: -17.469919204711914,
+  expected: -17.469905853271484,
+  experiment: "native reference enc_block_5_attn_residual",
+  max_absolute_error: 1.33514404296875e-5,
+  mean_absolute_error: 6.842198558842938e-7,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 1001,
+  worst_channel: 323
+}
+%{
+  actual: 13.947293281555176,
+  expected: 13.947281837463379,
+  experiment: "native reference enc_block_5_ffn_residual",
+  max_absolute_error: 1.1444091796875e-5,
+  mean_absolute_error: 5.709462698177958e-7,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 134,
+  worst_channel: 86
+}
+%{
+  actual: -21.215930938720703,
+  expected: -21.215940475463867,
+  experiment: "native reference enc_block_6_attn_residual",
+  max_absolute_error: 9.5367431640625e-6,
+  mean_absolute_error: 3.5253862051831675e-7,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 1124,
+  worst_channel: 323
+}
+%{
+  actual: -17.167516708374023,
+  expected: -17.167522430419922,
+  experiment: "native reference enc_block_6_ffn_residual",
+  max_absolute_error: 5.7220458984375e-6,
+  mean_absolute_error: 5.830317562072196e-8,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 125,
+  worst_channel: 323
+}

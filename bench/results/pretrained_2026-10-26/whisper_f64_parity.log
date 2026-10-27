@@ -1,0 +1,31 @@
+• Running devenv:files:cleanup
+• Running devenv:python:virtualenv
+✓ Running devenv:files:cleanup in 4.28ms
+✓ Running devenv:python:virtualenv in 9.76ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 5.13ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 450ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+
+20:36:56.388 [debug] redirecting to /api/resolve-cache/models/openai/whisper-base/e37978b90ca9030d5170a5c07aadb050351a65bb/config.json?%2Fopenai%2Fwhisper-base%2Fresolve%2Fmain%2Fconfig.json=&etag=%22708cca09e7e8a9364e444efe8b4f9c2691fc5f51%22
+
+20:36:56.475 [info] Cached model.safetensors (1/1)
+%{
+  comparison: "EXLA f64 vs LibTorch f64",
+  max_absolute_error: 5.426770144367765e-13,
+  mean_absolute_error: 5.3562983126856874e-15,
+  values_at_or_above_1e_4: 0
+}
+%{
+  comparison: "LibTorch f64 vs original f32 fixture",
+  max_absolute_error: 1.3221946798047668e-4,
+  mean_absolute_error: 1.2836425498424422e-6,
+  values_at_or_above_1e_4: 3
+}
+%{
+  comparison: "EXLA f64 vs original f32 fixture",
+  max_absolute_error: 1.3221946744934598e-4,
+  mean_absolute_error: 1.2836425497851339e-6,
+  values_at_or_above_1e_4: 3
+}

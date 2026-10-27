@@ -1,5 +1,7 @@
 # AI-generated diagnostic; attribution and poem: tools/whisper_reference/README.md.
-[reference_path] = System.argv()
+[reference_path | options] = System.argv()
+native? = options == ["native"]
+unless options in [[], ["native"]], do: raise("usage: SCRIPT REFERENCE [native]")
 Nx.default_backend({EXLA.Backend, client: :host})
 Nx.Defn.default_options(compiler: EXLA, client: :host, precision: :highest)
 fixture = Safetensors.read!("test/fixtures/numerical/whisper_encoder_reference.safetensors")
@@ -82,14 +84,15 @@ replace_gelu = fn include_stem ->
 end
 
 report.("baseline", run.(encoder, nil))
-report.("ffn_gelu_erfc", run.(replace_gelu.(false), nil))
-model = replace_gelu.(true)
-report.("all_gelu_erfc", run.(model, nil))
+unless native?, do: report.("ffn_gelu_erfc", run.(replace_gelu.(false), nil))
+model = if native?, do: encoder, else: replace_gelu.(true)
+label = if native?, do: "native", else: "all_gelu_erfc"
+unless native?, do: report.(label, run.(model, nil))
 
 boundaries =
   ["enc_conv1_act", "enc_conv2_act", "enc_pos_embed"] ++
     for(layer <- 1..6, part <- ["attn", "ffn"], do: "enc_block_#{layer}_#{part}_residual")
 
 for boundary <- boundaries do
-  report.("all_gelu_erfc reference #{boundary}", run.(model, boundary))
+  report.("#{label} reference #{boundary}", run.(model, boundary))
 end
