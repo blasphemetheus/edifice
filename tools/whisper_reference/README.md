@@ -67,6 +67,40 @@ test tolerance was changed by this diagnostic extension.
 The full isolated run is recorded in
 `bench/results/pretrained_2026-10-26/whisper_isolated_operations.log`.
 
+### Dense precision experiment
+
+Run `mix run scripts/compare_whisper_dense_precision.exs /tmp/whisper-eager.safetensors`
+after regenerating the eager reference with the current Rust runner. The script
+first compares isolated feed-forward dense operations, then runs five complete
+encoder variants against the original saved output. It uses f64 arithmetic
+inside selected dense layers, including their bias addition, and rounds each
+output back to f32. Stored checkpoint weights remain f32. This changes both
+product and accumulation precision; it is not an accumulation-only kernel.
+Production code and the original acceptance threshold remain unchanged.
+
+With Nx 1.0.0 and Axon 0.9.0 on EXLA CPU, the last block's isolated first dense
+error fell from 0.00011444 to 0.00003815. Complete encoder results were:
+
+| Dense layers using f64 internally | Maximum final error | Mean final error | Values at or above 0.0001 |
+| --- | ---: | ---: | ---: |
+| None (baseline) | 0.00025940 | 0.0000133890 | 115 |
+| Last block's first feed-forward projection | 0.00026131 | 0.0000133852 | 110 |
+| First feed-forward projection in all six blocks | 0.00020790 | 0.0000133703 | 110 |
+| Both feed-forward projections in all six blocks | 0.00020123 | 0.0000134081 | 148 |
+| All 36 dense layers, including attention projections | 0.00023556 | 0.0000133872 | 147 |
+
+All five variants fail the unchanged 0.0001 maximum-error requirement. More
+accurate dense arithmetic reduces one local discrepancy, but does not reliably
+improve agreement across the complete output. Even the variant with the lowest
+maximum error has more values exceeding the limit than the baseline. The
+reference itself uses f32 arithmetic, so greater precision does not guarantee
+closer agreement with it. These results do not justify a production f64 change.
+They also do not establish the effect on transcription accuracy.
+
+A useful next comparison would isolate convolution and normalization precision
+in the same way, to test which earlier differences survive through the network.
+Full results: `bench/results/pretrained_2026-10-26/whisper_dense_precision.log`.
+
 References: [tch-rs](https://github.com/LaurentMazare/tch-rs),
 [Whisper implementation](https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/models/whisper/modeling_whisper.py).
 

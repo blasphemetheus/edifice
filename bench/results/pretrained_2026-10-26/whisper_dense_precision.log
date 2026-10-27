@@ -1,0 +1,199 @@
+• Running devenv:files:cleanup
+• Running devenv:python:virtualenv
+✓ Running devenv:files:cleanup in 5.01ms
+✓ Running devenv:python:virtualenv in 9.27ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 4.55ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 190ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+
+19:56:35.676 [debug] redirecting to /api/resolve-cache/models/openai/whisper-base/e37978b90ca9030d5170a5c07aadb050351a65bb/config.json?%2Fopenai%2Fwhisper-base%2Fresolve%2Fmain%2Fconfig.json=&etag=%22708cca09e7e8a9364e444efe8b4f9c2691fc5f51%22
+
+19:56:35.758 [info] Cached model.safetensors (1/1)
+%{
+  reference: "/tmp/whisper-eager-ops.safetensors",
+  nx: ~c"1.0.0",
+  axon: ~c"0.9.0",
+  backend: :exla_host,
+  input_shape: {1, 80, 3000}
+}
+%{
+  experiment: "isolated enc_block_1_ffn_up f32",
+  max_absolute_error: 1.430511474609375e-5,
+  mean_absolute_error: 3.4696384432209015e-7,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_1_ffn_down f32",
+  max_absolute_error: 2.86102294921875e-6,
+  mean_absolute_error: 1.1170009628358457e-7,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_2_ffn_up f32",
+  max_absolute_error: 6.67572021484375e-6,
+  mean_absolute_error: 2.7879673325514887e-7,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_2_ffn_down f32",
+  max_absolute_error: 9.5367431640625e-7,
+  mean_absolute_error: 6.125474527607366e-8,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_3_ffn_up f32",
+  max_absolute_error: 4.5299530029296875e-6,
+  mean_absolute_error: 2.5293411454185843e-7,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_3_ffn_down f32",
+  max_absolute_error: 1.385807991027832e-6,
+  mean_absolute_error: 5.5409390853355944e-8,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_4_ffn_up f32",
+  max_absolute_error: 2.09808349609375e-5,
+  mean_absolute_error: 3.6263776337364106e-7,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_4_ffn_down f32",
+  max_absolute_error: 3.814697265625e-6,
+  mean_absolute_error: 4.9732893359077934e-8,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_5_ffn_up f32",
+  max_absolute_error: 4.9591064453125e-5,
+  mean_absolute_error: 2.5947013000404695e-6,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_5_ffn_down f32",
+  max_absolute_error: 7.62939453125e-6,
+  mean_absolute_error: 6.494533266732105e-8,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_6_ffn_up f32",
+  max_absolute_error: 1.1444091796875e-4,
+  mean_absolute_error: 2.9025645744695794e-6,
+  values_above_1e_4: 1
+}
+%{
+  experiment: "isolated enc_block_6_ffn_down f32",
+  max_absolute_error: 1.52587890625e-5,
+  mean_absolute_error: 1.0648744108721075e-7,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_1_ffn_up f64",
+  max_absolute_error: 4.76837158203125e-6,
+  mean_absolute_error: 1.8879197227761324e-7,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_1_ffn_down f64",
+  max_absolute_error: 1.1920928955078125e-6,
+  mean_absolute_error: 6.405009855825483e-8,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_2_ffn_up f64",
+  max_absolute_error: 2.86102294921875e-6,
+  mean_absolute_error: 1.7075190328341705e-7,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_2_ffn_down f64",
+  max_absolute_error: 5.960464477539062e-7,
+  mean_absolute_error: 3.3958382772425466e-8,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_3_ffn_up f64",
+  max_absolute_error: 1.9073486328125e-6,
+  mean_absolute_error: 1.5923686191854358e-7,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_3_ffn_down f64",
+  max_absolute_error: 6.258487701416016e-7,
+  mean_absolute_error: 3.22663744611873e-8,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_4_ffn_up f64",
+  max_absolute_error: 8.58306884765625e-6,
+  mean_absolute_error: 2.1871578326226881e-7,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_4_ffn_down f64",
+  max_absolute_error: 1.9073486328125e-6,
+  mean_absolute_error: 3.27553024703775e-8,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_5_ffn_up f64",
+  max_absolute_error: 1.9073486328125e-5,
+  mean_absolute_error: 1.2199842558402452e-6,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_5_ffn_down f64",
+  max_absolute_error: 3.814697265625e-6,
+  mean_absolute_error: 5.111614242991891e-8,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_6_ffn_up f64",
+  max_absolute_error: 3.814697265625e-5,
+  mean_absolute_error: 1.4597076187783387e-6,
+  values_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_6_ffn_down f64",
+  max_absolute_error: 1.52587890625e-5,
+  mean_absolute_error: 7.51769633211552e-8,
+  values_above_1e_4: 0
+}
+%{experiment: "baseline", selected_dense_nodes: 0}
+%{
+  experiment: "baseline",
+  max_absolute_error: 2.593994140625e-4,
+  mean_absolute_error: 1.3388971638050862e-5,
+  values_above_1e_4: 115
+}
+%{experiment: "last_ffn_up", selected_dense_nodes: 1}
+%{
+  experiment: "last_ffn_up",
+  max_absolute_error: 2.613067626953125e-4,
+  mean_absolute_error: 1.3385199054027908e-5,
+  values_above_1e_4: 110
+}
+%{experiment: "all_ffn_up", selected_dense_nodes: 6}
+%{
+  experiment: "all_ffn_up",
+  max_absolute_error: 2.079010009765625e-4,
+  mean_absolute_error: 1.3370305168791674e-5,
+  values_above_1e_4: 110
+}
+%{experiment: "all_ffn_dense", selected_dense_nodes: 12}
+%{
+  experiment: "all_ffn_dense",
+  max_absolute_error: 2.0122528076171875e-4,
+  mean_absolute_error: 1.3408095583145041e-5,
+  values_above_1e_4: 148
+}
+%{experiment: "all_dense", selected_dense_nodes: 36}
+%{
+  experiment: "all_dense",
+  max_absolute_error: 2.3555755615234375e-4,
+  mean_absolute_error: 1.3387246326601598e-5,
+  values_above_1e_4: 147
+}
