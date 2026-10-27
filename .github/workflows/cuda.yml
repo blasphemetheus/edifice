@@ -1,7 +1,7 @@
 name: CUDA kernels
 
 # The hosted CI (ci.yml) is CPU-only and never invokes nvcc. This workflow
-# builds every kernel library and runs the GPU parity matrix on a
+# builds the custom-call library and runs the GPU parity tests on a
 # self-hosted runner with an NVIDIA GPU, nvcc, Elixir/OTP and the repo's
 # dev shell available. Register such a runner with the labels below;
 # until one exists the workflow can only be triggered by hand.
@@ -13,7 +13,7 @@ on:
         default: sm_120
         required: true
       run_tests:
-        description: Run the GPU parity matrix after building
+        description: Run the GPU parity tests after building
         type: boolean
         default: true
   schedule:
@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   kernels:
-    name: Build kernels and run GPU matrix
+    name: Build the FFI library and run GPU tests
     runs-on: [self-hosted, linux, gpu]
     timeout-minutes: 60
     env:

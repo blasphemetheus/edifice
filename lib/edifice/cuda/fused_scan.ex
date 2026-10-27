@@ -1,55 +1,33 @@
 defmodule Edifice.CUDA.FusedScan do
   @moduledoc false
-  # High-level dispatch for fused CUDA scan kernels.
+  # High-level dispatch for the fused scans.
   #
-  # Three-tier dispatch (highest priority first):
-  # 1. XLA-graph tier via Nx.block (Edifice.Block.run) — stays inside the
-  #    XLA graph, no graph breaks. Needs `mix edifice.cuda.build`, EXLA 1.0's
-  #    `EXLA.load_dylib/1` and EDIFICE_FUSED_CUSTOM_CALL=1. Only the ops in
-  #    `Edifice.Block.native_ops/0` have handlers; `custom_call_available?/1`
-  #    is per-op so the other ops are not routed here (that would compile
-  #    the pure fallback and shadow tier 2).
-  # 2. NIF bridge — breaks the graph but runs the fused CUDA kernel on
-  #    eager EXLA.Backend tensors. Needs priv/libedifice_cuda_nif.so and
-  #    priv/cuda/libedifice_cuda_kernels{,_bf16}.so (`make -C c_src`,
-  #    `make -C native/cuda`); `Edifice.CUDA.NIF.loaded?/0` is the gate.
-  # 3. Elixir sequential scan — pure Nx, works on any backend.
+  # Two tiers (highest priority first):
+  # 1. XLA-graph tier via Nx.block (Edifice.Block.run) — the CUDA kernel runs
+  #    as an XLA custom call inside the compiled graph. Needs
+  #    `mix edifice.cuda.build`, EXLA 1.0's `EXLA.load_dylib/1` and
+  #    EDIFICE_FUSED_CUSTOM_CALL=1. Only the ops in
+  #    `Edifice.Block.native_ops/0` have handlers (today: the Mamba selective
+  #    scan); `custom_call_available?/1` is per-op so the other ops are not
+  #    routed here (that would compile the pure fallback through Nx.block
+  #    for nothing).
+  # 2. Pure-Nx scan — works on any backend; under `compiler: EXLA` it is
+  #    compiled and fused by XLA, which is faster than most of the kernels
+  #    we have measured (docs/kernel_tier_benchmarks.md).
   #
-  # Memory management (NIF path only): The NIF returns a gc_ref (NIF
-  # resource) alongside the output pointer. This gc_ref calls cudaFree
-  # when garbage collected.
+  # A third tier, a C NIF that ran 47 kernels on eager EXLA tensors, was
+  # removed on 2026-10-26: it was slower than the same kernel as a custom
+  # call and far slower than the compiled fallback, and gradients never
+  # reached it. The sources are on the `archive/cuda-nif-kernels` branch.
   #
-  # Parity of every tier against the pure-Nx reference is checked by
-  # test/edifice/cuda/kernel_matrix_gpu_test.exs (EDIFICE_TEST_CLIENT=cuda).
+  # Parity of the custom-call tier against the pure-Nx reference is checked
+  # by test/edifice/cuda/kernel_matrix_gpu_test.exs (EDIFICE_TEST_CLIENT=cuda).
 
   alias Edifice.CUDA.AutoTuneProfiler
-
-  @gc_refs_key :__edifice_cuda_gc_refs__
 
   # Record a kernel dispatch for profiling (zero overhead when profiler inactive)
   defp record_dispatch(kernel, path, tensor) do
     AutoTuneProfiler.record(kernel, path, Nx.shape(tensor), Nx.type(tensor))
-  end
-
-  # Compute dtype flag for NIF dispatch (0 = f32, 1 = bf16)
-  defp dtype_flag(tensor) do
-    case Nx.type(tensor) do
-      {:bf, 16} -> 1
-      _ -> 0
-    end
-  end
-
-  # Compute element size for pointer math
-  defp elem_size(tensor) do
-    case Nx.type(tensor) do
-      {:bf, 16} -> 2
-      _ -> 4
-    end
-  end
-
-  # Get tensor type for template/broadcast creation
-  defp tensor_type(tensor) do
-    Nx.type(tensor)
   end
 
   @doc false
@@ -58,10 +36,6 @@ defmodule Edifice.CUDA.FusedScan do
       Edifice.CUDA.AutoTune.use_fused?(:mingru, gates) ->
         record_dispatch(:mingru, :custom_call, gates)
         mingru_custom_call(gates, candidates)
-
-      cuda_available?(gates) ->
-        record_dispatch(:mingru, :nif, gates)
-        mingru_fused(gates, candidates)
 
       true ->
         record_dispatch(:mingru, :fallback, gates)
@@ -76,10 +50,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:minlstm, :custom_call, forget_gates)
         minlstm_custom_call(forget_gates, input_gates, candidates)
 
-      cuda_available?(forget_gates) ->
-        record_dispatch(:minlstm, :nif, forget_gates)
-        minlstm_fused(forget_gates, input_gates, candidates)
-
       true ->
         record_dispatch(:minlstm, :fallback, forget_gates)
         Edifice.Recurrent.MinLSTM.min_lstm_scan(forget_gates, input_gates, candidates)
@@ -92,10 +62,6 @@ defmodule Edifice.CUDA.FusedScan do
       Edifice.CUDA.AutoTune.use_fused?(:elu_gru, gates) ->
         record_dispatch(:elu_gru, :custom_call, gates)
         elu_gru_custom_call(gates, candidates)
-
-      cuda_available?(gates) ->
-        record_dispatch(:elu_gru, :nif, gates)
-        elu_gru_fused(gates, candidates)
 
       true ->
         record_dispatch(:elu_gru, :fallback, gates)
@@ -110,10 +76,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:real_gru, :custom_call, gates)
         real_gru_custom_call(gates, candidates)
 
-      cuda_available?(gates) ->
-        record_dispatch(:real_gru, :nif, gates)
-        real_gru_fused(gates, candidates)
-
       true ->
         record_dispatch(:real_gru, :fallback, gates)
         Edifice.Recurrent.NativeRecurrence.real_gru_scan(gates, candidates)
@@ -127,10 +89,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:diag_linear, :custom_call, a_vals)
         diag_linear_custom_call(a_vals, b_vals)
 
-      cuda_available?(a_vals) ->
-        record_dispatch(:diag_linear, :nif, a_vals)
-        diag_linear_fused(a_vals, b_vals)
-
       true ->
         record_dispatch(:diag_linear, :fallback, a_vals)
         Edifice.Recurrent.NativeRecurrence.diag_linear_scan(a_vals, b_vals)
@@ -143,10 +101,6 @@ defmodule Edifice.CUDA.FusedScan do
       Edifice.CUDA.AutoTune.use_fused?(:liquid, tau) ->
         record_dispatch(:liquid, :custom_call, tau)
         liquid_custom_call(tau, activation)
-
-      cuda_available?(tau) ->
-        record_dispatch(:liquid, :nif, tau)
-        liquid_fused(tau, activation)
 
       true ->
         record_dispatch(:liquid, :fallback, tau)
@@ -170,10 +124,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:linear_scan, :custom_call, a_vals)
         linear_scan_custom_call(a_vals, b_vals)
 
-      cuda_available?(a_vals) ->
-        record_dispatch(:linear_scan, :nif, a_vals)
-        linear_scan_fused(a_vals, b_vals)
-
       true ->
         record_dispatch(:linear_scan, :fallback, a_vals)
         linear_scan_fallback(a_vals, b_vals)
@@ -194,10 +144,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:delta_net_scan, :custom_call, q)
         delta_net_custom_call(q, k, v, beta)
 
-      cuda_available?(q) ->
-        record_dispatch(:delta_net_scan, :nif, q)
-        delta_net_fused(q, k, v, beta)
-
       true ->
         record_dispatch(:delta_net_scan, :fallback, q)
         Edifice.Recurrent.DeltaNet.delta_net_sequential_scan(q, k, v, beta)
@@ -217,10 +163,6 @@ defmodule Edifice.CUDA.FusedScan do
       Edifice.CUDA.AutoTune.use_fused?(:gated_delta_net_scan, q) ->
         record_dispatch(:gated_delta_net_scan, :custom_call, q)
         gated_delta_net_custom_call(q, k, v, beta, alpha)
-
-      cuda_available?(q) ->
-        record_dispatch(:gated_delta_net_scan, :nif, q)
-        gated_delta_net_fused(q, k, v, beta, alpha)
 
       true ->
         record_dispatch(:gated_delta_net_scan, :fallback, q)
@@ -245,10 +187,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:delta_product_scan, :custom_call, q)
         delta_product_custom_call(q, k, v, beta)
 
-      cuda_available?(q) ->
-        record_dispatch(:delta_product_scan, :nif, q)
-        delta_product_fused(q, k, v, beta)
-
       true ->
         record_dispatch(:delta_product_scan, :fallback, q)
         Edifice.Recurrent.DeltaProduct.delta_product_scan_fallback(q, k, v, beta)
@@ -267,10 +205,6 @@ defmodule Edifice.CUDA.FusedScan do
       Edifice.CUDA.AutoTune.use_fused?(:slstm_scan, wx) ->
         record_dispatch(:slstm_scan, :custom_call, wx)
         slstm_custom_call(wx, recurrent_weight)
-
-      cuda_available?(wx) ->
-        record_dispatch(:slstm_scan, :nif, wx)
-        slstm_fused(wx, recurrent_weight)
 
       true ->
         record_dispatch(:slstm_scan, :fallback, wx)
@@ -291,10 +225,6 @@ defmodule Edifice.CUDA.FusedScan do
       Edifice.CUDA.AutoTune.use_fused?(:lstm_scan, wx) ->
         record_dispatch(:lstm_scan, :custom_call, wx)
         lstm_custom_call(wx, recurrent_weight)
-
-      cuda_available?(wx) ->
-        record_dispatch(:lstm_scan, :nif, wx)
-        lstm_fused(wx, recurrent_weight)
 
       true ->
         record_dispatch(:lstm_scan, :fallback, wx)
@@ -326,10 +256,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:gru_scan, :custom_call, wx)
         gru_custom_call(wx, recurrent_weight, h0, bhn)
 
-      cuda_available?(wx) ->
-        record_dispatch(:gru_scan, :nif, wx)
-        gru_fused(wx, recurrent_weight, h0, bhn)
-
       true ->
         record_dispatch(:gru_scan, :fallback, wx)
         gru_scan_fallback(wx, recurrent_weight, h0, bhn)
@@ -352,10 +278,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:ttt_scan, :custom_call, q)
         ttt_custom_call(q, k, v, eta, w0, ln_gamma, ln_beta)
 
-      cuda_available?(q) ->
-        record_dispatch(:ttt_scan, :nif, q)
-        ttt_fused(q, k, v, eta, w0, ln_gamma, ln_beta)
-
       true ->
         record_dispatch(:ttt_scan, :fallback, q)
         Edifice.Recurrent.TTT.ttt_scan_fallback(q, k, v, eta, w0, ln_gamma, ln_beta)
@@ -377,10 +299,6 @@ defmodule Edifice.CUDA.FusedScan do
       Edifice.CUDA.AutoTune.use_fused?(:selective_scan, x) ->
         record_dispatch(:selective_scan, :custom_call, x)
         selective_scan_custom_call(x, dt, a, b, c)
-
-      cuda_available?(x) ->
-        record_dispatch(:selective_scan, :nif, x)
-        selective_scan_fused(x, dt, a, b, c)
 
       true ->
         record_dispatch(:selective_scan, :fallback, x)
@@ -405,10 +323,6 @@ defmodule Edifice.CUDA.FusedScan do
       Edifice.CUDA.AutoTune.use_fused?(:kda_scan, q) ->
         record_dispatch(:kda_scan, :custom_call, q)
         kda_custom_call(q, k, v, alpha, beta)
-
-      cuda_available?(q) ->
-        record_dispatch(:kda_scan, :nif, q)
-        kda_fused(q, k, v, alpha, beta)
 
       true ->
         record_dispatch(:kda_scan, :fallback, q)
@@ -441,10 +355,6 @@ defmodule Edifice.CUDA.FusedScan do
       Edifice.CUDA.AutoTune.use_fused?(:rla_scan, q) ->
         record_dispatch(:rla_scan, :custom_call, q)
         rla_custom_call(q, k, v, alpha, beta, gamma, variant, clip_threshold)
-
-      cuda_available?(q) ->
-        record_dispatch(:rla_scan, :nif, q)
-        rla_fused(q, k, v, alpha, beta, gamma, variant, clip_threshold)
 
       true ->
         record_dispatch(:rla_scan, :fallback, q)
@@ -3319,731 +3229,6 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   # ============================================================================
-  # CUDA NIF fused paths (graph-breaking)
-  # ============================================================================
-
-  defp mingru_fused(gates, candidates) do
-    {batch, seq_len, hidden} = Nx.shape(gates)
-    dtype = dtype_flag(gates)
-    esize = elem_size(gates)
-    ttype = tensor_type(gates)
-
-    # Apply sigmoid on the XLA side (XLA fuses this efficiently)
-    z = Nx.sigmoid(gates)
-
-    # Zero initial hidden state
-    h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(gates)), {batch, hidden})
-
-    # Extract device pointers
-    z_ptr = device_ptr(z)
-    c_ptr = device_ptr(candidates)
-    h0_ptr = device_ptr(h0)
-
-    case Edifice.CUDA.NIF.fused_mingru_scan(
-           z_ptr.address,
-           c_ptr.address,
-           h0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        # Hold gc_ref to prevent cudaFree until we're done with the tensor
-        hold_gc_ref(out_addr, gc_ref)
-
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(gates), client: :cuda, device_id: device_id_of(gates)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused MinGRU scan failed: #{reason}"
-    end
-  end
-
-  defp minlstm_fused(forget_gates, input_gates, candidates) do
-    {batch, seq_len, hidden} = Nx.shape(forget_gates)
-    dtype = dtype_flag(forget_gates)
-    esize = elem_size(forget_gates)
-    ttype = tensor_type(forget_gates)
-
-    # Apply sigmoid on XLA side — kernel expects post-sigmoid values
-    f = Nx.sigmoid(forget_gates)
-    i = Nx.sigmoid(input_gates)
-
-    # Zero initial cell state
-    h0 =
-      Nx.broadcast(
-        Nx.tensor(0.0, type: ttype, backend: backend_for(forget_gates)),
-        {batch, hidden}
-      )
-
-    # Extract device pointers
-    f_ptr = device_ptr(f)
-    i_ptr = device_ptr(i)
-    c_ptr = device_ptr(candidates)
-    h0_ptr = device_ptr(h0)
-
-    case Edifice.CUDA.NIF.fused_minlstm_scan(
-           f_ptr.address,
-           i_ptr.address,
-           c_ptr.address,
-           h0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(forget_gates), client: :cuda, device_id: device_id_of(forget_gates)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused MinLSTM scan failed: #{reason}"
-    end
-  end
-
-  # ============================================================================
-  # NativeRecurrence fused paths (pre-activation inputs — kernel applies
-  # sigmoid/elu internally, unlike MinGRU which gets post-sigmoid)
-  # ============================================================================
-
-  defp elu_gru_fused(gates, candidates) do
-    {batch, seq_len, hidden} = Nx.shape(gates)
-    dtype = dtype_flag(gates)
-    esize = elem_size(gates)
-    ttype = tensor_type(gates)
-
-    h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(gates)), {batch, hidden})
-
-    g_ptr = device_ptr(gates)
-    c_ptr = device_ptr(candidates)
-    h0_ptr = device_ptr(h0)
-
-    case Edifice.CUDA.NIF.fused_elu_gru_scan(
-           g_ptr.address,
-           c_ptr.address,
-           h0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(gates), client: :cuda, device_id: device_id_of(gates)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused ELU-GRU scan failed: #{reason}"
-    end
-  end
-
-  defp real_gru_fused(gates, candidates) do
-    {batch, seq_len, hidden} = Nx.shape(gates)
-    dtype = dtype_flag(gates)
-    esize = elem_size(gates)
-    ttype = tensor_type(gates)
-
-    h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(gates)), {batch, hidden})
-
-    g_ptr = device_ptr(gates)
-    c_ptr = device_ptr(candidates)
-    h0_ptr = device_ptr(h0)
-
-    case Edifice.CUDA.NIF.fused_real_gru_scan(
-           g_ptr.address,
-           c_ptr.address,
-           h0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(gates), client: :cuda, device_id: device_id_of(gates)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused Real-GRU scan failed: #{reason}"
-    end
-  end
-
-  defp diag_linear_fused(a_vals, b_vals) do
-    {batch, seq_len, hidden} = Nx.shape(a_vals)
-    dtype = dtype_flag(a_vals)
-    esize = elem_size(a_vals)
-    ttype = tensor_type(a_vals)
-
-    h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(a_vals)), {batch, hidden})
-
-    a_ptr = device_ptr(a_vals)
-    b_ptr = device_ptr(b_vals)
-    h0_ptr = device_ptr(h0)
-
-    case Edifice.CUDA.NIF.fused_diag_linear_scan(
-           a_ptr.address,
-           b_ptr.address,
-           h0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(a_vals), client: :cuda, device_id: device_id_of(a_vals)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused Diag-Linear scan failed: #{reason}"
-    end
-  end
-
-  defp linear_scan_fused(a_vals, b_vals) do
-    {batch, seq_len, hidden} = Nx.shape(a_vals)
-    dtype = dtype_flag(a_vals)
-    esize = elem_size(a_vals)
-    ttype = tensor_type(a_vals)
-
-    h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(a_vals)), {batch, hidden})
-
-    a_ptr = device_ptr(a_vals)
-    b_ptr = device_ptr(b_vals)
-    h0_ptr = device_ptr(h0)
-
-    case Edifice.CUDA.NIF.fused_linear_scan(
-           a_ptr.address,
-           b_ptr.address,
-           h0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(a_vals), client: :cuda, device_id: device_id_of(a_vals)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused linear scan failed: #{reason}"
-    end
-  end
-
-  defp liquid_fused(tau, activation) do
-    {batch, seq_len, hidden} = Nx.shape(tau)
-    dtype = dtype_flag(tau)
-    esize = elem_size(tau)
-    ttype = tensor_type(tau)
-
-    h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(tau)), {batch, hidden})
-
-    tau_ptr = device_ptr(tau)
-    act_ptr = device_ptr(activation)
-    h0_ptr = device_ptr(h0)
-
-    case Edifice.CUDA.NIF.fused_liquid_scan(
-           tau_ptr.address,
-           act_ptr.address,
-           h0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(tau), client: :cuda, device_id: device_id_of(tau)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused Liquid scan failed: #{reason}"
-    end
-  end
-
-  # ============================================================================
-  # Delta rule fused paths (matrix-state recurrences)
-  # ============================================================================
-
-  defp delta_net_fused(q, k, v, beta) do
-    {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
-    dtype = dtype_flag(q)
-    esize = elem_size(q)
-    ttype = tensor_type(q)
-
-    q_ptr = device_ptr(q)
-    k_ptr = device_ptr(k)
-    v_ptr = device_ptr(v)
-    beta_ptr = device_ptr(beta)
-
-    case Edifice.CUDA.NIF.fused_delta_net_scan(
-           q_ptr.address,
-           k_ptr.address,
-           v_ptr.address,
-           beta_ptr.address,
-           batch,
-           seq_len,
-           num_heads,
-           head_dim,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * num_heads * head_dim * esize
-
-        Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, num_heads, head_dim}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused DeltaNet scan failed: #{reason}"
-    end
-  end
-
-  defp gated_delta_net_fused(q, k, v, beta, alpha) do
-    {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
-    dtype = dtype_flag(q)
-    esize = elem_size(q)
-    ttype = tensor_type(q)
-
-    q_ptr = device_ptr(q)
-    k_ptr = device_ptr(k)
-    v_ptr = device_ptr(v)
-    beta_ptr = device_ptr(beta)
-    alpha_ptr = device_ptr(alpha)
-
-    case Edifice.CUDA.NIF.fused_gated_delta_net_scan(
-           q_ptr.address,
-           k_ptr.address,
-           v_ptr.address,
-           beta_ptr.address,
-           alpha_ptr.address,
-           batch,
-           seq_len,
-           num_heads,
-           head_dim,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * num_heads * head_dim * esize
-
-        Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, num_heads, head_dim}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused GatedDeltaNet scan failed: #{reason}"
-    end
-  end
-
-  defp delta_product_fused(q, k, v, beta) do
-    {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
-    {_, _, num_householder, _, _} = Nx.shape(k)
-    dtype = dtype_flag(q)
-    esize = elem_size(q)
-    ttype = tensor_type(q)
-
-    q_ptr = device_ptr(q)
-    k_ptr = device_ptr(k)
-    v_ptr = device_ptr(v)
-    beta_ptr = device_ptr(beta)
-
-    case Edifice.CUDA.NIF.fused_delta_product_scan(
-           q_ptr.address,
-           k_ptr.address,
-           v_ptr.address,
-           beta_ptr.address,
-           batch,
-           seq_len,
-           num_householder,
-           num_heads,
-           head_dim,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * num_heads * head_dim * esize
-
-        Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, num_heads, head_dim}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused DeltaProduct scan failed: #{reason}"
-    end
-  end
-
-  # ============================================================================
-  # sLSTM / TTT / Mamba fused paths (graph-breaking NIF)
-  # ============================================================================
-
-  defp slstm_fused(wx, recurrent_weight) do
-    {batch, seq_len, hidden4} = Nx.shape(wx)
-    hidden = div(hidden4, 4)
-    dtype = dtype_flag(wx)
-    esize = elem_size(wx)
-    ttype = tensor_type(wx)
-
-    h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
-    c0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
-
-    wx_ptr = device_ptr(wx)
-    r_ptr = device_ptr(recurrent_weight)
-    h0_ptr = device_ptr(h0)
-    c0_ptr = device_ptr(c0)
-
-    case Edifice.CUDA.NIF.fused_slstm_scan(
-           wx_ptr.address,
-           r_ptr.address,
-           h0_ptr.address,
-           c0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(wx), client: :cuda, device_id: device_id_of(wx)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused sLSTM scan failed: #{reason}"
-    end
-  end
-
-  defp lstm_fused(wx, recurrent_weight) do
-    {batch, seq_len, hidden4} = Nx.shape(wx)
-    hidden = div(hidden4, 4)
-    dtype = dtype_flag(wx)
-    esize = elem_size(wx)
-    ttype = tensor_type(wx)
-
-    h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
-    c0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
-
-    wx_ptr = device_ptr(wx)
-    r_ptr = device_ptr(recurrent_weight)
-    h0_ptr = device_ptr(h0)
-    c0_ptr = device_ptr(c0)
-
-    case Edifice.CUDA.NIF.fused_lstm_scan(
-           wx_ptr.address,
-           r_ptr.address,
-           h0_ptr.address,
-           c0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(wx), client: :cuda, device_id: device_id_of(wx)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused LSTM scan failed: #{reason}"
-    end
-  end
-
-  defp gru_fused(wx, recurrent_weight, h0, bhn) do
-    {batch, seq_len, hidden3} = Nx.shape(wx)
-    hidden = div(hidden3, 3)
-    dtype = dtype_flag(wx)
-    esize = elem_size(wx)
-    ttype = tensor_type(wx)
-
-    h0 =
-      h0 || Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
-
-    bhn = bhn || Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {hidden})
-
-    wx_ptr = device_ptr(wx)
-    r_ptr = device_ptr(recurrent_weight)
-    h0_ptr = device_ptr(h0)
-    bhn_ptr = device_ptr(bhn)
-
-    case Edifice.CUDA.NIF.fused_gru_scan(
-           wx_ptr.address,
-           r_ptr.address,
-           h0_ptr.address,
-           bhn_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(wx), client: :cuda, device_id: device_id_of(wx)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused GRU scan failed: #{reason}"
-    end
-  end
-
-  defp ttt_fused(q, k, v, eta, w0, ln_gamma, ln_beta) do
-    {batch, seq_len, inner_size} = Nx.shape(q)
-    dtype = dtype_flag(q)
-    esize = elem_size(q)
-    ttype = tensor_type(q)
-
-    # Broadcast W0 to [batch, inner_size, inner_size] if needed
-    w0_batched =
-      if Nx.rank(w0) == 2 do
-        Nx.broadcast(w0, {batch, inner_size, inner_size})
-      else
-        w0
-      end
-
-    q_ptr = device_ptr(q)
-    k_ptr = device_ptr(k)
-    v_ptr = device_ptr(v)
-    eta_ptr = device_ptr(eta)
-    w0_ptr = device_ptr(w0_batched)
-    lng_ptr = device_ptr(ln_gamma)
-    lnb_ptr = device_ptr(ln_beta)
-
-    case Edifice.CUDA.NIF.fused_ttt_scan(
-           q_ptr.address,
-           k_ptr.address,
-           v_ptr.address,
-           eta_ptr.address,
-           w0_ptr.address,
-           lng_ptr.address,
-           lnb_ptr.address,
-           batch,
-           seq_len,
-           inner_size,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * inner_size * esize
-
-        Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, inner_size}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused TTT scan failed: #{reason}"
-    end
-  end
-
-  defp selective_scan_fused(x, dt, a, b, c) do
-    {batch, seq_len, hidden} = Nx.shape(x)
-    {_h, state} = Nx.shape(a)
-    dtype = dtype_flag(x)
-    esize = elem_size(x)
-    ttype = tensor_type(x)
-
-    x_ptr = device_ptr(x)
-    dt_ptr = device_ptr(dt)
-    a_ptr = device_ptr(a)
-    b_ptr = device_ptr(b)
-    c_ptr = device_ptr(c)
-
-    case Edifice.CUDA.NIF.fused_selective_scan(
-           x_ptr.address,
-           dt_ptr.address,
-           a_ptr.address,
-           b_ptr.address,
-           c_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           state,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(x), client: :cuda, device_id: device_id_of(x)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused selective scan failed: #{reason}"
-    end
-  end
-
-  # ============================================================================
-  # KDA / RLA fused paths (graph-breaking NIF)
-  # ============================================================================
-
-  defp kda_fused(q, k, v, alpha, beta) do
-    {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
-    dtype = dtype_flag(q)
-    esize = elem_size(q)
-    ttype = tensor_type(q)
-
-    q_ptr = device_ptr(q)
-    k_ptr = device_ptr(k)
-    v_ptr = device_ptr(v)
-    alpha_ptr = device_ptr(alpha)
-    beta_ptr = device_ptr(beta)
-
-    case Edifice.CUDA.NIF.fused_kda_scan(
-           q_ptr.address,
-           k_ptr.address,
-           v_ptr.address,
-           alpha_ptr.address,
-           beta_ptr.address,
-           batch,
-           seq_len,
-           num_heads,
-           head_dim,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * num_heads * head_dim * esize
-
-        Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, num_heads, head_dim}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused KDA scan failed: #{reason}"
-    end
-  end
-
-  defp rla_fused(q, k, v, alpha, beta, gamma, variant, clip_threshold) do
-    {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
-    variant_int = if variant == :rdn, do: 1, else: 0
-    dtype = dtype_flag(q)
-    esize = elem_size(q)
-    ttype = tensor_type(q)
-
-    # Ensure gates are [B, T, H] for the CUDA kernel
-    alpha = Nx.reshape(alpha, {batch, seq_len, num_heads})
-    beta = Nx.reshape(beta, {batch, seq_len, num_heads})
-    gamma = Nx.reshape(gamma, {batch, seq_len, num_heads})
-
-    q_ptr = device_ptr(q)
-    k_ptr = device_ptr(k)
-    v_ptr = device_ptr(v)
-    alpha_ptr = device_ptr(alpha)
-    beta_ptr = device_ptr(beta)
-    gamma_ptr = device_ptr(gamma)
-
-    case Edifice.CUDA.NIF.fused_rla_scan(
-           q_ptr.address,
-           k_ptr.address,
-           v_ptr.address,
-           alpha_ptr.address,
-           beta_ptr.address,
-           gamma_ptr.address,
-           batch,
-           seq_len,
-           num_heads,
-           head_dim,
-           variant_int,
-           clip_threshold * 1.0,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * num_heads * head_dim * esize
-
-        Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, num_heads, head_dim}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused RLA scan failed: #{reason}"
-    end
-  end
-
-  # ============================================================================
   # Flash Attention (IO-aware exact attention)
   # ============================================================================
 
@@ -4073,10 +3258,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:flash_attention, :custom_call, q)
         flash_attention_custom_call(q, k, v, causal)
 
-      cuda_available?(q) ->
-        record_dispatch(:flash_attention, :nif, q)
-        flash_attention_fused(q, k, v, causal)
-
       true ->
         record_dispatch(:flash_attention, :fallback, q)
         flash_attention_fallback(q, k, v, causal)
@@ -4084,10 +3265,10 @@ defmodule Edifice.CUDA.FusedScan do
   end
 
   @doc """
-  Check if flash attention is available (any tier).
+  Check if a native flash attention kernel is available (custom-call tier).
   """
   def flash_attention_available? do
-    flash_attention_custom_call_available?() or nif_loaded?()
+    flash_attention_custom_call_available?()
   end
 
   defp flash_attention_custom_call_available? do
@@ -4114,43 +3295,6 @@ defmodule Edifice.CUDA.FusedScan do
 
       [grad_q, grad_k, grad_v]
     end)
-  end
-
-  defp flash_attention_fused(q, k, v, causal) do
-    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
-    dtype = dtype_flag(q)
-    esize = elem_size(q)
-    ttype = tensor_type(q)
-
-    q_ptr = device_ptr(q)
-    k_ptr = device_ptr(k)
-    v_ptr = device_ptr(v)
-
-    case Edifice.CUDA.NIF.fused_flash_attention(
-           q_ptr.address,
-           k_ptr.address,
-           v_ptr.address,
-           batch,
-           num_heads,
-           seq_len,
-           head_dim,
-           causal,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * num_heads * seq_len * head_dim * esize
-
-        Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, num_heads, seq_len, head_dim}
-        )
-
-      {:error, reason} ->
-        raise "CUDA flash attention failed: #{reason}"
-    end
   end
 
   @doc false
@@ -4294,10 +3438,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:laser_attention, :custom_call, q)
         laser_attention_custom_call(q, k, v, v_max, causal)
 
-      cuda_available?(q) ->
-        record_dispatch(:laser_attention, :nif, q)
-        laser_attention_fused(q, k, v, v_max, causal)
-
       true ->
         record_dispatch(:laser_attention, :fallback, q)
         laser_attention_fallback(q, k, v, v_max, causal)
@@ -4328,45 +3468,6 @@ defmodule Edifice.CUDA.FusedScan do
 
       [grad_q, grad_k, grad_v]
     end)
-  end
-
-  defp laser_attention_fused(q, k, v, v_max, causal) do
-    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
-    dtype = dtype_flag(q)
-    esize = elem_size(q)
-    ttype = tensor_type(q)
-
-    q_ptr = device_ptr(q)
-    k_ptr = device_ptr(k)
-    v_ptr = device_ptr(v)
-    vmax_ptr = device_ptr(v_max)
-
-    case Edifice.CUDA.NIF.fused_laser_attention(
-           q_ptr.address,
-           k_ptr.address,
-           v_ptr.address,
-           vmax_ptr.address,
-           batch,
-           num_heads,
-           seq_len,
-           head_dim,
-           causal,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * num_heads * seq_len * head_dim * esize
-
-        Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, num_heads, seq_len, head_dim}
-        )
-
-      {:error, reason} ->
-        raise "CUDA LASER attention failed: #{reason}"
-    end
   end
 
   @doc false
@@ -4518,10 +3619,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:fox_attention, :custom_call, q)
         fox_attention_custom_call(q, k, v, cs)
 
-      cuda_available?(q) ->
-        record_dispatch(:fox_attention, :nif, q)
-        fox_attention_fused(q, k, v, cs)
-
       true ->
         record_dispatch(:fox_attention, :fallback, q)
         fox_attention_fallback(q, k, v, cs)
@@ -4546,44 +3643,6 @@ defmodule Edifice.CUDA.FusedScan do
 
       [grad_q, grad_k, grad_v, grad_cs]
     end)
-  end
-
-  defp fox_attention_fused(q, k, v, cs) do
-    {batch, num_heads, seq_len, head_dim} = Nx.shape(q)
-    dtype = dtype_flag(q)
-    esize = elem_size(q)
-    ttype = tensor_type(q)
-
-    q_ptr = device_ptr(q)
-    k_ptr = device_ptr(k)
-    v_ptr = device_ptr(v)
-    cs_ptr = device_ptr(cs)
-
-    case Edifice.CUDA.NIF.fused_fox_attention(
-           q_ptr.address,
-           k_ptr.address,
-           v_ptr.address,
-           cs_ptr.address,
-           batch,
-           num_heads,
-           seq_len,
-           head_dim,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * num_heads * seq_len * head_dim * esize
-
-        Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, num_heads, seq_len, head_dim}
-        )
-
-      {:error, reason} ->
-        raise "CUDA FoX attention failed: #{reason}"
-    end
   end
 
   @doc false
@@ -4748,10 +3807,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:reservoir_scan, :custom_call, wx)
         reservoir_custom_call(wx, w_res, leak_rate)
 
-      cuda_available?(wx) ->
-        record_dispatch(:reservoir_scan, :nif, wx)
-        reservoir_fused(wx, w_res, leak_rate)
-
       true ->
         record_dispatch(:reservoir_scan, :fallback, wx)
         reservoir_scan_fallback(wx, w_res, leak_rate)
@@ -4773,44 +3828,6 @@ defmodule Edifice.CUDA.FusedScan do
                                                                                 _h0_packed ->
       reservoir_scan_fallback(wx, w_res, leak_rate)
     end)
-  end
-
-  defp reservoir_fused(wx, w_res, leak_rate) do
-    {batch, seq_len, hidden} = Nx.shape(wx)
-    dtype = dtype_flag(wx)
-    esize = elem_size(wx)
-    ttype = tensor_type(wx)
-
-    wx_ptr = device_ptr(wx)
-    wres_ptr = device_ptr(w_res)
-    # Must live on the same device as wx: a BinaryBackend h0 has no pointer.
-    h0 = Nx.broadcast(Nx.tensor(0.0, type: ttype, backend: backend_for(wx)), {batch, hidden})
-    h0_ptr = device_ptr(h0)
-
-    case Edifice.CUDA.NIF.fused_reservoir_scan(
-           wx_ptr.address,
-           wres_ptr.address,
-           h0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           leak_rate / 1,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(wx), client: :cuda, device_id: device_id_of(wx)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA reservoir scan failed: #{reason}"
-    end
   end
 
   @doc false
@@ -4854,10 +3871,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:titans_scan, :custom_call, combined)
         titans_custom_call(combined, memory_size, momentum)
 
-      cuda_available?(combined) ->
-        record_dispatch(:titans_scan, :nif, combined)
-        titans_fused(combined, memory_size, momentum)
-
       true ->
         record_dispatch(:titans_scan, :fallback, combined)
         titans_scan_fallback(combined, memory_size, momentum)
@@ -4877,38 +3890,6 @@ defmodule Edifice.CUDA.FusedScan do
       combined_inner = Nx.slice_along_axis(packed, 0, memory_size * 4, axis: 2)
       titans_scan_fallback(combined_inner, memory_size, momentum)
     end)
-  end
-
-  defp titans_fused(combined, memory_size, momentum) do
-    {batch, seq_len, _} = Nx.shape(combined)
-    dtype = dtype_flag(combined)
-    esize = elem_size(combined)
-    ttype = tensor_type(combined)
-
-    combined_ptr = device_ptr(combined)
-
-    case Edifice.CUDA.NIF.fused_titans_scan(
-           combined_ptr.address,
-           batch,
-           seq_len,
-           memory_size,
-           momentum / 1,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * memory_size * esize
-
-        Nx.from_pointer(
-          {backend_for(combined), client: :cuda, device_id: device_id_of(combined)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, memory_size}
-        )
-
-      {:error, reason} ->
-        raise "CUDA Titans scan failed: #{reason}"
-    end
   end
 
   defp titans_scan_fallback(combined, memory_size, momentum) do
@@ -4969,10 +3950,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:miras_scan, :custom_call, combined)
         miras_custom_call(combined, memory_size, momentum)
 
-      cuda_available?(combined) ->
-        record_dispatch(:miras_scan, :nif, combined)
-        miras_fused(combined, memory_size, momentum)
-
       true ->
         record_dispatch(:miras_scan, :fallback, combined)
         miras_scan_fallback(combined, memory_size, momentum)
@@ -4992,38 +3969,6 @@ defmodule Edifice.CUDA.FusedScan do
       combined_inner = Nx.slice_along_axis(packed, 0, memory_size * 5, axis: 2)
       miras_scan_fallback(combined_inner, memory_size, momentum)
     end)
-  end
-
-  defp miras_fused(combined, memory_size, momentum) do
-    {batch, seq_len, _} = Nx.shape(combined)
-    dtype = dtype_flag(combined)
-    esize = elem_size(combined)
-    ttype = tensor_type(combined)
-
-    combined_ptr = device_ptr(combined)
-
-    case Edifice.CUDA.NIF.fused_miras_scan(
-           combined_ptr.address,
-           batch,
-           seq_len,
-           memory_size,
-           momentum / 1,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * memory_size * esize
-
-        Nx.from_pointer(
-          {backend_for(combined), client: :cuda, device_id: device_id_of(combined)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, memory_size}
-        )
-
-      {:error, reason} ->
-        raise "CUDA MIRAS scan failed: #{reason}"
-    end
   end
 
   defp miras_scan_fallback(combined, memory_size, momentum) do
@@ -5094,10 +4039,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:gsa_scan, :custom_call, q)
         gsa_custom_call(q, k_slot, v, alpha)
 
-      cuda_available?(q) ->
-        record_dispatch(:gsa_scan, :nif, q)
-        gsa_fused(q, k_slot, v, alpha)
-
       true ->
         record_dispatch(:gsa_scan, :fallback, q)
         gsa_scan_fallback(q, k_slot, v, alpha)
@@ -5112,46 +4053,6 @@ defmodule Edifice.CUDA.FusedScan do
     Edifice.Block.run(:fused_gsa_scan, [q, k_slot, v, alpha], output, fn q, k_slot, v, alpha ->
       gsa_scan_fallback(q, k_slot, v, alpha)
     end)
-  end
-
-  defp gsa_fused(q, k_slot, v, alpha) do
-    {batch, seq_len, num_heads, head_dim} = Nx.shape(q)
-    {_, _, _, num_slots} = Nx.shape(k_slot)
-    dtype = dtype_flag(q)
-    esize = elem_size(q)
-    ttype = tensor_type(q)
-
-    q_ptr = device_ptr(q)
-    ks_ptr = device_ptr(k_slot)
-    v_ptr = device_ptr(v)
-    alpha_ptr = device_ptr(alpha)
-
-    case Edifice.CUDA.NIF.fused_gsa_scan(
-           q_ptr.address,
-           ks_ptr.address,
-           v_ptr.address,
-           alpha_ptr.address,
-           batch,
-           seq_len,
-           num_heads,
-           num_slots,
-           head_dim,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * num_heads * head_dim * esize
-
-        Nx.from_pointer(
-          {backend_for(q), client: :cuda, device_id: device_id_of(q)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, num_heads * head_dim}
-        )
-
-      {:error, reason} ->
-        raise "CUDA GSA scan failed: #{reason}"
-    end
   end
 
   defp gsa_scan_fallback(q, k_slot, v, alpha) do
@@ -5238,10 +4139,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:mingru_block, :custom_call, input)
         mingru_block_custom_call(input, weights, h0, num_layers)
 
-      cuda_available?(input) ->
-        record_dispatch(:mingru_block, :nif, input)
-        mingru_block_fused(input, weights, h0, num_layers)
-
       true ->
         record_dispatch(:mingru_block, :fallback, input)
         mingru_block_fallback(input, weights, h0, num_layers)
@@ -5256,42 +4153,6 @@ defmodule Edifice.CUDA.FusedScan do
     Edifice.Block.run(:fused_mingru_block_scan, [input, weights, h0], output, fn inp, w, h ->
       mingru_block_fallback(inp, w, h, num_layers)
     end)
-  end
-
-  defp mingru_block_fused(input, weights, h0, num_layers) do
-    {batch, seq_len, hidden} = Nx.shape(input)
-    dtype = dtype_flag(input)
-    esize = elem_size(input)
-    ttype = tensor_type(input)
-
-    input_ptr = device_ptr(input)
-    weights_ptr = device_ptr(weights)
-    h0_ptr = device_ptr(h0)
-
-    case Edifice.CUDA.NIF.fused_mingru_block_scan(
-           input_ptr.address,
-           weights_ptr.address,
-           h0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           num_layers,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(input), client: :cuda, device_id: device_id_of(input)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused MinGRU block scan failed: #{reason}"
-    end
   end
 
   defp mingru_block_fallback(input, weights, h0, num_layers) do
@@ -5375,10 +4236,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:minlstm_block, :custom_call, input)
         minlstm_block_custom_call(input, weights, h0, num_layers)
 
-      cuda_available?(input) ->
-        record_dispatch(:minlstm_block, :nif, input)
-        minlstm_block_fused(input, weights, h0, num_layers)
-
       true ->
         record_dispatch(:minlstm_block, :fallback, input)
         minlstm_block_fallback(input, weights, h0, num_layers)
@@ -5393,42 +4250,6 @@ defmodule Edifice.CUDA.FusedScan do
     Edifice.Block.run(:fused_minlstm_block_scan, [input, weights, h0], output, fn inp, w, h ->
       minlstm_block_fallback(inp, w, h, num_layers)
     end)
-  end
-
-  defp minlstm_block_fused(input, weights, h0, num_layers) do
-    {batch, seq_len, hidden} = Nx.shape(input)
-    dtype = dtype_flag(input)
-    esize = elem_size(input)
-    ttype = tensor_type(input)
-
-    input_ptr = device_ptr(input)
-    weights_ptr = device_ptr(weights)
-    h0_ptr = device_ptr(h0)
-
-    case Edifice.CUDA.NIF.fused_minlstm_block_scan(
-           input_ptr.address,
-           weights_ptr.address,
-           h0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           num_layers,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(input), client: :cuda, device_id: device_id_of(input)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused MinLSTM block scan failed: #{reason}"
-    end
   end
 
   defp minlstm_block_fallback(input, weights, h0, num_layers) do
@@ -5524,10 +4345,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:linear_block, :custom_call, input)
         linear_block_custom_call(input, weights, h0, num_layers)
 
-      cuda_available?(input) ->
-        record_dispatch(:linear_block, :nif, input)
-        linear_block_fused(input, weights, h0, num_layers)
-
       true ->
         record_dispatch(:linear_block, :fallback, input)
         linear_block_fallback(input, weights, h0, num_layers)
@@ -5542,42 +4359,6 @@ defmodule Edifice.CUDA.FusedScan do
     Edifice.Block.run(:fused_linear_block_scan, [input, weights, h0], output, fn inp, w, h ->
       linear_block_fallback(inp, w, h, num_layers)
     end)
-  end
-
-  defp linear_block_fused(input, weights, h0, num_layers) do
-    {batch, seq_len, hidden} = Nx.shape(input)
-    dtype = dtype_flag(input)
-    esize = elem_size(input)
-    ttype = tensor_type(input)
-
-    input_ptr = device_ptr(input)
-    weights_ptr = device_ptr(weights)
-    h0_ptr = device_ptr(h0)
-
-    case Edifice.CUDA.NIF.fused_linear_block_scan(
-           input_ptr.address,
-           weights_ptr.address,
-           h0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           num_layers,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(input), client: :cuda, device_id: device_id_of(input)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused linear block scan failed: #{reason}"
-    end
   end
 
   defp linear_block_fallback(input, weights, h0, num_layers) do
@@ -5660,10 +4441,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:lstm_block, :custom_call, input)
         lstm_block_custom_call(input, weights, h0, c0, num_layers)
 
-      cuda_available?(input) ->
-        record_dispatch(:lstm_block, :nif, input)
-        lstm_block_fused(input, weights, h0, c0, num_layers)
-
       true ->
         record_dispatch(:lstm_block, :fallback, input)
         lstm_block_fallback(input, weights, h0, c0, num_layers)
@@ -5678,44 +4455,6 @@ defmodule Edifice.CUDA.FusedScan do
     Edifice.Block.run(:fused_lstm_block_scan, [input, weights, h0, c0], output, fn inp, w, h, c ->
       lstm_block_fallback(inp, w, h, c, num_layers)
     end)
-  end
-
-  defp lstm_block_fused(input, weights, h0, c0, num_layers) do
-    {batch, seq_len, hidden} = Nx.shape(input)
-    dtype = dtype_flag(input)
-    esize = elem_size(input)
-    ttype = tensor_type(input)
-
-    input_ptr = device_ptr(input)
-    weights_ptr = device_ptr(weights)
-    h0_ptr = device_ptr(h0)
-    c0_ptr = device_ptr(c0)
-
-    case Edifice.CUDA.NIF.fused_lstm_block_scan(
-           input_ptr.address,
-           weights_ptr.address,
-           h0_ptr.address,
-           c0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           num_layers,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(input), client: :cuda, device_id: device_id_of(input)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused LSTM block scan failed: #{reason}"
-    end
   end
 
   defp lstm_block_fallback(input, weights, h0, c0, num_layers) do
@@ -5817,10 +4556,6 @@ defmodule Edifice.CUDA.FusedScan do
         record_dispatch(:gru_block, :custom_call, input)
         gru_block_custom_call(input, weights, h0, num_layers)
 
-      cuda_available?(input) ->
-        record_dispatch(:gru_block, :nif, input)
-        gru_block_fused(input, weights, h0, num_layers)
-
       true ->
         record_dispatch(:gru_block, :fallback, input)
         gru_block_fallback(input, weights, h0, num_layers)
@@ -5835,42 +4570,6 @@ defmodule Edifice.CUDA.FusedScan do
     Edifice.Block.run(:fused_gru_block_scan, [input, weights, h0], output, fn inp, w, h ->
       gru_block_fallback(inp, w, h, num_layers)
     end)
-  end
-
-  defp gru_block_fused(input, weights, h0, num_layers) do
-    {batch, seq_len, hidden} = Nx.shape(input)
-    dtype = dtype_flag(input)
-    esize = elem_size(input)
-    ttype = tensor_type(input)
-
-    input_ptr = device_ptr(input)
-    weights_ptr = device_ptr(weights)
-    h0_ptr = device_ptr(h0)
-
-    case Edifice.CUDA.NIF.fused_gru_block_scan(
-           input_ptr.address,
-           weights_ptr.address,
-           h0_ptr.address,
-           batch,
-           seq_len,
-           hidden,
-           num_layers,
-           dtype
-         ) do
-      {:ok, out_addr, gc_ref} ->
-        hold_gc_ref(out_addr, gc_ref)
-        out_bytes = batch * seq_len * hidden * esize
-
-        Nx.from_pointer(
-          {backend_for(input), client: :cuda, device_id: device_id_of(input)},
-          %Nx.Pointer{kind: :local, address: out_addr, data_size: out_bytes},
-          ttype,
-          {batch, seq_len, hidden}
-        )
-
-      {:error, reason} ->
-        raise "CUDA fused GRU block scan failed: #{reason}"
-    end
   end
 
   defp gru_block_fallback(input, weights, h0, num_layers) do
@@ -5956,70 +4655,16 @@ defmodule Edifice.CUDA.FusedScan do
   # GC reference tracking
   # ============================================================================
 
-  # Store a gc_ref in the process dictionary to prevent premature cudaFree.
-  # The NIF resource destructor calls cudaFree when the gc_ref is GC'd.
-  # We keep only the most recent ref per pointer address (a new allocation
-  # at the same address means the old one was already freed).
-  defp hold_gc_ref(ptr_addr, gc_ref) do
-    refs = Process.get(@gc_refs_key, %{})
-    Process.put(@gc_refs_key, Map.put(refs, ptr_addr, gc_ref))
-  end
-
   # ============================================================================
   # Backend detection
   # ============================================================================
-
-  defp cuda_available?(tensor) do
-    exla_cuda_backend?(tensor) and nif_loaded?()
-  end
-
-  # The NIF hands raw device pointers to CUDA kernels, so the tensor must
-  # live on the :cuda client — an EXLA host-client tensor would pass a CPU
-  # address through. Checked per tensor rather than per process so a host
-  # default client (e.g. the test suite) never reaches the NIF arm.
-  defp exla_cuda_backend?(tensor) do
-    exla_backend = Module.concat([EXLA, Backend])
-
-    tensor.data.__struct__ == exla_backend and
-      match?(%{buffer: %{client_name: :cuda}}, tensor.data)
-  rescue
-    _ -> false
-  end
-
-  # Device of the EXLA buffer backing `tensor` (same device as the inputs).
-  defp device_id_of(tensor), do: tensor.data.buffer.device_id
-
-  # Raw device address of an EXLA tensor, guaranteed to be READY.
-  #
-  # EXLA (PjRt) enqueues host->device copies from a thread pool and
-  # `Nx.to_pointer/2` returns the address without waiting for the buffer's
-  # definition event. The NIF launches on the legacy default stream and
-  # synchronizes the device first, but that cannot cover a copy that has not
-  # been enqueued yet — observed as run-to-run garbage/NaN in GRU H=512 and
-  # flash attention (kernel_matrix_gpu_test). A sized `DeviceBuffer.read`
-  # goes through PjRt's synchronous ToLiteral, which blocks the host until
-  # the buffer is defined, and copies only the first element back. (Running
-  # an executable on the tensor instead is NOT safe: it can donate the buffer
-  # out from under the pointer we are about to hand to the kernel.)
-  defp device_ptr(tensor) do
-    _ = apply(Module.concat([EXLA, DeviceBuffer]), :read, [tensor.data.buffer, elem_size(tensor)])
-    Nx.to_pointer(tensor, mode: :local)
-  end
-
-  defp backend_for(tensor) do
-    tensor.data.__struct__
-  end
-
-  # The NIF stubs exist whether or not priv/libedifice_cuda_nif.so loaded,
-  # so only the load flag is trustworthy (function_exported?/3 is not).
-  defp nif_loaded?, do: Edifice.CUDA.NIF.loaded?()
 
   @doc """
   Whether the in-graph custom-call tier is active for any op.
 
   Prefer `custom_call_available?/1`: the tier is only worth taking for
   ops that have a native handler (`Edifice.Block.native_ops/0`); for the
-  rest it compiles the pure fallback and would shadow the NIF arm.
+  rest it would only compile the pure fallback through `Nx.block`.
   """
   def custom_call_available? do
     custom_call_tier_enabled?()

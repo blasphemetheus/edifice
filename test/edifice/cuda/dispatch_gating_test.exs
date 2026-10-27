@@ -1,23 +1,22 @@
 defmodule Edifice.CUDA.DispatchGatingTest do
   @moduledoc """
-  Pins the tier-selection logic in `Edifice.CUDA.FusedScan`, `AutoTune`,
-  `Recurrent` and `Edifice.CUDA.NIF` without needing a GPU, the NIF
-  library or the FFI library.
+  Pins the tier-selection logic in `Edifice.CUDA.FusedScan`, `AutoTune` and
+  `Recurrent` without needing a GPU or the FFI library.
 
-  Three regressions this guards against (all shipped at one point):
+  Regressions this guards against:
 
   1. The custom-call tier was reported available for EVERY op whenever it
      was enabled, although only `Edifice.Block.native_ops/0` have handlers.
      The other ops were routed into `Nx.block` where the protocol returned
-     `:skip`, i.e. they silently ran the pure fallback and shadowed the NIF.
-  2. `function_exported?(Edifice.CUDA.NIF, :fused_mingru_scan, 7)` was used
-     as "NIF loaded": the stubs always exist, so it was always true.
-  3. `Recurrent` tested `fused_lstm_scan/7` against an arity-8 stub, so the
-     fused parameter layout could never be chosen through the NIF.
+     `:skip`, i.e. they silently compiled the pure fallback there.
+  2. The GRU/LSTM parameter layout used to follow "NIF library loaded",
+     probed through stubs that always existed. The NIF tier is gone
+     (2026-10-26); the layout now follows the EXLA CUDA target, with an
+     explicit override, so GPU-trained checkpoints keep loading.
   """
   use ExUnit.Case, async: false
 
-  alias Edifice.CUDA.{AutoTune, FusedScan, NIF}
+  alias Edifice.CUDA.{AutoTune, FusedScan}
 
   @kernels ~w(mingru minlstm elu_gru real_gru diag_linear liquid linear_scan
     delta_net_scan gated_delta_net_scan delta_product_scan slstm_scan lstm_scan
@@ -139,33 +138,32 @@ defmodule Edifice.CUDA.DispatchGatingTest do
     end
   end
 
-  describe "NIF load status" do
-    test "loaded?/0 reflects :erlang.load_nif, not the presence of the stubs" do
-      assert is_boolean(NIF.loaded?())
-      # The stubs are always exported; that was the broken probe.
-      assert function_exported?(NIF, :fused_mingru_scan, 7)
-      assert function_exported?(NIF, :fused_lstm_scan, 8)
-
-      so = Path.join(to_string(:code.priv_dir(:edifice)), "libedifice_cuda_nif.so")
-      unless File.exists?(so), do: refute(NIF.loaded?())
-    end
-  end
-
-  describe "Recurrent.fused_rnn_available?/1" do
-    test "LSTM has no custom-call handler, so only a loaded NIF can enable it" do
-      with_env([{"EDIFICE_FUSED_CUSTOM_CALL", "1"}], fn ->
-        assert Edifice.Recurrent.fused_rnn_available?(:lstm) == NIF.loaded?()
-      end)
-    end
-
-    test "GRU no longer has a custom-call handler, so it follows the NIF like LSTM" do
-      # Retired on 2026-10-26; enabling the tier must not flip the layout.
-      with_env([{"EDIFICE_FUSED_CUSTOM_CALL", "1"}], fn ->
-        assert Edifice.Recurrent.fused_rnn_available?(:gru) == NIF.loaded?()
+  describe "Recurrent.fused_rnn_available?/1 (parameter layout)" do
+    # Neither scan has a custom-call handler, so the layout follows the
+    # CUDA-target rule that replaced "NIF loaded" on 2026-10-26: GPU
+    # machines keep the fused layout their checkpoints were trained with.
+    test "follows the EXLA CUDA target when no override is set" do
+      with_env([{"EDIFICE_FUSED_RNN_LAYOUT", nil}, {"EXLA_TARGET", "cuda"}], fn ->
+        assert Edifice.Recurrent.fused_rnn_available?(:gru) == Code.ensure_loaded?(EXLA)
+        assert Edifice.Recurrent.fused_rnn_available?(:lstm) == Code.ensure_loaded?(EXLA)
       end)
 
-      with_env([{"EDIFICE_FUSED_CUSTOM_CALL", nil}], fn ->
-        assert Edifice.Recurrent.fused_rnn_available?(:gru) == NIF.loaded?()
+      with_env(
+        [{"EDIFICE_FUSED_RNN_LAYOUT", nil}, {"EXLA_TARGET", "host"}, {"XLA_TARGET", nil}],
+        fn ->
+          refute Edifice.Recurrent.fused_rnn_available?(:gru)
+          refute Edifice.Recurrent.fused_rnn_available?(:lstm)
+        end
+      )
+    end
+
+    test "EDIFICE_FUSED_RNN_LAYOUT forces either layout" do
+      with_env([{"EDIFICE_FUSED_RNN_LAYOUT", "axon"}, {"EXLA_TARGET", "cuda"}], fn ->
+        refute Edifice.Recurrent.fused_rnn_available?(:gru)
+      end)
+
+      with_env([{"EDIFICE_FUSED_RNN_LAYOUT", "fused"}, {"EXLA_TARGET", "host"}], fn ->
+        assert Edifice.Recurrent.fused_rnn_available?(:lstm)
       end)
     end
 

@@ -406,11 +406,7 @@ defmodule MeleeArchComparison do
         function_exported?(Edifice.CUDA.FusedScan, :custom_call_available?, 0) and
         Edifice.CUDA.FusedScan.custom_call_available?()
 
-    nif =
-      Code.ensure_loaded?(Edifice.CUDA.NIF) and
-        function_exported?(Edifice.CUDA.NIF, :fused_mingru_scan, 7)
-
-    IO.puts("  Dispatch: custom_call=#{cc}, NIF=#{nif}")
+    IO.puts("  Dispatch: custom_call=#{cc}")
     IO.puts("")
 
     IO.puts("  Phase 0: GPU warmup...")

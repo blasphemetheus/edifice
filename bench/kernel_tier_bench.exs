@@ -10,10 +10,9 @@
 #              (what every jitted model gets without a native handler)
 #   ffi        the CUDA kernel as an XLA custom call inside the same jit
 #              (`EDIFICE_FUSED_CUSTOM_CALL=1`, `libedifice_xla.so`)
-#   nif        the same kernel through the C NIF on eager EXLA tensors
-#              (forward only; gradients run inside jit where the NIF cannot)
 #   eager_xla  the fallback evaluated op by op on eager EXLA tensors
-#              (the NIF's only competitor when nothing is jitted)
+#              (what un-jitted code pays; the NIF tier that used to sit
+#              between it and `ffi` was removed on 2026-10-26)
 #
 # Reports first-call time (trace + XLA compile), steady-state median and
 # min, and the max abs difference of each tier from the xla tier.
@@ -182,7 +181,6 @@ defmodule KernelTierBench do
     :ok
   end
 
-  defp assert_nif_dispatch(kernel, shape), do: assert_dispatch(kernel, :nif, shape)
 
   defp rand(key, shape, lo, hi) do
     {t, key} = Nx.Random.uniform(key, lo, hi, shape: shape, type: {:f, 32})
@@ -230,13 +228,6 @@ defmodule KernelTierBench do
       end,
       xla_hp: fn ->
         forced_fallback(fn -> measure(fn -> fwd_hp.(wx, r, h0, bhn) end, @iters) end)
-      end,
-      nif: fn ->
-        res =
-          forced_fallback(fn -> measure(fn -> FusedScan.gru_scan(wx, r, h0, bhn) end, @iters) end)
-
-        assert_nif_dispatch(:gru_scan, {b, t, 3 * h})
-        res
       end,
       eager_xla: fn ->
         forced_fallback(fn -> measure(fn -> fwd_eager.(wx, r, h0, bhn) end, @eager_iters) end)
@@ -308,15 +299,6 @@ defmodule KernelTierBench do
         forced_fallback(fn -> measure(fn -> fwd_hp.(x, dt, a, bm, cm) end, @iters) end)
       end,
       ffi: fn -> measure(fn -> fwd_ffi.(x, dt, a, bm, cm) end, @iters) end,
-      nif: fn ->
-        res =
-          forced_fallback(fn ->
-            measure(fn -> FusedScan.selective_scan(x, dt, a, bm, cm) end, @iters)
-          end)
-
-        assert_nif_dispatch(:selective_scan, {b, t, h})
-        res
-      end,
       eager_xla: fn ->
         forced_fallback(fn -> measure(fn -> fwd_eager.(x, dt, a, bm, cm) end, @eager_iters) end)
       end,
@@ -488,16 +470,16 @@ defmodule KernelTierBench do
 
   defp speedup_table(title, rows) do
     header =
-      "| config | ffi vs xla (fwd) | ffi vs xla_hp (fwd) | nif vs xla (fwd) | nif vs eager_xla | ffi vs xla (grad) | ffi vs xla_hp (grad) |"
+      "| config | ffi vs xla (fwd) | ffi vs xla_hp (fwd) | xla vs eager_xla | ffi vs xla (grad) | ffi vs xla_hp (grad) |"
 
-    sep = "|---|---:|---:|---:|---:|---:|---:|"
+    sep = "|---|---:|---:|---:|---:|---:|"
 
     body =
       Enum.map_join(rows, "\n", fn {label, res} ->
         med = fn tier -> res[tier] && res[tier].median end
 
         "| #{label} | #{speedup(med.(:xla), med.(:ffi))} | #{speedup(med.(:xla_hp), med.(:ffi))} | " <>
-          "#{speedup(med.(:xla), med.(:nif))} | #{speedup(med.(:eager_xla), med.(:nif))} | " <>
+          "#{speedup(med.(:eager_xla), med.(:xla))} | " <>
           "#{speedup(med.(:xla_grad), med.(:ffi_grad))} | #{speedup(med.(:xla_hp_grad), med.(:ffi_grad))} |"
       end)
 
@@ -519,7 +501,6 @@ defmodule KernelTierBench do
     date = NaiveDateTime.local_now() |> NaiveDateTime.to_date() |> Date.to_iso8601()
     IO.puts("Kernel tier benchmark — #{gpu_name()} — nx #{version(:nx)} exla #{version(:exla)}")
     IO.puts("iters=#{@iters} warmup=#{@warmup} quick=#{@quick}")
-    unless Edifice.CUDA.NIF.loaded?(), do: raise("NIF not loaded; build with make -C c_src")
     Edifice.CUDA.Library.ensure_loaded!()
     Edifice.CUDA.AutoTuneProfiler.start()
 
@@ -546,7 +527,7 @@ defmodule KernelTierBench do
         {label, model_case(arch, cfg)}
       end
 
-    op_tiers = [:xla, :xla_hp, :ffi, :nif, :eager_xla, :xla_grad, :xla_hp_grad, :ffi_grad]
+    op_tiers = [:xla, :xla_hp, :ffi, :eager_xla, :xla_grad, :xla_hp_grad, :ffi_grad]
     model_tiers = [:xla, :xla_hp, :ffi, :xla_grad, :xla_hp_grad, :ffi_grad]
 
     md = """
@@ -561,7 +542,6 @@ defmodule KernelTierBench do
     Tiers: `xla` = pure-Nx fallback compiled in-graph (EXLA default precision,
     TF32 matmuls); `xla_hp` = the same at `precision: :highest` (exact f32, like
     the kernels); `ffi` = CUDA kernel as an XLA custom call in the same graph;
-    `nif` = same kernel through the C NIF on eager tensors (forward only);
     `eager_xla` = fallback op by op on eager tensors under `Nx.Defn.Evaluator`.
     `*_grad` = forward + gradient of a sum-of-squares loss (default precision).
 

@@ -517,18 +517,38 @@ defmodule Edifice.Recurrent do
     Axon.container(%{output: output_seq, hidden: final_hidden}, name: "carry_backbone")
   end
 
-  @doc false
+  @doc """
+  Whether GRU/LSTM layers use the "fused" parameter layout (`<name>_input_proj`
+  dense + `<name>_fused_scan.<name>_recurrent_kernel`, scanned by
+  `Edifice.CUDA.FusedScan`) instead of `Axon.gru`/`Axon.lstm`.
+
+  The layout is chosen when the op has a custom-call handler, or when EXLA
+  was built for CUDA (`EXLA_TARGET=cuda` or `XLA_TARGET=cuda*`). The second
+  rule keeps checkpoints stable: before 2026-10-26 the fused layout was taken
+  wherever the CUDA NIF library had loaded, which in practice meant every GPU
+  machine, and checkpoints trained there carry these parameter names. The
+  scan itself compiles the pure-Nx recurrence in-graph (the GRU custom-call
+  handler was retired as slower than that fallback).
+
+  Set `EDIFICE_FUSED_RNN_LAYOUT=axon` or `=fused` to force either layout.
+  """
   def fused_rnn_available?(cell_type) when cell_type in [:lstm, :gru] do
-    # Per-op: neither scan has a custom-call handler today (the GRU one
-    # was retired on 2026-10-26 as slower than the XLA fallback), so the
-    # first term is false and the fused parameter layout is chosen only
-    # where the NIF library loaded. The NIF flag is the real load status
-    # (the stubs always exist, so function_exported?/3 was never a test).
-    Edifice.CUDA.FusedScan.custom_call_available?(:"#{cell_type}_scan") or
-      Edifice.CUDA.NIF.loaded?()
+    case System.get_env("EDIFICE_FUSED_RNN_LAYOUT") do
+      "axon" -> false
+      "fused" -> true
+      _ -> Edifice.CUDA.FusedScan.custom_call_available?(:"#{cell_type}_scan") or cuda_target?()
+    end
   end
 
   def fused_rnn_available?(_), do: false
+
+  # EXLA compiled for a CUDA target. Side-effect free: creating the EXLA
+  # :cuda client would initialise the GPU and reserve memory at model build.
+  defp cuda_target? do
+    Code.ensure_loaded?(EXLA) and
+      (System.get_env("EXLA_TARGET") == "cuda" or
+         String.starts_with?(System.get_env("XLA_TARGET", ""), "cuda"))
+  end
 
   # ============================================================================
   # Fused Block Scan (multi-layer kernel dispatch)

@@ -3,7 +3,7 @@ defmodule Edifice.CUDA.AutoTuneProfiler do
   Profiling and runtime feedback for AutoTune kernel dispatch.
 
   Tracks which kernels are dispatched, how often, via which path (fused
-  custom call, NIF, or fallback), and with what input shapes. Reports
+  custom call or fallback), and with what input shapes. Reports
   coverage gaps where AutoTune benchmarks don't match actual training shapes.
 
   ## Quick Start
@@ -85,7 +85,7 @@ defmodule Edifice.CUDA.AutoTuneProfiler do
   ## Parameters
 
     * `kernel` - Kernel name atom (e.g., `:mingru`)
-    * `path` - Dispatch path: `:custom_call`, `:nif`, or `:fallback`
+    * `path` - Dispatch path: `:custom_call` or `:fallback`
     * `shape` - Input tensor shape tuple
     * `dtype` - Input tensor type
   """

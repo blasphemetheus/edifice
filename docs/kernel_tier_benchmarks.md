@@ -139,11 +139,16 @@ through `EXLA.CustomCall`; see the upstream notes below.
 
 ## What this means for the kernel work
 
+Both structural changes below landed on 2026-10-26, right after this run.
+
 - Keep the FFI tier for selective scan and route the GRU scan to the XLA
-  fallback by default. Do not port the GRU backward kernel to FFI; it would
-  make training slower.
-- Delete the NIF tier and the C bridge. Nothing it runs is faster than the
-  jitted fallback, and gradients never reached it.
+  fallback. Done: the GRU handler is retired; `Edifice.Block.native_ops/0`
+  lists only the selective-scan pair. The GRU backward kernel was not ported
+  to FFI; it would have made training slower.
+- Delete the NIF tier and the C bridge. Done: nothing it ran was faster than
+  the jitted fallback, and gradients never reached it. The sources are on
+  the `archive/cuda-nif-kernels` branch, and the `nif` column in the tables
+  above can no longer be reproduced from `main`.
 - The remaining custom-call value is compile time. If that matters for the
   development loop, a `while`-loop fallback (bounded graph size) is the
   cheaper way to get it than more kernels; the Stateful replay path already
@@ -158,7 +163,7 @@ through `EXLA.CustomCall`; see the upstream notes below.
 ## Reproduce
 
 ```bash
-scripts/check_cuda_kernels.sh                 # builds kernels, NIF, FFI library
+scripts/check_cuda_kernels.sh                 # builds the FFI library (the NIF tier is gone)
 EDIFICE_FUSED_CUSTOM_CALL=1 EDIFICE_AUTOTUNE=0 \
   BENCH_OUT=bench/results/kernel_tiers_$(date +%F) \
   mix run bench/kernel_tier_bench.exs          # ~25 min; BENCH_QUICK=1 for ~3

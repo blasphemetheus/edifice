@@ -96,24 +96,27 @@ First run builds a manifest and runs everything. Subsequent runs are fast.
 
 ### CUDA kernels (GPU host only)
 
-The fused CUDA kernels have three execution tiers (see the header of
-`lib/edifice/cuda/fused_scan.ex`): the EXLA custom-call tier, the NIF bridge
-and the pure-Nx fallback. Hosted CI exercises only the fallback. On a machine
-with a GPU and `nvcc`:
+The fused scans have two execution tiers (see the header of
+`lib/edifice/cuda/fused_scan.ex`): the EXLA custom-call tier, which today
+covers the Mamba selective scan, and the pure-Nx fallback compiled in-graph.
+Hosted CI exercises only the fallback. On a machine with a GPU and `nvcc`:
 
 ```bash
-scripts/check_cuda_kernels.sh          # build kernels, NIF, FFI library; syntax-check every .cu
-scripts/check_cuda_kernels.sh --test   # ... then run the GPU parity matrix
+scripts/check_cuda_kernels.sh          # syntax-check the sources, build the FFI library
+scripts/check_cuda_kernels.sh --test   # ... then run the GPU parity tests
 EDIFICE_TEST_CLIENT=cuda mix test --only cuda_kernels   # the matrix alone
 ```
 
-`test/edifice/cuda/kernel_matrix_gpu_test.exs` runs every forward kernel
-(including the five block scans) through the NIF against the Elixir fallback,
-the custom-call handler (selective scan) forward and backward against the
-tier forced off, the 2-layer Mamba model at batch 4 through the tier, and the
-simple scans in bf16. `dispatch_gating_test.exs`
-pins the tier-selection rules on any machine. `.github/workflows/cuda.yml`
-runs the script weekly on a self-hosted runner labelled `gpu`.
+`test/edifice/cuda/kernel_matrix_gpu_test.exs` runs the selective-scan
+handler forward and backward against the tier forced off, checks that the
+GRU scan ignores the tier, and runs the 2-layer Mamba and GRU models at
+batch 4 through the tier. `dispatch_gating_test.exs` pins the
+tier-selection rules on any machine. `.github/workflows/cuda.yml` runs the
+script weekly on a self-hosted runner labelled `gpu`.
+
+The NIF bridge that ran 47 kernels on eager tensors was removed on
+2026-10-26 (`docs/kernel_tier_benchmarks.md`); its sources are on the
+`archive/cuda-nif-kernels` branch.
 
 ### EXLA client
 

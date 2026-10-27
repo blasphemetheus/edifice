@@ -1,5 +1,11 @@
 # CUDA NIF Bridge: Results & Lessons Learned
 
+> **Historical.** The NIF bridge described here was removed on 2026-10-26
+> after the kernel tier benchmark ([kernel_tier_benchmarks.md](kernel_tier_benchmarks.md))
+> showed it slower than the same kernels as XLA custom calls and far slower
+> than the XLA-compiled fallback. The C bridge, the NIF module and the kernel
+> sources live on the `archive/cuda-nif-kernels` branch.
+
 ## Summary
 
 Phase 1 of the CUDA kernel integration is complete. Fused scan kernels for

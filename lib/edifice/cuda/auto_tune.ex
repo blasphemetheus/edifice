@@ -75,8 +75,8 @@ defmodule Edifice.CUDA.AutoTune do
       System.get_env("EDIFICE_AUTOTUNE") == "fallback" ->
         false
 
-      # Per-op: ops without a native handler must fall through to the NIF
-      # arm (or the fallback) instead of compiling the fallback in-graph.
+      # Per-op: ops without a native handler take the plain fallback instead
+      # of compiling it through Nx.block.
       not FusedScan.custom_call_available?(kernel_name) ->
         false
 

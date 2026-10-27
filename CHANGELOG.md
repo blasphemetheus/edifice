@@ -97,7 +97,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Edifice.Interpretability.Attribution`** (ported from exphil):
   gradient×input saliency + dimension-group shares.
 
+### Removed
+
+- **The CUDA NIF tier.** `Edifice.CUDA.NIF`, the C bridge in `c_src/`, the
+  f32 and bf16 kernel libraries (`priv/cuda/libedifice_cuda_kernels*.so`) and
+  45 of the 47 kernel sources in `native/cuda/` are gone, together with the
+  NIF arm of every `Edifice.CUDA.FusedScan` dispatcher and the standalone
+  test and bench harnesses. The tier ran kernels on eager EXLA tensors only;
+  the kernel tier benchmark (`docs/kernel_tier_benchmarks.md`) measured it
+  1.3-3x slower than the same kernel as an XLA custom call and 3-10x slower
+  than the XLA-compiled fallback, and gradients never reached it. The
+  sources are preserved on the `archive/cuda-nif-kernels` branch.
+  `scripts/check_cuda_kernels.sh` and the GPU workflow now build and test
+  only the FFI library; `make -C native/cuda` has `ffi`, `test-compile`,
+  `clean` and `info` targets.
+
+- `bench/nif_overhead_profile.exs` (measured the removed bridge).
+
 ### Changed
+
+- **GRU/LSTM parameter layout follows the EXLA target, not the NIF.**
+  `Edifice.Recurrent.fused_rnn_available?/1` used "NIF library loaded" to
+  decide between the fused layout (`<name>_input_proj` +
+  `<name>_fused_scan.<name>_recurrent_kernel`) and `Axon.gru`/`Axon.lstm`,
+  which in practice meant GPU machines got the fused layout and CPU machines
+  did not. It now uses "EXLA built for CUDA" (`EXLA_TARGET=cuda` or
+  `XLA_TARGET=cuda*`), so existing checkpoints keep loading on the machines
+  that produced them. `EDIFICE_FUSED_RNN_LAYOUT=axon|fused` forces either
+  layout. The scan runs the pure-Nx recurrence compiled in-graph either way.
 
 - **GRU scan no longer has a CUDA custom-call handler.** The kernel tier
   benchmark (`docs/kernel_tier_benchmarks.md`) showed the fused GRU kernel

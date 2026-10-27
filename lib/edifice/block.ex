@@ -50,7 +50,7 @@ defmodule Edifice.Block do
   The `FusedOp` ops that the `EXLA.CustomCall` implementation can lower
   to a native handler (`native/cuda/Makefile` `FFI_SOURCES`). Every
   other op compiles its pure fallback in-graph even when the native tier
-  is enabled, so dispatch must not route them here ahead of the NIF.
+  is enabled, so dispatch only routes these ops here.
 
   The GRU scan had a handler until 2026-10-26. It was removed because the
   kernel is slower than XLA's compiled fallback at every size measured
