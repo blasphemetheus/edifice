@@ -343,6 +343,43 @@ Saved evidence under `bench/results/pretrained_2026-10-26/`:
 `gelu_cpu_xla011.log`, `pretrained_test_xla011.log`, and
 `xla011_bridge_build.log`.
 
+### Adopting the upstream dependency update
+
+Edifice now pins both Nx and EXLA to upstream commit
+`171dcad658ae06f726aaacf785df2989eca047e0`, which integrates XLA 0.11 support.
+The matching Nx revision includes the ordering information that this EXLA
+revision uses for host callbacks. EXLA remains optional, and
+`EDIFICE_LOCAL_NX=1` still selects the sibling development checkout.
+XLA itself comes from its released Hex package and official prebuilt archives;
+the diagnostic `XLA_ARCHIVE_PATH` override is no longer needed.
+
+The development shell and CI select Clang to compile EXLA's native bridge.
+After updating dependencies, rebuild that bridge with
+`EXLA_FORCE_REBUILD=true mix deps.compile exla --force` if an older bridge was
+already compiled. Do this only after processes using that dependency tree have
+stopped, or use separate `MIX_DEPS_PATH` and `MIX_BUILD_PATH` directories.
+
+The optional-EXLA consumer check now understands sparse Git checkouts and
+isolated dependency directories. The small `GeluBackendTest` guards the exact
+large-input behavior that exposed the upstream bug, without downloading model
+weights. The Whisper reference test retains its original tolerance and remains
+a separate outstanding numerical issue.
+
+Validation used the actual pinned Git sources and Hex XLA 0.11.0, with no archive
+override or local patches, in `/tmp/edifice-upstream-deps` and
+`/tmp/edifice-upstream-build`. The new GELU regression, pretrained mapping
+regressions, Whisper unit tests, recurrent replay, and sharding tests passed:
+39 tests, zero failures. Sharding used two virtual CPU devices. The optional
+consumer compiled and ran on BinaryBackend without EXLA. Compilation with
+warnings treated as errors, formatting, and the unused-lock-entry check passed.
+
+The five external pretrained comparisons still produce four passes and the
+known Whisper failure (maximum 0.00017929, mean 0.0000019369). The test was not
+relaxed or skipped. GPU validation was deferred because another GPU job was
+active; this commit does not update ExPhil's checkout or dependencies.
+Evidence: `upstream_dependency_tests.log`, `upstream_dependency_pretrained.log`,
+and `upstream_dependency_optional.log` under `bench/results/pretrained_2026-10-26/`.
+
 References: [tch-rs](https://github.com/LaurentMazare/tch-rs),
 [Whisper implementation](https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/models/whisper/modeling_whisper.py).
 

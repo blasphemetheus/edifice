@@ -1,0 +1,28 @@
+• Running devenv:files:cleanup
+• Running devenv:python:virtualenv
+✓ Running devenv:files:cleanup in 5.57ms
+✓ Running devenv:python:virtualenv in 9.52ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 4.55ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 440ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+Compiling 358 files (.ex)
+Generated edifice app
+Running ExUnit with seed: 963511, max_cases: 8
+Excluding tags: [:slow, :integration, :external, :known_issue]
+Including tags: [:exla_only]
+
+.............................
+20:31:53.821 [warning] Module contains sdy shardings or meshes in frontend_attributes even when HloShardingV3 is enabled. This is probably due to stale model export, try re-exporting the model on HEAD (with HloShardingV3 enabled). Disabling HloShardingV3 here to prevent conflicts during Shardy import
+..
+20:31:53.844 [warning] Module contains sdy shardings or meshes in frontend_attributes even when HloShardingV3 is enabled. This is probably due to stale model export, try re-exporting the model on HEAD (with HloShardingV3 enabled). Disabling HloShardingV3 here to prevent conflicts during Shardy import
+...
+20:31:53.864 [warning] Module contains sdy shardings or meshes in frontend_attributes even when HloShardingV3 is enabled. This is probably due to stale model export, try re-exporting the model on HEAD (with HloShardingV3 enabled). Disabling HloShardingV3 here to prevent conflicts during Shardy import
+...
+20:31:53.884 [warning] Module contains sdy shardings or meshes in frontend_attributes even when HloShardingV3 is enabled. This is probably due to stale model export, try re-exporting the model on HEAD (with HloShardingV3 enabled). Disabling HloShardingV3 here to prevent conflicts during Shardy import
+.
+20:31:53.905 [warning] Module contains sdy shardings or meshes in frontend_attributes even when HloShardingV3 is enabled. This is probably due to stale model export, try re-exporting the model on HEAD (with HloShardingV3 enabled). Disabling HloShardingV3 here to prevent conflicts during Shardy import
+.
+Finished in 4.9 seconds (4.8s async, 0.1s sync)
+39 tests, 0 failures

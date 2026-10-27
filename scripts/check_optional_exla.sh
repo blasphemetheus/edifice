@@ -3,6 +3,7 @@
 # Run after mix deps.get. Path overrides reuse those sources without network access.
 set -euo pipefail
 export EDIFICE_SOURCE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export EDIFICE_DEPS_ROOT="${MIX_DEPS_PATH:-$EDIFICE_SOURCE_ROOT/deps}"
 consumer=$(mktemp -d)
 trap 'rm -rf "$consumer"' EXIT
 cat > "$consumer/mix.exs" <<'ELIXIR'
@@ -10,8 +11,12 @@ defmodule OptionalExlaConsumer.MixProject do
   use Mix.Project
   def project do
     root = System.fetch_env!("EDIFICE_SOURCE_ROOT")
+    deps_root = Path.expand(System.fetch_env!("EDIFICE_DEPS_ROOT"), root)
     required = for app <- [:nx, :axon, :polaris, :jason, :complex, :telemetry] do
-      {app, path: Path.join([root, "deps", Atom.to_string(app)]), override: true}
+      path = Path.join(deps_root, Atom.to_string(app))
+      # Git dependencies checked out sparsely keep the monorepo subdirectory.
+      path = if File.exists?(Path.join(path, "mix.exs")), do: path, else: Path.join(path, Atom.to_string(app))
+      {app, path: path, override: true}
     end
     [app: :optional_exla_consumer, version: "0.1.0",
      deps: [{:edifice, path: root} | required]]

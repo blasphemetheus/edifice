@@ -10,6 +10,7 @@ permissions:
   contents: read
 
 env:
+  CXX: clang++
   MIX_ENV: test
   ELIXIR_VERSION: "1.18"
   OTP_VERSION: "27"

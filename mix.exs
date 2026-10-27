@@ -3,6 +3,7 @@ defmodule Edifice.MixProject do
 
   @version "0.2.0"
   @source_url "https://github.com/blasphemetheus/edifice"
+  @nx_revision "171dcad658ae06f726aaacf785df2989eca047e0"
 
   def project do
     [
@@ -44,7 +45,7 @@ defmodule Edifice.MixProject do
       # ML Core
       if(local_nx?,
         do: {:nx, path: "../nx/nx", override: true},
-        else: {:nx, "~> 1.0"}
+        else: {:nx, github: "elixir-nx/nx", ref: @nx_revision, sparse: "nx", override: true}
       ),
       {:axon, "~> 0.9"},
       {:polaris, "~> 0.2"},
@@ -55,7 +56,7 @@ defmodule Edifice.MixProject do
       # GPU Backend
       if(local_nx?,
         do: {:exla, path: "../nx/exla", optional: true},
-        else: {:exla, "~> 1.0", optional: true}
+        else: {:exla, github: "elixir-nx/nx", ref: @nx_revision, sparse: "exla", optional: true}
       ),
 
       # Pretrained weight loading (optional)
