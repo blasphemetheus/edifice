@@ -32,8 +32,7 @@ GPU_ARCH ?= sm_75
 # Keep objects separate from the standalone C ABI and from other GPU targets.
 XLA_EXTENSION_DIR ?= $(EDIFICE_ROOT)/deps/exla/cache/xla_extension
 FFI_DIR ?= $(OBJ_DIR)/ffi/$(GPU_ARCH)
-FFI_SOURCES := fused_gru_scan.cu fused_gru_scan_backward.cu \
-               fused_selective_scan.cu fused_selective_scan_backward.cu
+FFI_SOURCES := fused_selective_scan.cu fused_selective_scan_backward.cu
 FFI_OBJECTS := $(patsubst %.cu,$(FFI_DIR)/%.o,$(FFI_SOURCES))
 FFI_TARGET := $(BUILD_DIR)/libedifice_xla.so
 

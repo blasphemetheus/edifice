@@ -58,9 +58,9 @@ The development project installs optional dependencies for testing. To check the
 consumer configuration without EXLA, run `bash scripts/check_optional_exla.sh`
 after `mix deps.get`.
 
-For native fused GRU and Mamba selective scans, build Edifice's separate FFI
-library with nvcc and an EXLA build that exposes `EXLA.CustomCall` and
-the EXLA NIF dynamic-library loader (`load_dylib`):
+For the native Mamba selective scan, build Edifice's separate FFI library
+with nvcc and an EXLA build that exposes `EXLA.CustomCall` and the EXLA
+dynamic-library loader (`EXLA.load_dylib/1`):
 
 ```bash
 devenv shell -- mix edifice.cuda.build --arch sm_120  # RTX 5090; choose your GPU target
@@ -70,8 +70,11 @@ devenv shell -- env EDIFICE_FUSED_CUSTOM_CALL=1 EDIFICE_AUTOTUNE=0 \
 
 The build uses the installed EXLA dependency's XLA headers and library without
 modifying EXLA. The loader registers the handlers once per VM, before compiling
-a supported CUDA call. Only f32 GRU (hidden ≤ 1024; backward sequence ≤ 256)
-and selective scan (state size ≤ 32) are enabled; other calls use Nx fallbacks.
+a supported CUDA call. Only the f32 selective scan (state size ≤ 32) is
+enabled; every other fused op uses its Nx fallback. The kernel pays off at
+batch sizes above a handful (3-5x inside Mamba at batch 32, a wash at batch 1);
+see `docs/kernel_tier_benchmarks.md` for the measurements and for why the GRU
+handler was retired.
 The flag is opt-in, and a missing library gives a build instruction. Restart
 running VMs after rebuilding kernels. Rebuild after changing XLA versions.
 For a separately installed library set `EDIFICE_CUDA_LIBRARY` to its absolute

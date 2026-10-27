@@ -20,9 +20,10 @@ defmodule Edifice.CUDA.KernelMatrixGpuTest do
     fallback). Kernel and fallback are both sequential f32, so the budget is
     tight.
   * **Custom-call tier** (`libedifice_xla.so` through `EXLA.load_dylib/1`):
-    the ops in `Edifice.Block.native_ops/0`, forward and gradients, compiled
-    by EXLA with the tier on, against the same code compiled with the tier
-    forced off.
+    the ops in `Edifice.Block.native_ops/0` (selective scan forward and
+    backward), compiled by EXLA with the tier on, against the same code
+    compiled with the tier forced off, plus the 2-layer Mamba and GRU models
+    at batch 4.
   * **bf16**: the simple scans through the bf16 kernel library, against the
     f32 reference with a bf16-sized budget.
 
@@ -189,51 +190,23 @@ defmodule Edifice.CUDA.KernelMatrixGpuTest do
       :ok
     end
 
-    for hidden <- [64, 512] do
-      test "gru_scan forward at H=#{hidden}" do
-        {wx, r, h0, bhn} = gru_inputs(unquote(hidden))
+    # The GRU handlers were retired on 2026-10-26 (slower than XLA's compiled
+    # fallback at every size; docs/kernel_tier_benchmarks.md). With the tier
+    # on, the GRU scan must still compile its fallback, so the GRU model case
+    # below is a no-regression check, not a kernel parity check.
+    test "gru_scan ignores the tier and compiles the fallback" do
+      {wx, r, h0, bhn} = gru_inputs(64)
 
-        fused =
-          Nx.Defn.jit(fn wx, r, h0, bhn -> FusedScan.gru_scan(wx, r, h0, bhn) end, compiler: EXLA)
+      fused =
+        Nx.Defn.jit(fn wx, r, h0, bhn -> FusedScan.gru_scan(wx, r, h0, bhn) end, compiler: EXLA)
 
-        ref =
-          Nx.Defn.jit(fn wx, r, h0, bhn -> FusedScan.gru_scan(wx, r, h0, bhn) end, compiler: EXLA)
+      ref =
+        Nx.Defn.jit(fn wx, r, h0, bhn -> FusedScan.gru_scan(wx, r, h0, bhn) end, compiler: EXLA)
 
-        got = fused.(wx, r, h0, bhn) |> Nx.backend_copy(Nx.BinaryBackend)
-
-        want =
-          forced_fallback(fn -> ref.(wx, r, h0, bhn) end) |> Nx.backend_copy(Nx.BinaryBackend)
-
-        # XLA's compiled fallback drifts ~1e-3 through the recurrence (approximate
-        # GPU transcendentals); the kernel itself is ~1e-6 from an f64 truth.
-        assert_close(got, want, atol: 5.0e-3, rtol: 1.0e-3)
-      end
-
-      test "gru_scan gradients at H=#{hidden}" do
-        {wx, r, h0, bhn} = gru_inputs(unquote(hidden))
-
-        grad_fused = fn wx, r, bhn, h0 ->
-          Nx.Defn.grad({wx, r, bhn}, fn {wx, r, bhn} ->
-            FusedScan.gru_scan(wx, r, h0, bhn) |> Nx.pow(2) |> Nx.mean()
-          end)
-        end
-
-        grad_ref = fn wx, r, bhn, h0 ->
-          Nx.Defn.grad({wx, r, bhn}, fn {wx, r, bhn} ->
-            FusedScan.gru_scan(wx, r, h0, bhn) |> Nx.pow(2) |> Nx.mean()
-          end)
-        end
-
-        got = Nx.Defn.jit(grad_fused, compiler: EXLA).(wx, r, bhn, h0) |> copy_all()
-
-        want =
-          forced_fallback(fn -> Nx.Defn.jit(grad_ref, compiler: EXLA).(wx, r, bhn, h0) end)
-          |> copy_all()
-
-        for {g, w} <- Enum.zip(Tuple.to_list(got), Tuple.to_list(want)) do
-          assert_close(g, w, atol: 5.0e-4, rtol: 1.0e-3)
-        end
-      end
+      got = fused.(wx, r, h0, bhn) |> Nx.backend_copy(Nx.BinaryBackend)
+      want = forced_fallback(fn -> ref.(wx, r, h0, bhn) end) |> Nx.backend_copy(Nx.BinaryBackend)
+      assert_close(got, want, atol: 1.0e-6)
+      refute FusedScan.custom_call_available?(:gru_scan)
     end
 
     for state <- [8, 32] do
@@ -292,15 +265,11 @@ defmodule Edifice.CUDA.KernelMatrixGpuTest do
       bc = Nx.template({@b, @t, 16}, {:f, 32})
 
       operands = %{
-        fused_gru_scan: [f32, r, h0, bhn],
-        fused_gru_scan_backward: [f32, r, h0, bhn, x, x],
         fused_selective_scan: [x, x, a, bc, bc],
         fused_selective_scan_backward: [x, x, a, bc, bc, x]
       }
 
       outputs = %{
-        fused_gru_scan: x,
-        fused_gru_scan_backward: {f32, f32, h0},
         fused_selective_scan: x,
         fused_selective_scan_backward: {x, x, bc, bc}
       }
@@ -341,16 +310,26 @@ defmodule Edifice.CUDA.KernelMatrixGpuTest do
                EXLA.CustomCall.call(
                  %Edifice.Block.FusedOp{op: :fused_gru_scan},
                  nil,
-                 operands.fused_gru_scan,
+                 [f32, r, h0, bhn],
+                 client
+               )
+
+      assert :skip ==
+               EXLA.CustomCall.call(
+                 %Edifice.Block.FusedOp{op: :fused_selective_scan},
+                 nil,
+                 operands.fused_selective_scan,
                  %{platform: :host}
                )
     end
 
-    # Regression: inside a real model XLA assigned the GRU custom-call result
-    # a T-major layout (its consumer is a reduce over H plus a last-step
-    # slice), so the 2-layer GRU was off by ~7 at batch 32 while every
+    # Regression: inside a real model XLA assigned a custom-call result a
+    # T-major layout (its consumer was a reduce over H plus a last-step
+    # slice), so the 2-layer GRU model was off by ~7 at batch 32 while every
     # parameter-fed op-level case, and batch 1, matched. The layout pin in
-    # the Spec fixes it; this exercises the whole Axon graph at batch 4.
+    # the Spec fixes it; this exercises the whole Axon graph at batch 4. The
+    # GRU model stays in the loop as a no-regression check now that its
+    # scan always compiles the fallback.
     for arch <- [:gru, :mamba] do
       test "#{arch} 2-layer model at batch 4 matches the fallback, forward and gradients" do
         {b, t, h} = {4, 24, 64}

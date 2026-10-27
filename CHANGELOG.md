@@ -99,6 +99,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **GRU scan no longer has a CUDA custom-call handler.** The kernel tier
+  benchmark (`docs/kernel_tier_benchmarks.md`) showed the fused GRU kernel
+  3-10x slower forward and 10-50x slower backward than XLA's compiled
+  fallback on an RTX 5090 at every size, so `mix edifice.cuda.build` now
+  builds only the Mamba selective-scan handlers and
+  `Edifice.Block.native_ops/0` lists only those two ops. The GRU scan
+  compiles its pure-Nx recurrence in-graph whether or not
+  `EDIFICE_FUSED_CUSTOM_CALL=1` is set. Parameter layouts are unchanged.
+
 - **Nx 1.0 ecosystem.** Edifice now requires `nx ~> 1.0`, `axon ~> 0.9`,
   `polaris ~> 0.2`, and (optionally) `exla ~> 1.0`, `scholar ~> 0.5`,
   `safetensors ~> 0.2`. Consumers on the Nx 0.13 line should stay on Edifice

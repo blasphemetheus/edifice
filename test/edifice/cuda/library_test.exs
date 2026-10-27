@@ -28,9 +28,12 @@ defmodule Edifice.CUDA.LibraryTest do
 
   test "supported CUDA calls give an actionable error when the library is missing" do
     assert_raise RuntimeError, ~r/mix edifice.cuda.build/, fn ->
-      EXLA.CustomCall.call(%FusedOp{op: :fused_gru_scan}, nil, [Nx.template({1, 4, 24}, :f32)], %{
-        platform: :cuda
-      })
+      EXLA.CustomCall.call(
+        %FusedOp{op: :fused_selective_scan},
+        nil,
+        [Nx.template({1, 4, 8}, :f32), nil, Nx.template({8, 16}, :f32)],
+        %{platform: :cuda}
+      )
     end
   end
 
@@ -75,25 +78,11 @@ defmodule Edifice.CUDA.LibraryTest do
     System.put_env("EDIFICE_CUDA_LIBRARY", "linked")
     client = %{platform: :cuda}
     {b, t, h, s} = {2, 8, 16, 8}
-    wx = Nx.template({b, t, 3 * h}, :f32)
-    r = Nx.template({h, 3 * h}, :f32)
-    h0 = Nx.template({b, h}, :f32)
-    bhn = Nx.template({h}, :f32)
     x = Nx.template({b, t, h}, :f32)
     a = Nx.template({h, s}, :f32)
     bc = Nx.template({b, t, s}, :f32)
 
     cases = [
-      {:fused_gru_scan, [wx, r, h0, bhn], x,
-       "[dense<[2, 1, 0]> : tensor<3xindex>, dense<[1, 0]> : tensor<2xindex>, " <>
-         "dense<[1, 0]> : tensor<2xindex>, dense<[0]> : tensor<1xindex>]",
-       "[dense<[2, 1, 0]> : tensor<3xindex>]"},
-      {:fused_gru_scan_backward, [wx, r, h0, bhn, x, x], {wx, wx, h0},
-       "[dense<[2, 1, 0]> : tensor<3xindex>, dense<[1, 0]> : tensor<2xindex>, " <>
-         "dense<[1, 0]> : tensor<2xindex>, dense<[0]> : tensor<1xindex>, " <>
-         "dense<[2, 1, 0]> : tensor<3xindex>, dense<[2, 1, 0]> : tensor<3xindex>]",
-       "[dense<[2, 1, 0]> : tensor<3xindex>, dense<[2, 1, 0]> : tensor<3xindex>, " <>
-         "dense<[1, 0]> : tensor<2xindex>]"},
       {:fused_selective_scan, [x, x, a, bc, bc], x,
        "[dense<[2, 1, 0]> : tensor<3xindex>, dense<[2, 1, 0]> : tensor<3xindex>, " <>
          "dense<[1, 0]> : tensor<2xindex>, dense<[2, 1, 0]> : tensor<3xindex>, " <>
@@ -122,34 +111,35 @@ defmodule Edifice.CUDA.LibraryTest do
     end
   end
 
-  test "disabled, host, unsupported dtype and oversized calls do not require a library" do
-    block = %FusedOp{op: :fused_gru_scan}
-    args = [Nx.template({1, 4, 24}, :f32)]
+  test "disabled, host, unsupported dtype, oversized and retired calls do not require a library" do
+    block = %FusedOp{op: :fused_selective_scan}
+    args = [Nx.template({1, 4, 8}, :f32), nil, Nx.template({8, 16}, :f32)]
     assert :skip == EXLA.CustomCall.call(block, nil, args, %{platform: :host})
 
     assert :skip ==
-             EXLA.CustomCall.call(block, nil, [Nx.template({1, 4, 24}, :bf16)], %{platform: :cuda})
+             EXLA.CustomCall.call(
+               block,
+               nil,
+               [Nx.template({1, 4, 8}, :bf16), nil, Nx.template({8, 16}, :f32)],
+               %{platform: :cuda}
+             )
 
-    assert :skip ==
-             EXLA.CustomCall.call(block, nil, [Nx.template({1, 4, 3075}, :f32)], %{
-               platform: :cuda
-             })
-
+    # state size above the kernel's register budget
     assert :skip ==
              EXLA.CustomCall.call(
-               %FusedOp{op: :fused_selective_scan},
+               block,
                nil,
                [Nx.template({1, 4, 8}, :f32), nil, Nx.template({8, 33}, :f32)],
                %{platform: :cuda}
              )
 
-    assert :skip ==
-             EXLA.CustomCall.call(
-               %FusedOp{op: :fused_gru_scan_backward},
-               nil,
-               [Nx.template({1, 257, 24}, :f32)],
-               %{platform: :cuda}
-             )
+    # The GRU handlers were retired on 2026-10-26; the ops must skip.
+    for op <- [:fused_gru_scan, :fused_gru_scan_backward] do
+      assert :skip ==
+               EXLA.CustomCall.call(%FusedOp{op: op}, nil, [Nx.template({1, 4, 24}, :f32)], %{
+                 platform: :cuda
+               })
+    end
 
     System.delete_env("EDIFICE_FUSED_CUSTOM_CALL")
     assert :skip == EXLA.CustomCall.call(block, nil, args, %{platform: :cuda})

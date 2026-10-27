@@ -3,7 +3,7 @@ defmodule Mix.Tasks.Edifice.Cuda.Build do
 
   @shortdoc "Build Edifice's EXLA FFI CUDA library"
   @moduledoc """
-  Builds the f32 GRU and selective-scan forward/backward handlers.
+  Builds the f32 Mamba selective-scan forward/backward handlers.
 
       mix edifice.cuda.build --arch sm_120
 

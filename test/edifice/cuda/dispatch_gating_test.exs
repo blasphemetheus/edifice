@@ -100,11 +100,12 @@ defmodule Edifice.CUDA.DispatchGatingTest do
       with_env([{"EDIFICE_FUSED_CUSTOM_CALL", "1"}], fn ->
         impl? = Edifice.Block.native_impl?()
         assert FusedScan.custom_call_available?() == impl?
-        assert FusedScan.custom_call_available?(:gru_scan) == impl?
         assert FusedScan.custom_call_available?(:selective_scan) == impl?
-        assert FusedScan.custom_call_available?(:fused_gru_scan_backward) == impl?
+        assert FusedScan.custom_call_available?(:fused_selective_scan_backward) == impl?
 
-        for k <- @kernels -- [:gru_scan, :selective_scan] do
+        # The GRU handler was retired on 2026-10-26 (slower than the XLA
+        # fallback at every size); it must not be routed to the tier.
+        for k <- @kernels -- [:selective_scan] do
           refute FusedScan.custom_call_available?(k), "#{k} has no FFI handler"
         end
       end)
@@ -112,14 +113,14 @@ defmodule Edifice.CUDA.DispatchGatingTest do
 
     test "EDIFICE_DISABLE_FUSED=1 and the force-fallback flag win" do
       with_env([{"EDIFICE_FUSED_CUSTOM_CALL", "1"}, {"EDIFICE_DISABLE_FUSED", "1"}], fn ->
-        refute FusedScan.custom_call_available?(:gru_scan)
+        refute FusedScan.custom_call_available?(:selective_scan)
       end)
 
       with_env([{"EDIFICE_FUSED_CUSTOM_CALL", "1"}], fn ->
         Process.put(:__edifice_force_fallback__, true)
 
         try do
-          refute FusedScan.custom_call_available?(:gru_scan)
+          refute FusedScan.custom_call_available?(:selective_scan)
         after
           Process.delete(:__edifice_force_fallback__)
         end
@@ -132,7 +133,8 @@ defmodule Edifice.CUDA.DispatchGatingTest do
       with_env([{"EDIFICE_FUSED_CUSTOM_CALL", "1"}, {"EDIFICE_AUTOTUNE", "0"}], fn ->
         refute AutoTune.use_fused?(:mingru, t)
         refute AutoTune.use_fused?(:lstm_scan, t)
-        assert AutoTune.use_fused?(:gru_scan, t) == Edifice.Block.native_impl?()
+        refute AutoTune.use_fused?(:gru_scan, t)
+        assert AutoTune.use_fused?(:selective_scan, t) == Edifice.Block.native_impl?()
       end)
     end
   end
@@ -156,10 +158,10 @@ defmodule Edifice.CUDA.DispatchGatingTest do
       end)
     end
 
-    test "GRU follows the per-op custom-call probe or the NIF" do
+    test "GRU no longer has a custom-call handler, so it follows the NIF like LSTM" do
+      # Retired on 2026-10-26; enabling the tier must not flip the layout.
       with_env([{"EDIFICE_FUSED_CUSTOM_CALL", "1"}], fn ->
-        assert Edifice.Recurrent.fused_rnn_available?(:gru) ==
-                 (Edifice.Block.native_impl?() or NIF.loaded?())
+        assert Edifice.Recurrent.fused_rnn_available?(:gru) == NIF.loaded?()
       end)
 
       with_env([{"EDIFICE_FUSED_CUSTOM_CALL", nil}], fn ->

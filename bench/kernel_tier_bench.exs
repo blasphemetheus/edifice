@@ -1,8 +1,10 @@
 # Kernel tier benchmark: XLA fallback vs EXLA FFI custom call vs NIF bridge.
 #
-# Times the two ops that have handlers in every tier (GRU scan, Mamba
-# selective scan) and the two models built on them, so the three dispatch
-# tiers in `Edifice.CUDA.FusedScan` can be compared on one GPU:
+# Times the GRU scan and the Mamba selective scan and the two models built
+# on them, so the dispatch tiers in `Edifice.CUDA.FusedScan` can be compared
+# on one GPU. (The GRU FFI handler was retired on 2026-10-26 on the strength
+# of this benchmark's first run, so the GRU rows no longer have `ffi`
+# columns; `bench/results/kernel_tiers_2026-10-26/` keeps those numbers.)
 #
 #   xla        the pure-Nx fallback compiled by EXLA inside `Nx.Defn.jit`
 #              (what every jitted model gets without a native handler)
@@ -203,10 +205,6 @@ defmodule KernelTierBench do
       Nx.Defn.jit(fn wx, r, h0, bhn -> FusedScan.gru_scan(wx, r, h0, bhn) end, compiler: EXLA)
 
     fwd_hp = hp(fn wx, r, h0, bhn -> FusedScan.gru_scan(wx, r, h0, bhn) end)
-
-    fwd_ffi =
-      Nx.Defn.jit(fn wx, r, h0, bhn -> FusedScan.gru_scan(wx, r, h0, bhn) end, compiler: EXLA)
-
     fwd_eager = eager(fn wx, r, h0, bhn -> FusedScan.gru_scan(wx, r, h0, bhn) end)
 
     grad_xla =
@@ -226,16 +224,6 @@ defmodule KernelTierBench do
         end)
       end)
 
-    grad_ffi =
-      Nx.Defn.jit(
-        fn wx, r, bhn, h0 ->
-          Nx.Defn.grad({wx, r, bhn}, fn {wx, r, bhn} ->
-            FusedScan.gru_scan(wx, r, h0, bhn) |> Nx.pow(2) |> Nx.sum()
-          end)
-        end,
-        compiler: EXLA
-      )
-
     run_tiers(
       xla: fn ->
         forced_fallback(fn -> measure(fn -> fwd_xla.(wx, r, h0, bhn) end, @iters) end)
@@ -243,7 +231,6 @@ defmodule KernelTierBench do
       xla_hp: fn ->
         forced_fallback(fn -> measure(fn -> fwd_hp.(wx, r, h0, bhn) end, @iters) end)
       end,
-      ffi: fn -> measure(fn -> fwd_ffi.(wx, r, h0, bhn) end, @iters) end,
       nif: fn ->
         res =
           forced_fallback(fn -> measure(fn -> FusedScan.gru_scan(wx, r, h0, bhn) end, @iters) end)
@@ -259,8 +246,7 @@ defmodule KernelTierBench do
       end,
       xla_hp_grad: fn ->
         forced_fallback(fn -> measure(fn -> grad_hp.(wx, r, bhn, h0) end, @iters) end)
-      end,
-      ffi_grad: fn -> measure(fn -> grad_ffi.(wx, r, bhn, h0) end, @iters) end
+      end
     )
   end
 
@@ -551,8 +537,10 @@ defmodule KernelTierBench do
         {label, ssm_case(cfg)}
       end
 
+    # Only Mamba has a native handler left; the GRU model would measure the
+    # fallback against itself.
     models =
-      for arch <- [:gru, :mamba], {b, t, h} = cfg <- @model_configs do
+      for arch <- [:mamba], {b, t, h} = cfg <- @model_configs do
         label = "#{arch} 2L B=#{b} T=#{t} H=#{h}"
         IO.puts("\n## model #{label}")
         {label, model_case(arch, cfg)}

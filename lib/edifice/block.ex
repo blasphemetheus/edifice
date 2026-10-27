@@ -42,8 +42,6 @@ defmodule Edifice.Block do
   end
 
   @native_ops [
-    :fused_gru_scan,
-    :fused_gru_scan_backward,
     :fused_selective_scan,
     :fused_selective_scan_backward
   ]
@@ -53,6 +51,11 @@ defmodule Edifice.Block do
   to a native handler (`native/cuda/Makefile` `FFI_SOURCES`). Every
   other op compiles its pure fallback in-graph even when the native tier
   is enabled, so dispatch must not route them here ahead of the NIF.
+
+  The GRU scan had a handler until 2026-10-26. It was removed because the
+  kernel is slower than XLA's compiled fallback at every size measured
+  (`docs/kernel_tier_benchmarks.md`); the GRU scan now always compiles
+  its pure-Nx recurrence in-graph.
   """
   @spec native_ops() :: [atom()]
   def native_ops, do: @native_ops

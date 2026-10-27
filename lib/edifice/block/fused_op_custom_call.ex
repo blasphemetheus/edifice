@@ -12,10 +12,11 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
     # Edifice.CUDA.Library loads the separately built handlers before a
     # supported call target is emitted. EXLA itself does not need rebuilding.
     #
-    # Scope: GRU and selective-scan forward + backward (f32).
-    # Constraints mirror the kernels: hidden <= 1024 (whole hidden dim in
-    # one CUDA block); backward additionally seq_len <= 256 (MAX_SEQ_LEN
-    # thread-local arrays).
+    # Scope: selective-scan forward + backward (f32). The GRU handlers were
+    # dropped on 2026-10-26: the kernel (one block per batch row, R@h
+    # recomputed from global memory each step) is 3-10x slower forward and
+    # 10-50x slower backward than XLA's compiled fallback on an RTX 5090
+    # (docs/kernel_tier_benchmarks.md).
 
     # ACTIVATION GATE: emitting a call target whose FFI handler is not
     # linked into the loaded EXLA library fails the whole XLA compile —
@@ -25,40 +26,12 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
 
     alias EXLA.CustomCall.Spec
 
-    @max_hidden 1024
-    @max_backward_seq 256
-
     defp enabled? do
       if System.get_env("EDIFICE_FUSED_CUSTOM_CALL") == "1" do
         Edifice.CUDA.Library.ensure_loaded!()
         true
       else
         false
-      end
-    end
-
-    # :fused_gru_scan operands: [wx {B,T,3H}, R {H,3H}, h0 {B,H}, bhn {H}]
-    def call(%{op: :fused_gru_scan}, out, [wx | _] = args, %{platform: :cuda}) do
-      with {:f, 32} <- wx.type,
-           {_b, _t, h3} <- wx.shape,
-           true <- div(h3, 3) <= @max_hidden,
-           true <- enabled?() do
-        {:ok, spec("exla_fused_gru_scan_f32", args, out)}
-      else
-        _ -> :skip
-      end
-    end
-
-    # :fused_gru_scan_backward operands:
-    # [wx, R, h0, bhn, forward_out, grad_output]
-    def call(%{op: :fused_gru_scan_backward}, out, [wx | _] = args, %{platform: :cuda}) do
-      with {:f, 32} <- wx.type,
-           {_b, t, h3} <- wx.shape,
-           true <- div(h3, 3) <= @max_hidden and t <= @max_backward_seq,
-           true <- enabled?() do
-        {:ok, spec("exla_fused_gru_scan_backward_f32", args, out)}
-      else
-        _ -> :skip
       end
     end
 
@@ -99,15 +72,15 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
 
     # LAYOUT PIN. EXLA emits `stablehlo.custom_call` without layout
     # constraints, so XLA's layout assignment may hand the handler operands
-    # or results in whatever layout their consumers prefer (observed:
-    # `f32[B,T,H]{2,0,1}`, i.e. T-major memory, for the GRU result feeding
-    # a reduce and a last-step slice). The kernels read and write row-major
-    # and cannot tell. At batch 1 a permutation of the batch axis is
-    # byte-identical, so the corruption only appears at batch > 1 (the
-    # 2-layer GRU model was off by 7.2 at B=32 and exact at B=1 on
-    # 2026-10-26). Pinning row-major on every operand and result makes XLA
-    # insert the copies instead. `out` is nil when the protocol is probed
-    # directly (tests); real lowerings always pass the output templates.
+    # or results in whatever layout their consumers prefer (observed with
+    # the former GRU handler: `f32[B,T,H]{2,0,1}`, i.e. T-major memory, for
+    # the scan result feeding a reduce and a last-step slice). The kernels
+    # read and write row-major and cannot tell. At batch 1 a permutation of
+    # the batch axis is byte-identical, so the corruption only appears at
+    # batch > 1 (the 2-layer GRU model was off by 7.2 at B=32 and exact at
+    # B=1 on 2026-10-26). Pinning row-major on every operand and result
+    # makes XLA insert the copies instead. `out` is nil when the protocol is
+    # probed directly (tests); real lowerings always pass the output templates.
     defp spec(target, args, out) do
       attributes =
         [{"operand_layouts", layouts(args)}] ++

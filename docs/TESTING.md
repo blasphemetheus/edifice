@@ -109,8 +109,9 @@ EDIFICE_TEST_CLIENT=cuda mix test --only cuda_kernels   # the matrix alone
 
 `test/edifice/cuda/kernel_matrix_gpu_test.exs` runs every forward kernel
 (including the five block scans) through the NIF against the Elixir fallback,
-the custom-call handlers (GRU, selective scan) forward and backward against
-the tier forced off, and the simple scans in bf16. `dispatch_gating_test.exs`
+the custom-call handler (selective scan) forward and backward against the
+tier forced off, the 2-layer Mamba model at batch 4 through the tier, and the
+simple scans in bf16. `dispatch_gating_test.exs`
 pins the tier-selection rules on any machine. `.github/workflows/cuda.yml`
 runs the script weekly on a self-hosted runner labelled `gpu`.
 
