@@ -224,11 +224,24 @@ defmodule Edifice.Audio.Whisper do
     dropout = Keyword.get(opts, :dropout, @default_dropout)
 
     # Inputs
-    token_ids = Axon.input("token_ids", shape: {nil, max_dec_len})
+    token_ids = Axon.input("token_ids", shape: {nil, nil})
     encoder_output = Axon.input("encoder_output", shape: {nil, nil, hidden_dim})
 
     # Token embedding
-    token_embed = Axon.embedding(token_ids, vocab_size, hidden_dim, name: "dec_token_embed")
+    # Whisper uses the same table for token lookup and output scores.
+    token_table =
+      Axon.layer(
+        fn table, _opts -> table end,
+        [Axon.parameter("kernel", {vocab_size, hidden_dim})],
+        name: "dec_token_embed"
+      )
+
+    token_embed =
+      Axon.layer(
+        fn ids, table, _opts -> Nx.take(table, ids) end,
+        [token_ids, token_table],
+        name: "dec_token_lookup"
+      )
 
     # Learned positional embedding: generate position indices and embed
     pos_embed_table =
@@ -260,6 +273,7 @@ defmodule Edifice.Audio.Whisper do
           CrossAttention.layer(q_normed, enc_out,
             hidden_size: hidden_dim,
             num_heads: num_heads,
+            key_bias: false,
             name: name
           )
         end,
@@ -276,9 +290,13 @@ defmodule Edifice.Audio.Whisper do
       )
 
     # Final layer norm + projection to vocab
-    x
-    |> Axon.layer_norm(name: "dec_final_norm")
-    |> Axon.dense(vocab_size, name: "dec_output_proj")
+    normalized = Axon.layer_norm(x, name: "dec_final_norm")
+
+    Axon.layer(
+      fn hidden, table, _opts -> Nx.dot(hidden, [2], table, [1]) end,
+      [normalized, token_table],
+      name: "dec_output_proj"
+    )
   end
 
   @doc """
@@ -322,7 +340,7 @@ defmodule Edifice.Audio.Whisper do
   @spec causal_self_attention(Axon.t(), pos_integer(), pos_integer(), String.t()) :: Axon.t()
   defp causal_self_attention(input, hidden_dim, num_heads, name) do
     q = Axon.dense(input, hidden_dim, name: "#{name}_q")
-    k = Axon.dense(input, hidden_dim, name: "#{name}_k")
+    k = Axon.dense(input, hidden_dim, use_bias: false, name: "#{name}_k")
     v = Axon.dense(input, hidden_dim, name: "#{name}_v")
 
     head_dim = div(hidden_dim, num_heads)

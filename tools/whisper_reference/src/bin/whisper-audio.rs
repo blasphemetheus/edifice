@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             "-i",
             &args[1],
             "-t",
-            "30",
+            "30.001",
             "-f",
             "s16le",
             "-ac",
@@ -73,13 +73,26 @@ fn main() -> Result<(), Box<dyn Error>> {
         .chunks_exact(2)
         .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
         .collect();
+    if samples.len() > 480_000 {
+        return Err(
+            "This runner accepts at most 30 seconds; split longer recordings explicitly".into(),
+        );
+    }
     let filters: HashMap<_, _> = Tensor::read_npz(&args[2])?.into_iter().collect();
     let filters = filters.get("mel_80").ok_or("Missing mel_80 filter bank")?;
     if filters.size() != [80, 201] {
         return Err("Expected 80 x 201 mel filters".into());
     }
     let mel = log_mel(&samples, filters).unsqueeze(0);
-    Tensor::write_safetensors(&[("mel_input", &mel)], &args[3])?;
+    let audio = Tensor::from_slice(&samples);
+    Tensor::write_safetensors(
+        &[
+            ("mel_input", &mel),
+            ("audio", &audio),
+            ("mel_filters", filters),
+        ],
+        &args[3],
+    )?;
     println!(
         "decoded_seconds={} mel_shape={:?} min={} max={}",
         samples.len() as f64 / 16000.0,

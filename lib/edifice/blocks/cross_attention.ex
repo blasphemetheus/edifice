@@ -37,6 +37,7 @@ defmodule Edifice.Blocks.CrossAttention do
     - `:hidden_size` - Hidden dimension for Q, K, V projections (required)
     - `:num_heads` - Number of attention heads (default: 1)
     - `:dropout` - Dropout rate (default: 0.0)
+    - `:key_bias` - Include a bias in the key projection (default: true)
     - `:name` - Layer name prefix (default: "cross_attn")
 
   ## Examples
@@ -59,7 +60,12 @@ defmodule Edifice.Blocks.CrossAttention do
     query_proj = Axon.dense(query_input, hidden_size, name: "#{name}_q_proj")
 
     # Project keys and values from kv input
-    key_proj = Axon.dense(kv_input, hidden_size, name: "#{name}_k_proj")
+    key_proj =
+      Axon.dense(kv_input, hidden_size,
+        use_bias: Keyword.get(opts, :key_bias, true),
+        name: "#{name}_k_proj"
+      )
+
     value_proj = Axon.dense(kv_input, hidden_size, name: "#{name}_v_proj")
 
     # Compute multi-head cross-attention

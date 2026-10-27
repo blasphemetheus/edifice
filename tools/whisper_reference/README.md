@@ -521,8 +521,8 @@ References: [tch-rs](https://github.com/LaurentMazare/tch-rs),
 **AI-generated update.** The Rust `whisper-audio` executable now converts audio
 into a Whisper-base input. It uses FFmpeg to decode mono 16 kHz signed 16-bit
 audio, pads to 30 seconds, and computes the log-mel features with LibTorch and
-OpenAI's published mel filter bank. Longer recordings use only their first
-30 seconds; this diagnostic is not a long-form transcription implementation.
+OpenAI's published mel filter bank. Longer recordings are now rejected rather
+than silently truncated; this is not a long-form transcription implementation.
 The preprocessing follows [OpenAI's audio implementation](https://github.com/openai/whisper/blob/86098128c0b4f24f0e2aa2994de830614b474227/whisper/audio.py).
 No Python process is used.
 
@@ -568,6 +568,61 @@ decoder/checkpoint validation are needed before treating Edifice as a dictation
 engine. In particular, the current key map skips `proj_out.weight` while the
 decoder builds a separate output projection. The notebook's demonstration
 decode loop is not evidence of pretrained transcript compatibility.
+
+### One-file transcription (completed follow-up)
+
+**AI-generated update.** `scripts/transcribe_whisper.exs` runs audio through
+Edifice's pretrained encoder and decoder and prints an English transcript.
+It accepts one clip of at most 30 seconds and generates at most 128 total tokens,
+including the prompt. It raises if generation hits that limit without finishing.
+It uses greedy decoding without timestamps. It does not implement language
+detection, long-form segmentation, beam search, microphone capture, or decoder
+KV caching. Parameters are pretrained OpenAI Whisper-base, not newly trained.
+
+The decoder now shares one parameter table between token embeddings and output
+scores, removes the self-/cross-attention key biases absent from Whisper, and
+accepts variable prefix lengths while retaining the full learned position table.
+This supersedes the decoder-gap finding above. Old Edifice-initialized decoder
+checkpoints with independent output weights are not equivalent to this corrected
+architecture and need explicit migration/retraining; encoder behavior is unchanged.
+
+Build the Rust executables using the existing Cargo command. Set `FFMPEG` or put
+FFmpeg on PATH, then run (using the isolated dependencies as above):
+
+```sh
+devenv shell -- env MIX_DEPS_PATH=/tmp/edifice-upstream-deps \
+  MIX_BUILD_PATH=/tmp/edifice-upstream-build MIX_ENV=test \
+  XLA_TARGET=cpu EXLA_CPU_ONLY=1 ERL_FLAGS='+S 4:4' \
+  mix run scripts/transcribe_whisper.exs /path/to/clip.wav --validate
+```
+
+Omit `--validate` for transcription alone. Validation independently computes
+audio features in Nx, then compares Edifice's complete token sequence and all
+next-token logits against a Rust/LibTorch encoder-decoder. Both use the same
+published tokenizer, English/transcription/no-timestamps prompt, and suppression
+rules. This is an independent numerical implementation, not a comparison with
+the complete official transcription application's search/fallback behavior.
+The model/tokenizer/config revisions are pinned. Temporary output files are
+separated by process ID; assets are cached under `/tmp/edifice-whisper-transcribe`.
+
+On the JFK clip, both implementations produced:
+
+> And so my fellow Americans, ask not what your country can do for you, ask what
+> you can do for your country.
+
+All 30 tokens including prompt and end marker match. Maximum next-token logit
+error is `6.96e-5`; mean error is `1.40e-5`. The independent Nx/LibTorch audio
+features differ by at most `2.63e-5` (frontend bound `atol=1e-4, rtol=1e-5`).
+A second 3.275-second clip also has exact token parity, with maximum logit error
+`8.97e-5`. Its transcript includes an apparent word error in both implementations:
+matching the reference does not guarantee correct recognition. Decoder logits
+use `atol=1e-3, rtol=1e-4`, separately from exact token parity.
+
+Regression checks cover tied output scores, absent key biases, and equality of
+prefix outputs with/without future tokens. The focused Whisper/key-map and full
+pretrained suite passed 33 tests. Logs: `whisper_transcription.log` and
+`whisper_transcription_asr2.log` in `bench/results/pretrained_2026-10-26/`.
+These are CPU correctness checks, not latency benchmarks.
 
 **AI-generated poem**
 
