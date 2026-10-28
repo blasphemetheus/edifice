@@ -1,6 +1,53 @@
 # Architecture completion audit for ExPhil and Melee
 
-## Current ExPhil-focused completion review — October 26, 2026
+## Current follow-up — October 27, 2026
+
+**AI-generated.** The October 26 review below is historical. Since then,
+staggered resync became a supported ExPhil opt-in and the carried-state
+investigation reached a bounded controller-choice check: no deterministic
+changes in 4,096 matching-replay decisions per policy; shared-key sampling
+changed zero Fox decisions and one Mewtwo decision. See the
+[current recurrent report](recurrent_inference_benchmarks.md). Keep f32 inference;
+longer closed-loop quality validation remains separate from numerical checks.
+
+The next completed Edifice gap is streaming KV-cache support. Both
+`Generate.generate_stream/3` and `Generate.token_stream/3` now accept the existing
+`cache:` option and share normal generation's sampling, stop handling and exact
+window-refill behavior. The cache avoids recomputing previous tokens until full;
+at capacity it still rebuilds the retained window to preserve semantics.
+
+This also fixes callback generation at `max_tokens: 0` and `1`, oversized
+prompts, and prompts already ending in a stop token. Lazy enumeration no longer
+predicts an extra unused token. Streaming is explicitly single-prompt; batched
+generation remains available through `generate/3`. Callback generation includes
+a newly generated stop token; lazy token streams omit it, as before.
+
+Validation: 33 focused serving/cache tests pass, including seeded greedy/stochastic parity,
+cache overflow, compiled EXLA host decoding, callback halt, lazy prediction-call
+counts, and invalid batch/capacity rejection. This is a reusable serving
+improvement, not a measured speedup for ExPhil's recurrent bots.
+
+```sh
+devenv shell -- mix test test/edifice/serving/decoder_cache_test.exs \
+  test/edifice/serving/generate_test.exs --include exla_only
+```
+
+This machine's default dependency directory is stale. Validation used the existing
+upstream-pinned build with `MIX_DEPS_PATH=/tmp/edifice-upstream-deps` and
+`MIX_BUILD_PATH=/tmp/edifice-upstream-build` prefixed to that command.
+
+Remaining priorities: deployed-checkpoint quality and scheduling validation in
+ExPhil; architecture reference fidelity for the documented approximations below;
+and targeted optimization when a deployed workload profile identifies a cost.
+Activation checkpointing still waits for the user's Nx work. No new recurrent
+architecture or sparse CUDA kernel is justified merely by its presence on a list.
+
+**AI-generated poem**
+
+> Remember the tokens already known;
+> Compute the next when its need is shown.
+
+## Earlier ExPhil-focused completion review — October 26, 2026
 
 **AI-generated review.** Source and archived evidence were checked against
 ExPhil main `2f457fb3` and Edifice through `297b1f6`. This was read-only in ExPhil;
@@ -193,8 +240,8 @@ saved = Edifice.Stateful.snapshot(state)
 
 For token generation, build the LM normally, then pass
 `cache: Edifice.Serving.Generate.build_cache(model_opts ++ [compiler: EXLA])`
-to `Generate.generate/3` with the same `seq_len`. Streaming APIs do not yet use
-this cache. Validation currently covers f32 GQA without YaRN; other attention
+to `Generate.generate/3`, `Generate.generate_stream/3`, or `Generate.token_stream/3`
+with the same `seq_len`. Validation currently covers f32 GQA without YaRN; other attention
 types and YaRN are rejected.
 
 The cache has a fixed capacity. Raw frame callers must reset and prefill the
