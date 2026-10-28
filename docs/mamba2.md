@@ -187,6 +187,62 @@ Use `BENCH_EXECUTION=sequential` for the old reference. `BENCH_BATCH` and
 `BENCH_STATE` override the batch/state sizes. The runner separates compilation
 from warm execution and reports compiler-generated fusion counts.
 
+For comparisons with Edifice's existing Mamba-1 model, set `BENCH_ARCH=mamba`
+(default state size 16). Run once with `EDIFICE_DISABLE_FUSED=1` for the
+portable implementation, then in a fresh VM with `EDIFICE_FUSED_CUSTOM_CALL=1
+EDIFICE_AUTOTUNE=0 BENCH_EXPECT_FUSED=1` for the native scan. The latter checks
+that the native scan was actually used and compares its outputs with the
+portable implementation at identical weights and inputs. `BENCH_ARCH=mamba2_full`
+is the default; use `BENCH_EXECUTION=chunked` for its optimized training path.
+The runner also measures a compiled single-bot step over 100 repetitions.
+This repeats the same frame and initial state to measure execution cost; it
+does not measure a game trajectory or action selection.
+
+### Mamba-1 comparison, October 28, 2026
+
+At the same B=128, T=80, input=264, hidden=512, two-layer f32 shape on the
+RTX 5090, using the same synthetic input seed and parameter seed:
+
+| Implementation | State size | Sequence forward | Forward + backward | Training scratch | One-bot step |
+|---|---:|---:|---:|---:|---:|
+| Edifice Mamba-1, portable | 16 | 12.517 ms | 62.087 ms | 15.941 GB | Not measured |
+| Edifice Mamba-1, native scan | 16 | 2.988 ms | 30.954 ms | 0.994 GB | 0.440 ms |
+| Canonical Mamba-2, chunked | 128 | 4.109 ms | 16.014 ms | 1.692 GB | 0.716 ms |
+| Canonical Mamba-2, chunked | 16 | 2.710 ms | 13.294 ms | 1.305 GB | 0.379 ms |
+
+Mamba-2's default configuration takes about half the forward/backward time of
+the native Mamba-1 implementation. Mamba-1 is faster for forward-only work and
+one-frame inference. The larger Mamba-2 state also consumes more memory.
+This does not establish which model learns a better policy.
+
+With Mamba-2 reduced to state size 16 (`BENCH_STATE=16`), it is about 2.3 times
+as fast for forward/backward work as native Mamba-1. Its forward and one-frame
+times are also modestly lower in this run. The one-frame maximum was 0.939 ms.
+This suggests the larger default state explains much of the inference cost;
+it does not prove that state size 16 retains the same policy quality.
+
+These are comparisons of our implementations. Edifice's existing Mamba-1 has
+fixed decay rates, no learned D skip, and clamped time steps; it is not a fully
+canonical upstream Mamba-1. State size 128 versus 16 is a practical default
+comparison, not matched capacity. Equal hidden widths and parameter seeds do
+not mean equal parameters or equations across architectures.
+
+Sequence times are warm medians of 10 runs. Single-frame times are medians of
+100 runs at B=1, including VM dispatch and output/state synchronization, with
+parameters, input and initial state already on GPU. Maximum observed step times
+were 1.334 ms for Mamba-1 and 1.362 ms for Mamba-2; this small sample does not
+certify a game deadline. Policy heads, input transfer, action sampling and
+resync are excluded. Desktop GPU processes remained, with no other compute job
+observed. The device utilization field in each result is sampled after timing
+and includes the benchmark's own GPU work.
+
+The native Mamba-1 dispatch was asserted, and its output differed from the
+portable path by at most 7.46e-9 at identical weights and inputs. Existing
+reference, gradient and carried-state tests provide the Mamba-2 correctness
+checks. Raw runs are `mamba1_portable.json`, `mamba1_fused.json`,
+`comparison_state128.json`, and `comparison_state16.json` in
+`bench/results/mamba2_full/`.
+
 Run the tests in the project environment:
 
 ```sh
