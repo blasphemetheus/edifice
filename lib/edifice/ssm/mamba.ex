@@ -1,9 +1,13 @@
 defmodule Edifice.SSM.Mamba do
   @moduledoc """
-  Mamba: True Selective State Space Model with optimized parallel scan.
+  Mamba-style selective state space model with optimized parallel scan.
 
-  Implements the Mamba architecture from "Mamba: Linear-Time Sequence Modeling
-  with Selective State Spaces" (Gu & Dao, 2023).
+  Implements the selective recurrence from "Mamba: Linear-Time Sequence Modeling
+  with Selective State Spaces" (Gu & Dao, 2023), with an Edifice-specific block.
+  This is not a checkpoint-compatible implementation of the authors' full block:
+  the builder fixes A to `-1..-state_size`, clips post-softplus dt to
+  `[0.001, 0.1]`, and omits the learned D skip. Projection biases and normalization
+  also differ. Existing Edifice checkpoints retain their current equations.
 
   ## Key Innovation: Parallel Associative Scan
 

@@ -322,8 +322,7 @@ defmodule Edifice.CUDA.KernelMatrixGpuTest do
     {x, dt, canonical_a(state), b, c}
   end
 
-  # The selective-scan fallback hardcodes Mamba's -(1..state) diagonal and
-  # ignores `a`; only this A keeps kernel and fallback on the same contract.
+  # Match the fixed diagonal used by Edifice's Mamba builder.
   defp canonical_a(state) do
     a_diag = Nx.negate(Nx.add(Nx.iota({state}), 1.0))
     Nx.broadcast(Nx.reshape(a_diag, {1, state}), {@h, state})

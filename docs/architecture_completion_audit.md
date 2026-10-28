@@ -2,6 +2,15 @@
 
 ## Current follow-up — October 27, 2026
 
+**Reference certification follow-up:** [GRU, SSD, Mamba and MinGRU validation](recurrent_reference_validation.md)
+adds 14 reference tests, with 52 targeted tests passing overall on portable/EXLA
+host paths. GRU checks use the actual LibTorch operator; SSD/selective scan use
+pinned Rust ports of upstream equations. The audit found and fixed the portable
+selective scan ignoring its A argument. It also establishes that `MambaSSD` is
+an Edifice Mamba variant with an SSD algorithm, not canonical Mamba-2; Mamba's
+builder has fixed-A/no-D restrictions; MinGRU uses signed candidates. These
+limits prevent a blanket claim of upstream checkpoint compatibility.
+
 **AI-generated.** The October 26 review below is historical. Since then,
 staggered resync became a supported ExPhil opt-in and the carried-state
 investigation reached a bounded controller-choice check: no deterministic
