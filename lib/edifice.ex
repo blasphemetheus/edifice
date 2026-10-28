@@ -101,7 +101,7 @@ defmodule Edifice do
     ],
     ssm: [
       mamba: Edifice.SSM.Mamba,
-      mamba2: Edifice.SSM.Mamba2,
+      mamba2_full: Edifice.SSM.Mamba2,
       mamba_ssd: Edifice.SSM.MambaSSD,
       mamba_cumsum: Edifice.SSM.MambaCumsum,
       mamba_hillis_steele: Edifice.SSM.MambaHillisSteele,

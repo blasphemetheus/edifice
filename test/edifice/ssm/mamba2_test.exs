@@ -22,7 +22,9 @@ defmodule Edifice.SSM.Mamba2Test do
   end
 
   defp run(p) do
-    Mamba2.forward(Mamba2.from_reference(p), p["x"], %{h: p["h0"], conv: p["conv0"]})
+    Mamba2.forward(Mamba2.from_reference(p), p["x"], %{h: p["h0"], conv: p["conv0"]},
+      execution: :sequential
+    )
   end
 
   for name <- ~w(plain grouped short pointwise) do
@@ -167,15 +169,103 @@ defmodule Edifice.SSM.Mamba2Test do
     end
   end
 
+  for chunk <- [1, 3, 16] do
+    @tag :exla_only
+    test "chunked SSD output, state and all gradients (chunk #{chunk})", %{fixture: f} do
+      p = arguments(f, "grouped")
+
+      run = fn p ->
+        Mamba2.forward(Mamba2.from_reference(p), p["x"], %{h: p["h0"], conv: p["conv0"]},
+          execution: :chunked,
+          chunk_size: unquote(chunk)
+        )
+      end
+
+      {y, state} = Nx.Defn.jit(run, compiler: EXLA, client: :host).(p)
+      assert_all_close(y, f["grouped.output"], atol: 2.0e-6, rtol: 2.0e-5)
+      assert_all_close(state.h, f["grouped.h"], atol: 2.0e-6, rtol: 2.0e-5)
+      weights = Nx.as_type(f["grouped.loss_weights"], :f32)
+
+      grads =
+        Nx.Defn.jit(
+          fn p, weights ->
+            Nx.Defn.grad(p, fn p ->
+              {y, _} = run.(p)
+              Nx.sum(Nx.multiply(y, weights))
+            end)
+          end,
+          compiler: EXLA,
+          client: :host
+        ).(p, weights)
+
+      for {key, grad} <- grads do
+        assert_all_close(grad, f["grouped.grad.#{key}"], atol: 1.0e-5, rtol: 2.0e-4)
+      end
+    end
+  end
+
+  @tag :exla_only
+  test "accelerated chunked SSD matches reference gradients and a long carried sequence", %{
+    fixture: f
+  } do
+    client = System.get_env("EDIFICE_TEST_CLIENT", "host") |> String.to_existing_atom()
+    p = arguments(f, "grouped")
+
+    run = fn p ->
+      Mamba2.forward(Mamba2.from_reference(p), p["x"], %{h: p["h0"], conv: p["conv0"]},
+        execution: :chunked,
+        chunk_size: 3
+      )
+    end
+
+    {y, _} = Nx.Defn.jit(run, compiler: EXLA, client: client, precision: :highest).(p)
+    assert_all_close(y, f["grouped.output"], atol: 2.0e-6, rtol: 2.0e-5)
+    weights = Nx.as_type(f["grouped.loss_weights"], :f32)
+
+    grads =
+      Nx.Defn.jit(
+        fn p, weights ->
+          Nx.Defn.grad(p, fn p ->
+            {y, _} = run.(p)
+            Nx.sum(Nx.multiply(y, weights))
+          end)
+        end,
+        compiler: EXLA,
+        client: client,
+        precision: :highest
+      ).(p, weights)
+
+    for {key, grad} <- grads do
+      assert_all_close(grad, f["grouped.grad.#{key}"], atol: 1.0e-5, rtol: 2.0e-4)
+    end
+
+    x = Nx.sin(Nx.iota({2, 80, 16}))
+    opts = [hidden_size: 16, head_dim: 4, state_size: 128, num_groups: 2]
+    model = Mamba2.build_block(Axon.input("x", shape: {nil, nil, 16}), opts)
+    {init, _} = Axon.build(model)
+    p = init.(Nx.broadcast(0.0, {2, 1, 16}), Axon.ModelState.empty()).data["mamba2"]
+    s = Mamba2.block_state(p, 2, 128)
+    run = fn p, x, s -> Mamba2.forward(p, x, s, execution: :chunked, chunk_size: 32) end
+    reference = fn p, x, s -> Mamba2.forward(p, x, s, execution: :sequential) end
+
+    {expected, se} =
+      Nx.Defn.jit(reference, compiler: EXLA, client: client, precision: :highest).(p, x, s)
+
+    {actual, sa} = Nx.Defn.jit(run, compiler: EXLA, client: client, precision: :highest).(p, x, s)
+    assert_all_close(actual, expected, atol: 1.0e-5, rtol: 1.0e-4)
+    assert_all_close(sa.h, se.h, atol: 1.0e-5, rtol: 1.0e-4)
+    assert_all_close(sa.conv, se.conv)
+  end
+
   @tag :exla_only
   test "registry dispatch and compiled chunk replay preserve all state" do
     opts = [embed_dim: 3, hidden_size: 4, head_dim: 2, state_size: 3, num_layers: 2]
-    assert Edifice.module_for(:mamba2) == Mamba2
+    assert Edifice.module_for(:mamba2_full) == Mamba2
     assert Edifice.module_for(:mamba_ssd) == Edifice.SSM.MambaSSD
-    {init, _} = Axon.build(Edifice.build(:mamba2, opts))
+    {init, _} = Axon.build(Edifice.build(:mamba2_full, opts))
     x = Nx.sin(Nx.iota({2, 7, 3}))
     params = init.(x, Axon.ModelState.empty())
-    initial = Edifice.init_state(:mamba2, params, opts ++ [batch_size: 2])
+    initial = Edifice.init_state(:mamba2_full, params, opts ++ [batch_size: 2])
     step = Edifice.Stateful.jit_step(Mamba2, EXLA, client: :host)
     replay = Edifice.Stateful.jit_replay(Mamba2, EXLA, client: :host)
     {_, carry} = step.(params, initial, Nx.take(x, 0, axis: 1))

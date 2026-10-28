@@ -9,8 +9,8 @@ defmodule Edifice.SSM.Mamba2 do
 
   `build_block/2` is the reference mixer alone (no outer norm or residual).
   `build/1` stacks pre-RMS-normalized residual mixers for frame-vector inputs.
-  Sequence execution projects and convolves the whole sequence before a compiled
-  sequential recurrence. It does not use the upstream fused SSD CUDA algorithm.
+  Sequence execution uses chunked SSD matrix products compiled by Nx/EXLA.
+  It does not depend on the upstream CUDA/Triton package.
 
   Supported reference configuration: full inner width in the SSM, per-head D,
   RMS normalization after SiLU gating, no dt limit, no packed sequences or
@@ -38,6 +38,8 @@ defmodule Edifice.SSM.Mamba2 do
     * `:conv_size` - causal convolution width (default 4)
     * `:bias` / `:conv_bias` - projection/convolution bias (default false/true)
     * `:output_mode` - `:last` (default) or `:all`
+    * `:execution` - `:chunked` (default) or reference `:sequential`
+    * `:chunk_size` - timesteps per SSD chunk (default 32)
 
   No dropout is inserted. A nonzero `:dropout` is rejected.
   """
@@ -132,7 +134,7 @@ defmodule Edifice.SSM.Mamba2 do
         }
 
         initial = block_state(p, Nx.axis_size(x, 0), cfg.state, Nx.type(x))
-        {y, _} = forward(p, x, initial)
+        {y, _} = forward(p, x, initial, execution: cfg.execution, chunk_size: cfg.chunk)
         y
       end,
       args,
@@ -200,7 +202,7 @@ defmodule Edifice.SSM.Mamba2 do
   end
 
   @doc "Run a sequence through one mixer with explicit initial/final state; accepts block parameters."
-  def forward(p, x, state) do
+  def forward(p, x, state, opts \\ []) do
     {batch, length, _} = Nx.shape(x)
     {_, heads, width, n} = Nx.shape(state.h)
     inner = heads * width
@@ -232,9 +234,33 @@ defmodule Edifice.SSM.Mamba2 do
       |> Nx.slice_along_axis(0, inner, axis: 2)
       |> Nx.reshape({batch, length, heads, width})
 
-    b = group_values(activated, inner, groups, n, heads)
-    c = group_values(activated, inner + groups * n, groups, n, heads)
-    {y, h} = scan(xh, b, c, dt, Nx.negate(Nx.exp(p["A_log"])), p["D"], state.h)
+    execution = Keyword.get(opts, :execution, :chunked)
+    bc_heads = if execution == :chunked, do: groups, else: heads
+    b = group_values(activated, inner, groups, n, bc_heads)
+    c = group_values(activated, inner + groups * n, groups, n, bc_heads)
+    a = Nx.negate(Nx.exp(p["A_log"]))
+
+    {y, h} =
+      case execution do
+        :sequential ->
+          scan(xh, b, c, dt, a, p["D"], state.h)
+
+        :chunked ->
+          Edifice.SSM.Mamba2SSD.scan(
+            xh,
+            b,
+            c,
+            dt,
+            a,
+            p["D"],
+            state.h,
+            Keyword.get(opts, :chunk_size, 32)
+          )
+
+        other ->
+          raise ArgumentError, "unsupported Mamba-2 execution #{inspect(other)}"
+      end
+
     y = Nx.reshape(y, {batch, length, inner})
     {finish(p, y, z, groups), %{h: h, conv: conv}}
   end
@@ -297,7 +323,7 @@ defmodule Edifice.SSM.Mamba2 do
   @doc "Advance a standalone mixer by one frame with constant-size carried state."
   def block_step(p, state, frame) do
     # Length-one convolution + recurrence preserves the same parameter contract.
-    {y, state} = forward(p, Nx.new_axis(frame, 1), state)
+    {y, state} = forward(p, Nx.new_axis(frame, 1), state, execution: :sequential)
     {Nx.squeeze(y, axes: [1]), state}
   end
 
@@ -352,6 +378,15 @@ defmodule Edifice.SSM.Mamba2 do
     groups = Keyword.get(opts, :num_groups, 1)
     state = Keyword.get(opts, :state_size, 128)
     conv = Keyword.get(opts, :conv_size, 4)
+    execution = Keyword.get(opts, :execution, :chunked)
+    chunk = Keyword.get(opts, :chunk_size, 32)
+
+    unless execution in [:sequential, :chunked] and is_integer(chunk) and chunk > 0,
+      do:
+        raise(
+          ArgumentError,
+          "execution must be :sequential or :chunked, with positive chunk_size"
+        )
 
     unless Enum.all?([width, expand, head, groups, state, conv], &(is_integer(&1) and &1 > 0)),
       do: raise(ArgumentError, "Mamba-2 dimensions must be positive integers")
@@ -381,6 +416,8 @@ defmodule Edifice.SSM.Mamba2 do
       groups: groups,
       state: state,
       conv: conv,
+      execution: execution,
+      chunk: chunk,
       bias: Keyword.get(opts, :bias, false),
       conv_bias: Keyword.get(opts, :conv_bias, true)
     }

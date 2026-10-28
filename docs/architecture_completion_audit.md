@@ -2,14 +2,16 @@
 
 ## Canonical Mamba-2 — October 28, 2026
 
-**AI-generated.** A separate `:mamba2` architecture now implements the standard
+**AI-generated.** A separate `:mamba2_full` architecture now implements the standard
 full-SSM mixer, with learned per-head A/D, joint x/B/C convolution, grouped
 states and gated RMS normalization. It supports carried stepping and compiled
 replay. Full-block reference output and gradient checks pass on portable/EXLA
 host paths. See [scope, usage and reference limits](mamba2.md), including the
-authorship poem. This is a portable implementation, not fused GPU training or
-whole-language-model checkpoint certification. Existing `:mamba_ssd` and ExPhil
-adapters retain their previous behavior.
+authorship poem. This uses portable Nx with compiler-generated GPU fusion;
+it is not whole-language-model checkpoint certification. Chunked SSD and shared-group
+matrix products reduce the measured ExPhil-shape forward/backward from 5.18 s
+to 15.9 ms. ExPhil now has a canonical `:mamba2_full` adapter; existing
+`:mamba_ssd` and `:mamba_2` adapters retain their previous behavior.
 
 ## Current follow-up — October 27, 2026
 

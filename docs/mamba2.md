@@ -2,9 +2,11 @@
 
 **AI-generated implementation and report.**
 
-Edifice now provides `:mamba2`, a separate implementation of the standard
+Edifice and ExPhil use `:mamba2_full` for the standard
 Mamba-2 mixer. Existing `:mamba_ssd` models keep their original equations and
-checkpoint format. They cannot be renamed to `:mamba2` or loaded into it.
+checkpoint format. They cannot be renamed to `:mamba2_full` or loaded into it.
+ExPhil's existing `:mamba_2` name remains the legacy SSD variant. The original
+Edifice registry name `:mamba2` was renamed to `:mamba2_full` for consistency.
 
 The new mixer learns a decay rate for each head. It convolves the projected
 input and both state projections together. Its output includes a learned skip
@@ -24,15 +26,15 @@ opts = [
   conv_size: 4
 ]
 
-model = Edifice.build(:mamba2, opts)
+model = Edifice.build(:mamba2_full, opts)
 {init, predict} = Axon.build(model)
 inputs = Nx.broadcast(0.0, {1, 8, 287})
 params = init.(inputs, Axon.ModelState.empty())
 output = predict.(params, inputs)
 
-state = Edifice.init_state(:mamba2, params, opts ++ [batch_size: 1])
+state = Edifice.init_state(:mamba2_full, params, opts ++ [batch_size: 1])
 frame = Nx.take(inputs, 0, axis: 1)
-{output, state} = Edifice.step(:mamba2, params, state, frame)
+{output, state} = Edifice.step(:mamba2_full, params, state, frame)
 ```
 
 Use `output_mode: :all` to return every timestep. The default returns the last.
@@ -86,7 +88,7 @@ restoration and compiled `Edifice.Stateful.jit_replay/3` work with this layout.
 
 ## Validation and limits
 
-Nine tests cover four full-mixer reference cases: lengths 1/5/7/9, batch 2,
+Thirteen tests cover four full-mixer reference cases: lengths 1/5/7/9, batch 2,
 groups 1/2, convolution widths 1/3/4, biases on/off, and zero/nonzero carried
 memory. Nontrivial A, D and norm weights prevent their omission from passing.
 The time steps exceed 0.1, so accidentally retaining the older clamp also fails.
@@ -94,9 +96,14 @@ Tests compare every output, final recurrent/convolution memory, and gradients
 of all parameters, input frames and initial memory. The loss is a weighted sum
 of sequence outputs; it does not add a separate final-state term.
 
-The combined Mamba-2, existing SSD, recurrent reference and compiled replay run
-passes **42 tests**. Validation used a bare VM with existing dependency beams
-to avoid rebuilding shared native libraries during other work.
+The original combined regression run passed 42 tests. The expanded Mamba-2
+suite also checks chunk sizes 1/3/16, partial chunks, every reference gradient,
+and an 80-frame GPU sequence with state size 128. Validation uses bare VMs with
+existing dependency beams, avoiding shared native-library rebuilds.
+The updated Edifice CPU regression set passes 32 tests, and the 13-test Mamba-2
+suite passes with CUDA validation enabled. ExPhil's focused integration/config
+set passes 21 tests. Its separate flag-parity suite still reports a pre-existing
+missing default for `:recurrent_state`; the new `:num_groups` flag has a default.
 
 The reference generator is Rust using `tch = 0.23.0` and LibTorch 2.10 CPU.
 It ports the pinned upstream block equations and uses LibTorch's convolution,
@@ -104,18 +111,81 @@ linear algebra and automatic differentiation. It is **not** a run of the
 upstream Python package or fused CUDA kernels. It uses f64 throughout, including
 A, to provide a higher precision numerical comparison. Edifice checks f32 with
 output/state tolerances `atol=2e-6, rtol=2e-5` and gradient tolerances
-`atol=1e-5, rtol=2e-4`. BinaryBackend and compiled EXLA host are covered.
+`atol=1e-5, rtol=2e-4`. BinaryBackend, compiled EXLA host, and CUDA are covered.
 
 Additional checks cover the Axon block with converted weights, a two-layer
 backbone with input projection, snapshot restoration, registry dispatch,
 unsupported options, and compiled chunk replay. No pretrained language model,
-reduced precision, GPU kernel, or ExPhil policy migration is certified here.
+reduced precision, or automatic migration of old ExPhil policies is certified.
 
-Sequence execution uses whole-sequence projection/convolution followed by a
-compiled sequential recurrence. It implements the canonical math but does not
-have the upstream fused SSD training algorithm's throughput. Stepping carries
-constant-size memory and does work independent of history length. GPU timings
-and a canonical ExPhil adapter remain separate work.
+Sequence execution defaults to chunked SSD (`chunk_size: 32`). Matrix products
+handle time within each chunk; state passes between chunks. B/C remain grouped
+through the matrix products instead of being duplicated per head. Stable masked
+segment sums avoid overflowing the unused upper triangle. XLA compiles this Nx
+graph into GPU matrix operations and fused elementwise/reduction kernels. No
+upstream Triton runtime or new handwritten CUDA custom-call library is required.
+Use `execution: :sequential` for the reference path. Stepping always uses the
+length-one recurrence, with constant-size memory.
+
+## ExPhil integration and training measurements
+
+Use `--backbone mamba2_full` in ExPhil, including the Fox windowed streaming
+driver. Shape settings, including `--num-groups`, survive policy export and
+reload. The Agent supports carried stepping, cold-start replay, resync,
+snapshots and per-bot resets. The integration test trains a real imitation step,
+checks that A_log changes, exports the policy and loads it into a stateful Agent.
+This does not add carried-state BPTT training to ExPhil's GRU-only BPTT pipeline.
+
+Measurements use the shape from `coh_fox_mamba_v3s906_ep3/model_config.json`:
+batch 128, 80 frames, 264 input features, hidden width 512, two layers. The
+canonical state size is 128 (the legacy checkpoint used 16). These runs use
+synthetic frames and newly initialized parameters, not that checkpoint's
+incompatible weights. The loss is a weighted sum of the last backbone output;
+controller heads, data loading and optimizer updates are excluded.
+
+RTX 5090, f32, EXLA `precision: :highest`, 3 warmups and 10 synchronized samples:
+
+| Execution | Forward median | Forward + backward median | Backward scratch memory |
+| --- | ---: | ---: | ---: |
+| Sequential reference, seed 71 | 9.196 ms | 5182.845 ms | 2.232 GB |
+| Initial chunked SSD | 4.843 ms | 18.081 ms | 2.040 GB |
+| Group-preserving SSD, seed 71 | 3.901 ms | 15.924 ms | 1.692 GB |
+
+The primary reference/final comparison uses identical parameter seed 71 and
+input seed 71. Earlier pilot runs used Axon's time-based parameter seed; they
+measured 3.74–3.95 ms forward and 15.69–15.80 ms forward/backward for the final
+implementation. The fixed-seed final executable contains 91 forward fusion
+calls and 297 forward/backward fusion calls. These are compiler graph counts,
+not a claim that the whole mixer is one kernel. Compilation takes 7.47 s for
+forward and 12.88 s for forward/backward, separately from the warm timings.
+
+The initial bottleneck is Nx's current reverse-mode handling of `while`: it
+recomputes earlier states, taking quadratic time in sequence length. Chunked
+SSD removes that loop from the training graph. Preserving shared B/C then cuts
+roughly another 12–13% from forward/backward time and about 17% from scratch
+memory versus the initial chunked implementation. The fixed-seed final path is
+325× faster forward/backward than the sequential reference, with 24% less
+scratch memory. These gains are relative to this reference
+implementation, not to upstream's optimized Mamba-2 kernels.
+
+Memory numbers come from the compiled executable's buffer assignment and exclude
+arguments, outputs, optimizer state and allocator reservation. No other training
+job ran during timing; desktop GPU processes remained. An isolated scan probe
+is archived as well, but its fully expanded independent B/C inputs and exposed
+state output differ from the model graph; its timings are not additive profile
+fractions. See `bench/results/mamba2_full/` for raw measurements.
+
+Reproduce one case per fresh GPU-enabled VM:
+
+```sh
+BENCH_CONFIG=/path/to/exphil/checkpoints/coh_fox_mamba_v3s906_ep3/model_config.json \
+BENCH_EXECUTION=chunked BENCH_OUT=/tmp/mamba2_full.json \
+devenv shell -- mix run bench/mamba2_training.exs
+```
+
+Use `BENCH_EXECUTION=sequential` for the old reference. `BENCH_BATCH` and
+`BENCH_STATE` override the batch/state sizes. The runner separates compilation
+from warm execution and reports compiler-generated fusion counts.
 
 Run the tests in the project environment:
 
