@@ -89,7 +89,11 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
             _ -> []
           end
 
-      %Spec{call_target_name: target, attributes: attributes}
+      # EXLA #1824 (2026-09-01, in the nx fork since its 10-26 upstream merge): `attributes` is the typed
+      # backend_config dictionary; string pairs that belong ON the stablehlo.custom_call op (the
+      # operand/result layouts) go in `mlir_attributes`. Putting the layout strings in `attributes`
+      # raised "Unsupported attribute type for attribute: operand_layouts" at JIT (ExPhil, 10-27).
+      %Spec{call_target_name: target, mlir_attributes: attributes}
     end
 
     defp layouts(templates), do: "[" <> Enum.map_join(templates, ", ", &row_major/1) <> "]"
