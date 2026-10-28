@@ -1,5 +1,16 @@
 # Architecture completion audit for ExPhil and Melee
 
+## Canonical Mamba-2 — October 28, 2026
+
+**AI-generated.** A separate `:mamba2` architecture now implements the standard
+full-SSM mixer, with learned per-head A/D, joint x/B/C convolution, grouped
+states and gated RMS normalization. It supports carried stepping and compiled
+replay. Full-block reference output and gradient checks pass on portable/EXLA
+host paths. See [scope, usage and reference limits](mamba2.md), including the
+authorship poem. This is a portable implementation, not fused GPU training or
+whole-language-model checkpoint certification. Existing `:mamba_ssd` and ExPhil
+adapters retain their previous behavior.
+
 ## Current follow-up — October 27, 2026
 
 **Reference certification follow-up:** [GRU, SSD, Mamba and MinGRU validation](recurrent_reference_validation.md)
