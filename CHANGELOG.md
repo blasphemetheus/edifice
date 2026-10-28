@@ -29,14 +29,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - GPU parity matrix for the fused CUDA kernels
   (`test/edifice/cuda/kernel_matrix_gpu_test.exs`, `--only cuda_kernels`,
-  needs `EDIFICE_TEST_CLIENT=cuda`): every forward kernel reachable from
-  Elixir, including the five block scans, through the NIF against the pure-Nx
-  reference; the custom-call handlers forward and backward against the tier
-  forced off; the simple scans in bf16. `dispatch_gating_test.exs` pins the
-  tier-selection rules on CPU. `scripts/check_cuda_kernels.sh` builds the
-  kernel libraries, the NIF and the FFI library and syntax-checks every `.cu`
-  (`--test` adds the matrix); `.github/workflows/cuda.yml` runs it on a
-  self-hosted GPU runner.
+  needs `EDIFICE_TEST_CLIENT=cuda`): the selective-scan custom-call handlers
+  forward and backward against the pure-Nx reference with the tier forced
+  off, and two-layer GRU and Mamba models at batch 4 at exact precision.
+  `dispatch_gating_test.exs` pins the tier-selection rules on CPU.
+  `scripts/check_cuda_kernels.sh` builds the FFI library and syntax-checks
+  every `.cu` (`--test` adds the matrix); `.github/workflows/cuda.yml` runs
+  it on a self-hosted GPU runner.
+
+- `Edifice.verified_architectures/0` and `Edifice.verification/1`: which
+  architectures have evidence beyond the unit tests, by level (deployed as an
+  ExPhil policy backbone, trained with tuned defaults in ExPhil, pretrained
+  checkpoint parity, random-weight reference parity). The names are checked
+  against the registry at compile time, and the "Verified in use" table in
+  `guides/architecture_index.md` is checked against the map by the doc-count
+  test.
 
 - `Edifice.Stateful.jit_replay_rows/3` compiles selected-row replay with fused
   gather/scatter and preserves padded or unaffected rows. Tuple histories in
@@ -126,6 +133,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with XLA 0.11. Published EXLA 1.0 / XLA 0.10 has the documented CPU erf/GELU
   defect; its unchanged regression is explicitly run with `--include upstream_fix`
   on the fixed profile. Native-call layout metadata supports both EXLA APIs.
+
+- Documentation review before 0.3.0. Session handoffs, audits and superseded
+  benchmark notes moved from the repository root and `docs/` into
+  `docs/history/` (indexed there); the open plans into `docs/plans/`. The
+  README family table, install line and Requirements, and the counts quoted
+  in the guides now match the registry (267 architectures, 26 families) and
+  the Nx 1.0 dependencies; `test/edifice/doc_counts_test.exs` now checks
+  every guide, not four files.
 
 - **GRU/LSTM parameter layout follows the EXLA target, not the NIF.**
   `Edifice.Recurrent.fused_rnn_available?/1` used "NIF library loaded" to
