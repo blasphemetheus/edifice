@@ -12,6 +12,25 @@ For descriptions, paper references, and decision guidance, see [Architecture Tax
 
 ---
 
+## Verified in use
+
+Most of the 267 architectures are backed by the library's own tests: shapes,
+gradients, batch sweeps, and the registry checks. The ones below have been
+exercised beyond that. The list is `Edifice.verified_architectures/0`; this
+section is checked against it by `test/edifice/doc_counts_test.exs`, and
+`Edifice.verification/1` answers for a single name.
+
+| Level | Meaning | Architectures |
+|---|---|---|
+| **Deployed** | Trained and run as an ExPhil policy backbone, with the stateful step and replay path checked against the batch forward on an actual checkpoint | `:gru`, `:lstm`, `:min_gru`, `:mamba`, `:mamba_ssd` |
+| **Trained** | ExPhil carries tuned training defaults for it, so it has been trained end to end at least in bake-offs | `:attention`, `:delta_net`, `:gated_delta_net`, `:gla`, `:griffin`, `:gru`, `:h3`, `:hgrn`, `:jamba`, `:lstm`, `:mamba`, `:mamba3`, `:mamba_ssd`, `:min_gru`, `:min_lstm`, `:performer`, `:retnet`, `:rwkv`, `:ttt`, `:ttt_e2e`, `:xlstm`, `:zamba` |
+| **Pretrained parity** | A published checkpoint loads through `Edifice.Pretrained` and its outputs match the PyTorch reference (`test/edifice/pretrained/numerical_validation_test.exs`) | `:convnext`, `:detr`, `:resnet`, `:vit`, `:whisper` |
+| **Reference parity** | Forward (and for DeltaNet, gradients) matches a PyTorch fixture at random weights (`test/edifice/pretrained/architecture_numerical_test.exs`) | `:deep_res_lstm`, `:delta_net`, `:dit`, `:gat`, `:gqa`, `:mamba`, `:min_gru` |
+
+Anything not listed has not been trained to convergence or compared with a
+reference implementation by us. Treat it as a faithful reading of the paper
+that compiles and runs, not as a certified port.
+
 ## Feedforward
 
 | Architecture | Module | Key Feature | Validation evidence |

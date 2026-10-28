@@ -198,7 +198,7 @@ checkpointing remains deferred until the upstream Nx checkpoint work merges.
 ## Next priorities
 
 The recurrent microbenchmark is now complete; see
-[measured CPU/GPU timings and ExPhil integration gaps](recurrent_inference_benchmarks.md).
+[measured CPU/GPU timings and ExPhil integration gaps](../recurrent_inference_benchmarks.md).
 Actual-checkpoint MinGRU/Mamba complete-policy latency and state/controller parity
 were validated October 25 in ExPhil. Full-update Mamba batch-8 CUDA medians are
 1.056 ms ordinary and 5.456 ms for one-row resync; see ExPhil's

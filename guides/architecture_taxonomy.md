@@ -7,7 +7,7 @@ evidence column in the [architecture index](architecture_index.md) and the
 counts below are not a live registry count; use `Edifice.list_architectures/0`.
 The validation guide includes the authorship poem for these additions.
 
-Edifice provides **184 registered architectures** across **25 families**, spanning from foundational MLPs to cutting-edge state space models, audio codecs, robotics, and 3D generation. This document serves as a comprehensive reference catalog — organized as a taxonomy with provenance, strengths/weaknesses, and adoption context for every architecture.
+Edifice provides **267 registered architectures** across **26 families**, spanning from foundational MLPs to cutting-edge state space models, audio codecs, robotics, and 3D generation. This document serves as a comprehensive reference catalog — organized as a taxonomy with provenance, strengths/weaknesses, and adoption context for every architecture.
 
 For guided learning, see [Learning Path](learning_path.md). For choosing architectures by problem type, see [Problem Landscape](problem_landscape.md).
 
@@ -49,7 +49,7 @@ For guided learning, see [Learning Path](learning_path.md). For choosing archite
 
 ### Sequence Processing
 
-#### State Space Models (19 architectures)
+#### State Space Models
 
 State Space Models (SSMs) model sequences through continuous-time linear dynamical systems discretized for neural networks. The key equation is:
 
@@ -275,7 +275,7 @@ Interleaves Hyena long convolution blocks (even layers, global context) with gat
 
 ---
 
-#### Attention & Linear Attention (19 architectures)
+#### Attention & Linear Attention
 
 The attention family spans the full evolution from O(N²) quadratic softmax attention to O(N) linear approximations. This is the largest family in Edifice, reflecting the central role of attention mechanisms in modern deep learning.
 
@@ -554,7 +554,7 @@ Splits sequences into chunks and processes attention in a rotating ring pattern.
 
 ---
 
-#### Recurrent Networks (10 architectures)
+#### Recurrent Networks
 
 The "recurrence renaissance" — a revival of RNN architectures with modern innovations like parallel scans, exponential gating, and test-time learning. These architectures combine the O(1) inference cost of RNNs with training parallelism.
 
@@ -726,7 +726,7 @@ GPT-style decoder-only transformer combining modern LLM techniques: GQA for effi
 
 ### Perception
 
-#### Vision (9 architectures)
+#### Vision
 
 Vision architectures process images (and related spatial data) through various token-mixing strategies — from attention (ViT) to convolution (ConvNeXt) to pure pooling (PoolFormer) to coordinate mapping (NeRF).
 
@@ -861,7 +861,7 @@ Maps 3D coordinates (and optional viewing directions) to color and density value
 
 ---
 
-#### Convolutional (6 architectures)
+#### Convolutional
 
 Classic convolutional networks for local pattern extraction. Despite the rise of transformers, CNNs remain relevant for efficiency, mobile deployment, and well-understood training dynamics.
 
@@ -954,7 +954,7 @@ Compound scaling of depth, width, and resolution with fixed scaling coefficients
 
 ### Structured Data
 
-#### Graph Networks (8 architectures)
+#### Graph Networks
 
 Graph neural networks for processing graph-structured data — molecular graphs, social networks, knowledge graphs, and spatial interactions.
 
@@ -1077,7 +1077,7 @@ Continuous-filter convolutions for molecular graphs. Edge weights derived from i
 
 ---
 
-#### Set Networks (2 architectures)
+#### Set Networks
 
 Architectures for permutation-invariant processing of unordered sets.
 
@@ -1113,7 +1113,7 @@ Point cloud processing with per-point MLPs and max pooling for permutation invar
 
 ### Generation
 
-#### Generative Models (11 architectures)
+#### Generative Models
 
 Architectures for generating data — from noise to images, actions, and latent representations.
 
@@ -1280,7 +1280,7 @@ Invertible transformations between simple base distribution and complex target. 
 
 ---
 
-#### Contrastive & Self-Supervised (6 architectures)
+#### Contrastive & Self-Supervised
 
 Architectures for learning representations without labels, using contrastive losses or prediction-based objectives.
 
@@ -1378,7 +1378,7 @@ Predicts representations of masked regions (not pixel values), learning more abs
 
 ### Composition & Enhancement
 
-#### Meta-Learning (10 architectures)
+#### Meta-Learning
 
 Architectures for routing, adaptation, composition, and model enhancement. These are typically composed with other architectures rather than used standalone.
 
@@ -1533,7 +1533,7 @@ Composable head modules for alignment: Reward head (sequence → scalar reward) 
 
 ### Specialized
 
-#### Energy-Based (3 architectures)
+#### Energy-Based
 
 Architectures modeling energy landscapes and continuous dynamics.
 
@@ -1583,7 +1583,7 @@ Parameterizes continuous hidden state dynamics: dh/dt = f(h(t), t; θ). Constant
 
 ---
 
-#### Probabilistic (3 architectures)
+#### Probabilistic
 
 Architectures for principled uncertainty quantification.
 
@@ -1634,7 +1634,7 @@ Places Dirichlet distribution over class probabilities. Network outputs evidence
 
 ---
 
-#### Memory-Augmented (2 architectures)
+#### Memory-Augmented
 
 Architectures with external differentiable memory.
 
@@ -1670,7 +1670,7 @@ Iterative reasoning over memory slots via multi-hop attention. Each hop: attend 
 
 ---
 
-#### Neuromorphic (2 architectures)
+#### Neuromorphic
 
 Biologically-plausible architectures for ultra-low-power deployment on neuromorphic hardware.
 
@@ -1705,7 +1705,7 @@ Converts trained ANNs to spiking networks by replacing ReLU with integrate-and-f
 
 ---
 
-#### Feedforward (5 architectures)
+#### Feedforward
 
 Foundational and specialized feedforward architectures.
 
@@ -1840,7 +1840,7 @@ Missing architectures identified through survey of current research, organized b
 | **Native Recurrence** | Recurrent | Hardware-native recurrent implementations for specialized accelerators |
 | **State Space Transformer** | SSM/Transformer | Deeper SSM-attention integration (beyond simple interleaving) |
 
-See [ARCHITECTURE_ROADMAP.md](https://github.com/blasphemetheus/edifice/blob/main/ARCHITECTURE_ROADMAP.md) for implementation timeline and prioritization.
+See [ARCHITECTURE_ROADMAP.md](https://github.com/blasphemetheus/edifice/blob/main/docs/history/ARCHITECTURE_ROADMAP.md) for implementation timeline and prioritization.
 
 ---
 

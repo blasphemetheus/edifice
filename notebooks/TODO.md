@@ -2,7 +2,7 @@
 
 ## Current Coverage
 
-12 notebooks covering ~30 of 184 registered architectures.
+12 notebooks covering ~30 of 267 registered architectures.
 
 ### Done
 

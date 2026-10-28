@@ -4,7 +4,7 @@
 ## Why Problems Dictate Architecture
 
 It's tempting to think there's one best neural network architecture. There isn't. The reason
-Edifice has 19 families is that different problems have fundamentally different structures, and
+Edifice has 26 families is that different problems have fundamentally different structures, and
 the right architecture encodes the right structural assumptions. Choosing an architecture is
 really about answering: "what does my data look like, and what do I need to predict?"
 

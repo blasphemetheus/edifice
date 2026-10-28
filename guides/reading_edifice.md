@@ -4,7 +4,7 @@
 ## What This Guide Covers
 
 Every architecture in Edifice follows the same patterns. Once you understand these patterns,
-you can pick up any of the 90+ architectures without re-learning the API. This guide walks
+you can pick up any of the 267 architectures without re-learning the API. This guide walks
 through those patterns with runnable examples.
 
 **Prerequisites:** You should be comfortable with the concepts in
@@ -18,7 +18,7 @@ Edifice sits on top of two foundational Elixir libraries:
 
 ```
 ┌─────────────────────────────────────┐
-│           Edifice                    │  90+ architectures, consistent API
+│           Edifice                    │  267 architectures, consistent API
 │  "What architecture do I want?"      │
 ├─────────────────────────────────────┤
 │           Axon                       │  Model building, computation graphs
@@ -40,7 +40,7 @@ NumPy + autograd.
 **computation graph** -- a description of how data flows through layers. The graph is then
 compiled into efficient functions for initialization and prediction.
 
-**Edifice** uses Axon to implement 90+ architectures with a consistent API. Instead of manually
+**Edifice** uses Axon to implement 267 architectures with a consistent API. Instead of manually
 wiring up attention heads, SSM blocks, and normalization layers, you call `Edifice.build/2` and
 get a ready-to-use Axon model.
 
@@ -398,7 +398,7 @@ The moduledocs follow a consistent pattern:
 
 With the API patterns understood, you're ready to explore architectures:
 
-1. **[Learning Path](learning_path.md)** -- a guided tour through the 19 families in a logical order
+1. **[Learning Path](learning_path.md)** -- a guided tour through the 26 families in a logical order
 2. Any architecture-specific guide (e.g., [State Space Models](state_space_models.md),
    [Attention Mechanisms](attention_mechanisms.md)) -- you now have the vocabulary and API
    knowledge to follow them

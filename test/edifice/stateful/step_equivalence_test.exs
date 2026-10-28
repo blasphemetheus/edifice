@@ -1,6 +1,6 @@
 defmodule Edifice.StatefulStepEquivalenceTest do
   @moduledoc """
-  THE correctness pin for `Edifice.Stateful` (HANDOFF_BOT_RUNTIME.md task 2):
+  THE correctness pin for `Edifice.Stateful` (docs/history/HANDOFF_BOT_RUNTIME.md task 2):
   iterated `step/3` must reproduce the full-sequence forward at every prefix
   length. If this equivalence holds, everything downstream (latency numbers,
   rollback behavior, the bot's frame loop) is trustworthy.

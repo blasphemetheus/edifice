@@ -152,6 +152,7 @@ mix run bench/scaling_profile.exs
 - One architecture per PR (unless closely related, e.g., MinGRU + MinLSTM)
 - Include the paper reference in the PR description
 - Tests must pass: `mix test && mix format --check-formatted && mix credo`
+- If you trained an architecture for real or matched it against a reference implementation, add it to `@verification` in `lib/edifice.ex` and to the "Verified in use" table in `guides/architecture_index.md`, and say where the evidence is in the PR
 
 ## Releasing
 

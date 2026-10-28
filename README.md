@@ -44,7 +44,7 @@ Add `edifice` to your dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:edifice, "~> 0.2.0"}
+    {:edifice, "~> 0.3.0"}
   ]
 end
 ```
@@ -148,30 +148,39 @@ Edifice.list_families()
 
 267 architectures across 26 families, plus 20 shared building blocks. See the **[full architecture index](guides/architecture_index.md)** for every module.
 
+Not every architecture has seen the same scrutiny. The ones that have been
+trained and deployed in [ExPhil](https://github.com/blasphemetheus/exphil), or
+checked against a PyTorch reference with real or random weights, are listed
+under **[Verified in use](guides/architecture_index.md#verified-in-use)** in
+the index, and `Edifice.verification/1` reports the same from code. The rest
+are faithful readings of their papers backed by shape, gradient and sweep
+tests.
+
 | Family | Count | Highlights |
 |--------|------:|------------|
-| **Attention** | 36 | Multi-Head, GQA, MLA, Perceiver, RetNet, RWKV-7, GLA, Griffin, NSA, Conformer |
-| **Generative** | 24 | VAE, GAN, Diffusion, DiT, MMDiT, Flow Matching, Transfusion, CogVideoX, MDLM |
-| **Meta** | 23 | MoE, LoRA, DoRA, DPO, GRPO, Capsules, Speculative Decoding, QAT |
-| **SSM** | 19 | Mamba, Mamba-2, Mamba-3, S4, Hyena, Hymba, Jamba, StripedHyena |
-| **Recurrent** | 16 | LSTM, GRU, xLSTM, MinGRU, DeltaNet, TTT, Titans |
-| **Vision** | 15 | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, DINOv2, MambaVision |
-| **Graph** | 9 | GCN, GAT, GIN, GraphSAGE, SchNet, EGNN |
-| **Contrastive** | 8 | SimCLR, BYOL, MAE, VICReg, JEPA, SigLIP |
+| **Attention** | 48 | Multi-Head, GQA, MLA, Perceiver, RetNet, RWKV, GLA, Griffin, NSA, Ring Attention, Conformer |
+| **Meta** | 36 | MoE, LoRA, DoRA, DPO, GRPO, Capsules, Speculative Decoding, Mixture of Depths, QAT |
+| **Generative** | 33 | VAE, GAN, Diffusion, DiT, MMDiT, Flow Matching, Transfusion, CogVideoX, MDLM, VAR |
+| **SSM** | 22 | Mamba, Mamba-2 (SSD), Mamba-3, S4, S5, Hyena, Hymba, Jamba, StripedHyena, Zamba |
+| **Recurrent** | 21 | LSTM, GRU, xLSTM, MinGRU, DeltaNet, Gated DeltaNet, TTT, Titans |
+| **Vision** | 18 | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, DINOv2, DINOv3, NeRF, MambaVision |
+| **Graph** | 13 | GCN, GAT, GIN, GraphSAGE, SchNet, EGNN, SE(3)-Transformer, GPS |
+| **Interpretability** | 12 | Sparse Autoencoder, Gated / JumpReLU / Matryoshka SAE, Transcoder, Crosscoder, LEACE, Probes |
+| **Contrastive** | 9 | SimCLR, BYOL, MAE, VICReg, JEPA, V-JEPA 2, SigLIP |
+| **Audio** | 6 | EnCodec, VALL-E, SoundStorm, Whisper, wav2vec 2.0, F5-TTS |
 | **Convolutional** | 6 | ResNet, DenseNet, TCN, MobileNet, EfficientNet |
 | **Feedforward** | 5 | MLP, KAN, KAT, TabNet, BitNet |
-| **Transformer** | 4 | Decoder-Only, Multi-Token Prediction, BLT, Nemotron-H |
-| **Audio** | 4 | EnCodec, VALL-E, SoundStorm, Whisper |
+| **Transformer** | 5 | Decoder-Only, Multi-Token Prediction, BLT, Nemotron-H, Free Transformer |
+| **Memory** | 4 | NTM, Memory Networks, Memory Layer, Engram |
+| **Sets** | 4 | DeepSets, PointNet, PointNet++, Entity Encoder |
+| **RL** | 4 | PolicyValue, Decision Transformer, Pointer Network, Autoregressive Head |
+| **Scientific** | 3 | FNO, DeepONet, TNO |
 | **Detection** | 3 | DETR, RT-DETR, SAM 2 |
 | **Energy** | 3 | EBM, Hopfield, Neural ODE |
-| **Memory** | 3 | NTM, Memory Networks, Engram |
 | **Probabilistic** | 3 | Bayesian, MC Dropout, Evidential |
-| **Sets** | 2 | DeepSets, PointNet |
-| **Robotics** | 2 | ACT, OpenVLA |
-| **RL** | 2 | PolicyValue, Decision Transformer |
-| **Interpretability** | 2 | Sparse Autoencoder, Transcoder |
+| **Robotics** | 3 | ACT, Diffusion Policy, OpenVLA |
 | **Neuromorphic** | 2 | SNN, ANN2SNN |
-| **+ 6 more** | 6 | Liquid NN, FNO, World Model, Medusa, Multimodal Fusion, Hybrid Builder |
+| **+ 4 more** | 4 | Liquid NN, World Model, Medusa, Multimodal Fusion |
 
 ## Guides
 
@@ -338,10 +347,10 @@ end
 ## Requirements
 
 - Elixir >= 1.18
-- Nx ~> 0.12
-- Axon ~> 0.8
-- Polaris ~> 0.1
-- EXLA ~> 0.11 (optional, for GPU acceleration)
+- Nx ~> 1.0
+- Axon ~> 0.9
+- Polaris ~> 0.2
+- EXLA ~> 1.0 (optional, for GPU acceleration)
 
 ## License
 
