@@ -190,6 +190,9 @@ jobs:
       - name: Check formatting
         run: mix format --check-formatted
 
+      - name: Check architecture evidence labels
+        run: elixir scripts/update_architecture_validation.exs --check
+
       - name: Compile (warnings as errors)
         run: mix compile --warnings-as-errors
 
@@ -219,3 +222,38 @@ jobs:
 
       - name: Run Dialyzer
         run: mix dialyzer
+
+  # The publishable baseline has a known XLA 0.10 erf defect. Keep the exact
+  # regression active on the pinned profile containing the upstream fix.
+  backend-compatibility:
+    name: EXLA compatibility (${{ matrix.profile }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [hex, upstream]
+    env:
+      EDIFICE_UPSTREAM_NX: ${{ matrix.profile == 'upstream' && '1' || '0' }}
+      XLA_TARGET: cpu
+      EXLA_CPU_ONLY: "1"
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+      - name: Resolve the fixed upstream profile
+        if: matrix.profile == 'upstream'
+        run: mix deps.update nx exla xla
+      - name: Resolve published packages
+        if: matrix.profile == 'hex'
+        run: mix deps.get
+      - name: Check native-call API
+        run: mix test test/edifice/cuda/library_test.exs
+      - name: Check upstream numerical fix
+        if: matrix.profile == 'upstream'
+        run: mix test test/edifice/pretrained/gelu_backend_test.exs --include upstream_fix
+      - name: Check compiled recurrent references
+        run: mix test test/edifice/pretrained/recurrent_reference_test.exs test/edifice/ssm/mamba2_test.exs --include exla_only

@@ -1,6 +1,13 @@
 # State Space Models
 > Linear-time sequence modeling through continuous-time dynamical systems with learned discretization.
 
+**AI-generated validation note.** Edifice's Mamba, legacy Mamba-2/SSD and
+canonical Mamba-2 Full have different equations and reference coverage.
+`:mamba_ssd` is not the canonical mixer; use `:mamba2_full` for that.
+See the [per-architecture evidence](architecture_index.md) and
+[validation scope, backend limits and authorship poem](validation.md).
+Other SSM family members do not inherit these models' validation results.
+
 ## Overview
 
 State Space Models (SSMs) bring control theory into deep learning. They model sequences as

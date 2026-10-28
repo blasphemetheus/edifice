@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **AI-generated release notes:** per-architecture validation labels and a
+  guide separating independent references, pretrained comparisons, local
+  behavior checks and unreviewed evidence. Scope, backend limits and the
+  accompanying **AI-generated poem** are in `guides/validation.md`.
+
 - Kernel tier benchmark (`bench/kernel_tier_bench.exs`, results and method in
   `docs/kernel_tier_benchmarks.md` and `bench/results/kernel_tiers_2026-10-26/`):
   GRU scan and Mamba selective scan, op-level and inside the 2-layer models,
@@ -115,6 +120,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `bench/nif_overhead_profile.exs` (measured the removed bridge).
 
 ### Changed
+
+- Default Nx/EXLA dependencies are published Hex 1.0 packages, so the release
+  package can be built. `EDIFICE_UPSTREAM_NX=1` retains the validated Git revision
+  with XLA 0.11. Published EXLA 1.0 / XLA 0.10 has the documented CPU erf/GELU
+  defect; its unchanged regression is explicitly run with `--include upstream_fix`
+  on the fixed profile. Native-call layout metadata supports both EXLA APIs.
 
 - **GRU/LSTM parameter layout follows the EXLA target, not the NIF.**
   `Edifice.Recurrent.fused_rnn_available?/1` used "NIF library loaded" to

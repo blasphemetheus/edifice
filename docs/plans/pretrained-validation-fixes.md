@@ -1,5 +1,10 @@
 # Pretrained numerical validation: execution results
 
+**AI-generated release clarification, October 28:** the resolved results below
+use the fixed upstream Nx/EXLA/XLA profile. The 0.3.0 release baseline uses
+published EXLA 1.0 / XLA 0.10, which still has the CPU erf/GELU defect. See
+[current dependency and validation limits](../../guides/validation.md).
+
 **Current status, October 26:** the initial failure below is resolved. The
 upstream Nx/EXLA/XLA update fixes the erf bug; independent f64 and varied/recorded
 input checks justify a Whisper-specific f32 comparison. All six pretrained

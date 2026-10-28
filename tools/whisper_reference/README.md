@@ -345,12 +345,15 @@ Saved evidence under `bench/results/pretrained_2026-10-26/`:
 
 ### Adopting the upstream dependency update
 
-Edifice now pins both Nx and EXLA to upstream commit
+The fixed validation profile (`EDIFICE_UPSTREAM_NX=1`) pins both Nx and EXLA to upstream commit
 `171dcad658ae06f726aaacf785df2989eca047e0`, which integrates XLA 0.11 support.
 The matching Nx revision includes the ordering information that this EXLA
 revision uses for host callbacks. EXLA remains optional, and
 `EDIFICE_LOCAL_NX=1` still selects the sibling development checkout.
-XLA itself comes from its released Hex package and official prebuilt archives;
+The publishable default now uses Hex Nx/EXLA 1.0 with the known XLA 0.10
+CPU erf/GELU limitation. Results in this section describe the fixed profile,
+not that default. See the [release validation guide](../../guides/validation.md).
+In the fixed profile, XLA comes from its released Hex package and official prebuilt archives;
 the diagnostic `XLA_ARCHIVE_PATH` override is no longer needed.
 
 The development shell and CI select Clang to compile EXLA's native bridge.

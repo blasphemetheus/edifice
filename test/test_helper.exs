@@ -10,4 +10,4 @@ if Code.ensure_loaded?(EXLA) do
   Application.put_env(:exla, :default_client, client)
 end
 
-ExUnit.start(exclude: [:slow, :integration, :external, :exla_only, :known_issue])
+ExUnit.start(exclude: [:slow, :integration, :external, :exla_only, :known_issue, :upstream_fix])

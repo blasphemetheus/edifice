@@ -99,15 +99,19 @@ defmodule Edifice.CUDA.LibraryTest do
              Enum.sort(Edifice.Block.native_ops())
 
     for {op, args, out, operand_layouts, result_layouts} <- cases do
-      assert {:ok, %EXLA.CustomCall.Spec{attributes: attrs}} =
+      assert {:ok, %EXLA.CustomCall.Spec{} = spec} =
                EXLA.CustomCall.call(%FusedOp{op: op}, out, args, client),
              "#{op}"
 
-      assert attrs == [
+      field = if Map.has_key?(spec, :mlir_attributes), do: :mlir_attributes, else: :attributes
+
+      assert Map.fetch!(spec, field) == [
                {"operand_layouts", operand_layouts},
                {"result_layouts", result_layouts}
              ],
              "#{op}"
+
+      if field == :mlir_attributes, do: assert(spec.attributes == [])
     end
   end
 

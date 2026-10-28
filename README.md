@@ -32,6 +32,13 @@ The Elixir ML ecosystem has excellent numerical computing (Nx) and model buildin
 
 ## Installation
 
+> **AI-generated release compatibility note.** The default dependencies use
+> published Nx/EXLA 1.0 packages. EXLA 1.0's XLA 0.10 has a known CPU f32
+> erf/GELU error. The fixed upstream setup remains available; see
+> [dependency limits and setup](guides/validation.md#dependency-and-backend-limits-for-030).
+> Whisper's corrected numerical results apply to that fixed setup.
+> The accompanying authorship poem is in the validation guide.
+
 Add `edifice` to your dependencies in `mix.exs`:
 
 ```elixir
@@ -94,6 +101,22 @@ when XLA still has unused pool memory. Size the fraction for your workload.
 > **Tip:** On Elixir 1.19+, set `MIX_OS_DEPS_COMPILE_PARTITION_COUNT=4` to compile dependencies in parallel (up to 4x faster first build).
 
 ## Quick Start
+
+### How much has each architecture been tested?
+
+**AI-generated evidence summary.** Coverage varies. Canonical Mamba-2, GRU,
+Mamba and MinGRU have independent numerical checks within documented limits.
+Selected vision models have real-checkpoint comparisons. Many other models
+have local tests, but have not been independently certified.
+
+The [architecture index](guides/architecture_index.md) now labels each listed
+architecture's reviewed evidence. The [validation guide](guides/validation.md)
+explains what was compared, which backend was used, and what remains unknown.
+**Unreviewed** means the evidence has not yet been assessed, not that no tests
+exist. Shape tests and speed measurements alone do not establish correctness.
+The validation guide includes the authorship poem for these additions.
+
+### Build a model
 
 ```elixir
 # Build any architecture by name

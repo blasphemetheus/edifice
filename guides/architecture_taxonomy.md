@@ -1,5 +1,12 @@
 # Architecture Taxonomy
 
+**AI-generated validation note.** This taxonomy describes architecture ideas;
+it does not certify each implementation against its paper. Check the per-model
+evidence column in the [architecture index](architecture_index.md) and the
+[validation guide](validation.md) before choosing a model. Historical family
+counts below are not a live registry count; use `Edifice.list_architectures/0`.
+The validation guide includes the authorship poem for these additions.
+
 Edifice provides **184 registered architectures** across **25 families**, spanning from foundational MLPs to cutting-edge state space models, audio codecs, robotics, and 3D generation. This document serves as a comprehensive reference catalog — organized as a taxonomy with provenance, strengths/weaknesses, and adoption context for every architecture.
 
 For guided learning, see [Learning Path](learning_path.md). For choosing architectures by problem type, see [Problem Landscape](problem_landscape.md).
