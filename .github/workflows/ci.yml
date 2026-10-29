@@ -246,7 +246,7 @@ jobs:
           otp-version: ${{ env.OTP_VERSION }}
       - name: Resolve the fixed upstream profile
         if: matrix.profile == 'upstream'
-        run: mix deps.update nx exla xla
+        run: mix deps.update nx exla xla && mix deps.get
       - name: Resolve published packages
         if: matrix.profile == 'hex'
         run: mix deps.get
