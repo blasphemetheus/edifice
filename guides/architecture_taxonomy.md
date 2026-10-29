@@ -7,7 +7,7 @@ evidence column in the [architecture index](architecture_index.md) and the
 counts below are not a live registry count; use `Edifice.list_architectures/0`.
 The validation guide includes the authorship poem for these additions.
 
-Edifice provides **267 registered architectures** across **26 families**, spanning from foundational MLPs to cutting-edge state space models, audio codecs, robotics, and 3D generation. This document serves as a comprehensive reference catalog — organized as a taxonomy with provenance, strengths/weaknesses, and adoption context for every architecture.
+Edifice provides **268 registered architectures** across **26 families**, spanning from foundational MLPs to cutting-edge state space models, audio codecs, robotics, and 3D generation. This document serves as a comprehensive reference catalog — organized as a taxonomy with provenance, strengths/weaknesses, and adoption context for every architecture.
 
 For guided learning, see [Learning Path](learning_path.md). For choosing architectures by problem type, see [Problem Landscape](problem_landscape.md).
 

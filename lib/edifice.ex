@@ -428,8 +428,10 @@ defmodule Edifice do
   #                      has been trained end to end at least in bake-offs
   #   :pretrained_parity a published checkpoint loads and its outputs match
   #                      the PyTorch reference (test/edifice/pretrained/)
-  #   :reference_parity  forward (and where noted gradient) matches a PyTorch
-  #                      fixture at random weights (test/edifice/pretrained/)
+  #   :reference_parity  forward (and where noted gradient) matches an
+  #                      independent reference at random weights: PyTorch
+  #                      fixtures (test/edifice/pretrained/), the ATen GRU and
+  #                      LibTorch Mamba-2 references (see guides/validation.md)
   #
   # Add a name here when you have the evidence, and say where it is in the
   # commit. guides/architecture_index.md lists these; the doc-count test keeps
@@ -461,7 +463,17 @@ defmodule Edifice do
       :zamba
     ],
     pretrained_parity: [:convnext, :detr, :resnet, :vit, :whisper],
-    reference_parity: [:deep_res_lstm, :delta_net, :dit, :gat, :gqa, :mamba, :min_gru]
+    reference_parity: [
+      :deep_res_lstm,
+      :delta_net,
+      :dit,
+      :gat,
+      :gqa,
+      :gru,
+      :mamba,
+      :mamba2_full,
+      :min_gru
+    ]
   }
 
   for {level, names} <- @verification, name <- names do

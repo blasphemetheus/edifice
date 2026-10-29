@@ -133,6 +133,11 @@ and run it with `devenv shell -- elixir scripts/update_architecture_validation.e
 New or unclassified models stay **Unreviewed**. The script's `--check` mode
 verifies that the index matches those lists; it does not run or certify tests.
 
+The coarser levels in `Edifice.verified_architectures/0` (deployed, trained,
+pretrained parity, reference parity) and the index's "Verified in use" table
+are kept in step by `test/edifice/doc_counts_test.exs`; add a name there in the
+same commit as the evidence it rests on.
+
 **AI-generated poem**
 
 A shape can fit while numbers stray;  

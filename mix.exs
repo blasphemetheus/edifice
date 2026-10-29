@@ -20,7 +20,7 @@ defmodule Edifice.MixProject do
       # Docs
       name: "Edifice",
       description:
-        "267 neural network architectures for Nx/Axon: transformers, Mamba, diffusion, GNNs, audio, robotics, and more",
+        "268 neural network architectures for Nx/Axon: transformers, Mamba, diffusion, GNNs, audio, robotics, and more",
       source_url: @source_url,
       homepage_url: @source_url,
       docs: docs(),

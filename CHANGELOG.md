@@ -138,7 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   benchmark notes moved from the repository root and `docs/` into
   `docs/history/` (indexed there); the open plans into `docs/plans/`. The
   README family table, install line and Requirements, and the counts quoted
-  in the guides now match the registry (267 architectures, 26 families) and
+  in the guides now match the registry (268 architectures, 26 families) and
   the Nx 1.0 dependencies; `test/edifice/doc_counts_test.exs` now checks
   every guide, not four files.
 
