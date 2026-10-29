@@ -1,27 +1,31 @@
 defmodule Edifice.CUDA.FusedScan do
-  @moduledoc false
-  # High-level dispatch for the fused scans.
-  #
-  # Two tiers (highest priority first):
-  # 1. XLA-graph tier via Nx.block (Edifice.Block.run) — the CUDA kernel runs
-  #    as an XLA custom call inside the compiled graph. Needs
-  #    `mix edifice.cuda.build`, EXLA 1.0's `EXLA.load_dylib/1` and
-  #    EDIFICE_FUSED_CUSTOM_CALL=1. Only the ops in
-  #    `Edifice.Block.native_ops/0` have handlers (today: the Mamba selective
-  #    scan); `custom_call_available?/1` is per-op so the other ops are not
-  #    routed here (that would compile the pure fallback through Nx.block
-  #    for nothing).
-  # 2. Pure-Nx scan — works on any backend; under `compiler: EXLA` it is
-  #    compiled and fused by XLA, which is faster than most of the kernels
-  #    we have measured (docs/kernel_tier_benchmarks.md).
-  #
-  # A third tier, a C NIF that ran 47 kernels on eager EXLA tensors, was
-  # removed on 2026-10-26: it was slower than the same kernel as a custom
-  # call and far slower than the compiled fallback, and gradients never
-  # reached it. The sources are on the `archive/cuda-nif-kernels` branch.
-  #
-  # Parity of the custom-call tier against the pure-Nx reference is checked
-  # by test/edifice/cuda/kernel_matrix_gpu_test.exs (EDIFICE_TEST_CLIENT=cuda).
+  @moduledoc """
+  Dispatch for the recurrent and state-space scans.
+
+  Every scan here runs one of two ways, tried in this order:
+
+  1. **XLA custom call.** The CUDA kernel runs inside the compiled graph
+     through `Edifice.Block`. This needs `mix edifice.cuda.build`, EXLA 1.0's
+     `EXLA.load_dylib/1` and `EDIFICE_FUSED_CUSTOM_CALL=1`. Only the ops in
+     `Edifice.Block.native_ops/0` have handlers (today, the Mamba selective
+     scan). `custom_call_available?/1` answers per op, so the other scans
+     never take this path.
+  2. **Pure Nx.** Works on any backend. Under `compiler: EXLA` XLA compiles
+     and fuses it, which is faster than most of the kernels we have measured
+     (see `docs/kernel_tier_benchmarks.md`).
+
+  A third tier, a C NIF that ran 47 kernels on eager EXLA tensors, was
+  removed on 2026-10-26. It was slower than the same kernel as a custom call
+  and far slower than the compiled fallback, and gradients never reached it.
+  The sources are on the `archive/cuda-nif-kernels` branch.
+
+  Parity of the custom-call tier against the pure-Nx reference is checked by
+  `test/edifice/cuda/kernel_matrix_gpu_test.exs` with
+  `EDIFICE_TEST_CLIENT=cuda`.
+
+  Architecture modules call these functions through their `fused_block` and
+  `fused_scan` options; application code normally does not call them directly.
+  """
 
   alias Edifice.CUDA.AutoTuneProfiler
 

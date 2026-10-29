@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- `Edifice.CUDA.FusedScan` is documented and listed under Internals. It was
+  hidden, so every reference to it from the guides and the changelog raised an
+  ex_doc warning during `mix docs` and `mix hex.publish`.
+
 ## [0.3.0] - 2026-10-29
 
 ### Added
