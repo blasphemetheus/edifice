@@ -1,7 +1,7 @@
 defmodule Edifice.MixProject do
   use Mix.Project
 
-  @version "0.2.0"
+  @version "0.3.0"
   @source_url "https://github.com/blasphemetheus/edifice"
   @nx_revision "171dcad658ae06f726aaacf785df2989eca047e0"
 
