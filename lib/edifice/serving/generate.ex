@@ -367,17 +367,21 @@ defmodule Edifice.Serving.Generate do
     else
       {tokens, _, _, _} =
         Enum.reduce_while(1..max_tokens, acc, fn _step, acc ->
-          case simple_step(ctx, acc) do
-            {:halt, acc} ->
-              {:halt, acc}
-
-            {:cont, acc} ->
-              token = last_token(elem(acc, 0))
-              if on_token.(token) == :halt, do: {:halt, acc}, else: {:cont, acc}
-          end
+          stream_step(ctx, acc, on_token)
         end)
 
       tokens
+    end
+  end
+
+  defp stream_step(ctx, acc, on_token) do
+    case simple_step(ctx, acc) do
+      {:halt, acc} ->
+        {:halt, acc}
+
+      {:cont, acc} ->
+        token = last_token(elem(acc, 0))
+        if on_token.(token) == :halt, do: {:halt, acc}, else: {:cont, acc}
     end
   end
 

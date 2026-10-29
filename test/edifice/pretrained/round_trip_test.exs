@@ -310,10 +310,19 @@ defmodule Edifice.Pretrained.RoundTripTest do
   end
 
   # Encoder conv stem
-  defp whisper_enc_reverse("enc_conv1.kernel", t), do: [{"model.encoder.conv1.weight", t}]
+  defp whisper_enc_reverse("enc_conv1.kernel", t),
+    do: [{"model.encoder.conv1.weight", Nx.transpose(t, axes: [2, 1, 0])}]
+
   defp whisper_enc_reverse("enc_conv1.bias", t), do: [{"model.encoder.conv1.bias", t}]
-  defp whisper_enc_reverse("enc_conv2.kernel", t), do: [{"model.encoder.conv2.weight", t}]
+
+  defp whisper_enc_reverse("enc_conv2.kernel", t),
+    do: [{"model.encoder.conv2.weight", Nx.transpose(t, axes: [2, 1, 0])}]
+
   defp whisper_enc_reverse("enc_conv2.bias", t), do: [{"model.encoder.conv2.bias", t}]
+
+  # Encoder positional embedding
+  defp whisper_enc_reverse("enc_pos_embed.kernel", t),
+    do: [{"model.encoder.embed_positions.weight", t}]
 
   # Encoder final norm
   defp whisper_enc_reverse("enc_final_norm.gamma", t),
