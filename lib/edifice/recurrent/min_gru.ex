@@ -7,6 +7,12 @@ defmodule Edifice.Recurrent.MinGRU do
   gate. This makes it parallel-scannable during training while preserving the
   core gating mechanism that makes GRUs effective.
 
+  This implementation uses signed linear candidates, as shown below. It does
+  not apply the positive candidate activation used by log-space MinGRU
+  implementations (`g(x) = x + 0.5` for nonnegative x, `sigmoid(x)` otherwise).
+  Those variants are not numerically interchangeable with existing Edifice
+  checkpoints. Edifice uses an affine scan rather than requiring positive states.
+
   ## Key Innovations
 
   - **Single gate**: Only one gate `z_t` controls interpolation (vs 3 in standard GRU)

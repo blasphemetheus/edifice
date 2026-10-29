@@ -2,7 +2,7 @@
 
 ## Current Status
 
-238 registered architectures across 26 families, 20 shared blocks, 2500+ tests.
+267 registered architectures across 26 families, 20 shared blocks, 5000+ tests.
 
 ## Future: Nx.Defn.Kernel.while generation loop
 
@@ -501,7 +501,7 @@ Livebook Smart Cell for browsing, configuring, and comparing Edifice architectur
 #### Applied Task Benchmarks
 `bench/tasks/` suite — train small models on real tasks to answer "which architecture for my problem?"
 
-All 6 bench files written and verified. `value_and_grad` + EXLA fix applied (`Nx.backend_copy` to BinaryBackend). See `docs/bench_tasks_fixup_plan.md` for results.
+All 6 bench files written and verified. `value_and_grad` + EXLA fix applied (`Nx.backend_copy` to BinaryBackend). See `docs/plans/bench_tasks_fixup_plan.md` for results.
 
 - [x] **Fix `value_and_grad` EXLA/Expr incompatibility** — Applied `Nx.backend_copy` on captured tensors (inputs, targets, model state) in `TaskHelpers.train/4`.
 - [x] **Sequence classification** — Cumsum sign prediction. 4/5 pass, min_gru 60.9%. `bench/tasks/sequence_classification.exs`.

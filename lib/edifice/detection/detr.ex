@@ -161,6 +161,16 @@ defmodule Edifice.Detection.DETR do
     # 1x1 conv projection to hidden_dim: [batch, H', W', hidden_dim]
     features = Axon.conv(features, hidden_dim, kernel_size: {1, 1}, name: "input_proj")
 
+    spatial_pe =
+      Axon.nx(
+        features,
+        fn t ->
+          {_batch, height, width, dim} = Nx.shape(t)
+          SinusoidalPE2D.detr_table(height, width, dim)
+        end,
+        name: "spatial_pe"
+      )
+
     # Flatten spatial dims: [batch, H'*W', hidden_dim]
     features =
       Axon.nx(
@@ -170,17 +180,6 @@ defmodule Edifice.Detection.DETR do
           Nx.reshape(t, {batch, h * w, d})
         end,
         name: "flatten_spatial"
-      )
-
-    # 2D sinusoidal positional encoding (added at each encoder layer)
-    spatial_pe =
-      Axon.nx(
-        features,
-        fn t ->
-          {_batch, seq_len, dim} = Nx.shape(t)
-          SinusoidalPE2D.build_table(seq_len, dim)
-        end,
-        name: "spatial_pe"
       )
 
     # Transformer encoder
@@ -343,7 +342,7 @@ defmodule Edifice.Detection.DETR do
       Axon.conv(input, @resnet50_initial_channels,
         kernel_size: {7, 7},
         strides: [2, 2],
-        padding: :same,
+        padding: [{3, 3}, {3, 3}],
         name: "#{prefix}_stem_conv"
       )
 
@@ -354,7 +353,7 @@ defmodule Edifice.Detection.DETR do
       Axon.max_pool(x,
         kernel_size: {3, 3},
         strides: [2, 2],
-        padding: :same,
+        padding: [{1, 1}, {1, 1}],
         name: "#{prefix}_stem_pool"
       )
 
@@ -376,6 +375,7 @@ defmodule Edifice.Detection.DETR do
             out =
               ResNet.bottleneck_block(block_acc, channels,
                 strides: strides,
+                padding: [{1, 1}, {1, 1}],
                 name: "#{prefix}_stage#{stage_idx}_block#{block_idx}",
                 in_channels: current_in
               )
@@ -562,13 +562,9 @@ defmodule Edifice.Detection.DETR do
           String.t()
         ) :: Axon.t()
   defp attention_with_pe(query, key, value, q_pe, k_pe, hidden_dim, num_heads, name) do
-    q = Axon.dense(query, hidden_dim, name: "#{name}_q")
-    k = Axon.dense(key, hidden_dim, name: "#{name}_k")
+    q = query |> Axon.add(q_pe, name: "#{name}_q_pe") |> Axon.dense(hidden_dim, name: "#{name}_q")
+    k = key |> Axon.add(k_pe, name: "#{name}_k_pe") |> Axon.dense(hidden_dim, name: "#{name}_k")
     v = Axon.dense(value, hidden_dim, name: "#{name}_v")
-
-    # Add positional encodings to Q and K
-    q = Axon.add(q, q_pe, name: "#{name}_q_pe")
-    k = Axon.add(k, k_pe, name: "#{name}_k_pe")
 
     head_dim = div(hidden_dim, num_heads)
 

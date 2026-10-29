@@ -59,8 +59,7 @@ defmodule Edifice.Serving.Generate do
     JIT call), but the per-step forward pass is fully compiled
   - Full prediction repeats quadratic attention over the context each step.
     The cached path projects only new tokens until the window fills.
-  - `generate/3` and `generate_simple/3` support KV caching; the streaming
-    APIs currently use full-context prediction.
+  - All generation APIs support KV caching, including callback and lazy streams.
   """
 
   alias Edifice.Serving.Sampling
@@ -226,6 +225,21 @@ defmodule Edifice.Serving.Generate do
   Same options as `generate/3`, which currently delegates here.
   """
   def generate_simple(predict_fn, params, opts) do
+    {ctx, acc, max_tokens} = init_generation(predict_fn, params, opts)
+
+    if max_tokens == 0 do
+      elem(acc, 0)
+    else
+      {tokens, _, _, _} =
+        Enum.reduce_while(1..max_tokens, acc, fn _step, acc ->
+          simple_step(ctx, acc)
+        end)
+
+      tokens
+    end
+  end
+
+  defp init_generation(predict_fn, params, opts) do
     prompt = Keyword.fetch!(opts, :prompt)
     max_tokens = Keyword.get(opts, :max_tokens, @default_max_tokens)
     seq_len = Keyword.fetch!(opts, :seq_len)
@@ -260,16 +274,7 @@ defmodule Edifice.Serving.Generate do
         do: Nx.equal(Nx.take(prompt, Nx.axis_size(prompt, 1) - 1, axis: 1), stop_token),
         else: Nx.broadcast(0, {batch_size})
 
-    if max_tokens == 0 do
-      prompt
-    else
-      {tokens, _, _, _} =
-        Enum.reduce_while(1..max_tokens, {prompt, key, stopped, nil}, fn _step, acc ->
-          simple_step(ctx, acc)
-        end)
-
-      tokens
-    end
+    {ctx, {prompt, key, stopped, nil}, max_tokens}
   end
 
   defp validate_simple_opts!(prompt, max_tokens, seq_len, cache) do
@@ -340,7 +345,7 @@ defmodule Edifice.Serving.Generate do
   @doc """
   Generate tokens with a per-token callback for streaming output.
 
-  Same options as `generate/3` except `:cache`, plus:
+  Same options as `generate/3`, including `:cache`, for a single prompt, plus:
 
     - `:on_token` - `fn token_id :: integer() -> :cont | :halt` callback.
       Called with each generated token ID (scalar integer). Return `:halt`
@@ -348,204 +353,80 @@ defmodule Edifice.Serving.Generate do
 
   ## Returns
 
-    `[batch, prompt_len + generated_len]` tensor of token IDs (same as `generate/3`).
+    `[1, prompt_len + generated_len]` tensor of token IDs. A generated stop token
+    is included in the result and passed to the callback. A prompt already ending
+    in the stop token produces no new tokens.
   """
   def generate_stream(predict_fn, params, opts) do
-    prompt = Keyword.fetch!(opts, :prompt)
-    embed_fn = Keyword.get(opts, :embed_fn)
-    pad_token = Keyword.get(opts, :pad_token, 0)
-    max_tokens = Keyword.get(opts, :max_tokens, @default_max_tokens)
-    temperature = Keyword.get(opts, :temperature, @default_temperature)
-    top_k = Keyword.get(opts, :top_k, @default_top_k)
-    top_p = Keyword.get(opts, :top_p, @default_top_p)
-    seed = Keyword.get(opts, :seed, @default_seed)
-    stop_token = Keyword.get(opts, :stop_token, nil)
-    seq_len = Keyword.fetch!(opts, :seq_len)
     on_token = Keyword.fetch!(opts, :on_token)
+    {ctx, acc, max_tokens} = init_generation(predict_fn, params, opts)
+    validate_stream_batch!(ctx)
 
-    batch_size = Nx.axis_size(prompt, 0)
-    prompt_len = Nx.axis_size(prompt, 1)
-
-    key = Nx.Random.key(seed)
-    sampling_opts = [temperature: temperature, top_k: top_k, top_p: top_p]
-
-    # Prefill
-    logits = predict_fn.(params, model_inputs(prompt, embed_fn, seq_len, pad_token))
-    last_logits = logits[[.., prompt_len - 1, ..]]
-
-    {next_token, key} = sample_token(last_logits, key, temperature, sampling_opts)
-    next_token = Nx.reshape(next_token, {batch_size, 1})
-    tokens = Nx.concatenate([prompt, next_token], axis: 1)
-
-    # Stream first token
-    token_val = next_token |> Nx.squeeze() |> Nx.to_number()
-    halt? = on_token.(token_val) == :halt
-
-    # Decode loop — full-sequence re-run each step
-    {tokens, _key} =
-      if halt? do
-        {tokens, key}
-      else
-        step_ctx = %{
-          predict_fn: predict_fn,
-          params: params,
-          embed_fn: embed_fn,
-          pad_token: pad_token,
-          seq_len: seq_len,
-          batch_size: batch_size,
-          stop_token: stop_token,
-          temperature: temperature,
-          sampling_opts: sampling_opts,
-          on_token: on_token
-        }
-
-        Enum.reduce_while(2..max_tokens, {tokens, key}, fn _step, acc ->
-          stream_step(step_ctx, acc)
+    if max_tokens == 0 do
+      elem(acc, 0)
+    else
+      {tokens, _, _, _} =
+        Enum.reduce_while(1..max_tokens, acc, fn _step, acc ->
+          stream_step(ctx, acc, on_token)
         end)
-      end
 
-    tokens
+      tokens
+    end
   end
 
-  defp stream_step(ctx, {tokens, key}) do
-    current_len = Nx.axis_size(tokens, 1)
-    last = Nx.slice_along_axis(tokens, current_len - 1, 1, axis: 1)
+  defp stream_step(ctx, acc, on_token) do
+    case simple_step(ctx, acc) do
+      {:halt, acc} ->
+        {:halt, acc}
 
-    if ctx.stop_token && token_matches_stop?(last, ctx.stop_token) do
-      {:halt, {tokens, key}}
-    else
-      inputs = model_inputs(tokens, ctx.embed_fn, ctx.seq_len, ctx.pad_token)
-      logits = ctx.predict_fn.(ctx.params, inputs)
-
-      pos = min(current_len - 1, ctx.seq_len - 1)
-      step_logits = logits[[.., pos, ..]]
-
-      {next_token, key} = sample_token(step_logits, key, ctx.temperature, ctx.sampling_opts)
-      next_token = Nx.reshape(next_token, {ctx.batch_size, 1})
-
-      token_val = next_token |> Nx.squeeze() |> Nx.to_number()
-      new_tokens = Nx.concatenate([tokens, next_token], axis: 1)
-
-      case ctx.on_token.(token_val) do
-        :halt -> {:halt, {new_tokens, key}}
-        _ -> {:cont, {new_tokens, key}}
-      end
+      {:cont, acc} ->
+        token = last_token(elem(acc, 0))
+        if on_token.(token) == :halt, do: {:halt, acc}, else: {:cont, acc}
     end
   end
 
   @doc """
-  Return a `Stream` that lazily generates tokens one at a time.
+  Return a `Stream` that lazily generates integer token IDs for a single prompt.
 
-  Each element in the stream is an integer token ID.
-
-  ## Options
-
-    Same as `generate/3`.
+  Accepts the same options as `generate/3`, including `:cache`. Stop tokens
+  are not emitted. Prediction happens only when the next token is requested;
+  halting enumeration does not predict an extra token.
   """
   def token_stream(predict_fn, params, opts) do
     Stream.resource(
-      fn -> init_stream_state(predict_fn, params, opts) end,
-      fn state -> next_stream_token(state) end,
+      fn ->
+        {ctx, acc, remaining} = init_generation(predict_fn, params, opts)
+        validate_stream_batch!(ctx)
+        {ctx, acc, remaining}
+      end,
+      &next_stream_token/1,
       fn _state -> :ok end
     )
   end
 
-  defp init_stream_state(predict_fn, params, opts) do
-    prompt = Keyword.fetch!(opts, :prompt)
-    embed_fn = Keyword.get(opts, :embed_fn)
-    pad_token = Keyword.get(opts, :pad_token, 0)
-    max_tokens = Keyword.get(opts, :max_tokens, @default_max_tokens)
-    temperature = Keyword.get(opts, :temperature, @default_temperature)
-    top_k = Keyword.get(opts, :top_k, @default_top_k)
-    top_p = Keyword.get(opts, :top_p, @default_top_p)
-    seed = Keyword.get(opts, :seed, @default_seed)
-    stop_token = Keyword.get(opts, :stop_token, nil)
-    seq_len = Keyword.fetch!(opts, :seq_len)
+  defp next_stream_token({_, _, 0} = state), do: {:halt, state}
 
-    batch_size = Nx.axis_size(prompt, 0)
-    prompt_len = Nx.axis_size(prompt, 1)
-    key = Nx.Random.key(seed)
-    sampling_opts = [temperature: temperature, top_k: top_k, top_p: top_p]
-
-    # Prefill
-    logits = predict_fn.(params, model_inputs(prompt, embed_fn, seq_len, pad_token))
-    last_logits = logits[[.., prompt_len - 1, ..]]
-    {next_token, key} = sample_token(last_logits, key, temperature, sampling_opts)
-    next_token = Nx.reshape(next_token, {batch_size, 1})
-
-    %{
-      predict_fn: predict_fn,
-      params: params,
-      embed_fn: embed_fn,
-      pad_token: pad_token,
-      seq_len: seq_len,
-      batch_size: batch_size,
-      temperature: temperature,
-      sampling_opts: sampling_opts,
-      stop_token: stop_token,
-      max_tokens: max_tokens,
-      key: key,
-      tokens_generated: 0,
-      pending_token: next_token,
-      tokens: Nx.concatenate([prompt, next_token], axis: 1)
-    }
-  end
-
-  defp next_stream_token(%{pending_token: nil} = state) do
-    {:halt, state}
-  end
-
-  defp next_stream_token(state) do
-    %{
-      pending_token: current_token,
-      tokens_generated: count,
-      max_tokens: max_tokens,
-      stop_token: stop_token
-    } = state
-
-    token_val = current_token |> Nx.squeeze() |> Nx.to_number()
-
-    cond do
-      count >= max_tokens ->
+  defp next_stream_token({ctx, acc, remaining} = state) do
+    case simple_step(ctx, acc) do
+      {:halt, _} ->
         {:halt, state}
 
-      stop_token && token_val == stop_token ->
-        {:halt, state}
+      {:cont, acc} ->
+        token = last_token(elem(acc, 0))
+        next = {ctx, acc, remaining - 1}
 
-      true ->
-        # Generate next token from the full accumulated sequence
-        %{
-          predict_fn: predict_fn,
-          params: params,
-          embed_fn: embed_fn,
-          pad_token: pad_token,
-          seq_len: seq_len,
-          batch_size: batch_size,
-          temperature: temperature,
-          sampling_opts: sampling_opts,
-          key: key,
-          tokens: tokens
-        } = state
-
-        current_len = Nx.axis_size(tokens, 1)
-
-        logits = predict_fn.(params, model_inputs(tokens, embed_fn, seq_len, pad_token))
-        pos = min(current_len - 1, seq_len - 1)
-        step_logits = logits[[.., pos, ..]]
-
-        {next_token, key} = sample_token(step_logits, key, temperature, sampling_opts)
-        next_token = Nx.reshape(next_token, {batch_size, 1})
-
-        new_state = %{
-          state
-          | key: key,
-            tokens_generated: count + 1,
-            pending_token: next_token,
-            tokens: Nx.concatenate([tokens, next_token], axis: 1)
-        }
-
-        {[token_val], new_state}
+        if token == ctx.stop_token, do: {:halt, next}, else: {[token], next}
     end
+  end
+
+  defp validate_stream_batch!(%{batch_size: 1}), do: :ok
+
+  defp validate_stream_batch!(_) do
+    raise ArgumentError, "streaming generation requires a single prompt (batch size 1)"
+  end
+
+  defp last_token(tokens) do
+    tokens |> Nx.take(Nx.axis_size(tokens, 1) - 1, axis: 1) |> Nx.squeeze() |> Nx.to_number()
   end
 
   defp sample_token(logits, key, temperature, sampling_opts) do
@@ -603,12 +484,5 @@ defmodule Edifice.Serving.Generate do
 
       Nx.concatenate([embedded, pad], axis: 1)
     end
-  end
-
-  defp token_matches_stop?(token_tensor, stop_token) do
-    token_tensor
-    |> Nx.reshape({:auto})
-    |> Nx.to_flat_list()
-    |> Enum.all?(&(&1 == stop_token))
   end
 end

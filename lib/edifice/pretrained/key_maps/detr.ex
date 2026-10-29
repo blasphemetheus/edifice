@@ -159,7 +159,7 @@ defmodule Edifice.Pretrained.KeyMaps.DETR do
     cond do
       # Object queries
       Regex.match?(@query_embed_re, key) ->
-        "object_queries.kernel"
+        "broadcast_queries.object_queries"
 
       # Class head
       match = Regex.run(@class_head_re, key) ->

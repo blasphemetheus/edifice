@@ -1,0 +1,33 @@
+• Running devenv:files:cleanup
+• Running devenv:python:virtualenv
+✓ Running devenv:files:cleanup in 5.31ms
+✓ Running devenv:python:virtualenv in 9.63ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 4.60ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 520ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+recording-1: jfk.flac decoded_seconds=11 mel_shape=[1, 80, 3000] min=-0.5387420654296875 max=1.4612579345703125
+
+recording-2: asr-1.flac decoded_seconds=10.435 mel_shape=[1, 80, 3000] min=-0.6991028785705566 max=1.3008971214294434
+
+recording-3: asr-2.flac decoded_seconds=3.275 mel_shape=[1, 80, 3000] min=-0.8223326206207275 max=1.1776673793792725
+
+
+20:51:20.763 [debug] redirecting to /api/resolve-cache/models/openai/whisper-base/e37978b90ca9030d5170a5c07aadb050351a65bb/config.json?%2Fopenai%2Fwhisper-base%2Fresolve%2Fmain%2Fconfig.json=&etag=%22708cca09e7e8a9364e444efe8b4f9c2691fc5f51%22
+
+20:51:20.907 [info] Cached model.safetensors (1/1)
+f32 bounds: atol=2e-3 rtol=1e-5 mean<=5e-6; f64 bounds: atol=1e-9 rtol=1e-10 mean<=1e-11
+recording-1 EXLA64/Torch64 max_abs=2.575717417130363e-12 mean_abs=4.932844276858091e-15 max_bound_ratio=0.0010446097603038719
+recording-1 EXLA32/Torch32 max_abs=0.0017461776733398438 mean_abs=1.7397402416463592e-6 max_bound_ratio=0.8168315291404724
+recording-1 EXLA32/Torch64 max_abs=0.0016344606609131063 mean_abs=1.5883660658000547e-6 max_bound_ratio=0.7645726616784965
+recording-1 Torch32/Torch64 max_abs=4.818633338405931e-4 mean_abs=1.0079801368458825e-6 max_bound_ratio=0.22693542790013305
+recording-2 EXLA64/Torch64 max_abs=1.3589129821411916e-12 mean_abs=3.867197445498328e-15 max_bound_ratio=0.0010313617751602465
+recording-2 EXLA32/Torch32 max_abs=5.440711975097656e-4 mean_abs=1.3623438235299545e-6 max_bound_ratio=0.2690492868423462
+recording-2 EXLA32/Torch64 max_abs=6.573531472082728e-4 mean_abs=1.1513394736687308e-6 max_bound_ratio=0.32506829834169254
+recording-2 Torch32/Torch64 max_abs=3.113869658117885e-4 mean_abs=7.954869703010748e-7 max_bound_ratio=0.15450266177511776
+recording-3 EXLA64/Torch64 max_abs=1.9699797348948778e-12 mean_abs=4.229480290206655e-15 max_bound_ratio=0.0015569566533662107
+recording-3 EXLA32/Torch32 max_abs=8.106231689453125e-4 mean_abs=1.5745154087198898e-6 max_bound_ratio=0.3718242347240448
+recording-3 EXLA32/Torch64 max_abs=6.067658128934283e-4 mean_abs=1.3423354601564177e-6 max_bound_ratio=0.28189526871637743
+recording-3 Torch32/Torch64 max_abs=4.410400103331824e-4 mean_abs=8.808208803966738e-7 max_bound_ratio=0.20229996584145712
+PASS: all inputs satisfy the independent f64 and f32 checks

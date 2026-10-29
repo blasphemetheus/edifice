@@ -1,0 +1,45 @@
+• Running devenv:files:cleanup
+• Running devenv:python:virtualenv
+✓ Running devenv:files:cleanup in 5.59ms
+✓ Running devenv:python:virtualenv in 9.25ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 3.99ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 170ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+
+20:43:22.323 [debug] redirecting to /api/resolve-cache/models/openai/whisper-base/e37978b90ca9030d5170a5c07aadb050351a65bb/config.json?%2Fopenai%2Fwhisper-base%2Fresolve%2Fmain%2Fconfig.json=&etag=%22708cca09e7e8a9364e444efe8b4f9c2691fc5f51%22
+
+20:43:22.410 [info] Cached model.safetensors (1/1)
+f32 bounds: atol=1e-4 rtol=1e-5; f64 bounds: atol=1e-9 rtol=1e-10
+original EXLA64/Torch64 max_abs=5.426770144367765e-13 mean_abs=5.3562983126856874e-15 max_bound_ratio=3.0616704252400806e-4
+original EXLA32/Torch32 max_abs=1.79290771484375e-4 mean_abs=1.9368740140635055e-6 max_bound_ratio=0.6752693057060242
+original EXLA32/Torch64 max_abs=1.8602103203591014e-4 mean_abs=1.5115281595053033e-6 max_bound_ratio=0.7006175058821345
+original Torch32/Torch64 max_abs=1.3221946798047668e-4 mean_abs=1.2836425498424422e-6 max_bound_ratio=0.6927959714958937
+constant_zero EXLA64/Torch64 max_abs=7.887024366937112e-13 mean_abs=4.942530068237526e-15 max_bound_ratio=4.280180086174857e-4
+constant_zero EXLA32/Torch32 max_abs=5.435943603515625e-4 mean_abs=2.449041176078026e-6 max_bound_ratio=4.276305198669434
+constant_zero EXLA32/Torch64 max_abs=5.173545190633178e-4 mean_abs=2.7582625246818445e-6 max_bound_ratio=4.678694658047854
+constant_zero Torch32/Torch64 max_abs=1.7571466663746094e-4 mean_abs=1.1110668966737324e-6 max_bound_ratio=1.2187571249997273
+constant_minus_one EXLA64/Torch64 max_abs=1.5276668818842154e-12 mean_abs=4.313862682127196e-15 max_bound_ratio=6.582441247491243e-4
+constant_minus_one EXLA32/Torch32 max_abs=6.837844848632812e-4 mean_abs=1.613989525139914e-6 max_bound_ratio=4.091131687164307
+constant_minus_one EXLA32/Torch64 max_abs=6.956190639000326e-4 mean_abs=1.4435110033549318e-6 max_bound_ratio=4.161935888568165
+constant_minus_one Torch32/Torch64 max_abs=3.0128674662499577e-4 mean_abs=9.081242112147746e-7 max_bound_ratio=1.7072337098472248
+scaled_original EXLA64/Torch64 max_abs=2.8261837314857985e-12 mean_abs=8.609476441233735e-15 max_bound_ratio=0.0018083540242202084
+scaled_original EXLA32/Torch32 max_abs=7.052421569824219e-4 mean_abs=2.3071420400810894e-6 max_bound_ratio=5.02778434753418
+scaled_original EXLA32/Torch64 max_abs=5.46787302967644e-4 mean_abs=1.7060724805692745e-6 max_bound_ratio=3.0932831379306815
+scaled_original Torch32/Torch64 max_abs=4.1287296038561294e-4 mean_abs=1.6019662365356664e-6 max_bound_ratio=2.0444241922088255
+structured EXLA64/Torch64 max_abs=2.453148795211746e-12 mean_abs=6.122964835299223e-15 max_bound_ratio=0.001012084417219818
+structured EXLA32/Torch32 max_abs=7.51495361328125e-4 mean_abs=1.996935679926537e-6 max_bound_ratio=3.9126181602478027
+structured EXLA32/Torch64 max_abs=8.734227137878747e-4 mean_abs=1.7103366396291166e-6 max_bound_ratio=3.3024328652029475
+structured Torch32/Torch64 max_abs=2.707874435703417e-4 mean_abs=1.1683342052688366e-6 max_bound_ratio=1.401902733105863
+noise_holdout EXLA64/Torch64 max_abs=3.7836400679225335e-13 mean_abs=5.084085393797025e-15 max_bound_ratio=2.1923582065873172e-4
+noise_holdout EXLA32/Torch32 max_abs=1.1348724365234375e-4 mean_abs=1.8965988601848949e-6 max_bound_ratio=0.8228497505187988
+noise_holdout EXLA32/Torch64 max_abs=1.72856444819125e-4 mean_abs=1.7512549878136812e-6 max_bound_ratio=1.2720234402153086
+noise_holdout Torch32/Torch64 max_abs=7.460617927179669e-5 mean_abs=1.475753887451513e-6 max_bound_ratio=0.4491700251075251
+step_holdout EXLA64/Torch64 max_abs=2.9132252166164108e-12 mean_abs=5.320621313042801e-15 max_bound_ratio=0.0016049104212671702
+step_holdout EXLA32/Torch32 max_abs=0.0011119842529296875 mean_abs=1.8293001176061807e-6 max_bound_ratio=7.717311859130859
+step_holdout EXLA32/Torch64 max_abs=9.206722474690565e-4 mean_abs=1.5588453283609573e-6 max_bound_ratio=5.062753001735851
+step_holdout Torch32/Torch64 max_abs=4.395412390287845e-4 mean_abs=1.0441814496494786e-6 max_bound_ratio=3.0534096643859443
+** (RuntimeError) Whisper validation exceeded the declared bounds
+    scripts/validate_whisper_inputs.exs:93: (file)
+    (elixir 1.18.4) lib/code.ex:1525: Code.require_file/2

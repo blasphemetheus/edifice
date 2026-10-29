@@ -114,6 +114,7 @@ defmodule Edifice.Vision.ConvNeXt do
     - `:dims` - Channel dimensions per stage (default: [96, 192, 384, 768])
     - `:dropout` - Dropout rate (default: 0.0)
     - `:layer_scale_init` - Initial value for layer scale (default: 1e-6)
+    - `:layer_norm_epsilon` - Layer normalization stabilizer (default: 1e-6)
     - `:num_classes` - Number of classes for classification head (optional)
 
   ## Returns
@@ -129,6 +130,7 @@ defmodule Edifice.Vision.ConvNeXt do
           | {:image_size, pos_integer()}
           | {:in_channels, pos_integer()}
           | {:layer_scale_init, float()}
+          | {:layer_norm_epsilon, float()}
           | {:num_classes, pos_integer() | nil}
           | {:patch_size, pos_integer()}
 
@@ -142,6 +144,7 @@ defmodule Edifice.Vision.ConvNeXt do
     dropout = Keyword.get(opts, :dropout, @default_dropout)
     layer_scale_init = Keyword.get(opts, :layer_scale_init, @default_layer_scale_init)
     num_classes = Keyword.get(opts, :num_classes, nil)
+    epsilon = Keyword.get(opts, :layer_norm_epsilon, 1.0e-6)
 
     num_stages = length(depths)
     first_dim = List.first(dims)
@@ -168,7 +171,7 @@ defmodule Edifice.Vision.ConvNeXt do
         name: "stem_conv"
       )
 
-    x = Axon.layer_norm(x, name: "stem_norm")
+    x = Axon.layer_norm(x, name: "stem_norm", epsilon: epsilon)
 
     # Process through stages
     x =
@@ -180,14 +183,15 @@ defmodule Edifice.Vision.ConvNeXt do
           acc =
             Enum.reduce(0..(stage_depth - 1), acc, fn block_idx, block_acc ->
               convnext_block(block_acc, dim, dropout, layer_scale_init,
-                name: "stage#{stage_idx}_block#{block_idx}"
+                name: "stage#{stage_idx}_block#{block_idx}",
+                epsilon: epsilon
               )
             end)
 
           # Downsampling between stages (except last)
           if stage_idx < num_stages - 1 do
             next_dim = Enum.at(dims, stage_idx + 1)
-            downsample(acc, next_dim, name: "downsample_#{stage_idx}")
+            downsample(acc, next_dim, name: "downsample_#{stage_idx}", epsilon: epsilon)
           else
             acc
           end
@@ -204,7 +208,7 @@ defmodule Edifice.Vision.ConvNeXt do
         name: "global_pool"
       )
 
-    x = Axon.layer_norm(x, name: "final_norm")
+    x = Axon.layer_norm(x, name: "final_norm", epsilon: epsilon)
 
     # Optional classification head
     if num_classes do
@@ -239,7 +243,7 @@ defmodule Edifice.Vision.ConvNeXt do
       )
 
     # LayerNorm (applied to last axis in NHWC)
-    x = Axon.layer_norm(x, name: "#{name}_norm")
+    x = Axon.layer_norm(x, name: "#{name}_norm", epsilon: opts[:epsilon])
 
     # Pointwise expand: 1x1 conv equivalent, C -> 4C
     x =
@@ -299,7 +303,7 @@ defmodule Edifice.Vision.ConvNeXt do
 
     # LayerNorm -> 2x2 strided conv (spatial halving + channel projection)
     input
-    |> Axon.layer_norm(name: "#{name}_norm")
+    |> Axon.layer_norm(name: "#{name}_norm", epsilon: opts[:epsilon])
     |> Axon.conv(next_dim,
       kernel_size: {2, 2},
       strides: [2, 2],

@@ -86,7 +86,7 @@ defmodule Edifice.Vision.ViT do
   use Edifice.Vision.Backbone
 
   alias Edifice.Blocks.PatchEmbed
-  alias Edifice.Utils.FusedOps
+  alias Edifice.Blocks.SDPA
 
   @default_image_size 224
   @default_patch_size 16
@@ -114,6 +114,7 @@ defmodule Edifice.Vision.ViT do
     - `:num_heads` - Number of attention heads (default: 12)
     - `:mlp_ratio` - MLP hidden dim ratio relative to embed_dim (default: 4.0)
     - `:dropout` - Dropout rate (default: 0.0)
+    - `:layer_norm_epsilon` - Layer normalization stabilizer (default: 1.0e-5)
     - `:num_classes` - Number of classes for classification head (optional)
 
   ## Returns
@@ -134,6 +135,7 @@ defmodule Edifice.Vision.ViT do
           | {:dropout, float()}
           | {:embed_dim, pos_integer()}
           | {:image_size, pos_integer()}
+          | {:layer_norm_epsilon, float()}
           | {:in_channels, pos_integer()}
           | {:mlp_ratio, float()}
           | {:num_classes, pos_integer() | nil}
@@ -150,6 +152,11 @@ defmodule Edifice.Vision.ViT do
     num_heads = Keyword.get(opts, :num_heads, @default_num_heads)
     mlp_ratio = Keyword.get(opts, :mlp_ratio, @default_mlp_ratio)
     dropout = Keyword.get(opts, :dropout, @default_dropout)
+    norm_epsilon = Keyword.get(opts, :layer_norm_epsilon, 1.0e-5)
+
+    if rem(embed_dim, num_heads) != 0,
+      do: raise(ArgumentError, "embed_dim must divide evenly into num_heads")
+
     num_classes = Keyword.get(opts, :num_classes, nil)
 
     num_patches = PatchEmbed.num_patches(image_size, patch_size)
@@ -185,12 +192,13 @@ defmodule Edifice.Vision.ViT do
     x =
       Enum.reduce(0..(depth - 1), x, fn block_idx, acc ->
         transformer_block(acc, embed_dim, num_heads, mlp_hidden, dropout,
-          name: "block_#{block_idx}"
+          name: "block_#{block_idx}",
+          layer_norm_epsilon: norm_epsilon
         )
       end)
 
     # Final layer norm
-    x = Axon.layer_norm(x, name: "final_norm")
+    x = Axon.layer_norm(x, name: "final_norm", epsilon: norm_epsilon)
 
     # Extract CLS token: [batch, embed_dim]
     x =
@@ -227,16 +235,17 @@ defmodule Edifice.Vision.ViT do
           Axon.t()
   def transformer_block(input, embed_dim, num_heads, mlp_hidden, dropout, opts \\ []) do
     name = Keyword.get(opts, :name, "block")
+    epsilon = Keyword.get(opts, :layer_norm_epsilon, 1.0e-5)
 
     # Pre-norm self-attention
-    normed = Axon.layer_norm(input, name: "#{name}_norm1")
+    normed = Axon.layer_norm(input, name: "#{name}_norm1", epsilon: epsilon)
 
     attended = self_attention(normed, embed_dim, num_heads, dropout, name: "#{name}_attn")
 
     x = Axon.add(input, attended, name: "#{name}_residual1")
 
     # Pre-norm MLP
-    normed2 = Axon.layer_norm(x, name: "#{name}_norm2")
+    normed2 = Axon.layer_norm(x, name: "#{name}_norm2", epsilon: epsilon)
 
     ffn =
       normed2
@@ -253,7 +262,7 @@ defmodule Edifice.Vision.ViT do
   # Self-Attention
   # ============================================================================
 
-  defp self_attention(input, embed_dim, _num_heads, dropout, opts) do
+  defp self_attention(input, embed_dim, num_heads, dropout, opts) do
     name = Keyword.get(opts, :name, "attn")
 
     # Project to Q, K, V
@@ -268,15 +277,7 @@ defmodule Edifice.Vision.ViT do
           k = Nx.slice_along_axis(qkv_tensor, embed_dim, embed_dim, axis: 2)
           v = Nx.slice_along_axis(qkv_tensor, embed_dim * 2, embed_dim, axis: 2)
 
-          # Scaled dot-product attention (no causal mask for ViT)
-          d_k = Nx.axis_size(k, -1)
-          scale = Nx.sqrt(d_k) |> Nx.as_type(Nx.type(q))
-
-          scores = Nx.dot(q, [2], [0], k, [2], [0])
-          scores = Nx.divide(scores, scale)
-          weights = FusedOps.fused_softmax(scores)
-
-          Nx.dot(weights, [2], [0], v, [1], [0])
+          SDPA.compute(q, k, v, num_heads, div(embed_dim, num_heads))
         end,
         name: "#{name}_compute"
       )
@@ -295,7 +296,7 @@ defmodule Edifice.Vision.ViT do
 
     # Create a learnable CLS token via a dense projection of a constant
     cls_source = Axon.nx(input, fn _tensor -> Nx.broadcast(1.0, {1, 1}) end, name: "#{name}_src")
-    cls_proj = Axon.dense(cls_source, embed_dim, name: "#{name}_proj")
+    cls_proj = Axon.dense(cls_source, embed_dim, use_bias: false, name: "#{name}_proj")
 
     # Expand CLS to [batch, 1, embed_dim] and concatenate
     Axon.layer(
@@ -322,13 +323,14 @@ defmodule Edifice.Vision.ViT do
   defp add_position_embedding(input, seq_len, embed_dim, opts) do
     name = Keyword.get(opts, :name, "pos_embed")
 
-    # Create learnable position embedding via dense projection
-    pos_source =
-      Axon.nx(input, fn _tensor -> Nx.iota({1, seq_len}, axis: 1) |> Nx.divide(seq_len) end,
-        name: "#{name}_src"
-      )
+    # Each position owns a separate vector. Retain the checkpoint parameter name.
+    table = Axon.param("kernel", {seq_len, embed_dim}, initializer: :normal)
 
-    pos_proj = Axon.dense(pos_source, embed_dim, name: "#{name}_proj")
+    pos_proj =
+      Axon.layer(fn _input, table, _opts -> table end, [input, table],
+        name: "#{name}_proj",
+        op_name: :position_embedding
+      )
 
     # Add position embeddings to input (broadcasts over batch)
     Axon.layer(

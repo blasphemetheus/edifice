@@ -2,7 +2,7 @@ defmodule Edifice.StatefulCase do
   @moduledoc """
   Shared harness for `Edifice.Stateful` correctness pins.
 
-  Two properties matter (see HANDOFF_BOT_RUNTIME.md task 2):
+  Two properties matter (see docs/history/HANDOFF_BOT_RUNTIME.md task 2):
 
     1. **Step/forward equivalence** — iterating `step/3` over a sequence
        reproduces the full-sequence forward outputs. Verified at EVERY

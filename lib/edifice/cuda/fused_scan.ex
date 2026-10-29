@@ -265,6 +265,10 @@ defmodule Edifice.CUDA.FusedScan do
 
   The kernel handles discretization (A_bar = exp(dt*A), B_bar = dt*B)
   and the full SSM recurrence internally.
+
+  dt is clipped to `[0.001, 0.1]`. The portable path differentiates all five
+  inputs. The native custom backward currently differentiates x, dt, B and C
+  only; A must remain fixed when training through that path.
   """
   def selective_scan(x, dt, a, b, c) do
     if Edifice.CUDA.AutoTune.use_fused?(:selective_scan, x) do

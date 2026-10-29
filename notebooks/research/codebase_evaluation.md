@@ -49,7 +49,7 @@ et al.) already migrated several modules, but many remain.
 
 TransformerBlock was extended with `layer/3` and `stack/4` for 3-sublayer decoder
 blocks (self-attn + cross-attn + FFN). DETR, RT-DETR, ACT, and Whisper now use
-it. See `docs/composability-audit.md` for details.
+it. See `docs/history/composability-audit.md` for details.
 
 ### 1.3 Duplicate Patterns Still Present
 

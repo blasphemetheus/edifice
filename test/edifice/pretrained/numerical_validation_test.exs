@@ -1,3 +1,5 @@
+Code.require_file("../../../scripts/support/whisper_f64_validation.exs", __DIR__)
+
 defmodule Edifice.Pretrained.NumericalValidationTest do
   @moduledoc """
   Forward pass numerical validation against PyTorch reference outputs.
@@ -50,7 +52,7 @@ defmodule Edifice.Pretrained.NumericalValidationTest do
     {init_fn, predict_fn} = Axon.build(model, mode: :inference)
     full_state = init_fn.(template, Axon.ModelState.empty())
     merged = deep_merge(full_state.data, hf_state.data)
-    {merged, predict_fn}
+    {%{full_state | data: merged}, predict_fn}
   end
 
   defp deep_merge(base, overlay) when is_map(base) and is_map(overlay) do
@@ -89,9 +91,8 @@ defmodule Edifice.Pretrained.NumericalValidationTest do
           build_opts: [num_classes: 1000]
         )
 
-      # Pass .data (plain map) to avoid Axon.ModelState Access protocol issue
       {_init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      output = predict_fn.(hf_params.data, %{"image" => input})
+      output = predict_fn.(hf_params, %{"image" => input})
 
       assert_all_close(output, expected_logits, atol: 1.0e-4)
     end
@@ -99,9 +100,6 @@ defmodule Edifice.Pretrained.NumericalValidationTest do
 
   describe "ConvNeXt forward pass" do
     @tag timeout: 600_000
-    @tag :skip
-    # Skipped: facebook/convnext-tiny-224 only has pytorch_model.bin (no safetensors).
-    # ConvNeXt is validated via random-weight tests in architecture_numerical_test.exs.
     test "matches PyTorch reference output" do
       fixture_file = "convnext_reference.safetensors"
 
@@ -123,11 +121,13 @@ defmodule Edifice.Pretrained.NumericalValidationTest do
 
       {model, hf_params} =
         Edifice.Pretrained.from_hub("facebook/convnext-tiny-224",
+          # Safetensors convertbot's conversion, pinned instead of following a PR branch.
+          revision: "754ee4efa2810dce51a80eff8b21737c8da9a92f",
           build_opts: [num_classes: 1000]
         )
 
       {_init_fn, predict_fn} = Axon.build(model, mode: :inference)
-      output = predict_fn.(hf_params.data, %{"image" => input})
+      output = predict_fn.(hf_params, %{"image" => input})
 
       assert_all_close(output, expected_logits, atol: 1.0e-4)
     end
@@ -237,10 +237,35 @@ defmodule Edifice.Pretrained.NumericalValidationTest do
       {encoder, _decoder, hf_params} =
         Edifice.Pretrained.from_hub("openai/whisper-base")
 
-      {_init_fn, predict_fn} = Axon.build(encoder, mode: :inference)
-      output = predict_fn.(hf_params.data, %{"mel_spectrogram" => mel_input})
+      {_init, predict_fn} = Axon.build(encoder, mode: :inference)
+      output = predict_fn.(hf_params, %{"mel_spectrogram" => mel_input})
 
-      assert_all_close(output, expected_output, atol: 1.0e-4)
+      # Independent f64 agreement and varied-input measurements are documented
+      # in tools/whisper_reference/README.md. Large activations need a relative
+      # allowance; keep the average error small as well.
+      Nx.Testing.assert_all_close(output, expected_output, atol: 1.0e-4, rtol: 1.0e-5)
+      assert Nx.to_number(Nx.mean(Nx.abs(Nx.subtract(output, expected_output)))) < 5.0e-6
+    end
+
+    @tag timeout: 600_000
+    test "matches the independent full f64 encoder reference" do
+      Nx.Defn.default_options(compiler: EXLA, client: :host, precision: :highest)
+
+      fixture =
+        Safetensors.read!(Path.join(@fixtures_dir, "whisper_encoder_reference.safetensors"))
+
+      reference =
+        Safetensors.read!(Path.join(@fixtures_dir, "whisper_encoder_f64_reference.safetensors"))[
+          "enc_final_norm"
+        ]
+
+      {encoder, _, loaded} = Edifice.Pretrained.from_hub("openai/whisper-base")
+      {_, predict} = Axon.build(WhisperF64Validation.model(encoder), mode: :inference)
+      actual = predict.(loaded, %{"mel_spectrogram" => fixture["mel_input"]})
+      assert Nx.type(actual) == {:f, 64}
+      assert Nx.type(reference) == {:f, 64}
+      Nx.Testing.assert_all_close(actual, reference, atol: 1.0e-9, rtol: 1.0e-10)
+      assert Nx.to_number(Nx.mean(Nx.abs(Nx.subtract(actual, reference)))) < 1.0e-11
     end
   end
 end

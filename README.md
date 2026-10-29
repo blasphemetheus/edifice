@@ -8,7 +8,7 @@
 
 A comprehensive ML architecture library for Elixir, built on [Nx](https://github.com/elixir-nx/nx) and [Axon](https://github.com/elixir-nx/axon).
 
-267 neural network architectures across 26 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons, audio codecs to robotics, scientific ML to 3D generation.
+268 neural network architectures across 26 families — from MLPs to Mamba, transformers to graph networks, VAEs to spiking neurons, audio codecs to robotics, scientific ML to 3D generation.
 
 ## What is this repo?
 I wanted to build Neural Networks of various architectures. I saw that Nx exists (check out elixir-nx's github page for all the various projects). I vibe coded a scaffold, an 'edifice' to put together the architectures I wanted to support a bot that plays melee. That project is called 'exphil' which is a play on elixir and philip, the colloqial name for slippi-ai's latest bot that combines imitation learning with reinforcement learning to create the currently most capable melee bots that I am aware of. This work to support implementations of various different kinds of architectures mostly coincided with me learning about the existence of the ideas that led to these architectures. The process for implementing them was to ask the coding agent of the time (encoded in the commit themselves, if you want to know more specifically) about the different options for ML neural net architectures. There are papers that lead to the popularization of various architectures, and ML is a very very new field all in all.
@@ -32,12 +32,19 @@ The Elixir ML ecosystem has excellent numerical computing (Nx) and model buildin
 
 ## Installation
 
+> **AI-generated release compatibility note.** The default dependencies use
+> published Nx/EXLA 1.0 packages. EXLA 1.0's XLA 0.10 has a known CPU f32
+> erf/GELU error. The fixed upstream setup remains available; see
+> [dependency limits and setup](guides/validation.md#dependency-and-backend-limits-for-030).
+> Whisper's corrected numerical results apply to that fixed setup.
+> The accompanying authorship poem is in the validation guide.
+
 Add `edifice` to your dependencies in `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:edifice, "~> 0.2.0"}
+    {:edifice, "~> 0.3.0"}
   ]
 end
 ```
@@ -95,6 +102,22 @@ when XLA still has unused pool memory. Size the fraction for your workload.
 
 ## Quick Start
 
+### How much has each architecture been tested?
+
+**AI-generated evidence summary.** Coverage varies. Canonical Mamba-2, GRU,
+Mamba and MinGRU have independent numerical checks within documented limits.
+Selected vision models have real-checkpoint comparisons. Many other models
+have local tests, but have not been independently certified.
+
+The [architecture index](guides/architecture_index.md) now labels each listed
+architecture's reviewed evidence. The [validation guide](guides/validation.md)
+explains what was compared, which backend was used, and what remains unknown.
+**Unreviewed** means the evidence has not yet been assessed, not that no tests
+exist. Shape tests and speed measurements alone do not establish correctness.
+The validation guide includes the authorship poem for these additions.
+
+### Build a model
+
 ```elixir
 # Build any architecture by name
 model = Edifice.build(:mamba, embed_size: 256, hidden_size: 512, num_layers: 4)
@@ -123,32 +146,41 @@ Edifice.list_families()
 
 ## Architecture Families
 
-267 architectures across 26 families, plus 20 shared building blocks. See the **[full architecture index](guides/architecture_index.md)** for every module.
+268 architectures across 26 families, plus 20 shared building blocks. See the **[full architecture index](guides/architecture_index.md)** for every module.
+
+Not every architecture has seen the same scrutiny. The ones that have been
+trained and deployed in [ExPhil](https://github.com/blasphemetheus/exphil), or
+checked against a PyTorch reference with real or random weights, are listed
+under **[Verified in use](guides/architecture_index.md#verified-in-use)** in
+the index, and `Edifice.verification/1` reports the same from code. The rest
+are faithful readings of their papers backed by shape, gradient and sweep
+tests.
 
 | Family | Count | Highlights |
 |--------|------:|------------|
-| **Attention** | 36 | Multi-Head, GQA, MLA, Perceiver, RetNet, RWKV-7, GLA, Griffin, NSA, Conformer |
-| **Generative** | 24 | VAE, GAN, Diffusion, DiT, MMDiT, Flow Matching, Transfusion, CogVideoX, MDLM |
-| **Meta** | 23 | MoE, LoRA, DoRA, DPO, GRPO, Capsules, Speculative Decoding, QAT |
-| **SSM** | 19 | Mamba, Mamba-2, Mamba-3, S4, Hyena, Hymba, Jamba, StripedHyena |
-| **Recurrent** | 16 | LSTM, GRU, xLSTM, MinGRU, DeltaNet, TTT, Titans |
-| **Vision** | 15 | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, DINOv2, MambaVision |
-| **Graph** | 9 | GCN, GAT, GIN, GraphSAGE, SchNet, EGNN |
-| **Contrastive** | 8 | SimCLR, BYOL, MAE, VICReg, JEPA, SigLIP |
+| **Attention** | 48 | Multi-Head, GQA, MLA, Perceiver, RetNet, RWKV, GLA, Griffin, NSA, Ring Attention, Conformer |
+| **Meta** | 36 | MoE, LoRA, DoRA, DPO, GRPO, Capsules, Speculative Decoding, Mixture of Depths, QAT |
+| **Generative** | 33 | VAE, GAN, Diffusion, DiT, MMDiT, Flow Matching, Transfusion, CogVideoX, MDLM, VAR |
+| **SSM** | 23 | Mamba, Mamba-2 (full mixer and SSD), Mamba-3, S4, S5, Hyena, Hymba, Jamba, StripedHyena, Zamba |
+| **Recurrent** | 21 | LSTM, GRU, xLSTM, MinGRU, DeltaNet, Gated DeltaNet, TTT, Titans |
+| **Vision** | 18 | ViT, DeiT, Swin, U-Net, ConvNeXt, MLP-Mixer, DINOv2, DINOv3, NeRF, MambaVision |
+| **Graph** | 13 | GCN, GAT, GIN, GraphSAGE, SchNet, EGNN, SE(3)-Transformer, GPS |
+| **Interpretability** | 12 | Sparse Autoencoder, Gated / JumpReLU / Matryoshka SAE, Transcoder, Crosscoder, LEACE, Probes |
+| **Contrastive** | 9 | SimCLR, BYOL, MAE, VICReg, JEPA, V-JEPA 2, SigLIP |
+| **Audio** | 6 | EnCodec, VALL-E, SoundStorm, Whisper, wav2vec 2.0, F5-TTS |
 | **Convolutional** | 6 | ResNet, DenseNet, TCN, MobileNet, EfficientNet |
 | **Feedforward** | 5 | MLP, KAN, KAT, TabNet, BitNet |
-| **Transformer** | 4 | Decoder-Only, Multi-Token Prediction, BLT, Nemotron-H |
-| **Audio** | 4 | EnCodec, VALL-E, SoundStorm, Whisper |
+| **Transformer** | 5 | Decoder-Only, Multi-Token Prediction, BLT, Nemotron-H, Free Transformer |
+| **Memory** | 4 | NTM, Memory Networks, Memory Layer, Engram |
+| **Sets** | 4 | DeepSets, PointNet, PointNet++, Entity Encoder |
+| **RL** | 4 | PolicyValue, Decision Transformer, Pointer Network, Autoregressive Head |
+| **Scientific** | 3 | FNO, DeepONet, TNO |
 | **Detection** | 3 | DETR, RT-DETR, SAM 2 |
 | **Energy** | 3 | EBM, Hopfield, Neural ODE |
-| **Memory** | 3 | NTM, Memory Networks, Engram |
 | **Probabilistic** | 3 | Bayesian, MC Dropout, Evidential |
-| **Sets** | 2 | DeepSets, PointNet |
-| **Robotics** | 2 | ACT, OpenVLA |
-| **RL** | 2 | PolicyValue, Decision Transformer |
-| **Interpretability** | 2 | Sparse Autoencoder, Transcoder |
+| **Robotics** | 3 | ACT, Diffusion Policy, OpenVLA |
 | **Neuromorphic** | 2 | SNN, ANN2SNN |
-| **+ 6 more** | 6 | Liquid NN, FNO, World Model, Medusa, Multimodal Fusion, Hybrid Builder |
+| **+ 4 more** | 4 | Liquid NN, World Model, Medusa, Multimodal Fusion |
 
 ## Guides
 
@@ -164,7 +196,7 @@ Start here if you're new to machine learning. These guides build from zero to fl
 
 ### Reference
 
-- **[Architecture Index](guides/architecture_index.md)** — Full listing of all 267 architectures with modules and descriptions
+- **[Architecture Index](guides/architecture_index.md)** — Full listing of all 268 architectures with modules and descriptions
 - **[Architecture Taxonomy](guides/architecture_taxonomy.md)** — Paper references, strengths/weaknesses, adoption context, and gap analysis
 
 ### Architecture Guides
@@ -315,10 +347,10 @@ end
 ## Requirements
 
 - Elixir >= 1.18
-- Nx ~> 0.12
-- Axon ~> 0.8
-- Polaris ~> 0.1
-- EXLA ~> 0.11 (optional, for GPU acceleration)
+- Nx ~> 1.0
+- Axon ~> 0.9
+- Polaris ~> 0.2
+- EXLA ~> 1.0 (optional, for GPU acceleration)
 
 ## License
 

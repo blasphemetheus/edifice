@@ -2,6 +2,12 @@ defmodule Edifice.SSM.MambaSSD do
   @moduledoc """
   Mamba variant using State Space Duality (SSD) algorithm from Mamba-2.
 
+  This module retains Edifice's Mamba-style projections and diagonal state
+  dynamics. It is not the authors' full Mamba-2 architecture: it lacks their
+  head-wise scalar decay, joint x/B/C convolution, learned A and D parameters,
+  and gated RMS normalization. SSD scan agreement does not establish Mamba-2
+  checkpoint compatibility. Existing checkpoint shapes and equations are retained.
+
   `Edifice.init_state(:mamba_ssd, params, opts)` and `Edifice.step/5` provide
   constant-time per-frame inference using the same block weights. Carried state
   matches a full prefix, not a freshly reset sliding window.
@@ -98,7 +104,7 @@ defmodule Edifice.SSM.MambaSSD do
   @behaviour Edifice.Stateful
   alias Edifice.Stateful.Ops
 
-  @doc "Initialize Mamba-2 recurrence and convolution history, including structured-mask decay when enabled."
+  @doc "Initialize the SSD variant's recurrence and convolution history, including structured-mask decay when enabled."
   @impl Edifice.Stateful
   def init_state(_params, opts \\ []) do
     state = Common.init_block_state(opts)

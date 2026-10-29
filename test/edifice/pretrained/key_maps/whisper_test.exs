@@ -90,8 +90,8 @@ defmodule Edifice.Pretrained.KeyMaps.WhisperTest do
   end
 
   describe "map_key/1 - encoder global" do
-    test "skips encoder position embeddings" do
-      assert Whisper.map_key("model.encoder.embed_positions.weight") == :skip
+    test "loads the exact encoder position table" do
+      assert Whisper.map_key("model.encoder.embed_positions.weight") == "enc_pos_embed.kernel"
     end
 
     test "maps encoder final norm" do
@@ -333,7 +333,7 @@ defmodule Edifice.Pretrained.KeyMaps.WhisperTest do
       refute Enum.any?(Map.keys(flat), &String.contains?(&1, "proj_out"))
     end
 
-    test "linear weights are transposed, conv weights are not" do
+    test "convolution weights use Axon's channels-last layout" do
       d = 8
 
       tensors = %{
@@ -349,9 +349,13 @@ defmodule Edifice.Pretrained.KeyMaps.WhisperTest do
       model_state = Edifice.Pretrained.load(Whisper, path, strict: false)
       data = model_state.data
 
-      # Conv weights are rank 3 — transpose_linear leaves them unchanged
-      assert Nx.shape(data["enc_conv1"]["kernel"]) == {d, 4, 3}
-      assert Nx.shape(data["enc_conv2"]["kernel"]) == {d, d, 3}
+      assert Nx.shape(data["enc_conv1"]["kernel"]) == {3, 4, d}
+      assert Nx.shape(data["enc_conv2"]["kernel"]) == {3, d, d}
+
+      Nx.Testing.assert_equal(
+        data["enc_conv1"]["kernel"],
+        Nx.transpose(tensors["model.encoder.conv1.weight"], axes: [2, 1, 0])
+      )
     end
   end
 end

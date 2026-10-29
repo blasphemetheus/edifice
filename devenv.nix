@@ -38,6 +38,7 @@ in
   packages = [
     pkgs.git
     pkgs.tmux
+    pkgs.clang
 
     # CUDA
     cuda.cuda_nvcc
@@ -84,6 +85,9 @@ in
 
   # Shell setup
   enterShell = ''
+    # Set this after stdenv's setup hooks, which otherwise restore g++.
+    # XLA 0.11 headers require Clang when compiling the EXLA bridge.
+    export CXX="${pkgs.clang}/bin/clang++"
     export MIX_HOME="$PWD/.nix-mix"
     export HEX_HOME="$PWD/.nix-hex"
     mkdir -p "$MIX_HOME" "$HEX_HOME"

@@ -1,0 +1,319 @@
+• Running devenv:python:virtualenv
+• Running devenv:files:cleanup
+✓ Running devenv:files:cleanup in 5.03ms
+✓ Running devenv:python:virtualenv in 9.96ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 3.90ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 320ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+
+20:35:16.504 [debug] redirecting to /api/resolve-cache/models/openai/whisper-base/e37978b90ca9030d5170a5c07aadb050351a65bb/config.json?%2Fopenai%2Fwhisper-base%2Fresolve%2Fmain%2Fconfig.json=&etag=%22708cca09e7e8a9364e444efe8b4f9c2691fc5f51%22
+
+20:35:16.590 [info] Cached model.safetensors (1/1)
+%{nx: ~c"1.0.0", exla: ~c"1.0.0", xla: ~c"0.11.0", backend: :exla_host}
+%{
+  experiment: "baseline",
+  max_absolute_error: 1.79290771484375e-4,
+  mean_absolute_error: 1.9368740140635055e-6,
+  values_at_or_above_1e_4: 3
+}
+%{
+  baseline_outliers: [
+    %{frame: 1355, channel: 323, absolute_error: 1.430511474609375e-4},
+    %{frame: 1486, channel: 145, absolute_error: 1.0013580322265625e-4},
+    %{frame: 1486, channel: 323, absolute_error: 1.79290771484375e-4}
+  ]
+}
+%{
+  final_norm_gamma_channel_323: 2.267578125,
+  final_norm_max_abs_gamma: 4.0234375
+}
+%{
+  experiment: "isolated enc_block_1_attn_norm",
+  max_absolute_error: 4.76837158203125e-6,
+  mean_absolute_error: 6.30673540058524e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_1_attn_q",
+  max_absolute_error: 1.049041748046875e-5,
+  mean_absolute_error: 3.7948410636090557e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_1_attn_k",
+  max_absolute_error: 9.5367431640625e-6,
+  mean_absolute_error: 4.0591484662400035e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_1_attn_v",
+  max_absolute_error: 4.76837158203125e-6,
+  mean_absolute_error: 2.1998486943175521e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_1_attn_compute",
+  max_absolute_error: 1.5139579772949219e-5,
+  mean_absolute_error: 3.338281544529309e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_1_attn_out",
+  max_absolute_error: 4.0531158447265625e-6,
+  mean_absolute_error: 1.7689258413611242e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "enc_block_1 attention boundary entry",
+  max_absolute_error: 1.583099365234375e-4,
+  mean_absolute_error: 1.8063490188069409e-6,
+  values_at_or_above_1e_4: 5
+}
+%{
+  experiment: "enc_block_1 attention boundary norm",
+  max_absolute_error: 1.468658447265625e-4,
+  mean_absolute_error: 1.7216705145983724e-6,
+  values_at_or_above_1e_4: 8
+}
+%{
+  experiment: "enc_block_1 attention boundary qkv",
+  max_absolute_error: 1.201629638671875e-4,
+  mean_absolute_error: 1.7020782934196177e-6,
+  values_at_or_above_1e_4: 1
+}
+%{
+  experiment: "enc_block_1 attention boundary compute",
+  max_absolute_error: 1.5354156494140625e-4,
+  mean_absolute_error: 1.5729141296105809e-6,
+  values_at_or_above_1e_4: 7
+}
+%{
+  experiment: "enc_block_1 attention boundary out",
+  max_absolute_error: 1.25885009765625e-4,
+  mean_absolute_error: 1.5082586060088943e-6,
+  values_at_or_above_1e_4: 2
+}
+%{
+  experiment: "isolated enc_block_1_ffn_norm",
+  max_absolute_error: 3.814697265625e-6,
+  mean_absolute_error: 7.72450761132859e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "enc_block_1 ffn boundary norm",
+  max_absolute_error: 1.2493133544921875e-4,
+  mean_absolute_error: 1.4225369113773922e-6,
+  values_at_or_above_1e_4: 4
+}
+%{
+  experiment: "isolated enc_block_1_ffn_up",
+  max_absolute_error: 1.33514404296875e-5,
+  mean_absolute_error: 3.4676239124564745e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "enc_block_1 ffn boundary up",
+  max_absolute_error: 1.0585784912109375e-4,
+  mean_absolute_error: 1.351121341031103e-6,
+  values_at_or_above_1e_4: 2
+}
+%{
+  experiment: "isolated enc_block_1_ffn_act",
+  max_absolute_error: 1.2973614502698183e-6,
+  mean_absolute_error: 8.43281142692831e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "enc_block_1 ffn boundary act",
+  max_absolute_error: 1.7690658569335938e-4,
+  mean_absolute_error: 1.332392912445357e-6,
+  values_at_or_above_1e_4: 4
+}
+%{
+  experiment: "isolated enc_block_1_ffn_down",
+  max_absolute_error: 2.1457672119140625e-6,
+  mean_absolute_error: 1.1169254321430344e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "enc_block_1 ffn boundary down",
+  max_absolute_error: 8.392333984375e-5,
+  mean_absolute_error: 1.2953859140907298e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_1_ffn_residual",
+  max_absolute_error: 0.0,
+  mean_absolute_error: 0.0,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "enc_block_1 ffn boundary residual",
+  max_absolute_error: 8.392333984375e-5,
+  mean_absolute_error: 1.2953859140907298e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_2_attn_norm",
+  max_absolute_error: 2.86102294921875e-6,
+  mean_absolute_error: 6.97023523343887e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_2_attn_q",
+  max_absolute_error: 4.0531158447265625e-6,
+  mean_absolute_error: 2.5286431082349736e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_2_attn_k",
+  max_absolute_error: 5.245208740234375e-6,
+  mean_absolute_error: 2.8522561024146853e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_2_attn_v",
+  max_absolute_error: 3.5762786865234375e-6,
+  mean_absolute_error: 1.9088427904989658e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_2_attn_compute",
+  max_absolute_error: 2.0265579223632812e-6,
+  mean_absolute_error: 7.590872996843245e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_2_attn_out",
+  max_absolute_error: 1.9669532775878906e-6,
+  mean_absolute_error: 7.498807974570809e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "enc_block_2 attention boundary entry",
+  max_absolute_error: 8.392333984375e-5,
+  mean_absolute_error: 1.2953859140907298e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "enc_block_2 attention boundary norm",
+  max_absolute_error: 1.3828277587890625e-4,
+  mean_absolute_error: 1.3108115126669873e-6,
+  values_at_or_above_1e_4: 4
+}
+%{
+  experiment: "enc_block_2 attention boundary qkv",
+  max_absolute_error: 1.18255615234375e-4,
+  mean_absolute_error: 1.2963262179255253e-6,
+  values_at_or_above_1e_4: 1
+}
+%{
+  experiment: "enc_block_2 attention boundary compute",
+  max_absolute_error: 1.201629638671875e-4,
+  mean_absolute_error: 1.2875664197053993e-6,
+  values_at_or_above_1e_4: 2
+}
+%{
+  experiment: "enc_block_2 attention boundary out",
+  max_absolute_error: 1.1444091796875e-4,
+  mean_absolute_error: 1.276266630156897e-6,
+  values_at_or_above_1e_4: 1
+}
+%{
+  experiment: "isolated enc_block_2_ffn_norm",
+  max_absolute_error: 2.86102294921875e-6,
+  mean_absolute_error: 8.088564840136314e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "enc_block_2 ffn boundary norm",
+  max_absolute_error: 1.0013580322265625e-4,
+  mean_absolute_error: 1.2775361710737343e-6,
+  values_at_or_above_1e_4: 1
+}
+%{
+  experiment: "isolated enc_block_2_ffn_up",
+  max_absolute_error: 6.198883056640625e-6,
+  mean_absolute_error: 2.7875745445271605e-7,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "enc_block_2 ffn boundary up",
+  max_absolute_error: 9.441375732421875e-5,
+  mean_absolute_error: 1.2367344197627972e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_2_ffn_act",
+  max_absolute_error: 1.2497766874730587e-6,
+  mean_absolute_error: 8.666291506642665e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "enc_block_2 ffn boundary act",
+  max_absolute_error: 8.392333984375e-5,
+  mean_absolute_error: 1.1838064892799594e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_2_ffn_down",
+  max_absolute_error: 1.1324882507324219e-6,
+  mean_absolute_error: 6.122422036014541e-8,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "enc_block_2 ffn boundary down",
+  max_absolute_error: 9.72747802734375e-5,
+  mean_absolute_error: 1.1936443797821994e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "isolated enc_block_2_ffn_residual",
+  max_absolute_error: 0.0,
+  mean_absolute_error: 0.0,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "enc_block_2 ffn boundary residual",
+  max_absolute_error: 9.72747802734375e-5,
+  mean_absolute_error: 1.1936443797821994e-6,
+  values_at_or_above_1e_4: 0
+}
+%{
+  experiment: "f64 conv1",
+  max_absolute_error: 1.983642578125e-4,
+  mean_absolute_error: 1.925702463267953e-6,
+  values_at_or_above_1e_4: 3
+}
+%{
+  experiment: "f64 convolutions",
+  max_absolute_error: 1.201629638671875e-4,
+  mean_absolute_error: 1.934709416673286e-6,
+  values_at_or_above_1e_4: 4
+}
+%{
+  experiment: "f64 first_norm",
+  max_absolute_error: 1.7547607421875e-4,
+  mean_absolute_error: 1.910612809297163e-6,
+  values_at_or_above_1e_4: 4
+}
+%{
+  experiment: "f64 block1_ffn_up",
+  max_absolute_error: 2.002716064453125e-4,
+  mean_absolute_error: 1.8826826817530673e-6,
+  values_at_or_above_1e_4: 2
+}
+%{
+  experiment: "f64 block1_attention",
+  max_absolute_error: 2.307891845703125e-4,
+  mean_absolute_error: 1.813425797081436e-6,
+  values_at_or_above_1e_4: 4
+}
+%{
+  experiment: "f64 all_norms",
+  max_absolute_error: 1.926422119140625e-4,
+  mean_absolute_error: 1.9048831063628313e-6,
+  values_at_or_above_1e_4: 2
+}

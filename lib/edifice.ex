@@ -101,6 +101,7 @@ defmodule Edifice do
     ],
     ssm: [
       mamba: Edifice.SSM.Mamba,
+      mamba2_full: Edifice.SSM.Mamba2,
       mamba_ssd: Edifice.SSM.MambaSSD,
       mamba_cumsum: Edifice.SSM.MambaCumsum,
       mamba_hillis_steele: Edifice.SSM.MambaHillisSteele,
@@ -416,6 +417,104 @@ defmodule Edifice do
   @spec list_families() :: %{atom() => [atom()]}
   def list_families do
     @families
+  end
+
+  # Architectures that have been exercised beyond the unit tests. Levels:
+  #
+  #   :deployed          trained and run as a policy backbone in ExPhil, with
+  #                      the stateful step/replay path checked against the
+  #                      batch forward on an actual checkpoint
+  #   :trained           ExPhil carries tuned training defaults for it, so it
+  #                      has been trained end to end at least in bake-offs
+  #   :pretrained_parity a published checkpoint loads and its outputs match
+  #                      the PyTorch reference (test/edifice/pretrained/)
+  #   :reference_parity  forward (and where noted gradient) matches an
+  #                      independent reference at random weights: PyTorch
+  #                      fixtures (test/edifice/pretrained/), the ATen GRU and
+  #                      LibTorch Mamba-2 references (see guides/validation.md)
+  #
+  # Add a name here when you have the evidence, and say where it is in the
+  # commit. guides/architecture_index.md lists these; the doc-count test keeps
+  # the two in step.
+  @verification %{
+    deployed: [:gru, :lstm, :min_gru, :mamba, :mamba_ssd],
+    trained: [
+      :attention,
+      :delta_net,
+      :gated_delta_net,
+      :gla,
+      :griffin,
+      :gru,
+      :h3,
+      :hgrn,
+      :jamba,
+      :lstm,
+      :mamba,
+      :mamba3,
+      :mamba_ssd,
+      :min_gru,
+      :min_lstm,
+      :performer,
+      :retnet,
+      :rwkv,
+      :ttt,
+      :ttt_e2e,
+      :xlstm,
+      :zamba
+    ],
+    pretrained_parity: [:convnext, :detr, :resnet, :vit, :whisper],
+    reference_parity: [
+      :deep_res_lstm,
+      :delta_net,
+      :dit,
+      :gat,
+      :gqa,
+      :gru,
+      :mamba,
+      :mamba2_full,
+      :min_gru
+    ]
+  }
+
+  for {level, names} <- @verification, name <- names do
+    unless Map.has_key?(@architecture_registry, name) do
+      raise "@verification #{level} names #{inspect(name)}, which is not a registered architecture"
+    end
+  end
+
+  @doc """
+  Architectures with evidence of use beyond the unit tests, grouped by level.
+
+  Levels are `:deployed` (trained and run as an ExPhil policy backbone),
+  `:trained` (ExPhil has tuned training defaults for it), `:pretrained_parity`
+  (a published checkpoint matches the PyTorch reference) and
+  `:reference_parity` (matches a PyTorch fixture at random weights). Every
+  other registered architecture is covered by shape, gradient and sweep tests
+  only.
+
+  ## Examples
+
+      iex> :mamba in Edifice.verified_architectures().deployed
+      true
+  """
+  @spec verified_architectures() :: %{atom() => [atom()]}
+  def verified_architectures, do: @verification
+
+  @doc """
+  The verification levels an architecture has reached. `[]` means it has only
+  the library's own tests behind it.
+
+  ## Examples
+
+      iex> Edifice.verification(:whisper)
+      [:pretrained_parity]
+
+      iex> Edifice.verification(:kan)
+      []
+  """
+  @spec verification(atom()) :: [atom()]
+  def verification(name) do
+    for {level, names} <- @verification, name in names, do: level
   end
 
   @doc """

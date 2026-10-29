@@ -29,6 +29,7 @@ jobs:
     runs-on: [self-hosted, linux, gpu]
     timeout-minutes: 60
     env:
+      CXX: clang++
       MIX_ENV: test
       EXLA_GPU_ARCH: ${{ inputs.arch || 'sm_120' }}
       EXLA_TARGET: cuda

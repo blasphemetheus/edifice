@@ -263,7 +263,7 @@ in an image. A recurrent network "knows" that word order matters. A graph networ
 nodes interact through edges. These structural biases mean the network needs less data and
 less training to learn the pattern, because the architecture already encodes part of the answer.
 
-This is why Edifice has 19 families -- each family encodes a different set of assumptions about
+This is why Edifice has 26 families -- each family encodes a different set of assumptions about
 what the data looks like and how it should be processed.
 
 ## What's Next
@@ -273,4 +273,4 @@ With these foundations in place, you're ready for:
 1. **[Core Vocabulary](core_vocabulary.md)** -- the precise terminology used across all Edifice guides
 2. **[Problem Landscape](problem_landscape.md)** -- how different ML problems map to different architecture families
 3. **[Reading Edifice](reading_edifice.md)** -- understanding the code patterns in this library
-4. **[Learning Path](learning_path.md)** -- a guided tour through the 19 architecture families
+4. **[Learning Path](learning_path.md)** -- a guided tour through the 26 architecture families

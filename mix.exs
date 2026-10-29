@@ -3,6 +3,7 @@ defmodule Edifice.MixProject do
 
   @version "0.2.0"
   @source_url "https://github.com/blasphemetheus/edifice"
+  @nx_revision "171dcad658ae06f726aaacf785df2989eca047e0"
 
   def project do
     [
@@ -19,7 +20,7 @@ defmodule Edifice.MixProject do
       # Docs
       name: "Edifice",
       description:
-        "267 neural network architectures for Nx/Axon: transformers, Mamba, diffusion, GNNs, audio, robotics, and more",
+        "268 neural network architectures for Nx/Axon: transformers, Mamba, diffusion, GNNs, audio, robotics, and more",
       source_url: @source_url,
       homepage_url: @source_url,
       docs: docs(),
@@ -39,13 +40,20 @@ defmodule Edifice.MixProject do
   defp deps do
     # Set EDIFICE_LOCAL_NX=1 to use local nx/exla forks (for CUDA kernel development)
     local_nx? = System.get_env("EDIFICE_LOCAL_NX") == "1"
+    upstream_nx? = System.get_env("EDIFICE_UPSTREAM_NX") == "1"
 
     [
       # ML Core
-      if(local_nx?,
-        do: {:nx, path: "../nx/nx", override: true},
-        else: {:nx, "~> 1.0"}
-      ),
+      cond do
+        local_nx? ->
+          {:nx, path: "../nx/nx", override: true}
+
+        upstream_nx? ->
+          {:nx, github: "elixir-nx/nx", ref: @nx_revision, sparse: "nx", override: true}
+
+        true ->
+          {:nx, "~> 1.0"}
+      end,
       {:axon, "~> 0.9"},
       {:polaris, "~> 0.2"},
       # Pretrained.Config/Hub parse HF JSON; a real dep so consumers
@@ -53,10 +61,16 @@ defmodule Edifice.MixProject do
       {:jason, "~> 1.4"},
 
       # GPU Backend
-      if(local_nx?,
-        do: {:exla, path: "../nx/exla", optional: true},
-        else: {:exla, "~> 1.0", optional: true}
-      ),
+      cond do
+        local_nx? ->
+          {:exla, path: "../nx/exla", optional: true}
+
+        upstream_nx? ->
+          {:exla, github: "elixir-nx/nx", ref: @nx_revision, sparse: "exla", optional: true}
+
+        true ->
+          {:exla, "~> 1.0", optional: true}
+      end,
 
       # Pretrained weight loading (optional)
       {:safetensors, "~> 0.2", optional: true},
@@ -95,6 +109,7 @@ defmodule Edifice.MixProject do
         "guides/learning_path.md",
         # Architecture Guides
         "guides/architecture_index.md",
+        "guides/validation.md",
         "guides/architecture_taxonomy.md",
         "guides/state_space_models.md",
         "guides/attention_mechanisms.md",
@@ -120,6 +135,7 @@ defmodule Edifice.MixProject do
         ],
         Reference: [
           "guides/architecture_index.md",
+          "guides/validation.md",
           "guides/architecture_taxonomy.md"
         ],
         "Guides: Sequence Processing": [

@@ -1,0 +1,29 @@
+• Running devenv:files:cleanup
+• Running devenv:python:virtualenv
+✓ Running devenv:files:cleanup in 4.28ms
+✓ Running devenv:python:virtualenv in 9.15ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 4.27ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 230ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+
+16:08:59.606 [debug] redirecting to /api/resolve-cache/models/openai/whisper-base/e37978b90ca9030d5170a5c07aadb050351a65bb/config.json?%2Fopenai%2Fwhisper-base%2Fresolve%2Fmain%2Fconfig.json=&etag=%22708cca09e7e8a9364e444efe8b4f9c2691fc5f51%22
+
+16:08:59.689 [info] Cached model.safetensors (1/1)
+%{
+  actual: -16.550745010375977,
+  expected: -16.55100440979004,
+  compute: {:f, 32},
+  max_absolute_error: 2.593994140625e-4,
+  mean_absolute_error: 1.3388971638050862e-5,
+  worst_flat_index: 761155
+}
+%{
+  actual: -15.34093573784523,
+  expected: -15.341070175170898,
+  compute: {:f, 64},
+  max_absolute_error: 1.3443732566820188e-4,
+  mean_absolute_error: 1.2994366978480553e-6,
+  worst_flat_index: 456003
+}

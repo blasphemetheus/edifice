@@ -101,6 +101,153 @@ defmodule Edifice.Serving.DecoderCacheTest do
       end)
 
     assert_all_close(Nx.concatenate(outputs, axis: 1), expected, atol: 1.0e-5)
+
+    opts = [prompt: Nx.tensor([[1, 2, 3]]), seq_len: 8, max_tokens: 7, temperature: 0.0]
+    generated = Generate.generate(predict, params, opts) |> Nx.to_flat_list() |> Enum.drop(3)
+
+    assert Enum.to_list(Generate.token_stream(predict, params, Keyword.put(opts, :cache, cache))) ==
+             generated
+  end
+
+  test "streaming rejects incompatible batch sizes and cache capacities before prediction" do
+    no_predict = fn _, _ -> flunk("invalid options reached prediction") end
+    opts = [prompt: Nx.tensor([[1], [2]]), seq_len: 8, max_tokens: 1, on_token: fn _ -> :cont end]
+
+    assert_raise ArgumentError, ~r/single prompt/, fn ->
+      Generate.generate_stream(no_predict, %{}, opts)
+    end
+
+    assert_raise ArgumentError, ~r/single prompt/, fn ->
+      Generate.token_stream(no_predict, %{}, opts) |> Enum.to_list()
+    end
+
+    opts =
+      Keyword.merge(opts,
+        prompt: Nx.tensor([[1]]),
+        cache: Generate.build_cache(@opts),
+        seq_len: 4
+      )
+
+    assert_raise ArgumentError, ~r/capacity/, fn ->
+      Generate.generate_stream(no_predict, %{}, opts)
+    end
+
+    assert_raise ArgumentError, ~r/capacity/, fn ->
+      Generate.token_stream(no_predict, %{}, opts) |> Enum.to_list()
+    end
+  end
+
+  test "both streaming APIs match seeded generation through cache overflow" do
+    model = Generate.build_lm(@opts)
+    {init, predict} = Axon.build(model, seed: 42)
+    params = init.(%{"token_ids" => Nx.template({1, 8}, :s64)}, Axon.ModelState.empty())
+    cache = Generate.build_cache(@opts)
+
+    for temperature <- [0.0, 0.7],
+        prompt <- [Nx.tensor([[1, 2, 3]]), Nx.tensor([[1, 2, 3, 4, 5, 6, 7, 8, 9]])] do
+      opts = [prompt: prompt, seq_len: 8, max_tokens: 9, temperature: temperature, seed: 42]
+      expected = Generate.generate(predict, params, opts)
+
+      expected_tokens =
+        expected |> Nx.slice_along_axis(Nx.axis_size(prompt, 1), 9, axis: 1) |> Nx.to_flat_list()
+
+      cached_opts = Keyword.put(opts, :cache, cache)
+      no_full = fn _, _ -> flunk("stream called the full predictor with a cache") end
+      assert Enum.to_list(Generate.token_stream(no_full, params, cached_opts)) == expected_tokens
+      assert Enum.to_list(Generate.token_stream(predict, params, opts)) == expected_tokens
+
+      actual =
+        Generate.generate_stream(
+          no_full,
+          params,
+          Keyword.put(cached_opts, :on_token, fn token -> send(self(), {:token, token}) end)
+        )
+
+      assert_equal(actual, expected)
+      for token <- expected_tokens, do: assert_receive({:token, ^token})
+      refute_receive {:token, _}
+    end
+  end
+
+  test "lazy cache does one prefill then only the requested decode steps" do
+    model = Generate.build_lm(@opts)
+    {init, _predict} = Axon.build(model, seed: 42)
+    params = init.(%{"token_ids" => Nx.template({1, 8}, :s64)}, Axon.ModelState.empty())
+    cache = Generate.build_cache(@opts)
+
+    traced = %{
+      cache
+      | predict: fn p, chunk, state ->
+          send(self(), {:chunk, Nx.axis_size(chunk, 1)})
+          cache.predict.(p, chunk, state)
+        end
+    }
+
+    opts = [
+      prompt: Nx.tensor([[1, 2, 3]]),
+      seq_len: 8,
+      max_tokens: 10,
+      temperature: 0.0,
+      cache: traced
+    ]
+
+    no_full = fn _, _ -> flunk("full prediction") end
+    stream = Generate.token_stream(no_full, params, opts)
+    refute_receive {:chunk, _}
+    assert length(Enum.take(stream, 2)) == 2
+    assert_receive {:chunk, 3}
+    assert_receive {:chunk, 1}
+    refute_receive {:chunk, _}
+
+    result =
+      Generate.generate_stream(no_full, params, Keyword.put(opts, :on_token, fn _ -> :halt end))
+
+    assert Nx.axis_size(result, 1) == 4
+    assert_receive {:chunk, 3}
+    refute_receive {:chunk, _}
+  end
+
+  test "stream limits and stop tokens never cause unwanted prediction" do
+    predict = fn _, %{"token_ids" => tokens} ->
+      send(self(), :prediction)
+      Nx.broadcast(Nx.tensor([[[0.0, 9.0, 0.0]]]), {1, Nx.axis_size(tokens, 1), 3})
+    end
+
+    opts = [
+      prompt: Nx.tensor([[2]]),
+      seq_len: 4,
+      max_tokens: 0,
+      temperature: 0.0,
+      on_token: fn token -> send(self(), {:token, token}) end
+    ]
+
+    assert_equal(Generate.generate_stream(predict, %{}, opts), opts[:prompt])
+    assert Enum.to_list(Generate.token_stream(predict, %{}, opts)) == []
+    refute_receive :prediction
+    refute_receive {:token, _}
+
+    for extra <- [[max_tokens: 1], [max_tokens: 5, stop_token: 1]] do
+      result = Generate.generate_stream(predict, %{}, Keyword.merge(opts, extra))
+      assert_equal(result, Nx.tensor([[2, 1]]))
+      assert_receive :prediction
+      assert_receive {:token, 1}
+      refute_receive :prediction
+    end
+
+    assert Enum.to_list(
+             Generate.token_stream(
+               predict,
+               %{},
+               Keyword.merge(opts, max_tokens: 5, stop_token: 1)
+             )
+           ) == []
+
+    assert_receive :prediction
+    refute_receive :prediction
+    stopped = Keyword.merge(opts, max_tokens: 5, stop_token: 2)
+    assert_equal(Generate.generate_stream(predict, %{}, stopped), opts[:prompt])
+    assert Enum.to_list(Generate.token_stream(predict, %{}, stopped)) == []
+    refute_receive :prediction
   end
 
   test "finished rows remain stopped while other rows decode" do
@@ -144,6 +291,16 @@ defmodule Edifice.Serving.DecoderCacheTest do
       Generate.generate(predict, params, gen),
       Generate.generate(predict, params, Keyword.put(gen, :cache, Generate.build_cache(opts)))
     )
+
+    expected = Generate.generate(predict, params, gen) |> Nx.to_flat_list() |> Enum.drop(9)
+
+    assert Enum.to_list(
+             Generate.token_stream(
+               predict,
+               params,
+               Keyword.put(gen, :cache, Generate.build_cache(opts))
+             )
+           ) == expected
 
     assert_raise ArgumentError, fn -> Cache.build(Keyword.put(@opts, :yarn, true)) end
   end

@@ -1,0 +1,23 @@
+• Running devenv:files:cleanup
+• Running devenv:python:virtualenv
+✓ Running devenv:files:cleanup in 4.46ms
+✓ Running devenv:python:virtualenv in 9.23ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 3.93ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 630ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.4.0: https://devenv.sh/getting-started/#installation
+    warning: redefining module Edifice.SSM.Common (current version loaded from /tmp/edifice-upstream-build/lib/edifice/ebin/Elixir.Edifice.SSM.Common.beam)
+    │
+  1 │ defmodule Edifice.SSM.Common do
+    │ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    │
+    └─ lib/edifice/ssm/common.ex:1: Edifice.SSM.Common (module)
+
+Running ExUnit with seed: 240527, max_cases: 64
+Excluding tags: [:slow, :integration, :known_issue]
+Including tags: [:external, :exla_only]
+
+....................................................
+Finished in 8.7 seconds (0.1s on load, 3.7s async, 4.7s sync)
+52 tests, 0 failures

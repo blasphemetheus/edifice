@@ -59,11 +59,8 @@ defmodule Edifice.CUDA.FusedCustomCallGpuTest do
     {b, key} = Nx.Random.uniform(key, -0.5, 0.5, shape: {@batch, @seq, state}, type: {:f, 32})
     {c, _} = Nx.Random.uniform(key, -0.5, 0.5, shape: {@batch, @seq, state}, type: {:f, 32})
 
-    # A must be the CANONICAL -(1..state) broadcast that Mamba passes
-    # (mamba.ex parallel_scan_ssm_impl): the Elixir fallback IGNORES the
-    # A argument and hardcodes exactly this diagonal, so kernel and
-    # fallback only agree on-contract. (A random A here diverges by
-    # design — that sharp edge is why this comment exists.)
+    # Cover the fixed diagonal used by the Mamba builder. The portable
+    # reference suite separately checks noncanonical A values and gradients.
     a_diag = Nx.negate(Nx.add(Nx.iota({state}), 1.0))
     a = Nx.broadcast(Nx.reshape(a_diag, {1, state}), {@hidden, state})
 

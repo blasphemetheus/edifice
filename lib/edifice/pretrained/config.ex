@@ -142,6 +142,7 @@ defmodule Edifice.Pretrained.Config do
           depth: num_hidden_layers,
           num_heads: num_attention_heads,
           mlp_ratio: intermediate_size / hidden_size,
+          layer_norm_epsilon: config["layer_norm_eps"] || 1.0e-12,
           dropout: config["hidden_dropout_prob"] || 0.0
         ]
         |> maybe_put(:num_classes, config["num_labels"])
@@ -159,7 +160,7 @@ defmodule Edifice.Pretrained.Config do
          {:ok, vocab_size} <- require_field(config, "vocab_size") do
       opts = [
         n_mels: config["num_mel_bins"] || 80,
-        max_audio_len: config["max_source_positions"] || 1500,
+        max_audio_len: 2 * (config["max_source_positions"] || 1500),
         hidden_dim: d_model,
         encoder_layers: encoder_layers,
         decoder_layers: decoder_layers,
@@ -186,6 +187,7 @@ defmodule Edifice.Pretrained.Config do
           in_channels: config["num_channels"] || 3,
           depths: depths,
           dims: hidden_sizes,
+          layer_norm_epsilon: config["layer_norm_eps"] || 1.0e-6,
           dropout: config["drop_path_rate"] || 0.0
         ]
         |> maybe_put(:num_classes, config["num_labels"])

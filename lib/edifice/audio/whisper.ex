@@ -158,13 +158,31 @@ defmodule Edifice.Audio.Whisper do
       |> Axon.conv(hidden_dim,
         kernel_size: {3},
         strides: 2,
-        padding: :same,
+        padding: [{1, 1}],
         name: "enc_conv2"
       )
       |> Axon.activation(:gelu, name: "enc_conv2_act")
 
-    # Sinusoidal positional encoding
-    x = SinusoidalPE.layer(x, dim: hidden_dim, name: "enc_pos")
+    # Load the exact frozen table from pretrained checkpoints. Recomputing the
+    # trigonometric values can amplify small differences through the encoder.
+    positions =
+      Axon.param("kernel", {div(max_audio_len + 1, 2), hidden_dim},
+        initializer: fn {length, dim}, type, _key ->
+          SinusoidalPE.build_table(max_len: length, dim: dim) |> Nx.as_type(type)
+        end
+      )
+
+    positions = %{positions | frozen: true}
+
+    x =
+      Axon.layer(
+        fn input, positions, _opts ->
+          Nx.add(input, Nx.slice_along_axis(positions, 0, Nx.axis_size(input, 1), axis: 0))
+        end,
+        [x, positions],
+        name: "enc_pos_embed",
+        op_name: :position_embedding
+      )
 
     # Encoder transformer blocks (pre-norm self-attention + FFN)
     x =
@@ -206,11 +224,24 @@ defmodule Edifice.Audio.Whisper do
     dropout = Keyword.get(opts, :dropout, @default_dropout)
 
     # Inputs
-    token_ids = Axon.input("token_ids", shape: {nil, max_dec_len})
+    token_ids = Axon.input("token_ids", shape: {nil, nil})
     encoder_output = Axon.input("encoder_output", shape: {nil, nil, hidden_dim})
 
     # Token embedding
-    token_embed = Axon.embedding(token_ids, vocab_size, hidden_dim, name: "dec_token_embed")
+    # Whisper uses the same table for token lookup and output scores.
+    token_table =
+      Axon.layer(
+        fn table, _opts -> table end,
+        [Axon.parameter("kernel", {vocab_size, hidden_dim})],
+        name: "dec_token_embed"
+      )
+
+    token_embed =
+      Axon.layer(
+        fn ids, table, _opts -> Nx.take(table, ids) end,
+        [token_ids, token_table],
+        name: "dec_token_lookup"
+      )
 
     # Learned positional embedding: generate position indices and embed
     pos_embed_table =
@@ -242,6 +273,7 @@ defmodule Edifice.Audio.Whisper do
           CrossAttention.layer(q_normed, enc_out,
             hidden_size: hidden_dim,
             num_heads: num_heads,
+            key_bias: false,
             name: name
           )
         end,
@@ -258,9 +290,13 @@ defmodule Edifice.Audio.Whisper do
       )
 
     # Final layer norm + projection to vocab
-    x
-    |> Axon.layer_norm(name: "dec_final_norm")
-    |> Axon.dense(vocab_size, name: "dec_output_proj")
+    normalized = Axon.layer_norm(x, name: "dec_final_norm")
+
+    Axon.layer(
+      fn hidden, table, _opts -> Nx.dot(hidden, [2], table, [1]) end,
+      [normalized, token_table],
+      name: "dec_output_proj"
+    )
   end
 
   @doc """
@@ -282,7 +318,7 @@ defmodule Edifice.Audio.Whisper do
   @spec self_attention(Axon.t(), pos_integer(), pos_integer(), String.t()) :: Axon.t()
   defp self_attention(input, hidden_dim, num_heads, name) do
     q = Axon.dense(input, hidden_dim, name: "#{name}_q")
-    k = Axon.dense(input, hidden_dim, name: "#{name}_k")
+    k = Axon.dense(input, hidden_dim, use_bias: false, name: "#{name}_k")
     v = Axon.dense(input, hidden_dim, name: "#{name}_v")
 
     head_dim = div(hidden_dim, num_heads)
@@ -304,7 +340,7 @@ defmodule Edifice.Audio.Whisper do
   @spec causal_self_attention(Axon.t(), pos_integer(), pos_integer(), String.t()) :: Axon.t()
   defp causal_self_attention(input, hidden_dim, num_heads, name) do
     q = Axon.dense(input, hidden_dim, name: "#{name}_q")
-    k = Axon.dense(input, hidden_dim, name: "#{name}_k")
+    k = Axon.dense(input, hidden_dim, use_bias: false, name: "#{name}_k")
     v = Axon.dense(input, hidden_dim, name: "#{name}_v")
 
     head_dim = div(hidden_dim, num_heads)

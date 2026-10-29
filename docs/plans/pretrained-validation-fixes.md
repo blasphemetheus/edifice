@@ -1,6 +1,16 @@
 # Pretrained numerical validation: execution results
 
-## Status — RUN, COMPATIBILITY FAILURES REMAIN
+**AI-generated release clarification, October 28:** the resolved results below
+use the fixed upstream Nx/EXLA/XLA profile. The 0.3.0 release baseline uses
+published EXLA 1.0 / XLA 0.10, which still has the CPU erf/GELU defect. See
+[current dependency and validation limits](../../guides/validation.md).
+
+**Current status, October 26:** the initial failure below is resolved. The
+upstream Nx/EXLA/XLA update fixes the erf bug; independent f64 and varied/recorded
+input checks justify a Whisper-specific f32 comparison. All six pretrained
+numerical tests now pass. One-file English transcription also matches an
+independent decoder's token sequence. See the [current evidence and limits](../../tools/whisper_reference/README.md).
+The remainder of this file preserves the initial investigation results.
 
 Validated October 24, 2026 using the existing PyTorch fixtures and downloaded
 HuggingFace checkpoints. Test setup now explicitly selects EXLA's host backend
@@ -32,4 +42,4 @@ plain parameter maps are deprecated. The tests still use those maps; that warnin
 is distinct from the three numerical/shape failures above.
 
 Do not loosen tolerances to mask these failures. See the
-[architecture audit](../architecture_completion_audit.md) for bot-focused priorities.
+[architecture audit](../history/architecture_completion_audit.md) for bot-focused priorities.

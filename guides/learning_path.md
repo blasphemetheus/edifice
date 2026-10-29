@@ -1,9 +1,9 @@
 # Learning Path
-> A guided tour through Edifice's 19 architecture families -- what to learn first, what builds on what, and where to go deep.
+> A guided tour through Edifice's 26 architecture families -- what to learn first, what builds on what, and where to go deep.
 
 ## How to Use This Guide
 
-Edifice has 90+ architectures across 19 families. That's overwhelming if you try to learn them
+Edifice has 268 architectures across 26 families. That's overwhelming if you try to learn them
 all at once. This guide gives you a structured path through the families, organized so that
 each step builds naturally on the previous ones. At each step, you get:
 

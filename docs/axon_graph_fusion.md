@@ -79,6 +79,6 @@ custom call optimization.
 
 ## Files
 
-- `docs/exla_custom_calls_results.md` — full benchmark data
+- `docs/history/exla_custom_calls_results.md` — full benchmark data
 - `lib/edifice/cuda/fused_scan.ex` — three-tier dispatch implementation
 - `bench/model_breakdown.exs` — per-layer benchmarking script

@@ -13,8 +13,8 @@ defmodule Edifice.Pretrained.KeyMaps.Whisper do
 
   ## Skipped Keys
 
-  - `model.encoder.embed_positions.weight` — Edifice uses sinusoidal PE (not trainable)
-  - `proj_out.weight` — Edifice uses its own `dec_output_proj` dense layer
+  - `proj_out.weight` — the decoder reuses `model.decoder.embed_tokens.weight`
+    for the tied output projection, as in Whisper.
 
   ## Usage
 
@@ -38,8 +38,7 @@ defmodule Edifice.Pretrained.KeyMaps.Whisper do
   def map_key("model.encoder.conv2.weight"), do: "enc_conv2.kernel"
   def map_key("model.encoder.conv2.bias"), do: "enc_conv2.bias"
 
-  # Sinusoidal PE — not trainable in Edifice
-  def map_key("model.encoder.embed_positions.weight"), do: :skip
+  def map_key("model.encoder.embed_positions.weight"), do: "enc_pos_embed.kernel"
 
   def map_key("model.encoder.layer_norm.weight"), do: "enc_final_norm.gamma"
   def map_key("model.encoder.layer_norm.bias"), do: "enc_final_norm.beta"
@@ -50,7 +49,7 @@ defmodule Edifice.Pretrained.KeyMaps.Whisper do
   def map_key("model.decoder.layer_norm.weight"), do: "dec_final_norm.gamma"
   def map_key("model.decoder.layer_norm.bias"), do: "dec_final_norm.beta"
 
-  # Edifice uses its own dec_output_proj
+  # The output projection shares the token embedding table.
   def map_key("proj_out.weight"), do: :skip
 
   def map_key(key) do
@@ -146,6 +145,7 @@ defmodule Edifice.Pretrained.KeyMaps.Whisper do
   @impl true
   def tensor_transforms do
     [
+      {~r/^enc_conv[12]\.kernel$/, fn tensor -> Nx.transpose(tensor, axes: [2, 1, 0]) end},
       # Transpose linear weight matrices but not embedding kernels
       # Embeddings (token_embed, pos_embed) are already {vocab/seq, dim} in both HF and Axon
       {~r/(?<!embed)\.kernel$/, &Transform.transpose_linear/1}

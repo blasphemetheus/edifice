@@ -654,10 +654,11 @@ defmodule Edifice.SSM.Common do
   # x: [batch, seq_len, hidden], dt: [batch, seq_len, hidden],
   # a: [hidden, state_size], b: [batch, seq_len, state_size], c: [batch, seq_len, state_size]
   def selective_scan_fallback(x, dt, a, b_proj, c_proj) do
-    state_size = Nx.axis_size(a, 1)
-
-    # Discretize and scan using the existing infrastructure
-    {a_bar, bx} = discretize_ssm(x, b_proj, dt, state_size)
+    # The generic scan accepts a learned A. discretize_ssm/4 is specific to
+    # Edifice's fixed-diagonal model builder and would discard these values.
+    dt = Nx.new_axis(Nx.clip(dt, dt_min(), dt_max()), 3)
+    a_bar = Nx.exp(Nx.multiply(dt, Nx.reshape(a, {1, 1, Nx.axis_size(a, 0), Nx.axis_size(a, 1)})))
+    bx = Nx.multiply(Nx.multiply(dt, Nx.new_axis(b_proj, 2)), Nx.new_axis(x, 3))
     h = sequential_scan(a_bar, bx)
     compute_ssm_output(h, c_proj)
   end

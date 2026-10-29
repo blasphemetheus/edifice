@@ -1,0 +1,199 @@
+• Running devenv:python:virtualenv
+• Running devenv:files:cleanup
+✓ Running devenv:files:cleanup in 5.26ms
+✓ Running devenv:python:virtualenv in 9.50ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 4.98ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 260ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+
+20:09:33.428 [debug] redirecting to /api/resolve-cache/models/openai/whisper-base/e37978b90ca9030d5170a5c07aadb050351a65bb/config.json?%2Fopenai%2Fwhisper-base%2Fresolve%2Fmain%2Fconfig.json=&etag=%22708cca09e7e8a9364e444efe8b4f9c2691fc5f51%22
+
+20:09:33.523 [info] Cached model.safetensors (1/1)
+%{
+  reference: "/tmp/whisper-sdpa-ops.safetensors",
+  nx: ~c"1.0.0",
+  axon: ~c"0.9.0",
+  backend: :exla_host
+}
+%{
+  actual: -16.550745010375977,
+  expected: -16.55100440979004,
+  experiment: "baseline",
+  max_absolute_error: 2.593994140625e-4,
+  mean_absolute_error: 1.3388971638050862e-5,
+  values_at_or_above_1e_4: 115,
+  worst_frame: 1486,
+  worst_channel: 323
+}
+%{
+  actual: -16.550758361816406,
+  expected: -16.55100440979004,
+  experiment: "ffn_gelu_erfc",
+  max_absolute_error: 2.460479736328125e-4,
+  mean_absolute_error: 1.99815053747443e-6,
+  values_at_or_above_1e_4: 10,
+  worst_frame: 1486,
+  worst_channel: 323
+}
+%{
+  actual: -15.34093952178955,
+  expected: -15.341070175170898,
+  experiment: "all_gelu_erfc",
+  max_absolute_error: 1.3065338134765625e-4,
+  mean_absolute_error: 1.8948189790535253e-6,
+  values_at_or_above_1e_4: 7,
+  worst_frame: 890,
+  worst_channel: 323
+}
+%{
+  actual: 4.211581230163574,
+  expected: 4.211693286895752,
+  experiment: "all_gelu_erfc reference enc_conv1_act",
+  max_absolute_error: 1.1205673217773438e-4,
+  mean_absolute_error: 1.8193583173342631e-6,
+  values_at_or_above_1e_4: 4,
+  worst_frame: 1083,
+  worst_channel: 145
+}
+%{
+  actual: -11.530434608459473,
+  expected: -11.530281066894531,
+  experiment: "all_gelu_erfc reference enc_conv2_act",
+  max_absolute_error: 1.5354156494140625e-4,
+  mean_absolute_error: 1.7184888747578952e-6,
+  values_at_or_above_1e_4: 6,
+  worst_frame: 482,
+  worst_channel: 323
+}
+%{
+  actual: -11.530434608459473,
+  expected: -11.530281066894531,
+  experiment: "all_gelu_erfc reference enc_pos_embed",
+  max_absolute_error: 1.5354156494140625e-4,
+  mean_absolute_error: 1.7184888747578952e-6,
+  values_at_or_above_1e_4: 6,
+  worst_frame: 482,
+  worst_channel: 323
+}
+%{
+  actual: -15.340950965881348,
+  expected: -15.341070175170898,
+  experiment: "all_gelu_erfc reference enc_block_1_attn_residual",
+  max_absolute_error: 1.1920928955078125e-4,
+  mean_absolute_error: 1.3863170806871494e-6,
+  values_at_or_above_1e_4: 6,
+  worst_frame: 890,
+  worst_channel: 323
+}
+%{
+  actual: -16.550870895385742,
+  expected: -16.55100440979004,
+  experiment: "all_gelu_erfc reference enc_block_1_ffn_residual",
+  max_absolute_error: 1.33514404296875e-4,
+  mean_absolute_error: 1.2385136187731405e-6,
+  values_at_or_above_1e_4: 1,
+  worst_frame: 1486,
+  worst_channel: 323
+}
+%{
+  actual: -16.550914764404297,
+  expected: -16.55100440979004,
+  experiment: "all_gelu_erfc reference enc_block_2_attn_residual",
+  max_absolute_error: 8.96453857421875e-5,
+  mean_absolute_error: 1.193560819956474e-6,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 1486,
+  worst_channel: 323
+}
+%{
+  actual: -16.456972122192383,
+  expected: -16.45704460144043,
+  experiment: "all_gelu_erfc reference enc_block_2_ffn_residual",
+  max_absolute_error: 7.2479248046875e-5,
+  mean_absolute_error: 1.1054122524001286e-6,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 1355,
+  worst_channel: 323
+}
+%{
+  actual: -4.220615863800049,
+  expected: -4.2205610275268555,
+  experiment: "all_gelu_erfc reference enc_block_3_attn_residual",
+  max_absolute_error: 5.4836273193359375e-5,
+  mean_absolute_error: 1.0668180721040699e-6,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 1417,
+  worst_channel: 323
+}
+%{
+  actual: -11.530242919921875,
+  expected: -11.530281066894531,
+  experiment: "all_gelu_erfc reference enc_block_3_ffn_residual",
+  max_absolute_error: 3.814697265625e-5,
+  mean_absolute_error: 9.513790928394883e-7,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 482,
+  worst_channel: 323
+}
+%{
+  actual: -16.98407554626465,
+  expected: -16.984106063842773,
+  experiment: "all_gelu_erfc reference enc_block_4_attn_residual",
+  max_absolute_error: 3.0517578125e-5,
+  mean_absolute_error: 9.294523124481202e-7,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 484,
+  worst_channel: 323
+}
+%{
+  actual: 14.669044494628906,
+  expected: 14.669024467468262,
+  experiment: "all_gelu_erfc reference enc_block_4_ffn_residual",
+  max_absolute_error: 2.002716064453125e-5,
+  mean_absolute_error: 7.875932510614803e-7,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 1458,
+  worst_channel: 410
+}
+%{
+  actual: -16.224124908447266,
+  expected: -16.224111557006836,
+  experiment: "all_gelu_erfc reference enc_block_5_attn_residual",
+  max_absolute_error: 1.33514404296875e-5,
+  mean_absolute_error: 7.019008876341104e-7,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 196,
+  worst_channel: 323
+}
+%{
+  actual: -16.172962188720703,
+  expected: -16.1729736328125,
+  experiment: "all_gelu_erfc reference enc_block_5_ffn_residual",
+  max_absolute_error: 1.1444091796875e-5,
+  mean_absolute_error: 5.975399517410551e-7,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 233,
+  worst_channel: 323
+}
+%{
+  actual: -19.465116500854492,
+  expected: -19.465106964111328,
+  experiment: "all_gelu_erfc reference enc_block_6_attn_residual",
+  max_absolute_error: 9.5367431640625e-6,
+  mean_absolute_error: 3.629178593200777e-7,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 574,
+  worst_channel: 323
+}
+%{
+  actual: -22.601755142211914,
+  expected: -22.601747512817383,
+  experiment: "all_gelu_erfc reference enc_block_6_ffn_residual",
+  max_absolute_error: 7.62939453125e-6,
+  mean_absolute_error: 6.746871150653533e-8,
+  values_at_or_above_1e_4: 0,
+  worst_frame: 236,
+  worst_channel: 323
+}

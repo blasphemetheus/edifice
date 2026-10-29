@@ -1,9 +1,13 @@
 defmodule Edifice.SSM.Mamba do
   @moduledoc """
-  Mamba: True Selective State Space Model with optimized parallel scan.
+  Mamba-style selective state space model with optimized parallel scan.
 
-  Implements the Mamba architecture from "Mamba: Linear-Time Sequence Modeling
-  with Selective State Spaces" (Gu & Dao, 2023).
+  Implements the selective recurrence from "Mamba: Linear-Time Sequence Modeling
+  with Selective State Spaces" (Gu & Dao, 2023), with an Edifice-specific block.
+  This is not a checkpoint-compatible implementation of the authors' full block:
+  the builder fixes A to `-1..-state_size`, clips post-softplus dt to
+  `[0.001, 0.1]`, and omits the learned D skip. Projection biases and normalization
+  also differ. Existing Edifice checkpoints retain their current equations.
 
   ## Key Innovation: Parallel Associative Scan
 
@@ -236,10 +240,17 @@ defmodule Edifice.SSM.Mamba do
   @doc """
   Advance one frame: `[batch, embed_dim]` in, `{[batch, hidden], state}` out.
 
-  Matches the CPU (non-fused) forward path — `Common.discretize_ssm/4` +
-  scan — exactly; equivalence at every prefix length is pinned by
+  Implements the CPU (non-fused) forward equations — `Common.discretize_ssm/4`
+  plus scan. Numerical equivalence at every prefix length is tested by
   `test/edifice/stateful/step_equivalence_test.exs`, including one case
   crossing the Blelloch-scan branch (`seq_len > 32`).
+
+  Floating-point results need not be identical across batch sizes or backends.
+  Dense reductions can use different addition orders; their rounding differences
+  then enter the convolution history and subsequent frames. Validate trained
+  checkpoints over complete trajectories, including resync, when changing the
+  batching strategy. Compare both carry and outputs against a higher-precision
+  reference: agreement between batch and single execution alone is insufficient.
   """
   @impl Edifice.Stateful
   def step(params, %{h: h, conv: conv}, frame) do

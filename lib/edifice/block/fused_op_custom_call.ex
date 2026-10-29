@@ -26,6 +26,13 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
 
     alias EXLA.CustomCall.Spec
 
+    # Published EXLA 1.0 stores operation attributes in `attributes`; newer
+    # EXLA separates them from the typed backend configuration.
+    @layout_field if(Map.has_key?(struct(Spec), :mlir_attributes),
+                    do: :mlir_attributes,
+                    else: :attributes
+                  )
+
     defp enabled? do
       if System.get_env("EDIFICE_FUSED_CUSTOM_CALL") == "1" do
         Edifice.CUDA.Library.ensure_loaded!()
@@ -89,7 +96,7 @@ if Code.ensure_loaded?(EXLA.CustomCall) do
             _ -> []
           end
 
-      %Spec{call_target_name: target, attributes: attributes}
+      struct!(Spec, [{:call_target_name, target}, {@layout_field, attributes}])
     end
 
     defp layouts(templates), do: "[" <> Enum.map_join(templates, ", ", &row_major/1) <> "]"

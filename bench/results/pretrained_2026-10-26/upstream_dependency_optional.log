@@ -1,0 +1,32 @@
+• Running devenv:files:cleanup
+• Running devenv:python:virtualenv
+✓ Running devenv:files:cleanup in 4.38ms
+✓ Running devenv:python:virtualenv in 9.01ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 4.01ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 310ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+==> telemetry
+Compiling 7 files (.erl)
+Generated telemetry app
+==> jason
+Compiling 10 files (.ex)
+Generated jason app
+==> complex
+Compiling 2 files (.ex)
+Generated complex app
+==> nx
+Compiling 41 files (.ex)
+Generated nx app
+==> polaris
+Compiling 5 files (.ex)
+Generated polaris app
+==> axon
+Compiling 29 files (.ex)
+Generated axon app
+==> edifice
+Compiling 355 files (.ex)
+Generated edifice app
+Generated optional_exla_consumer app
+Edifice compiled and ran on BinaryBackend without EXLA

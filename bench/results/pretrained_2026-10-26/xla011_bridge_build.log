@@ -1,0 +1,26 @@
+• Running devenv:python:virtualenv
+• Running devenv:files:cleanup
+✓ Running devenv:files:cleanup in 5.53ms
+✓ Running devenv:python:virtualenv in 9.72ms
+• Running devenv:enterShell
+✓ Running devenv:enterShell in 4.32ms
+• Running devenv:enterTest
+✓ Running devenv:enterTest in 200ns (no command)
+✨ devenv 2.3.0 is out of date. Please update to 2.0.4: https://devenv.sh/getting-started/#installation
+==> exla
+Removing cached .o files in cache/1.0.0/objs
+Removing cached libexla.so file in cache/libexla.so
+Removing libexla.so cache at /home/blewf/.cache/xla/exla/elixir-1.18.4-erts-15.2.7.6-xla-0.10.0-exla-1.0.0-oaa6nlih5j6bmsyeiswfrot3my/libexla.so
+EXLA_CPU_ONLY is set, skipping nvcc step
+/nix/store/7p4sqkgph7ww7v26nssmhapsd9240l25-clang-wrapper-21.1.8/bin/clang++ -fPIC -I/nix/store/91cvm5i1qaqwgva6yx9fdg5qb0jzavhw-erlang-27.3.4.9/lib/erlang/erts-15.2.7.6/include -I/tmp/edifice-xla011-deps/fine/c_include -Icache/xla_extension/include -Wall -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers -Wno-comment -std=c++17 -w -DNDEBUG -O3 -DEXLA_PROD -c c_src/exla/exla.cc -o cache/1.0.0/objs/exla.o
+/nix/store/7p4sqkgph7ww7v26nssmhapsd9240l25-clang-wrapper-21.1.8/bin/clang++ -fPIC -I/nix/store/91cvm5i1qaqwgva6yx9fdg5qb0jzavhw-erlang-27.3.4.9/lib/erlang/erts-15.2.7.6/include -I/tmp/edifice-xla011-deps/fine/c_include -Icache/xla_extension/include -Wall -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers -Wno-comment -std=c++17 -w -DNDEBUG -O3 -DEXLA_PROD -c c_src/exla/exla_client.cc -o cache/1.0.0/objs/exla_client.o
+/nix/store/7p4sqkgph7ww7v26nssmhapsd9240l25-clang-wrapper-21.1.8/bin/clang++ -fPIC -I/nix/store/91cvm5i1qaqwgva6yx9fdg5qb0jzavhw-erlang-27.3.4.9/lib/erlang/erts-15.2.7.6/include -I/tmp/edifice-xla011-deps/fine/c_include -Icache/xla_extension/include -Wall -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers -Wno-comment -std=c++17 -w -DNDEBUG -O3 -DEXLA_PROD -c c_src/exla/exla_mlir.cc -o cache/1.0.0/objs/exla_mlir.o
+/nix/store/7p4sqkgph7ww7v26nssmhapsd9240l25-clang-wrapper-21.1.8/bin/clang++ -fPIC -I/nix/store/91cvm5i1qaqwgva6yx9fdg5qb0jzavhw-erlang-27.3.4.9/lib/erlang/erts-15.2.7.6/include -I/tmp/edifice-xla011-deps/fine/c_include -Icache/xla_extension/include -Wall -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers -Wno-comment -std=c++17 -w -DNDEBUG -O3 -DEXLA_PROD -c c_src/exla/ipc.cc -o cache/1.0.0/objs/ipc.o
+/nix/store/7p4sqkgph7ww7v26nssmhapsd9240l25-clang-wrapper-21.1.8/bin/clang++ -fPIC -I/nix/store/91cvm5i1qaqwgva6yx9fdg5qb0jzavhw-erlang-27.3.4.9/lib/erlang/erts-15.2.7.6/include -I/tmp/edifice-xla011-deps/fine/c_include -Icache/xla_extension/include -Wall -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers -Wno-comment -std=c++17 -w -DNDEBUG -O3 -DEXLA_PROD -c c_src/exla/custom_calls/runtime_callback.cc -o cache/1.0.0/objs/custom_calls/runtime_callback.o
+/nix/store/7p4sqkgph7ww7v26nssmhapsd9240l25-clang-wrapper-21.1.8/bin/clang++ -fPIC -I/nix/store/91cvm5i1qaqwgva6yx9fdg5qb0jzavhw-erlang-27.3.4.9/lib/erlang/erts-15.2.7.6/include -I/tmp/edifice-xla011-deps/fine/c_include -Icache/xla_extension/include -Wall -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers -Wno-comment -std=c++17 -w -DNDEBUG -O3 -DEXLA_PROD -c c_src/exla/custom_calls/runtime_callback_bridge.cc -o cache/1.0.0/objs/custom_calls/runtime_callback_bridge.o
+/nix/store/7p4sqkgph7ww7v26nssmhapsd9240l25-clang-wrapper-21.1.8/bin/clang++ -fPIC -I/nix/store/91cvm5i1qaqwgva6yx9fdg5qb0jzavhw-erlang-27.3.4.9/lib/erlang/erts-15.2.7.6/include -I/tmp/edifice-xla011-deps/fine/c_include -Icache/xla_extension/include -Wall -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers -Wno-comment -std=c++17 -w -DNDEBUG -O3 -DEXLA_PROD -c c_src/exla/custom_calls/runtime_callback_cuda.cc -o cache/1.0.0/objs/custom_calls/runtime_callback_cuda.o
+/nix/store/7p4sqkgph7ww7v26nssmhapsd9240l25-clang-wrapper-21.1.8/bin/clang++ -fPIC -I/nix/store/91cvm5i1qaqwgva6yx9fdg5qb0jzavhw-erlang-27.3.4.9/lib/erlang/erts-15.2.7.6/include -I/tmp/edifice-xla011-deps/fine/c_include -Icache/xla_extension/include -Wall -Wno-sign-compare -Wno-unused-parameter -Wno-missing-field-initializers -Wno-comment -std=c++17 -w -DNDEBUG -O3 -DEXLA_PROD -c c_src/exla/exla_cuda.cc -o cache/1.0.0/objs/exla_cuda.o
+/nix/store/7p4sqkgph7ww7v26nssmhapsd9240l25-clang-wrapper-21.1.8/bin/clang++ cache/1.0.0/objs/exla.o cache/1.0.0/objs/exla_client.o cache/1.0.0/objs/exla_mlir.o cache/1.0.0/objs/ipc.o cache/1.0.0/objs/custom_calls/runtime_callback.o cache/1.0.0/objs/custom_calls/runtime_callback_bridge.o cache/1.0.0/objs/custom_calls/runtime_callback_cuda.o cache/1.0.0/objs/exla_cuda.o -o cache/libexla.so -Lcache/xla_extension/lib -lxla_extension -shared -fvisibility=hidden -Wl,-rpath,'$ORIGIN/xla_extension/lib'
+Caching libexla.so at /home/blewf/.cache/xla/exla/elixir-1.18.4-erts-15.2.7.6-xla-0.10.0-exla-1.0.0-oaa6nlih5j6bmsyeiswfrot3my/libexla.so
+Compiling 26 files (.ex)
+Generated exla app

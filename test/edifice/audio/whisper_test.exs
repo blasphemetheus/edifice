@@ -72,6 +72,37 @@ defmodule Edifice.Audio.WhisperTest do
   end
 
   describe "Whisper.build_decoder/1" do
+    test "shares token weights with output scores and preserves causal prefixes" do
+      decoder = Whisper.build_decoder(@small_opts)
+
+      {id, _} =
+        Enum.find(decoder.nodes, fn {_, node} ->
+          node.name.(node.op_name, %{}) == "dec_final_norm"
+        end)
+
+      model = Axon.container(%{logits: decoder, hidden: %{decoder | output: id}})
+      {init, predict} = Axon.build(model, mode: :inference)
+
+      input = %{
+        "token_ids" => Nx.tensor([[1, 2, 3, 4]], type: :s64),
+        "encoder_output" => Nx.broadcast(0.1, {1, 5, @hidden_dim})
+      }
+
+      state = init.(input, Axon.ModelState.empty())
+      refute Map.has_key?(state.data, "dec_output_proj")
+      refute Map.has_key?(state.data["dec_block_1_attn_k"], "bias")
+      refute Map.has_key?(state.data["dec_block_1_cross_attn_k_proj"], "bias")
+      result = predict.(state, input)
+      expected = Nx.dot(result.hidden, [2], state.data["dec_token_embed"]["kernel"], [1])
+      Nx.Testing.assert_all_close(result.logits, expected)
+      prefix = predict.(state, %{input | "token_ids" => Nx.tensor([[1, 2]], type: :s64)})
+
+      Nx.Testing.assert_all_close(
+        prefix.logits,
+        Nx.slice(result.logits, [0, 0, 0], [1, 2, @vocab_size])
+      )
+    end
+
     test "produces correct output shape" do
       decoder = Whisper.build_decoder(@small_opts)
       {init_fn, predict_fn} = Axon.build(decoder, mode: :inference)

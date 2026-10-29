@@ -1,0 +1,40 @@
+{
+  "scope": "backbone only; synthetic frames; weighted output loss; no optimizer or policy heads",
+  "opts": {
+    "chunk_size": 32,
+    "embed_dim": 264,
+    "num_layers": 2,
+    "hidden_size": 512,
+    "execution": "sequential",
+    "state_size": 128,
+    "head_dim": 64
+  },
+  "device": "NVIDIA GeForce RTX 5090, 99 %, 8145 MiB\n",
+  "source": "/home/blewf/git/exphil/checkpoints/coh_fox_mamba_v3s906_ep3/model_config.json",
+  "forward": {
+    "compile_ms": 4503.478,
+    "median_ms": 9.356,
+    "max_ms": 10.084,
+    "compiled_memory": {
+      "alias_size_in_bytes": 0,
+      "argument_size_in_bytes": 25119112,
+      "generated_code_size_in_bytes": 2852,
+      "output_size_in_bytes": 262144,
+      "temp_size_in_bytes": 549719880
+    }
+  },
+  "batch": 128,
+  "sequence": 80,
+  "forward_backward": {
+    "compile_ms": 7093.754,
+    "median_ms": 5179.7,
+    "max_ms": 5185.001,
+    "compiled_memory": {
+      "alias_size_in_bytes": 0,
+      "argument_size_in_bytes": 25119112,
+      "generated_code_size_in_bytes": 4072,
+      "output_size_in_bytes": 14305844,
+      "temp_size_in_bytes": 2232250560
+    }
+  }
+}

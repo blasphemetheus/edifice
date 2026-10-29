@@ -1,6 +1,6 @@
 defmodule Edifice.StatefulRollbackTest do
   @moduledoc """
-  The netplay rollback primitive (HANDOFF_BOT_RUNTIME.md task 2): run N
+  The netplay rollback primitive (docs/history/HANDOFF_BOT_RUNTIME.md task 2): run N
   steps, snapshot at k (through the serialize/deserialize wire format),
   run to N, restore, replay k..N with identical inputs → bitwise-identical
   outputs. Slippi rollback re-simulates frames when remote inputs arrive

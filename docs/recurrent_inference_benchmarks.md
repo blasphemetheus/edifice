@@ -2,6 +2,115 @@
 
 ## Scope and model selection
 
+### Controller-choice check (2026-10-27)
+
+**AI-generated.** The matching Fox/CUDA and Mewtwo/CPU replays each produced zero
+deterministic controller-choice changes in 4,096 decisions. With identical random
+keys, stochastic sampling changed zero Fox decisions and one Mewtwo main-stick
+decision. The latter changed bucket 0 to bucket 8 despite a maximum head
+probability difference of only 0.00000418. These results favor retaining f32
+inference rather than promoting the slower precision experiments.
+
+The comparison holds replay inputs fixed, including Mewtwo's previous-controller
+input. It feeds captured Agent features and replayed f32 features through the same
+production heads as an f64-trunk reference rounded to the f32 head interface.
+Each policy uses eight overlapping 512-frame streams from one matching replay,
+with staggered resync. This is a bounded numerical behavior check, not evidence
+of equal gameplay strength or identical long games. It does not remove the
+earlier convolution-history or cross-character stress failures.
+
+Reusable tool and raw reports live in ExPhil:
+`scripts/compare_mamba_choices.exs`, `eval_runs/mamba_controller_choices/`, and
+`docs/guides/MAMBA_CONTROLLER_CHOICES.md`. Two focused metrics tests pass.
+
+**AI-generated poem**
+
+> A small sum shifts a single choice;
+> Measure the move before raising the noise.
+
+### Mamba accuracy promotion gate (2026-10-27)
+
+**AI-generated.** Extended trained-checkpoint validation rejected promotion of
+the experimental accurate dense path. Production stepping remains unchanged.
+The accompanying `Mamba.step/3` documentation now distinguishes the same
+mathematical equations from identical floating-point results.
+
+The experiment splits each dense product into eight-term f32 sums, combines
+those sums in f64, then rounds the result back to f32. It passed the earlier
+160-frame fixture. At 512 frames with eight independently resynchronizing rows,
+the original checkpoint still passes batch-versus-single comparisons but fails
+27 convolution-history values across the two comparisons with the f64 reference.
+Two additional Mewtwo checkpoints expose output-feature failures when fed the
+Fox observations as a cross-character stress test. The full Mewtwo checkpoint
+passes on a matching Mewtwo replay (worst error/bound ratio below 0.07). No
+tolerances were changed (`atol = rtol = 1e-4`).
+
+For the Mewtwo full checkpoint on CPU with Fox observations, f64 dense products make batch and single
+execution identical, but both fail 315 output values against the reference.
+Using f64 normalization as well reduces that count to 232, not zero. Thus dense
+accumulation explains the previously observed batch sensitivity, but changing
+it alone does not establish accuracy over trained trajectories. The next
+numerical experiment should isolate the SSM update, gated output and residual
+additions. Their responsibility is not established by these measurements.
+
+Complete ExPhil Agent timings on an idle RTX 5090, eight rows, staggered resync,
+512 calls with the first 160 excluded:
+
+| Path | Ordinary frame median / p95 | Resync frame median / p95 |
+| --- | ---: | ---: |
+| Existing f32 | 1.217 / 1.700 ms | 4.972 / 5.622 ms |
+| Experimental eight-term dense sums | 1.100 / 1.443 ms | 6.287 / 6.668 ms |
+
+These are single runs, not evidence of an ordinary-frame speedup. Resync adds
+about 3.8 ms over ordinary inference in the existing path and about 5.2 ms in
+the experiment. It remains the larger latency cost, but optimizing the rejected
+precision method would be premature. These calls include embedding and action
+heads, but exclude Dolphin and IPC. Numeric captures for CPU checkpoints ran
+concurrently with other diagnostics and are not idle timing measurements.
+
+The reusable ExPhil checker now accepts checkpoint/replay paths, replay offsets,
+per-row reset schedules, a capture-only timing mode, and `--require-pass` for a
+failing process status when a reference check fails. Its per-row reset logic is
+tested against independent chronological single-row execution. Results and
+reproduction commands are in ExPhil's
+`docs/guides/MAMBA_CARRY_RESOLUTION.md` and
+`eval_runs/mamba_accuracy_extended/summary.json`.
+
+**AI-generated poem**
+
+> Two answers match, yet miss the mark;
+> A wider check can light the dark.
+
+#### Follow-up: SSM and output-gate isolation
+
+**AI-generated.** Separate f64 experiments for the SSM update, SSM output sum,
+gate activation/multiplication, and gate-to-output projection did not clear the
+reference gate. Keeping SSM memory in f64 between frames also did not clear it.
+On the Fox CUDA capture, convolution reference failures are 15 batch / 12 single
+for the chunk8 control, 9 / 6 with f64 SSM calculation, 12 / 12 with the f64
+output path, and 9 / 15 with f64 SSM calculation and storage. The original
+tolerance stays unchanged; production behavior stays unchanged.
+
+The new frame trace separates an operation's own rounding from errors already
+in its inputs. At the Fox failure (row 3, diagnostic tick 264, layer 2, channel
+166), local projection error is about +2.25e-7, while propagated input error is
+about -1.94e-4. The projection is mainly amplifying earlier differences. The
+Mewtwo-on-Fox stress trace likewise shows that the large gated-output error is
+mostly propagated, not introduced by the gate multiplication itself.
+
+The instrumented Fox step stays within 1.91e-6 of ordinary f32 step outputs/state
+leaves; the Mewtwo stress trace reproduces its ordinary step exactly. Neither
+trace establishes the earliest error source over the complete replay, or a
+gameplay regression. A blanket precision mode is still unsupported by these
+results. Checking controller decisions on matching replays is a more useful
+next gate than assuming every feature-tolerance failure changes bot behavior.
+
+Reproduction tools: ExPhil's `scripts/trace_mamba_precision.exs`,
+`scripts/resolve_mamba_carry.exs` and `docs/guides/MAMBA_CARRY_RESOLUTION.md`.
+Stage reports and coordinate-level error decompositions are retained in
+`eval_runs/mamba_stage_precision/`. No performance claims follow from these
+diagnostic runs.
+
 ### Resync profiling and optimization (2026-10-25)
 
 Profiling isolated eager history assembly (2.5–3.9 ms on CUDA at batch 32) and
