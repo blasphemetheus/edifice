@@ -304,6 +304,7 @@ defmodule Edifice.MixProject do
           Edifice.Pretrained.Transform
         ],
         Internals: [
+          Edifice.CUDA.FusedScan,
           Edifice.SSM.Common,
           Edifice.SSM.HybridBuilder,
           Edifice.Graph.MessagePassing,
